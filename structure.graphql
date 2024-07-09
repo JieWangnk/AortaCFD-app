@@ -1,0 +1,62 @@
+AortaCFD-app/
+│
+├── .gitignore            # To ignore unwanted files/folders
+│
+├── README.md             # Project description, setup instructions, etc.
+│
+├── LICENSE               # Open source license file
+│
+├── CAD/           # Directory for your raw geometry files
+│   ├── geometry*/
+│   │   ├── inlet.stl
+│   │   ├── outlet1.stl
+│   │   ├── outlet2.stl
+│   │   ├── outlet3.stl
+│   │   ├── outlet4.stl
+│   │   ├── wall_aorta.stl
+|
+├── MESH/
+│   ├── blockMeshDicts/   # blockMesh dictionaries for each geometry
+│   │   ├── geometry*
+│   │
+│   ├── snappyHexMeshDicts/ # snappyHexMesh dictionaries for refinements
+│       ├── coarse/
+│       ├── medium/
+│       ├── fine/
+│
+├── SIMULATION_SETUP/
+│   ├── initial_conditions/
+│   │   ├── U/
+│   │   ├── p/
+│   │   ...
+│   │
+│   ├── transportProperties/
+│   ├── moment/
+│   └── ...
+│
+├── SCRIPTS/
+│   ├── run_preprocessing.py
+│   ├── run_simulation.py
+│   ├── post_process.py
+│   ├── hpc_submission.sh  # If using HPC that requires job scripts
+│   └── ...
+│
+├── post_processing/
+│   ├── pvbatch_scripts/   # Paraview pvbatch scripts for post-processing
+│   │   ├── contour.py
+│   │   ├── streamline.py
+│   │   ...
+│   │
+│   ├── visualizations/    # Place for generated visualizations
+│   └── data_extracts/     # Extracted data from post processing
+│
+├── container/             # Docker or Singularity files for HPC/Cloud
+│   ├── Dockerfile
+│   ├── singularity.def
+│   └── ...
+│
+└── docs/                  # Documentation other than README
+    ├── setup.md
+    ├── usage.md
+    ├── results.md
+    └── ...
