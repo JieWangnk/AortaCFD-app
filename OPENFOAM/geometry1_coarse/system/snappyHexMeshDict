@@ -1,0 +1,195 @@
+
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      snappyHexMeshDict;
+}
+
+castellatedMesh true;
+snap            true;
+addLayers       true;
+
+geometry
+{
+    
+        outlet3.stl
+        {
+            type triSurfaceMesh;
+            name outlet3;
+        }
+        
+        wall_aorta.stl
+        {
+            type triSurfaceMesh;
+            name wall_aorta;
+        }
+        
+        inlet.stl
+        {
+            type triSurfaceMesh;
+            name inlet;
+        }
+        
+        outlet4.stl
+        {
+            type triSurfaceMesh;
+            name outlet4;
+        }
+        
+        outlet1.stl
+        {
+            type triSurfaceMesh;
+            name outlet1;
+        }
+        
+        outlet2.stl
+        {
+            type triSurfaceMesh;
+            name outlet2;
+        }
+        
+    region_refinement_box { type searchableBox; min (-8 190 -61); max (1.8 209 -42); }
+};
+
+castellatedMeshControls
+{
+    maxLocalCells 10000000;
+    maxGlobalCells 20000000;
+    minRefinementCells 10;
+    maxLoadUnbalance 0.10;
+    nCellsBetweenLevels 3;
+
+    features
+    (
+        
+        {file "outlet3.eMesh"; level 2;}
+        
+        {file "wall_aorta.eMesh"; level 2;}
+        
+        {file "inlet.eMesh"; level 2;}
+        
+        {file "outlet4.eMesh"; level 2;}
+        
+        {file "outlet1.eMesh"; level 2;}
+        
+        {file "outlet2.eMesh"; level 2;}
+        
+    );
+
+    refinementSurfaces
+    {
+        
+        outlet3
+        {
+        level (2 3);
+        }
+        
+        wall_aorta
+        {
+        level (2 3);
+        }
+        
+        inlet
+        {
+        level (2 3);
+        }
+        
+        outlet4
+        {
+        level (2 3);
+        }
+        
+        outlet1
+        {
+        level (2 3);
+        }
+        
+        outlet2
+        {
+        level (2 3);
+        }
+        
+    };
+
+    
+    refinementRegions
+    {
+        region_refinement_box
+        {
+            mode inside;
+            levels ((1E15 2));  // Adjust as needed
+        }
+    };
+    
+
+    locationInMesh (0 0 0);
+    allowFreeStandingZoneFaces true;
+    resolveFeatureAngle 30;
+};
+
+snapControls
+{
+    nSmoothPatch 3;
+    tolerance 4.0;
+    nSolveIter 30;
+    nRelaxIter 5;
+    nFeatureSnapIter 10;
+    implicitFeatureSnap false;
+    explicitFeatureSnap true;
+    multiRegionFeatureSnap false;
+};
+
+addLayersControls
+{
+    relativeSizes true;
+    layers
+    {
+        "wall_aorta.stl"
+        {  
+            nSurfaceLayers 5;
+        }    
+    }
+    expansionRatio 1.0;
+    finalLayerThickness 0.3;
+    minThickness 0.1;
+    nGrow 0;
+    featureAngle 30;
+    slipFeatureAngle 80;
+    nRelaxIter 3;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals 3;
+    nSmoothThickness 10;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedianAxisAngle 90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter 50;
+};
+meshQualityControls
+{
+    maxNonOrtho 65;
+    maxBoundarySkewness 20;
+    maxInternalSkewness 4;
+    maxConcave 80;
+    minFlatness 0.5;
+    minVol 1e-13;
+    minTetQuality 1e-30;
+    minArea -1;
+    minTwist 0.02;
+    minDeterminant 0.001;
+    minFaceWeight 0.02;
+    minVolRatio 0.01;
+    minTriangleTwist -1;
+    nSmoothScale 4;
+    errorReduction 0.75;
+};
+writeFlags
+(
+    scalarLevels
+    layerSets
+    layerFields
+);
+mergeTolerance 1E-6;

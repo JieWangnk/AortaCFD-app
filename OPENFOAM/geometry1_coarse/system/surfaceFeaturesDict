@@ -1,0 +1,23 @@
+
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      surfaceFeaturesDict;
+}
+surfaces ( 
+        "outlet3.stl"
+    
+        "wall_aorta.stl"
+    
+        "inlet.stl"
+    
+        "outlet4.stl"
+    
+        "outlet1.stl"
+    
+        "outlet2.stl"
+     );
+includedAngle 150;
