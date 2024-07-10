@@ -58,6 +58,7 @@
 2. **Individual scripts**:
    The [```appDriver.py```](./appDriver.py)
    1.  [```meshsetup.py```](./SCRIPTS/meshSetup.py): a Python script to automatically generate blockMeshDict and snappyHexMeshDict files.  This script will create very basic dictionary files, and modify parameter based on the ```userParameter.py```. 
+<<<<<<< HEAD
 
 3. **Simulation Run**
    ```bash
@@ -76,4 +77,8 @@
 
 
 4.  **Post-Processing** (Still working on it)
+=======
+   
+3.  **Post-Processing**
+>>>>>>> 98e3dfd6f57ee2f4239f74b7e5651cee3db6e047
     1.  [```phaseAverage.py```](./SCRIPTS/phaseAverage.py): 

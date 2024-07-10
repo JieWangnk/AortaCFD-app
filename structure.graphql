@@ -24,6 +24,7 @@ AortaCFD-app/
 │       ├── medium/
 │       ├── fine/
 │
+<<<<<<< HEAD
 ├── appDriver/
 │   ├── appDriver.py      # Main script to run the app
 │   |   ├── create_OFcase
@@ -71,6 +72,33 @@ AortaCFD-app/
 │   │
 │   ├── data/    # Place for generated visualizations
 │   └── images/     # Extracted data from post processing
+=======
+├── SIMULATION_SETUP/
+│   ├── initial_conditions/
+│   │   ├── U/
+│   │   ├── p/
+│   │   ...
+│   │
+│   ├── transportProperties/
+│   ├── moment/
+│   └── ...
+│
+├── SCRIPTS/
+│   ├── run_preprocessing.py
+│   ├── run_simulation.py
+│   ├── post_process.py
+│   ├── hpc_submission.sh  # If using HPC that requires job scripts
+│   └── ...
+│
+├── post_processing/
+│   ├── pvbatch_scripts/   # Paraview pvbatch scripts for post-processing
+│   │   ├── contour.py
+│   │   ├── streamline.py
+│   │   ...
+│   │
+│   ├── visualizations/    # Place for generated visualizations
+│   └── data_extracts/     # Extracted data from post processing
+>>>>>>> 98e3dfd6f57ee2f4239f74b7e5651cee3db6e047
 │
 ├── container/             # Docker or Singularity files for HPC/Cloud
 │   ├── Dockerfile

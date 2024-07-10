@@ -2,7 +2,11 @@ import os
 import numpy as np
 
 REFINEMENT_LEVELS = {
+<<<<<<< HEAD
     "coarse":1,
+=======
+    "coarse":0.4,
+>>>>>>> 98e3dfd6f57ee2f4239f74b7e5651cee3db6e047
     "medium":0.2,
     "fine":0.1
 }
@@ -45,7 +49,11 @@ SIMULATION_CONTROL = {
     "writeControl" : "runTime",    #timeStep, runTime, adjustableRunTime
     "writeInterval" : "0.1",       # 1, 0.1, 0.01
     "runTimeModifiable" : "true",
+<<<<<<< HEAD
     "functionList" : ["wallShearStress"]
+=======
+    "functionList" : ["wallShearStress", "turbulenceFields"]
+>>>>>>> 98e3dfd6f57ee2f4239f74b7e5651cee3db6e047
 }
 
 WK_SETTING = {
