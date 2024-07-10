@@ -8,7 +8,11 @@ from SCRIPTS.solverSetup import *
 from SCRIPTS.simulationSetup import *
 from SCRIPTS.inletMapping import *
 from SCRIPTS.inletDataSetup import *
+<<<<<<< HEAD
 from SCRIPTS.solnTypeSetup import *
+=======
+from SCRIPTS.solnType import *
+>>>>>>> 98e3dfd6f57ee2f4239f74b7e5651cee3db6e047
 from SCRIPTS.wkSetup import *
 import shutil
 import time
@@ -158,10 +162,17 @@ def run_mesh():
     # run checkMesh
     os.system("checkMesh > checkMesh.log")
     # transfer mesh scale based on GEOMETRY_SCALE
+<<<<<<< HEAD
     # openfoam8
     os.system("transformPoints -scale '{} {} {}'".format(GEOMETRY_SCALE,GEOMETRY_SCALE,GEOMETRY_SCALE))
     
     #####for scaling in openfoam11 use
+=======
+    
+    #os.system("transformPoints -scale '{} {} {}'".format(GEOMETRY_SCALE,GEOMETRY_SCALE,GEOMETRY_SCALE))
+    
+    #for scaling in openfoam11 use
+>>>>>>> 98e3dfd6f57ee2f4239f74b7e5651cee3db6e047
     os.system("transformPoints 'scale=({} {} {})'".format(GEOMETRY_SCALE, GEOMETRY_SCALE, GEOMETRY_SCALE))
  
     end_time = time.time()
@@ -200,6 +211,10 @@ def run_bc():
     os.system("rm change_format0.py")
     os.system("cp points constant/boundaryData/{}/".format(inlet_stl))
     os.system("rm points*")
+<<<<<<< HEAD
+=======
+    
+>>>>>>> 98e3dfd6f57ee2f4239f74b7e5651cee3db6e047
       
     # run inletMapping 
     processor = InletMapping(center = eval(INLET_CENTER), radius = eval(INLET_RADIUS))
@@ -252,10 +267,18 @@ def run_simulation():
 
     print("Simulation run in {:.2f} minutes.".format(elapsed_time / 60))
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 98e3dfd6f57ee2f4239f74b7e5651cee3db6e047
 def run_postprocessing():
     start_time = time.time()
     # plot residuals
     os.system("gnuplot -e \"set terminal jpeg size 1400,700; set output 'Residuals.jpeg'; set logscale y; plot 'logs/Ux_0' u 1:2 w l title 'Ux','logs/Uy_0' u 1:2 w l title 'Uy','logs/Uz_0' u 1:2 w l title 'Uz','logs/pFinalRes_0' u 1:2 w l title 'p','logs/CourantMax_0' u 1:2 w l title 'Co','logs/k_0' u 1:2 w l title 'k','logs/omega_0' u 1:2 w l title 'omega'\"")
+<<<<<<< HEAD
+=======
+    
+>>>>>>> 98e3dfd6f57ee2f4239f74b7e5651cee3db6e047
      
     # Logic to run post-processing
     end_time = time.time()

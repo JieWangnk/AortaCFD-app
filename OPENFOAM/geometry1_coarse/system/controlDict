@@ -51,6 +51,10 @@ functions
 {
     
             #includeFunc    wallShearStress
+<<<<<<< HEAD
+=======
+            #includeFunc    turbulenceFields
+>>>>>>> 98e3dfd6f57ee2f4239f74b7e5651cee3db6e047
 }
 
 // ************************************************************************* //
