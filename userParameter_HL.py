@@ -10,7 +10,7 @@ BC_OUTLET = "3EWINDKESSEL" #options: ZERO_GRADIENT, 3EWINDKESSEL
 #-------------------------------------------------------------------------------------------#
 # Inlet details
 INLET_DATA_FILE = "BPM120.csv"
-INLET_CENTER = "[-0.015923, -0.0212171, -0.0128499]"
+INLET_CENTER = "[-0.0159618, -0.0217017, -0.0128172]"
 INLET_RADIUS = "0.0055"
 #-------------------------------------------------------------------------------------------#
 # Physical properties: transportProperteis and momentumTransport

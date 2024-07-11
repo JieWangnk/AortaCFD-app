@@ -1,84 +1,76 @@
 /*--------------------------------*- C++ -*----------------------------------*\
-| =========                 |                                                 |
-| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \    /   O peration     | Version:  4.0                                   |
-|   \  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \/     M anipulation  |                                                 |
+  =========                 |
+  \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \    /   O peration     | Website:  https://openfoam.org
+    \  /    A nd           | Version:  8
+     \/     M anipulation  |
 \*---------------------------------------------------------------------------*/
 FoamFile
 {
-    version     4.0;
+    version     2.0;
     format      ascii;
     class       dictionary;
     location    "constant";
     object      windkesselProperties;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-
-        outlet3
-            {
-            C                   8.597955230293353e-10;
-            R                   1947908717.9619577;
-            Z                   285180369.5867006;
-            outIndex            0;        //must equal 'index' value in 0/p
-            FDM_order           3;      //finite backward difference order: up to 3rd order
-            //Initialise
-            Flowrate_threeStepBefore      0;    
-            Flowrate_twoStepBefore        0;
-            Flowrate_oneStepBefore        0;
-            Pressure_twoStepBefore        0;
-            Pressure_oneStepBefore        0;
-            Pressure_start                0;
-            }
+outlet1
+{
+C                   8.597955230293353e-10;
+R                   1947908717.9619577;
+Z                   285180369.5867006;
+outIndex            0;     
+FDM_order           3;      
+Flowrate_threeStepBefore      0;    
+Flowrate_twoStepBefore        0;
+Flowrate_oneStepBefore        0;
+Pressure_twoStepBefore        0;
+Pressure_oneStepBefore        0;
+Pressure_start                0;
+}
         
-        outlet4
-            {
-            C                   3.251101821454681e-10;
-            R                   5033042492.39982;
-            Z                   872647656.489182;
-            outIndex            1;        //must equal 'index' value in 0/p
-            FDM_order           3;      //finite backward difference order: up to 3rd order
-            //Initialise
-            Flowrate_threeStepBefore      0;    
-            Flowrate_twoStepBefore        0;
-            Flowrate_oneStepBefore        0;
-            Pressure_twoStepBefore        0;
-            Pressure_oneStepBefore        0;
-            Pressure_start                0;
-            }
+outlet2
+{
+C                   3.251101821454681e-10;
+R                   5033042492.39982;
+Z                   872647656.489182;
+outIndex            1;     
+FDM_order           3;      
+Flowrate_threeStepBefore      0;    
+Flowrate_twoStepBefore        0;
+Flowrate_oneStepBefore        0;
+Pressure_twoStepBefore        0;
+Pressure_oneStepBefore        0;
+Pressure_start                0;
+}
         
-        outlet1
-            {
-            C                   5.454327849217341e-10;
-            R                   3038834008.760765;
-            Z                   481306424.8134781;
-            outIndex            2;        //must equal 'index' value in 0/p
-            FDM_order           3;      //finite backward difference order: up to 3rd order
-            //Initialise
-            Flowrate_threeStepBefore      0;    
-            Flowrate_twoStepBefore        0;
-            Flowrate_oneStepBefore        0;
-            Pressure_twoStepBefore        0;
-            Pressure_oneStepBefore        0;
-            Pressure_start                0;
-            }
+outlet3
+{
+C                   5.454327849217341e-10;
+R                   3038834008.760765;
+Z                   481306424.8134781;
+outIndex            2;     
+FDM_order           3;      
+Flowrate_threeStepBefore      0;    
+Flowrate_twoStepBefore        0;
+Flowrate_oneStepBefore        0;
+Pressure_twoStepBefore        0;
+Pressure_oneStepBefore        0;
+Pressure_start                0;
+}
         
-        outlet2
-            {
-            C                   2.595507735144807e-09;
-            R                   541087379.8706106;
-            Z                   198652276.4602077;
-            outIndex            3;        //must equal 'index' value in 0/p
-            FDM_order           3;      //finite backward difference order: up to 3rd order
-            //Initialise
-            Flowrate_threeStepBefore      0;    
-            Flowrate_twoStepBefore        0;
-            Flowrate_oneStepBefore        0;
-            Pressure_twoStepBefore        0;
-            Pressure_oneStepBefore        0;
-            Pressure_start                0;
-            }
-        
-
+outlet4
+{
+C                   2.595507735144807e-09;
+R                   541087379.8706106;
+Z                   198652276.4602077;
+outIndex            3;     
+FDM_order           3;      
+Flowrate_threeStepBefore      0;    
+Flowrate_twoStepBefore        0;
+Flowrate_oneStepBefore        0;
+Pressure_twoStepBefore        0;
+Pressure_oneStepBefore        0;
+Pressure_start                0;
+}
 // ************************************************************************* //
