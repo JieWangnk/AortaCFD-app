@@ -8,12 +8,9 @@ from SCRIPTS.solverSetup import *
 from SCRIPTS.simulationSetup import *
 from SCRIPTS.inletMapping import *
 from SCRIPTS.inletDataSetup import *
-<<<<<<< HEAD
 from SCRIPTS.solnTypeSetup import *
-=======
-from SCRIPTS.solnType import *
->>>>>>> 98e3dfd6f57ee2f4239f74b7e5651cee3db6e047
 from SCRIPTS.wkSetup import *
+from SCRIPTS.formatPoints import *
 import shutil
 import time
 
@@ -129,6 +126,13 @@ class OpenFOAMCase:
         self.write_WK_Setup()
 
 def create_openfoam_case():
+    """
+    Creates an OpenFOAM case with the specified parameters.
+
+    Returns:
+        None
+    """
+    print("Creating OpenFOAM case...")
     my_case = OpenFOAMCase(
         geometry_case=GEOMETRY_CASE, 
         refinement=REFINEMENT,
@@ -136,9 +140,9 @@ def create_openfoam_case():
         bc_inlet=BC_INLET,
         bc_outlet=BC_OUTLET,
         initial_condition_U=INITIAL_CONDITION_U,
-        initial_condition_p = INITIAL_CONDITION_P,
-        initial_condition_K = INITIAL_CONDITION_K,
-        initial_condition_omega = INITIAL_CONDITION_OMEGA,
+        initial_condition_p=INITIAL_CONDITION_P,
+        initial_condition_K=INITIAL_CONDITION_K,
+        initial_condition_omega=INITIAL_CONDITION_OMEGA,
         nu=NU,
         rho=RHO,
         simulation_type=SIMULATIONTYPE,
@@ -152,6 +156,21 @@ def create_openfoam_case():
     print("OpenFOAM case created")
 
 def run_mesh():
+    """
+    Runs the meshing process for AortaCFD.
+
+    This function executes a series of OpenFOAM commands to generate the mesh for AortaCFD simulation.
+    It runs the following commands in sequence:
+    1. blockMesh: Generates the initial mesh using block structured grids.
+    2. surfaceFeatureExtract: Extracts surface features from the geometry.
+    3. snappyHexMesh: Generates a high-quality mesh using the snappyHexMesh algorithm.
+    4. checkMesh: Performs mesh quality checks and saves the results in a log file.
+    5. transformPoints: Scales the mesh based on the GEOMETRY_SCALE parameter.
+
+    Returns:
+    None
+    """
+    print("Running meshing process...")
     start_time = time.time()
     # Run blockMesh
     os.system("blockMesh")
@@ -162,18 +181,11 @@ def run_mesh():
     # run checkMesh
     os.system("checkMesh > checkMesh.log")
     # transfer mesh scale based on GEOMETRY_SCALE
-<<<<<<< HEAD
     # openfoam8
-    os.system("transformPoints -scale '{} {} {}'".format(GEOMETRY_SCALE,GEOMETRY_SCALE,GEOMETRY_SCALE))
+    os.system("transformPoints -scale '({} {} {})'".format(GEOMETRY_SCALE,GEOMETRY_SCALE,GEOMETRY_SCALE))
     
     #####for scaling in openfoam11 use
-=======
-    
-    #os.system("transformPoints -scale '{} {} {}'".format(GEOMETRY_SCALE,GEOMETRY_SCALE,GEOMETRY_SCALE))
-    
-    #for scaling in openfoam11 use
->>>>>>> 98e3dfd6f57ee2f4239f74b7e5651cee3db6e047
-    os.system("transformPoints 'scale=({} {} {})'".format(GEOMETRY_SCALE, GEOMETRY_SCALE, GEOMETRY_SCALE))
+    #os.system("transformPoints 'scale=({} {} {})'".format(GEOMETRY_SCALE, GEOMETRY_SCALE, GEOMETRY_SCALE))
  
     end_time = time.time()
     elapsed_time = end_time - start_time
@@ -182,8 +194,23 @@ def run_mesh():
 
 
 def run_bc():
-    
+    """
+    Sets up the boundary conditions for the simulation.
+
+    This function performs the following steps:
+    1. Extracts the inlet STL file name.
+    2. Writes the inlet cell centers to map the inlet velocity.
+    3. Runs the inlet mapping process.
+    4. Copies the content of the INLET_DATA_FILE directory to the INLET_DATA_BPM directory.
+    5. Sets up the inlet velocity profile.
+    6. Changes the format of the "points" file to match the timeVaryingMappedFixedValue BC requirements.
+
+    Returns:
+    None
+    """
+    print("Setting boundary conditions...")
     start_time = time.time()
+    ###### Old method by Jie- to be removed after testing ######
     # create sampleDict file for inlet extraction, this can be done only after meshing
     #os.system("postProcess -func sampleDict")
     
@@ -195,27 +222,22 @@ def run_bc():
     # for opfnoam11
     #os.system("mv postProcessing/sampleDict/0/points.xy postProcessing/sampleDict/0/points")
     #os.system("cp postProcessing/sampleDict/0/points constant/boundaryData/{}/points".format(inlet_stl))
+    ##########################################################
+	# another option is to run "writeMeshObj" by Dania
+    # Then rename the "patch_inlet_0.obj" to be "points-new", copy this to "/OPENFOAM/geometry1-dania-new_coarse/constant/boundaryData/inlet" directory then run the python script named to porduced the required format, then rm -r mesh* patch*
     
-     # get inlet stl file name
+    # get inlet stl file name
     inlet_stl = [f for f in os.listdir(os.path.join("constant", "triSurface")) if "inlet" in f][0].split(".")[0] 
     
-	# another option is to run "writeMeshObj", then rename the "patch_inlet_0.obj" to be "points-new", copy this to "/OPENFOAM/geometry1-dania-new_coarse/constant/boundaryData/inlet" directory then run the python script named to porduced the required format, then rm -r mesh* patch*
-	
     # write the inlet cell centers to map the inlet velocity
     os.system("writeMeshObj")
     os.system("mv patch_inlet_0.obj points-new")
     os.system("rm -r mesh* patch*")
-    os.system("cp ../../SCRIPTS/change_format0.py .")
-    os.system("cp ../../SCRIPTS/change_format1.py .")
-    os.system("python3 change_format0.py")
-    os.system("rm change_format0.py")
+    formatter = EnhancedPointsFormatter(format_version=1)
+    formatter.format_coordinates()
     os.system("cp points constant/boundaryData/{}/".format(inlet_stl))
-    os.system("rm points*")
-<<<<<<< HEAD
-=======
+    #os.system("rm points*")
     
->>>>>>> 98e3dfd6f57ee2f4239f74b7e5651cee3db6e047
-      
     # run inletMapping 
     processor = InletMapping(center = eval(INLET_CENTER), radius = eval(INLET_RADIUS))
     #processor.run(INLET_DATA_FILE, inlet_stl, scale=GEOMETRY_SCALE)
@@ -231,16 +253,29 @@ def run_bc():
     inletProfile.execute()
     
     # change the format of "points" file to match the timeVaryingMappedFixedValue BC requirements
-    os.system("python3 change_format1.py")
-    os.system("rm change_format1.py")
+    formatter = EnhancedPointsFormatter(format_version=2)
+    formatter.format_coordinates()
     os.system("cp points constant/boundaryData/{}/".format(inlet_stl))
     end_time = time.time()
     elapsed_time = end_time - start_time
 
     print("Boundary condition set in {:.2f} minutes.".format(elapsed_time / 60))
 
-
 def run_simulation():
+    """
+    Runs the simulation based on the specified solution type.
+
+    The function checks the value of the SOLN_TYPE variable and executes the appropriate commands
+    to run the simulation. If SOLN_TYPE is set to "serial", it runs the simulation in serial mode.
+    If SOLN_TYPE is set to "parallel", it runs the simulation in parallel mode.
+
+    Returns:
+        None
+
+    Raises:
+        None
+    """
+    print("Running simulation...")
     start_time = time.time()
     # Logic to run simulation
     if SOLN_TYPE == "serial":
@@ -254,7 +289,7 @@ def run_simulation():
         #os.system("mpirun -np {} foamRun -parallel -solver incompressibleFluid > log.log".format(SUBDOMAINS))
         # for OF10
         if BC_OUTLET == "3EWINDKESSEL":
-           os.system("mpirun -np {} pimpleFoam_WK_2.1 > log.log".format(SUBDOMAINS))
+           os.system("mpirun -np {} pimpleFoam_WK_2.0 > log.log".format(SUBDOMAINS))    # pimpleFOAM_WK_2.0 or *2.1
         else:
             os.system("mpirun -np {} pimpleFoam > log.log".format(SUBDOMAINS))     
         os.system("reconstructPar > reconstruct.log")
@@ -267,18 +302,11 @@ def run_simulation():
 
     print("Simulation run in {:.2f} minutes.".format(elapsed_time / 60))
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 98e3dfd6f57ee2f4239f74b7e5651cee3db6e047
 def run_postprocessing():
+    print("Running post-processing...")
     start_time = time.time()
     # plot residuals
     os.system("gnuplot -e \"set terminal jpeg size 1400,700; set output 'Residuals.jpeg'; set logscale y; plot 'logs/Ux_0' u 1:2 w l title 'Ux','logs/Uy_0' u 1:2 w l title 'Uy','logs/Uz_0' u 1:2 w l title 'Uz','logs/pFinalRes_0' u 1:2 w l title 'p','logs/CourantMax_0' u 1:2 w l title 'Co','logs/k_0' u 1:2 w l title 'k','logs/omega_0' u 1:2 w l title 'omega'\"")
-<<<<<<< HEAD
-=======
-    
->>>>>>> 98e3dfd6f57ee2f4239f74b7e5651cee3db6e047
      
     # Logic to run post-processing
     end_time = time.time()
@@ -288,7 +316,7 @@ def run_postprocessing():
 
 
 def run_all():
-    # Run all functions
+    print("Running all steps...")
     run_mesh()
     run_bc()
     run_simulation()

@@ -37,10 +37,10 @@ FoamFile
 #------------------------------------------------------------------
 
         # Accessing the WK_SETTING dictionary values
-        A_rcca = float(self.WK_SETTING["A_rcca"])
-        A_lcca = float(self.WK_SETTING["A_lcca"])
-        A_lsca = float(self.WK_SETTING["A_lsca"])
-        A_DAo = float(self.WK_SETTING["A_DAo"])
+        outlet1 = float(self.WK_SETTING["outlet1"])
+        outlet2 = float(self.WK_SETTING["outlet2"])
+        outlet3 = float(self.WK_SETTING["outlet3"])
+        outlet4 = float(self.WK_SETTING["outlet4"])
         percentage = float(self.WK_SETTING["percentage"])
         SP = float(self.WK_SETTING["SP"])
         DP = float(self.WK_SETTING["DP"])
@@ -59,7 +59,7 @@ FoamFile
                 os.remove(fileout_OF)    
 
             # CALCULATE WK COEFFICIENTS
-            A = np.array([A_rcca, A_lcca, A_lsca, A_DAo])
+            A = np.array([outlet1, outlet2, outlet3, outlet4])
             A_branches = np.sum(A[:3])
 
             flowSplit_branches = A[:3] / A_branches
@@ -76,7 +76,7 @@ FoamFile
             
             
             # Constants
-            #branch_names = ["outlet1", "outlet2", "outlet3", "outlet4"]
+            branch_names = ["outlet1", "outlet2", "outlet3", "outlet4"]
             a = 13.3
             b = 0.3
             tau = 1.92
@@ -92,33 +92,32 @@ FoamFile
             C = tau / R_total
 #------------------------------------------------------------------
         # Create the function block
-        self.OUTLET_STL = []
-        for f in self.STL_FILES:
-            if "outlet" in f:
-                self.OUTLET_STL.append(f)      
+        # self.OUTLET_STL = []
+        # for f in self.STL_FILES:
+        #     if "outlet" in f:
+        #         self.OUTLET_STL.append(f)      
 
         outlet_block_template = """
-        {outlet_name}
-            {{
-            C                   {C_val};
-            R                   {R_val};
-            Z                   {Z_val};
-            outIndex            {index};        //must equal 'index' value in 0/p
-            FDM_order           3;      //finite backward difference order: up to 3rd order
-            //Initialise
-            Flowrate_threeStepBefore      0;    
-            Flowrate_twoStepBefore        0;
-            Flowrate_oneStepBefore        0;
-            Pressure_twoStepBefore        0;
-            Pressure_oneStepBefore        0;
-            Pressure_start                0;
-            }}
+{outlet_name}
+{{
+C                   {C_val};
+R                   {R_val};
+Z                   {Z_val};
+outIndex            {index};     
+FDM_order           3;      
+Flowrate_threeStepBefore      0;    
+Flowrate_twoStepBefore        0;
+Flowrate_oneStepBefore        0;
+Pressure_twoStepBefore        0;
+Pressure_oneStepBefore        0;
+Pressure_start                0;
+}}
         """
 
         outlet_block = ""
         # sort self.OUTLET_STL
-        for outlet in range(len(self.OUTLET_STL)):
-            outletName = self.OUTLET_STL[outlet].split(".")[0]
+        for outlet in range(len(branch_names)):
+            outletName = branch_names[outlet]
             index = outlet
             outlet_block += outlet_block_template.format(outlet_name=outletName, index=index, C_val=C[outlet], R_val=R_2[outlet], Z_val=R_1[outlet])
 
