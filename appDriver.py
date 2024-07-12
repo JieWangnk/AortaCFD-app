@@ -236,7 +236,7 @@ def run_bc():
     formatter = EnhancedPointsFormatter(format_version=1)
     formatter.format_coordinates()
     os.system("cp points constant/boundaryData/{}/".format(inlet_stl))
-    #os.system("rm points*")
+    os.system("rm points")
     
     # run inletMapping 
     processor = InletMapping(center = eval(INLET_CENTER), radius = eval(INLET_RADIUS))
