@@ -68,28 +68,26 @@ FoamFile
                 Q[:, j] = Q_in[:, 1] * flowSplit_branches[j] * perc_branches
             Q[:, 3] = Q_in[:, 1] * (1 - perc_branches)
 
-            #plt.plot(Q_in[:, 1])
-            #for j in range(4):
-            #    plt.plot(Q[:, j])
-            #plt.legend(['Q-inlet', 'Q-rcca', 'Q-lcca', 'Q-lsca', 'Q-DAo'])
-            #plt.show()
-            
-            
+            plt.plot(Q_in[:, 1])
+            for j in range(4):
+               plt.plot(Q[:, j])
+            plt.legend(['Q-inlet', 'Q-rcca', 'Q-lcca', 'Q-lsca', 'Q-DAo'])
+            plt.show()            
             # Constants
             branch_names = ["outlet1", "outlet2", "outlet3", "outlet4"]
             a = 13.3
-            b = 0.3
-            tau = 1.92
-            BloodDens = 1060
-            MAP = (SP + DP) / 2
-            mP = MAP * 133.33
+        b = 0.3
+        tau = 1.92
+        BloodDens = 1060
+        MAP = (SP + DP) / 2
+        mP = MAP * 133.33
 
-            mean_Q = np.mean(Q, axis=0)
-            c = a / (2 * np.sqrt(A * 10**6 / np.pi))**b
-            R_total = mP / mean_Q
-            R_1 = BloodDens * c / A
-            R_2 = R_total - R_1
-            C = tau / R_total
+        mean_Q = np.mean(Q, axis=0)
+        c = a / (2 * np.sqrt(A * 10**6 / np.pi))**b
+        R_total = mP / mean_Q
+        R_1 = BloodDens * c / A
+        R_2 = R_total - R_1
+        C = tau / R_total
 #------------------------------------------------------------------
         # Create the function block
         # self.OUTLET_STL = []
@@ -119,10 +117,10 @@ Pressure_start                0;
         for outlet in range(len(branch_names)):
             outletName = branch_names[outlet]
             index = outlet
-            outlet_block += outlet_block_template.format(outlet_name=outletName, index=index, C_val=C[outlet], R_val=R_2[outlet], Z_val=R_1[outlet])
+            outlet_block += outlet_block_template.format(outlet_name=outletName, index=index, C_val="{:.4e}".format(C[outlet]), R_val="{:.4e}".format(R_2[outlet]), Z_val="{:.4e}".format(R_1[outlet]))
 
         # Use the template to fill in the variables and write to the file
         with open(os.path.join(self.DIRECTORY, "constant", "windkesselProperties"), 'w') as f:
             f.write(template.format(outlet_block=outlet_block))
         print("windkesselProperties file has been written")
-        
+
