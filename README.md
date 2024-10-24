@@ -6,6 +6,10 @@
     ```bash
     source /opt/openfoam8/etc/bashrc
     ```
+    The last version of the code is compatible with OpenFOAM version 10. (This invovled some changes in OF commands)
+    ```bash
+    source /opt/openfoam10/etc/bashrc
+    ```
 -  ```/opt/openfoam8/``` can be replaced with the path to your OpenFOAM installation.
 2. **Source pvbatch**:
    Every time you open a new terminal and want to use pvbatch, you should source the bashrc file:
