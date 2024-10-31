@@ -7,7 +7,7 @@ processor*
 0.orig
 extendedFeatureEdgeMesh
 polyMesh
-OpenFOAM
+OPENFOAM
 *.foam
 *.png
 __pycache__
