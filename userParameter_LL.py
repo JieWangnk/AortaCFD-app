@@ -6,6 +6,12 @@ REFINEMENT_LEVELS = {
     "medium":0.2,
     "fine":0.1
 }
+SNAPPY_SETTINGS = {
+    "expansion_factor":0.02,
+    "feature_level":3,
+    "surface_refinement_levels": (1,3),
+    "number_of_layers": 5
+}
 # ----------------- #
 # initial condition #
 # ----------------- #
@@ -41,9 +47,9 @@ SIMULATION_CONTROL = {
     "startTime" : "0",
     "stopAt" : "endTime",
     "endTime" : "1",
-    "deltaT" : "0.001",
-    "writeControl" : "runTime",    #timeStep, runTime, adjustableRunTime
-    "writeInterval" : "0.1",       # 1, 0.1, 0.01
+    "deltaT" : "0.000001",
+    "writeControl" : "adjustableRunTime",    #timeStep, runTime, adjustableRunTime
+    "writeInterval" : "0.01",       # 1, 0.1, 0.01
     "runTimeModifiable" : "true",
     "functionList" : ["wallShearStress"]
 }
