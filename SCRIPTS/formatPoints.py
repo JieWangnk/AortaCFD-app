@@ -30,6 +30,17 @@ class EnhancedPointsFormatter:
 				formatted_coordinates.append(f"({x} {y} {z})")
 		return formatted_coordinates
 
-# # Example usage:
-# formatter = EnhancedPointsFormatter(format_version=2)
-# formatter.format_coordinates()
+# usage in the terminal
+# python formatPoints.py points-new
+
+if __name__ == "__main__":
+	import sys
+	if len(sys.argv) < 2:
+		print("Usage: python formatPoints.py <input_filename>")
+		sys.exit(1)
+	input_filename = sys.argv[1]
+	output_filename = "points"
+	formatter = EnhancedPointsFormatter(input_filename=input_filename, output_filename=output_filename)
+	formatter.format_coordinates()
+
+	

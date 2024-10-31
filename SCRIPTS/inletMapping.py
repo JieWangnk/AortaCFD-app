@@ -112,9 +112,19 @@ class InletMapping:
                        times, velocities, n_points, points, normal_vector, scale=1e0)
 
 
-# Example usage
-if __name__ == "__main__":
-    processor = InletMapping(
-        center=[-0.0197167, -0.0244641, -0.00713538], radius=0.0055)
-    processor.run("BPM120_U_dopplerU.csv", "inlet")
+# Example usage from the terminal
+# python inletMapping.py BPM120.csv PAT1 1e-3
 
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) < 4:
+        print("Usage: python inletMapping.py <inlet_data_file>")
+        sys.exit(1)
+    inlet_data_file = sys.argv[1]
+    # inlet_name = sys.argv[2]
+    # scale = float(sys.argv[3])
+    center = [-0.02256496, -0.0363579, -0.014821885]
+    radius = 0.014
+    inlet_mapping = InletMapping(center, radius)
+    inlet_mapping.run(inlet_data_file, inlet_name="inlet", scale=1e0)
+    print("Inlet mapping completed.")

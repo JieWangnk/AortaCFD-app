@@ -15,7 +15,7 @@ def is_binary_file(file_path):
     return False
 
 class GeometryAnalyzer:
-    def __init__(self,DIRECTORY, geometry_case,refinement="coarse",expansion_factor = 0.02,feature_level=2,surface_refinement_levels=(2,3),region_refinement =(-8,190,-61,1.8,209,-42),addLayers = 5):
+    def __init__(self,DIRECTORY, geometry_case,refinement="coarse",expansion_factor = 0.02,feature_level=2,surface_refinement_levels=(1,2),region_refinement =(-8,190,-61,1.8,209,-42),addLayers = 5):
         self.DIRECTORY = DIRECTORY
         self.geometry_case = geometry_case
         self.geometry_path = os.path.join("CAD",geometry_case)
@@ -261,7 +261,7 @@ mergeTolerance 1E-6;
         }}
         """
             features_block += f"""
-        {{file "{eMesh_file}"; level {self.feature_level};}}
+        {{file "{eMesh_file}"; level {self.feature_level};}}   
         """
             refinementSurface_block += f"""
         {stl_file_name}
@@ -333,7 +333,7 @@ includedAngle 150;
 
         with open(output_path, 'w') as f:
             f.write(content)
-
+        print(self.surface_refinement_levels)
         print(f"surfaceFeaturesDict written to {output_path}")
 
 

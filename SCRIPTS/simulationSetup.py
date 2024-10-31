@@ -55,6 +55,10 @@ runTimeModifiable {runTimeModifiable};
 
 allowSystemOperations 1;
 
+adjustTimeStep  true;
+
+maxCo   1;
+
 functions
 {{
     {function_block}

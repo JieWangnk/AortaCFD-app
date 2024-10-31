@@ -15,10 +15,13 @@ import shutil
 import time
 
 class OpenFOAMCase:
-
-    def __init__(self, geometry_case, refinement, directory, bc_inlet, bc_outlet, initial_condition_U, initial_condition_p, initial_condition_K, initial_condition_omega, nu, rho, simulation_type, simulation_control, soln_type, subdomains, decomposition_method, wk_setting):
+    def __init__(self, geometry_case, refinement,feature_level,surface_refinement_levels,directory, bc_inlet, bc_outlet, initial_condition_U, initial_condition_p,
+        initial_condition_K, initial_condition_omega, nu, rho, simulation_type, simulation_control, 
+        soln_type, subdomains, decomposition_method, wk_setting):
         self.geometry_case = geometry_case
         self.refinement = refinement
+        self.feature_level = feature_level
+        self.surface_refinement_levels = surface_refinement_levels
         self.directory = directory
         self.BC_INLET = bc_inlet
         self.BC_OUTLET = bc_outlet
@@ -37,7 +40,7 @@ class OpenFOAMCase:
             
         self.__create_OFcase()
 
-        self.geometry_analyzer = GeometryAnalyzer(self.directory,self.geometry_case, self.refinement)
+        self.geometry_analyzer = GeometryAnalyzer(DIRECTORY=self.directory,geometry_case=self.geometry_case,refinement=self.refinement,feature_level=self.feature_level,surface_refinement_levels=self.surface_refinement_levels)
         self.boundary_condition = BoundaryConditionSetup(self.directory,self.geometry_analyzer.stl_files,self.BC_INLET, self.BC_OUTLET, self.initial_condition_U, self.initial_condition_p, self.initial_condition_K, self.initial_condition_omega, self.simulation_type)
         self.physical_condition = PhysicalPropertiesWriter(self.directory, self.nu, self.rho, self.simulation_type)
         self.numericalSetup = FvSchemesWriter(self.directory,self.simulation_type)
@@ -136,6 +139,8 @@ def create_openfoam_case():
     my_case = OpenFOAMCase(
         geometry_case=GEOMETRY_CASE, 
         refinement=REFINEMENT,
+        feature_level=SNAPPY_SETTINGS["feature_level"],
+        surface_refinement_levels=SNAPPY_SETTINGS["surface_refinement_levels"],
         directory=os.path.join(os.getcwd(), "OPENFOAM", GEOMETRY_CASE + "_" + REFINEMENT),
         bc_inlet=BC_INLET,
         bc_outlet=BC_OUTLET,
@@ -153,6 +158,7 @@ def create_openfoam_case():
         wk_setting=WK_SETTING
     )
     my_case.casePoilt()
+    os.system("touch f.foam")
     print("OpenFOAM case created")
 
 def run_mesh():
@@ -280,7 +286,11 @@ def run_simulation():
     # Logic to run simulation
     if SOLN_TYPE == "serial":
         # For serial solution
-        os.system("foamRun -solver incompressibleFluid > log.log")
+        #os.system("foamRun -solver incompressibleFluid > log.log")  
+        if BC_OUTLET == "3EWINDKESSEL":
+            os.system("pimpleFoam_WK_2.1 > log.log")    # pimpleFOAM_WK_2.0 or *2.1
+        else:
+            os.system("pimpleFoam > log.log")
     elif SOLN_TYPE == "parallel":
         # For parallel solution
         os.system("decomposePar > decompose.log")
@@ -289,7 +299,7 @@ def run_simulation():
         #os.system("mpirun -np {} foamRun -parallel -solver incompressibleFluid > log.log".format(SUBDOMAINS))
         # for OF10
         if BC_OUTLET == "3EWINDKESSEL":
-           os.system("mpirun -np {} pimpleFoam_WK_2.0 > log.log".format(SUBDOMAINS))    # pimpleFOAM_WK_2.0 or *2.1
+           os.system("mpirun -np {} pimpleFoam_WK_2.1 > log.log".format(SUBDOMAINS))    # pimpleFOAM_WK_2.0 or *2.1
         else:
             os.system("mpirun -np {} pimpleFoam > log.log".format(SUBDOMAINS))     
         os.system("reconstructPar > reconstruct.log")

@@ -201,17 +201,26 @@ solvers
 
 PIMPLE
 {
-    nOuterCorrectors 2;
+    nOuterCorrectors 20;
     nCorrectors     2;
     nNonOrthogonalCorrectors 0;
     pRefCell        0;
     pRefValue       0;
 
-    residualControl
+    outerCorrectorResidualControl
     {
-        U       1e-05;
-        p       1e-05;
-    }
+        U
+        {
+                tolerance 1e-5;
+                relTol 0;
+        }
+        p
+        {
+                tolerance 1e-6;
+                relTol 0;
+        }
+   }
+
 }
 
 potentialFlow
@@ -332,17 +341,25 @@ solvers
 PIMPLE
 {
     nOuterCorrectors 2;
-    nCorrectors     2;
+    nCorrectors     10;
     nNonOrthogonalCorrectors 0;
     pRefCell        0;
     pRefValue       0;
 
-    residualControl
+    outerCorrectorResidualControl
     {
-        U       1e-05;
-        p       1e-05;
-        "(k|omega|h)"   1e-5;
-    }
+        U
+        {
+                tolerance 1e-5;
+                relTol 0;
+        }
+        p
+        {
+                tolerance 1e-6;
+                relTol 0;
+        }
+   }
+
 }
 
 potentialFlow
