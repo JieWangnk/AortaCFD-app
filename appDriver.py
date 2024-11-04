@@ -37,8 +37,7 @@ class OpenFOAMCase:
         self.soln_type = soln_type
         self.subdomains = subdomains
         self.decomposition_method = decomposition_method
-        self.wk_setting = wk_setting
-            
+        self.wk_setting = wk_setting            
         self.__create_OFcase()
 
         self.geometry_analyzer = GeometryAnalyzer(DIRECTORY=self.directory,geometry_case=self.geometry_case,refinement=self.refinement,feature_level=self.feature_level,surface_refinement_levels=self.surface_refinement_levels)
@@ -50,8 +49,6 @@ class OpenFOAMCase:
         self.solnType = SolnType(self.directory,soln_type,subdomains,decomposition_method)
         if self.BC_OUTLET == "3EWINDKESSEL":
             self.wk_Setup = wk_Setup(self.directory,self.geometry_analyzer.stl_files,self.wk_setting)
-
-       
 
     def __create_OFcase(self):
         if not os.path.exists(self.directory):
@@ -159,7 +156,6 @@ def create_openfoam_case():
         wk_setting=WK_SETTING
     )
     my_case.casePoilt()
-    os.system("touch f.foam")
     print("OpenFOAM case created")
 
 def run_mesh():
@@ -196,11 +192,9 @@ def run_mesh():
     
     #####for scaling in openfoam10 and above use
     os.system("transformPoints 'scale=({} {} {})'".format(GEOMETRY_SCALE, GEOMETRY_SCALE, GEOMETRY_SCALE))
-    
-     
+    os.system("touch f.foam")
     end_time = time.time()
     elapsed_time = end_time - start_time
-    
     print("Mesh created in {:.2f} minutes.".format(elapsed_time / 60))
 
 
@@ -233,17 +227,20 @@ def run_bc():
     os.system("cp points constant/boundaryData/{}/".format(inlet_stl))
     os.system("rm points")
     
+    stl_files = [f for f in os.listdir(os.path.join("constant", "triSurface")) if f.endswith(".stl")]
     # Create an instance of PatchProcessing
-    inlet_radius_calculator = PatchProcessing(DIRECTORY = os.path.join(os.getcwd(), "OPENFOAM", GEOMETRY_CASE + "_" + REFINEMENT), STL_FILES = inlet_stl, patch_name = "inlet")
+    inlet_radius_calculator = PatchProcessing(DIRECTORY = os.path.join(os.getcwd(), "OPENFOAM", GEOMETRY_CASE + "_" + REFINEMENT), STL_FILES = stl_files, PATH_NAME = "inlet")
     # calculate the inlet radius
     inlet_center,inlet_radius,inlet_normal = inlet_radius_calculator.calculate_inlet_center_radius()
     # scale the inlet radius based on GEOMETRY_SCALE
-    inlet_radius = inlet_radius * eval(GEOMETRY_SCALE)
-    inlet_center = inlet_center * eval(GEOMETRY_SCALE)
+    inlet_radius = inlet_radius * float(GEOMETRY_SCALE)
+    inlet_center = inlet_center * float(GEOMETRY_SCALE)
+    print("Inlet center: ", inlet_center)
+    print("Inlet radius: ", inlet_radius)
     # run inletMapping 
-    processor = InletMapping(center = eval(inlet_center), radius = eval(inlet_radius))
+    processor = InletMapping(center = inlet_center, radius = inlet_radius, inlet_data_file=INLET_DATA_FILE,inlet_name="inlet",profile=INLET_PROFILE)
     #processor.run(INLET_DATA_FILE, inlet_stl, scale=GEOMETRY_SCALE)
-    processor.run(INLET_DATA_FILE, inlet_stl)
+    processor.run()
     
     # copy the content of "INLET_DATA_FILE" directory to "INLET_DATA_BPM" directory
       
