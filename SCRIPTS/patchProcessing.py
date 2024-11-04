@@ -11,12 +11,12 @@ class PatchProcessing:
         self.geometry_case = GEOMETRY_CASE
 
         # Construct the path to the CAD folder
-        self.CAD_FOLDER = os.path.join("CAD", self.geometry_case)
+        self.CAD_FOLDER = os.path.join("constant","triSurface")
 
         # Find the inlet stl file 
         self.STL = [f for f in self.STL_FILES if PATH_NAME in f][0]
         self.STL_PATH = os.path.join(self.CAD_FOLDER, self.STL)
-
+        
         self.mesh_data = self.load_mesh(self.STL_PATH)
         self.all_points = self.extract_points()
       
@@ -63,7 +63,7 @@ class PatchProcessing:
         perimeter = hull.area
 
         # Calculate hydraulic radius
-        hydraulic_radius = (2 * area) / perimeter * 0.001  # assuming a scaling factor of 10^-3
+        hydraulic_radius = (2 * area) / perimeter  # assuming a scaling factor of 10^-3
 
         return projected_centroid, hydraulic_radius, average_normal
 

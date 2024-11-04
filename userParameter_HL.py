@@ -10,6 +10,11 @@ BC_OUTLET = "3EWINDKESSEL" #options: ZERO_GRADIENT, 3EWINDKESSEL
 #-------------------------------------------------------------------------------------------#
 # Inlet details
 INLET_DATA_FILE = "BPM120.csv"
+INLET_PROFILE = "parabolic" #options: womersley, parabolic
+WOMERSLEY_PARAMETERS = {
+    "HEART_RATE": "75", 
+    "DELTA_P": "1" # Pressure gradient amplitude
+}
 #-------------------------------------------------------------------------------------------#
 # Physical properties: transportProperteis and momentumTransport
 NU = "3.3e-06"
