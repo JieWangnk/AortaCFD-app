@@ -22,10 +22,7 @@ SNAPPY_SETTINGS = {
 INITIAL_CONDITION_U = {
         #"inlet_volumetric_flow_rate": "7.84e-5",
         "inlet_max_velocity": "0.1",
-        "inlet_normal": "(0, 0, 1)",
-        "inlet_radius": "[-0.015923, -0.0212171, -0.0128499]",
         "heart_rate": "60",
-        "inlet_center" : "0.0055"
 }
 
 INITIAL_CONDITION_P = {
@@ -55,10 +52,6 @@ SIMULATION_CONTROL = {
 }
 
 WK_SETTING = {
-    "outlet1" : "2.880E-05",  # RCCA area
-    "outlet2" : "1.089E-05",  # LCCA area
-    "outlet3" : "1.827E-05",  # LSCA area
-    "outlet4" : "3.944E-05",   # DAo area
     "percentage" : "40",  # Insert percentage flow through branches (30% average) 
     "SP" : "113",  # Systole Pressure   
     "DP" : "62",   # Dystole Pressure     

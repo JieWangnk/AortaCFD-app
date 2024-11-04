@@ -1,7 +1,7 @@
 import os 
 import sys
 from userParameter_HL import *
-from SCRIPTS.inletRadius import *
+from SCRIPTS.patchProcessing import *
 from SCRIPTS.meshSetup import GeometryAnalyzer
 
 
@@ -19,8 +19,8 @@ class BoundaryConditionSetup():
         self.INITIAL_CONDITION_OMEGA = INITIAL_CONDITION_OMEGA
         self.SIMULATIONTYPE = SIMULATIONTYPE
 
-        # Create an instance of InletRadius
-        inlet_radius_calculator = InletRadius(self.DIRECTORY, self.STL_FILES)
+        # Create an instance of PatchProcessing
+        inlet_radius_calculator = PatchProcessing(self.DIRECTORY, self.STL_FILES,"inlet")
         
         # Get the inlet parameters from inletRadius module
         self.inlet_center, self.inlet_radius, self.inlet_normal = inlet_radius_calculator.calculate_inlet_center_radius()
@@ -28,7 +28,6 @@ class BoundaryConditionSetup():
         self.INITIAL_CONDITION_U["inlet_radius"] = self.inlet_radius
         self.INITIAL_CONDITION_U["inlet_center"] = self.inlet_center
         self.INITIAL_CONDITION_U["inlet_normal"] = self.inlet_normal
-
 
         # find the main aorta stl file and rest are inlet and outlet patch
         self.MAIN_AORTA_STL = [f for f in self.STL_FILES if "wall" in f][0]

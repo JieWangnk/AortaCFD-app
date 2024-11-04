@@ -2,6 +2,7 @@ import os
 import sys
 import numpy as np
 import matplotlib.pyplot as plt 
+from SCRIPTS.patchProcessing import *
 from userParameter_HL import *
 from userParameter_LL import *
 
@@ -35,12 +36,17 @@ FoamFile
 """
 
 #------------------------------------------------------------------
-
+        # calcuate the patch area 
+        outlet1 = PatchProcessing(self.DIRECTORY, self.STL_FILES, "outlet1").calculate_surface_area()
+        outlet2 = PatchProcessing(self.DIRECTORY, self.STL_FILES, "outlet2").calculate_surface_area()
+        outlet3 = PatchProcessing(self.DIRECTORY, self.STL_FILES, "outlet3").calculate_surface_area()
+        outlet4 = PatchProcessing(self.DIRECTORY, self.STL_FILES, "outlet4").calculate_surface_area()
+        # covert the area to gemetery scale
+        outlet1 = outlet1 * float(GEOMETRY_SCALE) * float(GEOMETRY_SCALE)
+        outlet2 = outlet2 * float(GEOMETRY_SCALE) * float(GEOMETRY_SCALE)
+        outlet3 = outlet3 * float(GEOMETRY_SCALE) * float(GEOMETRY_SCALE)
+        outlet4 = outlet4 * float(GEOMETRY_SCALE) * float(GEOMETRY_SCALE)
         # Accessing the WK_SETTING dictionary values
-        outlet1 = float(self.WK_SETTING["outlet1"])
-        outlet2 = float(self.WK_SETTING["outlet2"])
-        outlet3 = float(self.WK_SETTING["outlet3"])
-        outlet4 = float(self.WK_SETTING["outlet4"])
         percentage = float(self.WK_SETTING["percentage"])
         SP = float(self.WK_SETTING["SP"])
         DP = float(self.WK_SETTING["DP"])
