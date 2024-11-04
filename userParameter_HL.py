@@ -1,6 +1,6 @@
 from userParameter_LL import *
 
-GEOMETRY_CASE = "geometry1"
+GEOMETRY_CASE = "PAT1_2024"
 REFINEMENT = "coarse" #options: "coarse", "medium", "fine"
 GEOMETRY_SCALE = "1e-3"
 #-------------------------------------------------------------------------------------------#
@@ -10,13 +10,11 @@ BC_OUTLET = "3EWINDKESSEL" #options: ZERO_GRADIENT, 3EWINDKESSEL
 #-------------------------------------------------------------------------------------------#
 # Inlet details
 INLET_DATA_FILE = "BPM120.csv"
-INLET_CENTER = "[-0.0159618, -0.0217017, -0.0128172]"
-INLET_RADIUS = "0.0055"
 #-------------------------------------------------------------------------------------------#
 # Physical properties: transportProperteis and momentumTransport
 NU = "3.3e-06"
 RHO = "1060"
-SIMULATIONTYPE ="LES" #options: laminar, RAS, LES
+SIMULATIONTYPE ="laminar" #options: laminar, RAS, LES
 #-------------------------------------------------------------------------------------------#
 # Cardiac cycle details
 NUMBER_OF_CYCLES = "2"

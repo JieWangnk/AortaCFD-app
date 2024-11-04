@@ -7,7 +7,6 @@ from SCRIPTS.numericalSetup import *
 from SCRIPTS.solverSetup import *
 from SCRIPTS.simulationSetup import *
 from SCRIPTS.inletMapping import *
-from SCRIPTS.inletRadius import *
 from SCRIPTS.inletDataSetup import *
 from SCRIPTS.solnTypeSetup import *
 from SCRIPTS.wkSetup import *
@@ -16,10 +15,13 @@ import shutil
 import time
 
 class OpenFOAMCase:
-
-    def __init__(self, geometry_case, refinement, directory, bc_inlet, bc_outlet, initial_condition_U, initial_condition_p, initial_condition_K, initial_condition_omega, nu, rho, simulation_type, simulation_control, soln_type, subdomains, decomposition_method, wk_setting):
+    def __init__(self, geometry_case, refinement,feature_level,surface_refinement_levels,directory, bc_inlet, bc_outlet, initial_condition_U, initial_condition_p,
+        initial_condition_K, initial_condition_omega, nu, rho, simulation_type, simulation_control, 
+        soln_type, subdomains, decomposition_method, wk_setting):
         self.geometry_case = geometry_case
         self.refinement = refinement
+        self.feature_level = feature_level
+        self.surface_refinement_levels = surface_refinement_levels
         self.directory = directory
         self.BC_INLET = bc_inlet
         self.BC_OUTLET = bc_outlet
@@ -38,7 +40,7 @@ class OpenFOAMCase:
             
         self.__create_OFcase()
 
-        self.geometry_analyzer = GeometryAnalyzer(self.directory,self.geometry_case, self.refinement)
+        self.geometry_analyzer = GeometryAnalyzer(DIRECTORY=self.directory,geometry_case=self.geometry_case,refinement=self.refinement,feature_level=self.feature_level,surface_refinement_levels=self.surface_refinement_levels)
         self.boundary_condition = BoundaryConditionSetup(self.directory,self.geometry_analyzer.stl_files,self.BC_INLET, self.BC_OUTLET, self.initial_condition_U, self.initial_condition_p, self.initial_condition_K, self.initial_condition_omega, self.simulation_type)
         self.physical_condition = PhysicalPropertiesWriter(self.directory, self.nu, self.rho, self.simulation_type)
         self.numericalSetup = FvSchemesWriter(self.directory,self.simulation_type)
@@ -137,6 +139,8 @@ def create_openfoam_case():
     my_case = OpenFOAMCase(
         geometry_case=GEOMETRY_CASE, 
         refinement=REFINEMENT,
+        feature_level=SNAPPY_SETTINGS["feature_level"],
+        surface_refinement_levels=SNAPPY_SETTINGS["surface_refinement_levels"],
         directory=os.path.join(os.getcwd(), "OPENFOAM", GEOMETRY_CASE + "_" + REFINEMENT),
         bc_inlet=BC_INLET,
         bc_outlet=BC_OUTLET,
@@ -154,6 +158,7 @@ def create_openfoam_case():
         wk_setting=WK_SETTING
     )
     my_case.casePoilt()
+    os.system("touch f.foam")
     print("OpenFOAM case created")
 
 def run_mesh():
@@ -173,25 +178,21 @@ def run_mesh():
     """
     print("Running meshing process...")
     start_time = time.time()
-    #for translating the mesh so as the center of the inlet is (0,0,0)
-    #os.system("transformPoints 'translate=({} {} {})'".format(GEOMETRY_SCALE, GEOMETRY_SCALE, GEOMETRY_SCALE))
-    #os.system("transformPoints 'translate=(-117.732 -71.822 -36.0173)'")   
     # Run blockMesh
-    os.system("blockMesh > blockMesh.log")
+    os.system("blockMesh")
     # Run surfaceFeatureExtract
-    os.system("surfaceFeatures > surfaceFeatures.log")
+    os.system("surfaceFeatures")
     # Run snappyHexMesh
-    os.system("snappyHexMesh -overwrite > snappyHex.log")
+    os.system("snappyHexMesh -overwrite")
     # run checkMesh
     os.system("checkMesh > checkMesh.log")
     # transfer mesh scale based on GEOMETRY_SCALE
     # openfoam8
-    # os.system("transformPoints -scale '({} {} {})'".format(GEOMETRY_SCALE,GEOMETRY_SCALE,GEOMETRY_SCALE))
+    os.system("transformPoints -scale '({} {} {})'".format(GEOMETRY_SCALE,GEOMETRY_SCALE,GEOMETRY_SCALE))
     
-    #####for scaling in openfoam10 and above use
-    os.system("transformPoints 'scale=({} {} {})'".format(GEOMETRY_SCALE, GEOMETRY_SCALE, GEOMETRY_SCALE))
-    
-     
+    #####for scaling in openfoam11 use
+    #os.system("transformPoints 'scale=({} {} {})'".format(GEOMETRY_SCALE, GEOMETRY_SCALE, GEOMETRY_SCALE))
+ 
     end_time = time.time()
     elapsed_time = end_time - start_time
     
@@ -215,19 +216,34 @@ def run_bc():
     """
     print("Setting boundary conditions...")
     start_time = time.time()
+    ###### Old method by Jie- to be removed after testing ######
+    # create sampleDict file for inlet extraction, this can be done only after meshing
+    #os.system("postProcess -func sampleDict")
+    
+    #to perform triSurfaceSmapling in openfoam11 use the following command
+    #os.system("surfaceMeshTriangulate inlet.stl -patches "(inlet)"")
+    # cp the points file to INLET folder
+    # os.system("cp postProcessing/sampleDict/0/triSurfaceSampling/points constant/boundaryData/{}/points".format(inlet_stl))
+    
+    # for opfnoam11
+    #os.system("mv postProcessing/sampleDict/0/points.xy postProcessing/sampleDict/0/points")
+    #os.system("cp postProcessing/sampleDict/0/points constant/boundaryData/{}/points".format(inlet_stl))
+    ##########################################################
+	# another option is to run "writeMeshObj" by Dania
+    # Then rename the "patch_inlet_0.obj" to be "points-new", copy this to "/OPENFOAM/geometry1-dania-new_coarse/constant/boundaryData/inlet" directory then run the python script named to porduced the required format, then rm -r mesh* patch*
     
     # get inlet stl file name
     inlet_stl = [f for f in os.listdir(os.path.join("constant", "triSurface")) if "inlet" in f][0].split(".")[0] 
     
     # write the inlet cell centers to map the inlet velocity
-    os.system("writeMeshObj > meshObj.log")
+    os.system("writeMeshObj")
     os.system("mv patch_inlet_0.obj points-new")
     os.system("rm -r mesh* patch*")
     formatter = EnhancedPointsFormatter(format_version=1)
     formatter.format_coordinates()
     os.system("cp points constant/boundaryData/{}/".format(inlet_stl))
     os.system("rm points")
-        
+    
     # run inletMapping 
     processor = InletMapping(center = eval(INLET_CENTER), radius = eval(INLET_RADIUS))
     #processor.run(INLET_DATA_FILE, inlet_stl, scale=GEOMETRY_SCALE)
@@ -246,7 +262,6 @@ def run_bc():
     formatter = EnhancedPointsFormatter(format_version=2)
     formatter.format_coordinates()
     os.system("cp points constant/boundaryData/{}/".format(inlet_stl))
-    os.system("rm points*")
     end_time = time.time()
     elapsed_time = end_time - start_time
 
@@ -271,7 +286,11 @@ def run_simulation():
     # Logic to run simulation
     if SOLN_TYPE == "serial":
         # For serial solution
-        os.system("foamRun -solver incompressibleFluid > log.log")
+        #os.system("foamRun -solver incompressibleFluid > log.log")  
+        if BC_OUTLET == "3EWINDKESSEL":
+            os.system("pimpleFoam_WK_2.1 > log.log")    # pimpleFOAM_WK_2.0 or *2.1
+        else:
+            os.system("pimpleFoam > log.log")
     elif SOLN_TYPE == "parallel":
         # For parallel solution
         os.system("decomposePar > decompose.log")
@@ -280,7 +299,7 @@ def run_simulation():
         #os.system("mpirun -np {} foamRun -parallel -solver incompressibleFluid > log.log".format(SUBDOMAINS))
         # for OF10
         if BC_OUTLET == "3EWINDKESSEL":
-           os.system("mpirun -np {} pimpleFoam_WK_2.0 > log.log".format(SUBDOMAINS))    # pimpleFOAM_WK_2.0 or *2.1
+           os.system("mpirun -np {} pimpleFoam_WK_2.1 > log.log".format(SUBDOMAINS))    # pimpleFOAM_WK_2.0 or *2.1
         else:
             os.system("mpirun -np {} pimpleFoam > log.log".format(SUBDOMAINS))     
         os.system("reconstructPar > reconstruct.log")

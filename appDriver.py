@@ -7,6 +7,7 @@ from SCRIPTS.numericalSetup import *
 from SCRIPTS.solverSetup import *
 from SCRIPTS.simulationSetup import *
 from SCRIPTS.inletMapping import *
+from SCRIPTS.patchProcessing import *
 from SCRIPTS.inletDataSetup import *
 from SCRIPTS.solnTypeSetup import *
 from SCRIPTS.wkSetup import *
@@ -178,21 +179,25 @@ def run_mesh():
     """
     print("Running meshing process...")
     start_time = time.time()
+    #for translating the mesh so as the center of the inlet is (0,0,0)
+    #os.system("transformPoints 'translate=({} {} {})'".format(GEOMETRY_SCALE, GEOMETRY_SCALE, GEOMETRY_SCALE))
+    #os.system("transformPoints 'translate=(-117.732 -71.822 -36.0173)'")   
     # Run blockMesh
-    os.system("blockMesh")
+    os.system("blockMesh > blockMesh.log")
     # Run surfaceFeatureExtract
-    os.system("surfaceFeatures")
+    os.system("surfaceFeatures > surfaceFeatures.log")
     # Run snappyHexMesh
-    os.system("snappyHexMesh -overwrite")
+    os.system("snappyHexMesh -overwrite > snappyHex.log")
     # run checkMesh
     os.system("checkMesh > checkMesh.log")
     # transfer mesh scale based on GEOMETRY_SCALE
     # openfoam8
-    os.system("transformPoints -scale '({} {} {})'".format(GEOMETRY_SCALE,GEOMETRY_SCALE,GEOMETRY_SCALE))
+    # os.system("transformPoints -scale '({} {} {})'".format(GEOMETRY_SCALE,GEOMETRY_SCALE,GEOMETRY_SCALE))
     
-    #####for scaling in openfoam11 use
-    #os.system("transformPoints 'scale=({} {} {})'".format(GEOMETRY_SCALE, GEOMETRY_SCALE, GEOMETRY_SCALE))
- 
+    #####for scaling in openfoam10 and above use
+    os.system("transformPoints 'scale=({} {} {})'".format(GEOMETRY_SCALE, GEOMETRY_SCALE, GEOMETRY_SCALE))
+    
+     
     end_time = time.time()
     elapsed_time = end_time - start_time
     
@@ -216,27 +221,11 @@ def run_bc():
     """
     print("Setting boundary conditions...")
     start_time = time.time()
-    ###### Old method by Jie- to be removed after testing ######
-    # create sampleDict file for inlet extraction, this can be done only after meshing
-    #os.system("postProcess -func sampleDict")
-    
-    #to perform triSurfaceSmapling in openfoam11 use the following command
-    #os.system("surfaceMeshTriangulate inlet.stl -patches "(inlet)"")
-    # cp the points file to INLET folder
-    # os.system("cp postProcessing/sampleDict/0/triSurfaceSampling/points constant/boundaryData/{}/points".format(inlet_stl))
-    
-    # for opfnoam11
-    #os.system("mv postProcessing/sampleDict/0/points.xy postProcessing/sampleDict/0/points")
-    #os.system("cp postProcessing/sampleDict/0/points constant/boundaryData/{}/points".format(inlet_stl))
-    ##########################################################
-	# another option is to run "writeMeshObj" by Dania
-    # Then rename the "patch_inlet_0.obj" to be "points-new", copy this to "/OPENFOAM/geometry1-dania-new_coarse/constant/boundaryData/inlet" directory then run the python script named to porduced the required format, then rm -r mesh* patch*
     
     # get inlet stl file name
     inlet_stl = [f for f in os.listdir(os.path.join("constant", "triSurface")) if "inlet" in f][0].split(".")[0] 
-    
     # write the inlet cell centers to map the inlet velocity
-    os.system("writeMeshObj")
+    os.system("writeMeshObj > meshObj.log")
     os.system("mv patch_inlet_0.obj points-new")
     os.system("rm -r mesh* patch*")
     formatter = EnhancedPointsFormatter(format_version=1)
@@ -244,8 +233,15 @@ def run_bc():
     os.system("cp points constant/boundaryData/{}/".format(inlet_stl))
     os.system("rm points")
     
+    # Create an instance of PatchProcessing
+    inlet_radius_calculator = PatchProcessing(DIRECTORY = os.path.join(os.getcwd(), "OPENFOAM", GEOMETRY_CASE + "_" + REFINEMENT), STL_FILES = inlet_stl, patch_name = "inlet")
+    # calculate the inlet radius
+    inlet_center,inlet_radius,inlet_normal = inlet_radius_calculator.calculate_inlet_center_radius()
+    # scale the inlet radius based on GEOMETRY_SCALE
+    inlet_radius = inlet_radius * eval(GEOMETRY_SCALE)
+    inlet_center = inlet_center * eval(GEOMETRY_SCALE)
     # run inletMapping 
-    processor = InletMapping(center = eval(INLET_CENTER), radius = eval(INLET_RADIUS))
+    processor = InletMapping(center = eval(inlet_center), radius = eval(inlet_radius))
     #processor.run(INLET_DATA_FILE, inlet_stl, scale=GEOMETRY_SCALE)
     processor.run(INLET_DATA_FILE, inlet_stl)
     
@@ -262,6 +258,7 @@ def run_bc():
     formatter = EnhancedPointsFormatter(format_version=2)
     formatter.format_coordinates()
     os.system("cp points constant/boundaryData/{}/".format(inlet_stl))
+    os.system("rm points*")
     end_time = time.time()
     elapsed_time = end_time - start_time
 
