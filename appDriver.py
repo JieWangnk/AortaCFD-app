@@ -78,8 +78,9 @@ class OpenFOAMCase:
             if "inlet" in f:
                 inletBoundary = os.path.join(self.directory,"constant","boundaryData",f.split(".")[0])
                 os.makedirs(inletBoundary)
-                # copy the INLET_DATA_FILE to constant/boundaryData/*inlet*/ folder
-                shutil.copy(os.path.join("INLET",INLET_DATA_FILE),inletBoundary)
+                if self.BC_INLET == "TIME_VARYING_MAPPED_FIXED_VALUE" and "INLET_PROFILE" == "parabolic":
+                    # copy the INLET_DATA_FILE to constant/boundaryData/*inlet*/ folder
+                    shutil.copy(os.path.join("INLET",INLET_DATA_FILE),inletBoundary)
         
     def write_geometry_files(self):
         self.geometry_analyzer.write_blockMeshDict()
@@ -244,11 +245,15 @@ def run_bc():
     
     # copy the content of "INLET_DATA_FILE" directory to "INLET_DATA_BPM" directory
       
-    os.system("mkdir constant/boundaryData/inlet/InletBCs_" + str(INLET_DATA))
-    os.system("cp -r constant/boundaryData/inlet/{0}/* constant/boundaryData/inlet/InletBCs_{1}".format(INLET_DATA_FILE.split('.')[0], INLET_DATA))
+    #os.system("mkdir constant/boundaryData/inlet/InletBCs_" + str(HEART_RATE))
+    #os.system("cp -r constant/boundaryData/inlet/{0}/* constant/boundaryData/inlet/InletBCs_{1}".format(INLET_DATA_FILE.split('.')[0], INLET_DATA))
+    #print("cp -r constant/boundaryData/inlet/{0}/* constant/boundaryData/inlet/InletBCs_{1}".format(INLET_DATA_FILE.split('.')[0], INLET_DATA))
     
     # run inletDataSetup
-    inletProfile = InletVelocityProfile(BPM = eval(INLET_DATA), numberOfCycle  = eval(NUMBER_OF_CYCLES), baseDir=None)
+    inletProfile = InletVelocityProfile(BPM = eval(HEART_RATE), numberOfCycle  = eval(NUMBER_OF_CYCLES), baseDir=None)
+    print("Inlet velocity profile simulink data setup...")
+    print("Inlet velocity profile data for BPM = " + str(INLET_DATA))
+    print("Number of cycles = " + str(NUMBER_OF_CYCLES))
     inletProfile.execute()
     
     # change the format of "points" file to match the timeVaryingMappedFixedValue BC requirements

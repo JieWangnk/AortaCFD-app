@@ -22,7 +22,7 @@ SNAPPY_SETTINGS = {
 INITIAL_CONDITION_U = {
         #"inlet_volumetric_flow_rate": "7.84e-5",
         "inlet_max_velocity": "0.1",
-        "heart_rate": "60",
+        "heart_rate": "113",
 }
 
 INITIAL_CONDITION_P = {
@@ -53,9 +53,9 @@ SIMULATION_CONTROL = {
 
 WK_SETTING = {
     "percentage" : "40",  # Insert percentage flow through branches (30% average) 
-    "SP" : "113",  # Systole Pressure   
-    "DP" : "62",   # Dystole Pressure     
-    "HR" : "120"  # Heart Rate
+    "SP" : "118",  # Systole Pressure   
+    "DP" : "82",   # Dystole Pressure     
+    "HR" : "113"  # Heart Rate
 }
 
 
