@@ -7,7 +7,7 @@ from userParameter_HL import *
 from userParameter_LL import *
 
 class InletMapping:
-    def __init__(self, center, radius, inlet_data_file, inlet_name, scale=1e0,profile='parabolic', **kwargs):
+    def __init__(self, center, radius, inlet_data_file, inlet_name, scale=1e0, profile='parabolic', **kwargs):
         self.center = np.array(center)
         self.radius = radius
         self.inlet_data_file = inlet_data_file
@@ -21,14 +21,14 @@ class InletMapping:
         v2 = p3 - p1
         v3 = np.cross(v1, v2)
         v3 = v3 / np.linalg.norm(v3)
-        if orientation == 'in' and v3[2] > 0 or orientation == 'out' and v3[2] < 0:
+        if (orientation == 'in' and v3[2] > 0) or (orientation == 'out' and v3[2] < 0):
             v3 = -v3
         return v3
 
     def read_csv_file(self, file_name):
         data = np.genfromtxt(file_name, delimiter=',', skip_header=0)
         time = data[:, 0]
-        vel = np.transpose(data[:, 1])
+        vel = data[:, 1]
         return time, vel
 
     def get_velocity_components(self, vel, face_normal_vectors):
@@ -56,7 +56,7 @@ class InletMapping:
         factor = (1 - (dist / self.radius)**2)
         return vel * face_normal_vectors * factor
 
-    def write_openfoam_data_format_parabolic(self, file_name, n_points, vel_x_array, vel_y_array, vel_z_array):
+    def write_openfoam_data_format(self, file_name, n_points, vel_x_array, vel_y_array, vel_z_array):
         with open(file_name, 'w') as file:
             file.write(f"{n_points}\n(\n")
             for vel_x, vel_y, vel_z in zip(vel_x_array, vel_y_array, vel_z_array):
@@ -64,80 +64,124 @@ class InletMapping:
                 file.write(formatted_line)
             file.write(")\n")
 
-    def womersley_velocity_profile(self, r, t, R, rho, nu, delta_P, HR):
-        omega = 2 * np.pi * int(HR) / 60  # Convert HR to angular frequency
-        alpha = R * np.sqrt(omega / float(nu))
-        i = complex(0, 1)
-        gamma = i ** 1.5 * alpha
-        exponent = i * omega * t
+    @staticmethod
+    def womersley_velocity_profile_half_sine(t, r, R, rho, nu, delta_P_max, HR):
+        """
+        Calculate the Womersley velocity profile at a given time and radial position.
+        """
+        # Convert heart rate to angular frequency
+        f = HR / 60.0
+        omega = 2 * np.pi * f
 
-        # Compute Bessel function terms using jv
-        numerator = jv(0, gamma * (r / R))
-        denominator = jv(0, gamma)
+        # Calculate Womersley number
+        alpha = R * np.sqrt(omega / nu)
+        if alpha > 0.1:
+            # Compute complex parameters
+            i = complex(0, 1)
+            gamma = alpha * np.exp(-i * np.pi / 4)
+            numerator = jv(0, gamma * (r / R))
+            denominator = jv(0, gamma)
+            if np.abs(denominator) < 1e-10:
+                raise ValueError("Denominator in Bessel function computation is too small.")
+            U = (delta_P_max / (omega * rho)) * np.abs(1 - numerator / denominator)
+        else:
+            # Simplified parabolic profile
+            U = delta_P_max / (4 * nu) * (1 - (r / R)**2)
 
-        # Compute complex velocity
-        u_complex = (int(delta_P) / (i * omega * int(rho))) * (1 - numerator / denominator) * np.exp(exponent)
+        # Time-dependent term
+        sin_omega_t = np.sin(omega * t)
+        heaviside = np.heaviside(sin_omega_t, 0)
+        time_factor = sin_omega_t * heaviside
 
-        # Return the real part
-        return np.real(u_complex)
+        # Compute velocity
+        u = time_factor * U
+        return u, alpha
 
-
-
-    def write_out(self, inlet_data_file, inlet_name, time, vel, n_points, points, normal_vector, scale= 1e0, profile='parabolic', **kwargs):
-        directory = f"constant/boundaryData/{inlet_name}/{inlet_data_file.split('.')[0]}"
+    def write_out(self, inlet_data_file, inlet_name,n_points, points, normal_vector, scale=1.0, profile='parabolic', **kwargs):
+        if profile == 'womersley':
+            directory = f"constant/boundaryData/{inlet_name}/BPM{HEART_RATE}"
+        else:
+            directory = f"constant/boundaryData/{inlet_name}/{inlet_data_file.split('.')[0]}"
         parent_dir = os.getcwd()
         directory = os.path.join(parent_dir, directory)
         os.makedirs(directory, exist_ok=True)
 
-        for files in glob.glob(directory + '/*'):
-            os.remove(files)
+        for file in glob.glob(directory + '/*'):
+            os.remove(file)
         
-        if time.size > 0:  # Check if time is not empty
-            for t in time:
-                # print("Processing time:", t)  # Print current time being processed
+        if profile == 'parabolic':
+            # Read the velocity data from the csv file in the INLET folder
+            times, velocities = self.read_csv_file('constant/boundaryData/{}/{}'.format(self.inlet_name, self.inlet_data_file))
+            if times.size > 0:
+                for t in times:
+                    vel_x_array, vel_y_array, vel_z_array = [], [], []
+                    for point in points:
+                        point = np.array(point, dtype=float) * scale
+                        dist = self.get_distance_from_center(point)
+                        if dist <= self.radius:
+                            t_idx = np.where(times == t)[0]
+                            if len(t_idx) > 0:
+                                velocity_magnitude = velocities[t_idx[0]]
+                                vel_x, vel_y, vel_z = self.get_velocity_components_parabolic(
+                                    velocity_magnitude, normal_vector, dist)
+                                vel_x_array.append(vel_x)
+                                vel_y_array.append(vel_y)
+                                vel_z_array.append(vel_z)
+                        else:
+                            # Point is outside the vessel radius; set velocity to zero
+                            vel_x_array.append(0.0)
+                            vel_y_array.append(0.0)
+                            vel_z_array.append(0.0)
+                    # Write the velocities for this time step
+                    self.write_openfoam_data_format(
+                        os.path.join(directory, 'U_'+f'{t:.6f}'),
+                        n_points,
+                        vel_x_array,
+                        vel_y_array,
+                        vel_z_array
+                    )
+        elif profile == 'womersley':
+            # Womersley parameters
+            R = self.radius
+            rho = eval(RHO)
+            nu = eval(NU)
+            delta_P = eval(WOMERSLEY_PARAMETERS['SYSTOLIC_PRESSURE']) - eval(WOMERSLEY_PARAMETERS['DIASTOLIC_PRESSURE'])
+            HR = eval(HEART_RATE)
+
+            newTime = np.linspace(0, 60/HR, 100)
+            for t in newTime:
                 vel_x_array, vel_y_array, vel_z_array = [], [], []
                 for point in points:
                     point = np.array(point, dtype=float) * scale
                     dist = self.get_distance_from_center(point)
+                    r = dist
                     if dist <= self.radius:
-                        if profile == 'parabolic':
-                            t_idx = np.where(time == t)[0]
-                            if len(t_idx) > 0:  # Check if index exists
-                                velocity_magnitude = vel[t_idx[0]]  # Access velocity magnitude
-                                # print("Velocity magnitude at time", t, ":", velocity_magnitude)
-                                # print("Normal vector:", normal_vector)
-                                # print("Distance from center:", dist)
-                                vel_x, vel_y, vel_z = self.get_velocity_components_parabolic(
-                                    velocity_magnitude, normal_vector, dist)
-                        elif profile == 'womersley':
-                            # Womersley parameters
-                            R = self.radius
-                            rho = RHO #kwargs.get('rho', 1060)  # Blood density in kg/m^3
-                            nu = NU  #kwargs.get('mu', 0.004)   # Blood dynamic viscosity in Pa·s
-                            delta_P = WOMERSLEY_PARAMETERS["DELTA_P"]  # Pressure gradient amplitude
-                            HR = WOMERSLEY_PARAMETERS["HEART_RATE"]      # Heart rate in beats per minute
-
-                            # Calculate radial position normalized to inlet radius
-                            r = dist
-                            velocity_magnitude = self.womersley_velocity_profile(r, t, R, rho, nu, delta_P, HR)
-                            vel_x, vel_y, vel_z = self.get_velocity_components(
-                                velocity_magnitude, normal_vector)
-                        else:
-                            raise ValueError("Invalid profile type. Choose 'parabolic' or 'womersley'.")
+                        velocity_magnitude,alpha  = self.womersley_velocity_profile_half_sine(
+                            t=t, r=r, R=R, rho=rho, nu=nu, delta_P_max=delta_P, HR=HR)
+                        vel_x, vel_y, vel_z = self.get_velocity_components(
+                            velocity_magnitude, normal_vector)
                         vel_x_array.append(vel_x)
                         vel_y_array.append(vel_y)
                         vel_z_array.append(vel_z)
                     else:
-                        vel_x_array.append(0)
-                        vel_y_array.append(0)
-                        vel_z_array.append(0)
-                self.write_openfoam_data_format_parabolic(
-                    os.path.join(directory, f'U_{t:.6f}'), str(n_points), vel_x_array, vel_y_array, vel_z_array)
+                        # Point is outside the vessel radius; set velocity to zero
+                        vel_x_array.append(0.0)
+                        vel_y_array.append(0.0)
+                        vel_z_array.append(0.0)
+                # Write the velocities for this time step
+                self.write_openfoam_data_format(
+                    os.path.join(directory, 'U_'+f'{t:.6f}'),
+                    n_points,
+                    vel_x_array,
+                    vel_y_array,
+                    vel_z_array
+                )
+            print("Womersley velocity profile generated: alpha = ", alpha)
+        else:
+            raise ValueError("Invalid profile type. Choose 'parabolic' or 'womersley'.")
+
 
     def run(self):
-        # Read the velocity data from the csv file in the INLET folder
-        times, velocities = self.read_csv_file(
-            'constant/boundaryData/{}/{}'.format(self.inlet_name, self.inlet_data_file))
         n_points, points = self.read_points_file(
             'constant/boundaryData/{}/points'.format(self.inlet_name))
         indices = np.random.randint(0, len(points), size=3)
@@ -145,8 +189,7 @@ class InletMapping:
         p1, p2, p3 = points[indices[0]], points[indices[1]], points[indices[2]]
         normal_vector = self.get_face_normal_vectors(
             np.asarray(p1), np.asarray(p2), np.asarray(p3), 'out')
-        self.write_out(self.inlet_data_file, self.inlet_name,
-                       times, velocities, n_points, points, normal_vector, profile=self.profile,scale=self.scale, **self.kwargs)
+        self.write_out(self.inlet_data_file, self.inlet_name, n_points, points, normal_vector, profile=self.profile, scale=self.scale, **self.kwargs)
 
 if __name__ == "__main__":
     import sys
@@ -155,17 +198,14 @@ if __name__ == "__main__":
     # Additional parameters can be passed via kwargs
     center = [-0.02256496, -0.0363579, -0.014821885]
     radius = 0.014
-    
+
     # Example of passing additional parameters for Womersley profile
     kwargs = {}
     if profile == 'womersley':
-        kwargs['rho'] = 1060         # Blood density (kg/m^3) 
-        kwargs['mu'] = 0.004         # Blood dynamic viscosity (Pa·s)
+        kwargs['rho'] = 1060         # Blood density (kg/m^3)
+        kwargs['nu'] = 4e-6          # Blood kinematic viscosity (m^2/s)
         kwargs['delta_P'] = 1        # Pressure gradient amplitude
         kwargs['HR'] = 75            # Heart rate (beats per minute)
-        kwargs['scale'] = 1e0        # Scaling factor if needed
-    else:
-        kwargs['scale'] = 1e0        # Scaling factor if needed
-    inlet_mapping = InletMapping(center=center,radius= radius,inlet_data_file=inlet_data_file, inlet_name="inlet", profile=profile,scale=1)
+    inlet_mapping = InletMapping(center=center, radius=radius, inlet_data_file=inlet_data_file, inlet_name="inlet", profile=profile, scale=1, **kwargs)
     inlet_mapping.run()
     print("Inlet mapping completed.")

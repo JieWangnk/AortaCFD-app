@@ -106,8 +106,44 @@ solvers
 
 PIMPLE
 {
-    nOuterCorrectors 2;
+    nOuterCorrectors 100;
     nCorrectors     2;
+    nNonOrthogonalCorrectors 0;
+    pRefCell        0;
+    pRefValue       0;
+
+    outerCorrectorResidualControl
+    {
+        U
+        {
+                tolerance 1e-5;
+                relTol 0;
+        }
+        p
+        {
+                tolerance 1e-6;
+                relTol 0;
+        }
+}
+
+relaxationFactors
+{
+    fields
+    {
+        p       0.4;
+        pFinal  1;
+    }
+
+
+    equations
+    {
+        "U.*"           0.5;
+        "C_*"                   0.7;
+        "n_*"                   0.7;
+        L_PLS                   0.7;
+        "k.*"           1;
+        "epsilon.*"     1;
+    }
 }
 
 
@@ -201,7 +237,7 @@ solvers
 
 PIMPLE
 {
-    nOuterCorrectors 20;
+    nOuterCorrectors 100;
     nCorrectors     2;
     nNonOrthogonalCorrectors 0;
     pRefCell        0;
@@ -247,8 +283,6 @@ relaxationFactors
         "epsilon.*"     1;
     }
 }
-
-
 
 // ************************************************************************* //
 """

@@ -10,10 +10,13 @@ BC_OUTLET = "3EWINDKESSEL" #options: ZERO_GRADIENT, 3EWINDKESSEL
 #-------------------------------------------------------------------------------------------#
 # Inlet details
 INLET_DATA_FILE = "BPM120.csv"
-INLET_PROFILE = "parabolic" #options: womersley, parabolic
+INLET_PROFILE = "womersley" #options: womersley, parabolic
 WOMERSLEY_PARAMETERS = {
-    "HEART_RATE": "75", 
-    "DELTA_P": "1" # Pressure gradient amplitude
+    "MAX_VELOCITY": "1.0",
+    "MEAN_VELOCITY": "0.73",
+    "SYSTOLIC_PRESSURE": "118",
+    "DIASTOLIC_PRESSURE": "82"
+    #"DELTA_P": "2" # Pressure gradient amplitude
 }
 #-------------------------------------------------------------------------------------------#
 # Physical properties: transportProperteis and momentumTransport
@@ -24,8 +27,9 @@ SIMULATIONTYPE ="laminar" #options: laminar, RAS, LES
 # Cardiac cycle details
 NUMBER_OF_CYCLES = "2"
 START_TIME = "0"
-CARDIAC_PEROID = "0.5"
-INLET_DATA = "120"
+CARDIAC_PEROID = "0.53"
+INLET_DATA = "113"
+HEART_RATE = "113"
 #-------------------------------------------------------------------------------------------#
 # Solution type
 SOLN_TYPE = "parallel" #options: serial or parallel
