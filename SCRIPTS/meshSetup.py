@@ -333,7 +333,6 @@ includedAngle 150;
 
         with open(output_path, 'w') as f:
             f.write(content)
-        print(self.surface_refinement_levels)
         print(f"surfaceFeaturesDict written to {output_path}")
 
 

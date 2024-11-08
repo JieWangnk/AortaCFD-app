@@ -7,7 +7,7 @@ from SCRIPTS.numericalSetup import *
 from SCRIPTS.solverSetup import *
 from SCRIPTS.simulationSetup import *
 from SCRIPTS.inletMapping import *
-from SCRIPTS.inletDataSetup import *
+from SCRIPTS.cycleDataSetup import *
 from SCRIPTS.solnTypeSetup import *
 from SCRIPTS.wkSetup import *
 from SCRIPTS.formatPoints import *

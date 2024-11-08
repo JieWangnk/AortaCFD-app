@@ -42,22 +42,25 @@ FoamFile
         outlet3 = PatchProcessing(self.DIRECTORY, self.STL_FILES, "outlet3").calculate_surface_area()
         outlet4 = PatchProcessing(self.DIRECTORY, self.STL_FILES, "outlet4").calculate_surface_area()
         # covert the area to gemetery scale
-        outlet1 = outlet1 * float(GEOMETRY_SCALE) * float(GEOMETRY_SCALE)
-        outlet2 = outlet2 * float(GEOMETRY_SCALE) * float(GEOMETRY_SCALE)
-        outlet3 = outlet3 * float(GEOMETRY_SCALE) * float(GEOMETRY_SCALE)
-        outlet4 = outlet4 * float(GEOMETRY_SCALE) * float(GEOMETRY_SCALE)
+        outlet1 = outlet1 * eval(GEOMETRY_SCALE) * eval(GEOMETRY_SCALE)
+        outlet2 = outlet2 * eval(GEOMETRY_SCALE) * eval(GEOMETRY_SCALE)
+        outlet3 = outlet3 * eval(GEOMETRY_SCALE) * eval(GEOMETRY_SCALE)
+        outlet4 = outlet4 * eval(GEOMETRY_SCALE) * eval(GEOMETRY_SCALE)
         # Accessing the WK_SETTING dictionary values
-        percentage = float(self.WK_SETTING["percentage"])
-        SP = float(self.WK_SETTING["SP"])
-        DP = float(self.WK_SETTING["DP"])
+        percentage = eval(self.WK_SETTING["percentage"])
+        SP = eval(self.WK_SETTING["SP"])
+        DP = eval(self.WK_SETTING["DP"])
         HR = [int(hr) for hr in str(self.WK_SETTING["HR"]).split()]
 
         perc_branches = percentage / 100 
         PD = SP - DP   # Calculate PD 41
         for i in HR:
-            filename = f'./INLET/BPM{i}.csv'
+            if INLET_PROFILE == 'parabolic':
+                filename = f'./INLET/BPM{i}.csv'
+            elif INLET_PROFILE == 'womersley':
+                filename = f'./constant/boundaryData/inlet/BPM{i}.csv'
             Q_orig = np.loadtxt(filename, delimiter=',')  # Load as array, inlet flow rates over time Q(t)
-            Q_in = Q_orig[:1000, :]
+            Q_in = Q_orig[:, :]
             fileout_OF = f'{SP}bp{DP}WK_Coef_SP{percentage}_HR{i}'
             # check if file exists and if so, delete it
     
@@ -69,7 +72,7 @@ FoamFile
             A_branches = np.sum(A[:3])
 
             flowSplit_branches = A[:3] / A_branches
-            Q = np.zeros((1000, 4))
+            Q = np.zeros((len(Q_in), 4))
             for j in range(3):
                 Q[:, j] = Q_in[:, 1] * flowSplit_branches[j] * perc_branches
             Q[:, 3] = Q_in[:, 1] * (1 - perc_branches)
@@ -126,7 +129,7 @@ Pressure_start                0;
             outlet_block += outlet_block_template.format(outlet_name=outletName, index=index, C_val="{:.4e}".format(C[outlet]), R_val="{:.4e}".format(R_2[outlet]), Z_val="{:.4e}".format(R_1[outlet]))
 
         # Use the template to fill in the variables and write to the file
-        with open(os.path.join(self.DIRECTORY, "constant", "windkesselProperties"), 'w') as f:
+        with open(os.path.join("constant", "windkesselProperties"), 'w') as f:
             f.write(template.format(outlet_block=outlet_block))
         print("windkesselProperties file has been written")
 

@@ -65,7 +65,7 @@ class InletMapping:
             file.write(")\n")
 
     @staticmethod
-    def womersley_velocity_profile_half_sine(t, r, R, rho, nu, delta_P_max, HR):
+    def womersley_velocity_profile_half_sine(t, r, R, rho, nu, delta_P_max,Vmax, HR):
         """
         Calculate the Womersley velocity profile at a given time and radial position.
         """
@@ -81,12 +81,14 @@ class InletMapping:
             gamma = alpha * np.exp(-i * np.pi / 4)
             numerator = jv(0, gamma * (r / R))
             denominator = jv(0, gamma)
+            # Compute delta_P using V_max
+            delta_P = Vmax * omega * rho * np.abs(denominator / (denominator - 1))
             if np.abs(denominator) < 1e-10:
                 raise ValueError("Denominator in Bessel function computation is too small.")
-            U = (delta_P_max / (omega * rho)) * np.abs(1 - numerator / denominator)
+            U = (delta_P / (omega * rho)) * np.abs(1 - numerator / denominator)
         else:
             # Simplified parabolic profile
-            U = delta_P_max / (4 * nu) * (1 - (r / R)**2)
+            U = delta_P / (4 * nu) * (1 - (r / R)**2) 
 
         # Time-dependent term
         sin_omega_t = np.sin(omega * t)
@@ -146,28 +148,40 @@ class InletMapping:
             rho = eval(RHO)
             nu = eval(NU)
             delta_P = eval(WOMERSLEY_PARAMETERS['SYSTOLIC_PRESSURE']) - eval(WOMERSLEY_PARAMETERS['DIASTOLIC_PRESSURE'])
+            vmax = eval(WOMERSLEY_PARAMETERS['MAX_VELOCITY'])
             HR = eval(HEART_RATE)
 
             newTime = np.linspace(0, 60/HR, 100)
+            velocity_magnitude_list = []
+
             for t in newTime:
                 vel_x_array, vel_y_array, vel_z_array = [], [], []
+
+                # Calculate the velocity profile at center of the vessel
+                center_velocity, alpha = self.womersley_velocity_profile_half_sine(
+                    t=t, r=0, R=R, rho=rho, nu=nu, delta_P_max=delta_P,Vmax=vmax, HR=HR)
+                velocity_magnitude_list.append(center_velocity)
+
                 for point in points:
                     point = np.array(point, dtype=float) * scale
                     dist = self.get_distance_from_center(point)
                     r = dist
                     if dist <= self.radius:
                         velocity_magnitude,alpha  = self.womersley_velocity_profile_half_sine(
-                            t=t, r=r, R=R, rho=rho, nu=nu, delta_P_max=delta_P, HR=HR)
+                            t=t, r=r, R=R, rho=rho, nu=nu, delta_P_max=delta_P,Vmax=vmax, HR=HR)
                         vel_x, vel_y, vel_z = self.get_velocity_components(
                             velocity_magnitude, normal_vector)
                         vel_x_array.append(vel_x)
                         vel_y_array.append(vel_y)
                         vel_z_array.append(vel_z)
                     else:
+                        velocity_magnitude = 0.0
                         # Point is outside the vessel radius; set velocity to zero
                         vel_x_array.append(0.0)
                         vel_y_array.append(0.0)
                         vel_z_array.append(0.0)
+                    # return t and velocity magnitude as inlet velocity profile csv file
+                    
                 # Write the velocities for this time step
                 self.write_openfoam_data_format(
                     os.path.join(directory, 'U_'+f'{t:.6f}'),
@@ -176,6 +190,13 @@ class InletMapping:
                     vel_y_array,
                     vel_z_array
                 )
+
+            # Write the velocity profile to a csv file
+            csv_file_path = os.path.join("constant/boundaryData/",inlet_name,f"BPM{HEART_RATE}.csv")
+            with open(csv_file_path, 'w') as file:
+                for i in range(len(newTime)):
+                    file.write(f"{newTime[i]},{velocity_magnitude_list[i]}\n")
+                print(f"Velocity profile saved to {csv_file_path}")
             print("Womersley velocity profile generated: alpha = ", alpha)
         else:
             raise ValueError("Invalid profile type. Choose 'parabolic' or 'womersley'.")
