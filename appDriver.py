@@ -1,4 +1,3 @@
-import sys
 from userParameter_HL import * 
 from SCRIPTS.meshSetup import *
 from SCRIPTS.boundaryConditionSetup import *
@@ -8,17 +7,16 @@ from SCRIPTS.solverSetup import *
 from SCRIPTS.simulationSetup import *
 from SCRIPTS.inletMapping import *
 from SCRIPTS.patchProcessing import *
-from SCRIPTS.inletDataSetup import *
+from SCRIPTS.cycleDataSetup import *
 from SCRIPTS.solnTypeSetup import *
 from SCRIPTS.wkSetup import *
 from SCRIPTS.formatPoints import *
-import shutil
-import time
+import sys, shutil, time, os, argparse
 
 class OpenFOAMCase:
     def __init__(self, geometry_case, refinement,feature_level,surface_refinement_levels,directory, bc_inlet, bc_outlet, initial_condition_U, initial_condition_p,
         initial_condition_K, initial_condition_omega, nu, rho, simulation_type, simulation_control, 
-        soln_type, subdomains, decomposition_method, wk_setting):
+        soln_type, subdomains, decomposition_method):
         self.geometry_case = geometry_case
         self.refinement = refinement
         self.feature_level = feature_level
@@ -37,7 +35,7 @@ class OpenFOAMCase:
         self.soln_type = soln_type
         self.subdomains = subdomains
         self.decomposition_method = decomposition_method
-        self.wk_setting = wk_setting            
+           
         self.__create_OFcase()
 
         self.geometry_analyzer = GeometryAnalyzer(DIRECTORY=self.directory,geometry_case=self.geometry_case,refinement=self.refinement,feature_level=self.feature_level,surface_refinement_levels=self.surface_refinement_levels)
@@ -47,8 +45,6 @@ class OpenFOAMCase:
         self.solverSetup = FvSolutionWriter(self.directory,self.simulation_type)
         self.simulationSetup = SimulationSetup(self.directory,self.simulation_control)
         self.solnType = SolnType(self.directory,soln_type,subdomains,decomposition_method)
-        if self.BC_OUTLET == "3EWINDKESSEL":
-            self.wk_Setup = wk_Setup(self.directory,self.geometry_analyzer.stl_files,self.wk_setting)
 
     def __create_OFcase(self):
         if not os.path.exists(self.directory):
@@ -112,10 +108,7 @@ class OpenFOAMCase:
     
     def write_decomposeParDict(self):
         self.solnType.write_decomposeParDict()
-        
-    def write_WK_Setup(self):
-        if self.BC_OUTLET == "3EWINDKESSEL":
-            self.wk_Setup.write_WK_Setup()       
+           
 
     def casePoilt(self):
         self.write_geometry_files()
@@ -125,7 +118,6 @@ class OpenFOAMCase:
         self.write_solverSetup()
         self.write_simulationSetup()
         self.write_decomposeParDict()
-        self.write_WK_Setup()
 
 def create_openfoam_case():
     """
@@ -153,8 +145,7 @@ def create_openfoam_case():
         simulation_control=SIMULATION_CONTROL,
         soln_type=SOLN_TYPE,
         subdomains=SUBDOMAINS,
-        decomposition_method=DECOMPOSITION_METHOD,
-        wk_setting=WK_SETTING
+        decomposition_method=DECOMPOSITION_METHOD
     )
     my_case.casePoilt()
     print("OpenFOAM case created")
@@ -198,7 +189,6 @@ def run_mesh():
     elapsed_time = end_time - start_time
     print("Mesh created in {:.2f} minutes.".format(elapsed_time / 60))
 
-
 def run_bc():
     """
     Sets up the boundary conditions for the simulation.
@@ -236,11 +226,9 @@ def run_bc():
     # scale the inlet radius based on GEOMETRY_SCALE
     inlet_radius = inlet_radius * float(GEOMETRY_SCALE)
     inlet_center = inlet_center * float(GEOMETRY_SCALE)
-    print("Inlet center: ", inlet_center)
-    print("Inlet radius: ", inlet_radius)
+
     # run inletMapping 
     processor = InletMapping(center = inlet_center, radius = inlet_radius, inlet_data_file=INLET_DATA_FILE,inlet_name="inlet",profile=INLET_PROFILE)
-    #processor.run(INLET_DATA_FILE, inlet_stl, scale=GEOMETRY_SCALE)
     processor.run()
     
     # copy the content of "INLET_DATA_FILE" directory to "INLET_DATA_BPM" directory
@@ -251,9 +239,6 @@ def run_bc():
     
     # run inletDataSetup
     inletProfile = InletVelocityProfile(BPM = eval(HEART_RATE), numberOfCycle  = eval(NUMBER_OF_CYCLES), baseDir=None)
-    print("Inlet velocity profile simulink data setup...")
-    print("Inlet velocity profile data for BPM = " + str(INLET_DATA))
-    print("Number of cycles = " + str(NUMBER_OF_CYCLES))
     inletProfile.execute()
     
     # change the format of "points" file to match the timeVaryingMappedFixedValue BC requirements
@@ -261,6 +246,12 @@ def run_bc():
     formatter.format_coordinates()
     os.system("cp points constant/boundaryData/{}/".format(inlet_stl))
     os.system("rm points*")
+
+    # wkSetup
+    if BC_OUTLET == "3EWINDKESSEL":
+        wk_setup = wk_Setup(DIRECTORY = os.path.join(os.getcwd(), "OPENFOAM", GEOMETRY_CASE + "_" + REFINEMENT), STL_FILES = stl_files,WK_SETTING=WK_SETTING)  
+        wk_setup.write_WK_Setup()
+    
     end_time = time.time()
     elapsed_time = end_time - start_time
 
@@ -323,7 +314,6 @@ def run_postprocessing():
 
     print("Post-processing done in {:.2f} minutes.".format(elapsed_time / 60))
 
-
 def run_all():
     print("Running all steps...")
     run_mesh()
@@ -333,20 +323,55 @@ def run_all():
 
 
 if __name__ == "__main__":
-    # Check if additional arguments are provided
-    if len(sys.argv) > 1:
-        # change the directory to OPENFOAM case directory
-        os.chdir(os.path.join(os.getcwd(), "OPENFOAM", GEOMETRY_CASE + "_" + REFINEMENT))
-        command = sys.argv[1]
-        if command == "runMesh":
-            run_mesh()
-        elif command == "runBC":
-            run_bc()
-        elif command == "runSimulation":
-            run_simulation()
-        elif command == "runPost":
-            run_postprocessing()
-        elif command == "runAll":
-            run_all()
-    else:
+    # Create the top-level parser
+    parser = argparse.ArgumentParser(
+        description="Script to manage OpenFOAM simulations.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    # Define the subcommands
+    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    # Subcommand: createCase
+    parser_create = subparsers.add_parser('createCase', help='Create the OpenFOAM case setup.')
+    # Subcommand: runMesh
+    parser_mesh = subparsers.add_parser('runMesh', help='Run mesh generation.')
+    # Subcommand: runBC
+    parser_bc = subparsers.add_parser('runBC', help='Run boundary conditions setup.')
+    # Subcommand: runSimulation
+    parser_simulation = subparsers.add_parser('runSimulation', help='Run the simulation.')
+    # Subcommand: runPost
+    parser_post = subparsers.add_parser('runPost', help='Run post-processing.')
+    # Subcommand: runAll
+    parser_all = subparsers.add_parser('runAll', help='Run the entire workflow.')
+    # Add common arguments if necessary
+    parser.add_argument('--geometry', type=str, default=GEOMETRY_CASE,
+                        help='Geometry case name.')
+    parser.add_argument('--refinement', type=str, default=REFINEMENT,
+                        help='Mesh refinement level.')
+
+    # Parse the arguments
+    args = parser.parse_args()
+
+    # Change directory if necessary
+    case_directory = os.path.join(os.getcwd(), "OPENFOAM", f"{args.geometry}_{args.refinement}")
+
+    if args.command != 'createCase':
+        if not os.path.exists(case_directory):
+            print(f"Error: Case directory '{case_directory}' does not exist.")
+            sys.exit(1)
+        os.chdir(case_directory)
+
+    # Execute the corresponding function based on the command
+    if args.command == 'createCase':
         create_openfoam_case()
+    elif args.command == 'runMesh':
+        run_mesh()
+    elif args.command == 'runBC':
+        run_bc()
+    elif args.command == 'runSimulation':
+        run_simulation()
+    elif args.command == 'runPost':
+        run_postprocessing()
+    elif args.command == 'runAll':
+        run_all()
+    else:
+        parser.print_help()
