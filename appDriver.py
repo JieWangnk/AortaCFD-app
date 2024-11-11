@@ -184,7 +184,7 @@ class OpenFOAMRunner:
         # run checkMesh
         os.system("checkMesh > checkMesh.log")
         # transfer mesh scale based on GEOMETRY_SCALE
-        os.system("transformPoints 'scale=({} {} {})'".format(self.GEOMETRY_SCALE, self.GEOMETRY_SCALE, self.GEOMETRY_SCALE))
+        os.system("transformPoints 'scale=({} {} {})' > transform.log".format(self.GEOMETRY_SCALE, self.GEOMETRY_SCALE, self.GEOMETRY_SCALE))
         os.system("touch f.foam")
         end_time = time.time()
         elapsed_time = end_time - start_time
