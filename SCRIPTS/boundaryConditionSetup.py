@@ -18,7 +18,7 @@ class BoundaryConditionSetup():
         self.INITIAL_CONDITION_K = INITIAL_CONDITION_K
         self.INITIAL_CONDITION_OMEGA = INITIAL_CONDITION_OMEGA
         self.SIMULATIONTYPE = SIMULATIONTYPE
-
+        print(os.path.join(os.getcwd(),self.DIRECTORY))
         # Create an instance of PatchProcessing
         inlet_radius_calculator = PatchProcessing(self.DIRECTORY, self.STL_FILES,"inlet")
         
