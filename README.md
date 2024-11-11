@@ -21,8 +21,12 @@
 **Troubleshooting**: If you encounter issues, please referernce [OpenFOAM installation](https://openfoam.org/download/) and [paraview installation](https://www.paraview.org/download/).
 
 3. **Python Library**
+   - python version 3.10
    - numpy-stl: Allowed to handle both ASCII and Binary STL format.
+   - pip install numpy
    - pip install numpy-stl
+   - pip install scipy
+   - pip install matplotlib
 
 ### Setting Up the Parameters for the Simulation
 1. ```userParameter_HL.py```:
