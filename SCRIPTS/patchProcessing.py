@@ -15,7 +15,7 @@ class PatchProcessing:
 
         # Find the inlet stl file 
         self.STL = [f for f in self.STL_FILES if PATH_NAME in f][0]
-        self.STL_PATH = os.path.join(self.CAD_FOLDER, self.STL)
+        self.STL_PATH = os.path.join(self.DIRECTORY,self.CAD_FOLDER, self.STL)
         
         self.mesh_data = self.load_mesh(self.STL_PATH)
         self.all_points = self.extract_points()
