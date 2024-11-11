@@ -11,6 +11,7 @@ class PatchProcessing:
         self.geometry_case = GEOMETRY_CASE
 
         # Construct the path to the CAD folder
+        # TODO: Jie need update
         self.CAD_FOLDER = os.path.join("constant","triSurface")
 
         # Find the inlet stl file 
