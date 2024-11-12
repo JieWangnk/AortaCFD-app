@@ -5,6 +5,7 @@ REFINEMENT = "coarse" #options: "coarse", "medium", "fine"
 GEOMETRY_SCALE = "1e-3"
 #-------------------------------------------------------------------------------------------#
 # Boundary conditions
+#TODO: {Vincent} Change name of waveform to plugFlow.
 BC_INLET = "TIME_VARYING_MAPPED_FIXED_VALUE" #options: FIXED_PARABOLIC_VELOCITY, TIMEVARYING_PARABOLIC_VELOCITY, TIME_VARYING_MAPPED_FIXED_VALUE, WAVEFORM
 BC_OUTLET = "3EWINDKESSEL" #options: ZERO_GRADIENT, 3EWINDKESSEL
 #-------------------------------------------------------------------------------------------#
