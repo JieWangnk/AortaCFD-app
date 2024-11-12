@@ -215,12 +215,9 @@ class OpenFOAMRunner:
         inlet_radius_calculator = PatchProcessing(DIRECTORY=self.case_directory, STL_FILES=stl_files, PATH_NAME="inlet")
         # calculate the inlet radius
         inlet_center, inlet_radius, inlet_normal = inlet_radius_calculator.calculate_inlet_center_radius()
-        # scale the inlet radius based on GEOMETRY_SCALE
-        inlet_radius = inlet_radius * float(self.GEOMETRY_SCALE)
-        inlet_center = inlet_center * float(self.GEOMETRY_SCALE)
-
-        # run inletMapping 
-        processor = InletMapping(center=inlet_center, radius=inlet_radius, inlet_data_file=self.INLET_DATA_FILE, inlet_name="inlet", profile=self.INLET_PROFILE)
+ 
+         # run inletMapping 
+        processor = InletMapping(center=inlet_center * eval(self.GEOMETRY_SCALE), radius=inlet_radius * eval(self.GEOMETRY_SCALE), inlet_data_file=self.INLET_DATA_FILE, inlet_name="inlet", profile=self.INLET_PROFILE)
         processor.run()
         # run cycleDataSetup
         cycle_data = CycleDataSetup(BPM=int(self.HEART_RATE), numberOfCycle=int(self.NUMBER_OF_CYCLES))
