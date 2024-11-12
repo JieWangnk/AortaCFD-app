@@ -283,6 +283,7 @@ class OpenFOAMRunner:
 
     def run_all(self):
         print("Running all steps...")
+        self.create_openfoam_case()
         self.run_mesh()
         self.run_bc()
         self.run_simulation()
