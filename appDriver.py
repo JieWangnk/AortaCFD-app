@@ -1,4 +1,4 @@
-from userParameter_HL import * 
+from userParameter_HL import *
 from SCRIPTS.meshSetup import *
 from SCRIPTS.boundaryConditionSetup import *
 from SCRIPTS.physicalProperitesSetup import *
@@ -35,7 +35,7 @@ class OpenFOAMCase:
         self.soln_type = soln_type
         self.subdomains = subdomains
         self.decomposition_method = decomposition_method
-           
+
         self.__create_OFcase()
 
         self.geometry_analyzer = GeometryAnalyzer(DIRECTORY=self.directory, geometry_case=self.geometry_case, refinement=self.refinement, feature_level=self.feature_level, surface_refinement_levels=self.surface_refinement_levels)
@@ -50,12 +50,12 @@ class OpenFOAMCase:
         if not os.path.exists(self.directory):
             os.makedirs(self.directory)
         else:
-            # remove and create new one 
+            # remove and create new one
             shutil.rmtree(self.directory)
             os.makedirs(self.directory)
         print("Directory ", self.directory, " Created ")
-           
-        # create system, constant, and 0 folders 
+
+        # create system, constant, and 0 folders
         for f in ["system", "constant", "0"]:
             directory = os.path.join(self.directory, f)
             os.makedirs(directory)
@@ -70,14 +70,14 @@ class OpenFOAMCase:
         for f in os.listdir(CADfolder):
             # copy stl files to constant/triSurface folder
             shutil.copy(os.path.join(CADfolder, f), directory_con_tri)
-            # if f contains inlet 
+            # if f contains inlet
             if "inlet" in f:
                 inletBoundary = os.path.join(self.directory, "constant", "boundaryData", f.split(".")[0])
                 os.makedirs(inletBoundary)
                 if self.BC_INLET == "TIME_VARYING_MAPPED_FIXED_VALUE" and "INLET_PROFILE" == "parabolic":
                     # copy the INLET_DATA_FILE to constant/boundaryData/*inlet*/ folder
                     shutil.copy(os.path.join("INLET", INLET_DATA_FILE), inletBoundary)
-    
+
     def write_geometry_files(self):
         self.geometry_analyzer.write_blockMeshDict()
         self.geometry_analyzer.write_snappyHexMeshDict()
@@ -102,13 +102,13 @@ class OpenFOAMCase:
 
     def write_solverSetup(self):
         self.solverSetup.write_fvSolution_file()
-    
+
     def write_simulationSetup(self):
         self.simulationSetup.write_controlDict()
-    
+
     def write_decomposeParDict(self):
         self.solnType.write_decomposeParDict()
-           
+
 
     def casePoilt(self):
         self.write_geometry_files()
@@ -210,7 +210,7 @@ class OpenFOAMRunner:
         formatter.format_coordinates()
         os.system("cp points constant/boundaryData/{}/".format(inlet_stl))
         os.system("rm points")
-        
+
         stl_files = [f for f in os.listdir(os.path.join("constant", "triSurface")) if f.endswith(".stl")]
         # Create an instance of PatchProcessing
         inlet_radius_calculator = PatchProcessing(DIRECTORY=self.case_directory, STL_FILES=stl_files, PATH_NAME="inlet")
@@ -220,15 +220,15 @@ class OpenFOAMRunner:
         inlet_radius = inlet_radius * float(self.GEOMETRY_SCALE)
         inlet_center = inlet_center * float(self.GEOMETRY_SCALE)
 
-        # run inletMapping 
+        # run inletMapping
         processor = InletMapping(center=inlet_center, radius=inlet_radius, inlet_data_file=self.INLET_DATA_FILE, inlet_name="inlet", profile=self.INLET_PROFILE)
         processor.run()
-        
+
         # wkSetup
         if self.BC_OUTLET == "3EWINDKESSEL":
             wk_setup = wk_Setup(DIRECTORY=self.case_directory, STL_FILES=stl_files, WK_SETTING=self.WK_SETTING)  
             wk_setup.write_WK_Setup()
-        
+
         end_time = time.time()
         elapsed_time = end_time - start_time
 
@@ -274,7 +274,7 @@ class OpenFOAMRunner:
         os.chdir(self.case_directory)
         # plot residuals
         os.system("gnuplot -e \"set terminal jpeg size 1400,700; set output 'Residuals.jpeg'; set logscale y; plot 'logs/Ux_0' u 1:2 w l title 'Ux','logs/Uy_0' u 1:2 w l title 'Uy','logs/Uz_0' u 1:2 w l title 'Uz','logs/pFinalRes_0' u 1:2 w l title 'p','logs/CourantMax_0' u 1:2 w l title 'Co','logs/k_0' u 1:2 w l title 'k','logs/omega_0' u 1:2 w l title 'omega'\"")
-        
+
         # Logic to run post-processing
         end_time = time.time()
         elapsed_time = end_time - start_time
