@@ -6,6 +6,7 @@ REFINEMENT_LEVELS = {
     "medium":0.2,
     "fine":0.1
 }
+#TODO: (Jie) Angle
 SNAPPY_SETTINGS = {
     "expansion_factor":0.02,
     "feature_level":3,
