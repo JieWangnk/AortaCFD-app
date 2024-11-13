@@ -37,29 +37,34 @@ FoamFile
 
 #------------------------------------------------------------------
         # calcuate the patch area 
+        inlet = PatchProcessing(self.DIRECTORY, self.STL_FILES, "inlet").calculate_surface_area()
         outlet1 = PatchProcessing(self.DIRECTORY, self.STL_FILES, "outlet1").calculate_surface_area()
         outlet2 = PatchProcessing(self.DIRECTORY, self.STL_FILES, "outlet2").calculate_surface_area()
         outlet3 = PatchProcessing(self.DIRECTORY, self.STL_FILES, "outlet3").calculate_surface_area()
         outlet4 = PatchProcessing(self.DIRECTORY, self.STL_FILES, "outlet4").calculate_surface_area()
         # covert the area to gemetery scale
+        inlet = inlet * eval(GEOMETRY_SCALE) * eval(GEOMETRY_SCALE)
         outlet1 = outlet1 * eval(GEOMETRY_SCALE) * eval(GEOMETRY_SCALE)
         outlet2 = outlet2 * eval(GEOMETRY_SCALE) * eval(GEOMETRY_SCALE)
         outlet3 = outlet3 * eval(GEOMETRY_SCALE) * eval(GEOMETRY_SCALE)
         outlet4 = outlet4 * eval(GEOMETRY_SCALE) * eval(GEOMETRY_SCALE)
+        print(outlet1,outlet2,outlet3,outlet4)
         # Accessing the WK_SETTING dictionary values
         percentage = eval(self.WK_SETTING["percentage"])
         SP = eval(self.WK_SETTING["SP"])
         DP = eval(self.WK_SETTING["DP"])
         HR = [int(hr) for hr in str(self.WK_SETTING["HR"]).split()]
-
+        
         perc_branches = percentage / 100 
         PD = SP - DP   # Calculate PD 41
         for i in HR:
-            if INLET_PROFILE == 'parabolic':
-                filename = f'./INLET/BPM{i}.csv'
-            elif INLET_PROFILE == 'womersley':
-                filename = f'./constant/boundaryData/inlet/BPM{i}.csv'
-            Q_orig = np.loadtxt(filename, delimiter=',')  # Load as array, inlet flow rates over time Q(t)
+            filename = f'./constant/boundaryData/inlet/BPM{i}.csv'
+            U = np.loadtxt(filename, delimiter=',')  # Load as array, inlet velocity profile
+            #Calculate the flow rate at the inlet
+            Q_orig = np.zeros((len(U), 2))
+            Q_orig[:, 0] = U[:, 0]
+            Q_orig[:, 1] = U[:, 1] * inlet
+            print(Q_orig)
             Q_in = Q_orig[:, :]
             fileout_OF = f'{SP}bp{DP}WK_Coef_SP{percentage}_HR{i}'
             # check if file exists and if so, delete it

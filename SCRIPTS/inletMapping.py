@@ -55,6 +55,9 @@ class InletMapping:
     def get_velocity_components_parabolic(self, vel, face_normal_vectors, dist):
         factor = (1 - (dist / self.radius)**2)
         return vel * face_normal_vectors * factor
+    
+    def get_velocity_components_plug(self, vel, face_normal_vectors):
+        return vel * face_normal_vectors 
 
     def write_openfoam_data_format(self, file_name, n_points, vel_x_array, vel_y_array, vel_z_array):
         with open(file_name, 'w') as file:
@@ -110,8 +113,30 @@ class InletMapping:
 
         for file in glob.glob(directory + '/*'):
             os.remove(file)
-        
-        if profile == 'parabolic':
+        if profile == 'plug':
+            times, velocities = self.read_csv_file('constant/boundaryData/{}/{}'.format(self.inlet_name, self.inlet_data_file))
+            if times.size > 0:
+                for t in times:
+                    vel_x_array, vel_y_array, vel_z_array = [], [], []
+                    for point in points:
+                        point = np.array(point, dtype=float) * scale
+                        t_idx = np.where(times == t)[0]
+                        if len(t_idx) > 0:
+                            velocity_magnitude = velocities[t_idx[0]]
+                            vel_x, vel_y, vel_z = self.get_velocity_components_plug(
+                                velocity_magnitude, normal_vector)
+                            vel_x_array.append(vel_x)
+                            vel_y_array.append(vel_y)
+                            vel_z_array.append(vel_z)
+                    # Write the velocities for this time step
+                    self.write_openfoam_data_format(
+                        os.path.join(directory, 'U_'+f'{t:.6f}'),
+                        n_points,
+                        vel_x_array,
+                        vel_y_array,
+                        vel_z_array
+                    )
+        elif profile == 'parabolic':
             # Read the velocity data from the csv file in the INLET folder
             times, velocities = self.read_csv_file('constant/boundaryData/{}/{}'.format(self.inlet_name, self.inlet_data_file))
             if times.size > 0:
