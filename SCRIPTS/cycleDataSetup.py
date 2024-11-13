@@ -1,6 +1,6 @@
 import os
 
-class InletVelocityProfile:
+class CycleDataSetup:
     def __init__(self, BPM, numberOfCycle, baseDir=None):
         self.BPM = BPM
         self.cardiacPeriod = 60 / self.BPM
