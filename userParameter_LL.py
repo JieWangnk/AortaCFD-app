@@ -3,13 +3,13 @@ import numpy as np
 
 REFINEMENT_LEVELS = {   
     "coarse":1,
-    "medium":0.2,
+    "medium":0.6,
     "fine":0.1
 }
 SNAPPY_SETTINGS = {
     "expansion_factor":0.02,
     "feature_level":3,
-    "surface_refinement_levels": (1,3),
+    "surface_refinement_levels": (2,3),
     "number_of_layers": 5
 }
 # ----------------- #
