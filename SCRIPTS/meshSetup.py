@@ -108,9 +108,7 @@ class GeometryAnalyzer:
 
         # Check if the generated point is inside the geometry
         return internal_point2
-        
-    
-#================================================================================================
+         
     
     def generate_blockMeshDict_bounds(self): 
         min_vertex, max_vertex = self.get_max_vertex()
