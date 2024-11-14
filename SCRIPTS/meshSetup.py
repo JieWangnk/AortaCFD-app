@@ -30,6 +30,7 @@ class GeometryAnalyzer:
         self.geometry_name = os.path.basename(self.geometry_path)
         # find the main aorta stl file and rest are inlet and outlet patch
         self.main_aorta_stl = [f for f in self.stl_files if "wall" in f][0]
+        
 
 
     def extract_vertices_from_stl(self, stl_file):
@@ -78,6 +79,38 @@ class GeometryAnalyzer:
         y_cells = int((max_vertex[1]-min_vertex[1]) / self.refinement)
         z_cells = int((max_vertex[2]-min_vertex[2]) / self.refinement)
         return x_cells,y_cells,z_cells
+        
+
+    def load_mesh_points(self): 
+        all_points = np.empty((0, 3))
+        for stl_file in self.stl_files:
+            full_path = os.path.join(self.geometry_path, stl_file)
+            vertices = self.extract_vertices_from_stl(full_path)
+            all_points = np.concatenate([all_points,vertices])
+        
+        # Calculate the centroid
+        centroid = np.mean(all_points, axis=0)
+        
+        return all_points, centroid
+    
+    def get_internal_point(self, offset_factor=0.2):
+        # Load the STL file and compute the centroid
+        all_points, centroid = self.load_mesh_points()
+
+        # Find the farthest point on the hull from the centroid
+        distances = np.linalg.norm(all_points - centroid, axis=1)
+        farthest_point = all_points[np.argmax(distances)]
+        
+        # Move inward from the farthest point along the vector towards the centroid
+        direction_vector = centroid - farthest_point
+        internal_point = farthest_point + direction_vector * offset_factor  # Offset towards inside
+        internal_point2 = ("({:.5f}  {:.5f}  {:.5f})".format(internal_point[0], internal_point[1], internal_point[2]))
+
+        # Check if the generated point is inside the geometry
+        return internal_point2
+        
+    
+#================================================================================================
     
     def generate_blockMeshDict_bounds(self): 
         min_vertex, max_vertex = self.get_max_vertex()
@@ -133,7 +166,7 @@ boundary
 
 """
     def generate_snappyHexMeshDict(self):
-        
+                
         # Template for the snappyHexMeshDict
         template = """
 FoamFile
@@ -175,7 +208,7 @@ castellatedMeshControls
 
     {region_refinement_block}
 
-    locationInMesh (0 0 0);
+    locationInMesh {internal_point2};
     allowFreeStandingZoneFaces true;
     resolveFeatureAngle 30;
 }};
@@ -296,7 +329,8 @@ mergeTolerance 1E-6;
             features_block=features_block,
             refinementSurface_block=refinementSurface_block,
             region_refinement_block=region_refinement_block,
-            main_aorta_stl=self.main_aorta_stl
+            main_aorta_stl=self.main_aorta_stl,
+            internal_point2 = self.get_internal_point(offset_factor=0.2)
         )
         return snappy_hex_mesh_dict_content
 
