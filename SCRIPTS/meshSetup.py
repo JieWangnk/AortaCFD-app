@@ -15,17 +15,19 @@ def is_binary_file(file_path):
     return False
 
 class GeometryAnalyzer:
-    def __init__(self,DIRECTORY, geometry_case,refinement="coarse",expansion_factor = 0.02,feature_level=2,surface_refinement_levels=(1,2),region_refinement =(-8,190,-61,1.8,209,-42),addLayers = 5):
+    def __init__(self,DIRECTORY, geometry_case,refinement="coarse"):
         self.DIRECTORY = DIRECTORY
         self.geometry_case = geometry_case
         self.geometry_path = os.path.join("CAD",geometry_case)
         self.stl_files = [f for f in os.listdir(self.geometry_path) if f.endswith('.stl')]
         self.refinement = REFINEMENT_LEVELS[refinement]
-        self.expansion_factor = expansion_factor
-        self.feature_level = feature_level
-        self.surface_refinement_levels = surface_refinement_levels
-        self.region_refinement = region_refinement
-        self.addLayers = addLayers
+        self.expansion_factor = SNAPPY_SETTINGS["expansionFactor"]
+        self.feature_level = SNAPPY_SETTINGS["featureLevel"]
+        self.surface_refinement_levels = SNAPPY_SETTINGS["surfaceRefinementLevels"]
+        self.addLayers = SNAPPY_SETTINGS["addLayer"]
+        self.nCellsBetweenLevels = SNAPPY_SETTINGS["nCellsBetweenLevels"]
+        self.resloveFeatureAngle = SNAPPY_SETTINGS["resloveFeatureAngle"]
+        self.region_refinement = SNAPPY_SETTINGS["regionRefinement"]
         # The name of the geometry is the name of the folder containing the STL files
         self.geometry_name = os.path.basename(self.geometry_path)
         # find the main aorta stl file and rest are inlet and outlet patch

@@ -2,16 +2,21 @@ import os
 import numpy as np
 
 REFINEMENT_LEVELS = {   
-    "coarse":1,
-    "medium":0.6,
-    "fine":0.1
+    "coarse":0.38,
+    "medium":0.48,
+    "fine":1
 }
 #TODO: (Jie) Angle
 SNAPPY_SETTINGS = {
-    "expansion_factor":0.02,
-    "feature_level":3,
-    "surface_refinement_levels": (2,3),
-    "number_of_layers": 5
+    "parallel": "true",
+    "n_cores": 3,
+    "expansionFactor":0.02,
+    "featureLevel":1,
+    "surfaceRefinementLevels": (2,3),
+    "addLayer": 5,
+    "nCellsBetweenLevels":4,
+    "resloveFeatureAngle": 30,
+    "regionRefinement": (-8,190,-61,1.8,209,-42)
 }
 # ----------------- #
 # initial condition #
