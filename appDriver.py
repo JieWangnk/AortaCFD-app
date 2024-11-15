@@ -14,13 +14,11 @@ from SCRIPTS.formatPoints import *
 import sys, shutil, time, os, argparse
 
 class OpenFOAMCase:
-    def __init__(self, geometry_case, refinement, feature_level, surface_refinement_levels, directory, bc_inlet, bc_outlet, initial_condition_U, initial_condition_p,
+    def __init__(self, geometry_case, refinement, directory, bc_inlet, bc_outlet, initial_condition_U, initial_condition_p,
                  initial_condition_K, initial_condition_omega, nu, rho, simulation_type, simulation_control, 
                  soln_type, subdomains, decomposition_method):
         self.geometry_case = geometry_case
         self.refinement = refinement
-        self.feature_level = feature_level
-        self.surface_refinement_levels = surface_refinement_levels
         self.directory = directory
         self.BC_INLET = bc_inlet
         self.BC_OUTLET = bc_outlet
@@ -38,7 +36,7 @@ class OpenFOAMCase:
            
         self.__create_OFcase()
 
-        self.geometry_analyzer = GeometryAnalyzer(DIRECTORY=self.directory, geometry_case=self.geometry_case, refinement=self.refinement, feature_level=self.feature_level, surface_refinement_levels=self.surface_refinement_levels)
+        self.geometry_analyzer = GeometryAnalyzer(DIRECTORY=self.directory, geometry_case=self.geometry_case,refinement=self.refinement)
         self.boundary_condition = BoundaryConditionSetup(self.directory, self.geometry_analyzer.stl_files, self.BC_INLET, self.BC_OUTLET, self.initial_condition_U, self.initial_condition_p, self.initial_condition_K, self.initial_condition_omega, self.simulation_type)
         self.physical_condition = PhysicalPropertiesWriter(self.directory, self.nu, self.rho, self.simulation_type)
         self.numericalSetup = FvSchemesWriter(self.directory, self.simulation_type)
@@ -144,8 +142,6 @@ class OpenFOAMRunner:
         my_case = OpenFOAMCase(
             geometry_case=self.geometry_case, 
             refinement=self.refinement,
-            feature_level=SNAPPY_SETTINGS["feature_level"],
-            surface_refinement_levels=SNAPPY_SETTINGS["surface_refinement_levels"],
             directory=self.case_directory,
             bc_inlet=BC_INLET,
             bc_outlet=BC_OUTLET,
@@ -178,8 +174,18 @@ class OpenFOAMRunner:
         os.system("blockMesh > blockMesh.log")
         # Run surfaceFeatureExtract
         os.system("surfaceFeatures > surfaceFeatures.log")
-        # Run snappyHexMesh
-        os.system("snappyHexMesh -overwrite > snappyHex.log")
+        # check if parallel snappyHexMesh is needed
+        if SNAPPY_SETTINGS["parallel"] == "true":
+            # decompose the mesh with simple decomposition
+            os.system("foamDictionary -entry 'method' -set 'simple' system/decomposeParDict")
+            os.system("foamDictionary -entry 'subdomains' -set '{}' system/decomposeParDict".format(SNAPPY_SETTINGS["n_cores"]))
+            os.system("foamDictionary -entry 'simpleCoeffs/n' -set '(1 1 {})' system/decomposeParDict".format(SNAPPY_SETTINGS["n_cores"]))
+            os.system("decomposePar -noZero -force > decompose.log")
+            os.system("mpirun -np {} snappyHexMesh -overwrite -parallel > snappyHex.log".format(SNAPPY_SETTINGS["n_cores"]))
+            os.system("reconstructParMesh -noZero -constant > reconstruct.log")
+            os.system("rm -r processor*")
+        else:
+            os.system("snappyHexMesh -overwrite > snappyHex.log")
         # run checkMesh
         os.system("checkMesh > checkMesh.log")
         # transfer mesh scale based on GEOMETRY_SCALE

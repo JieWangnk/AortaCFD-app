@@ -34,6 +34,6 @@ HEART_RATE = "120"
 #-------------------------------------------------------------------------------------------#
 # Solution type
 SOLN_TYPE = "parallel" #options: serial or parallel
-SUBDOMAINS = "2"
+SUBDOMAINS = "3"
 DECOMPOSITION_METHOD = "scotch" #options: scotch, simple, hierarchical
 #-------------------------------------------------------------------------------------------#
