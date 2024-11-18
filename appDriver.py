@@ -224,6 +224,21 @@ class OpenFOAMRunner:
         processor = InletMapping(center=inlet_center, radius=inlet_radius, inlet_data_file=self.INLET_DATA_FILE, inlet_name="inlet", profile=self.INLET_PROFILE)
         processor.run()
 
+        # copy the content of "INLET_DATA_FILE" directory to "INLET_DATA_BPM" directory
+
+        os.system("mkdir constant/boundaryData/inlet/InletBCs_" + str(INLET_DATA))
+        os.system("cp -r constant/boundaryData/inlet/{0}/* constant/boundaryData/inlet/InletBCs_{1}".format(
+            INLET_DATA_FILE.split('.')[0], INLET_DATA))
+
+        # run inletDataSetup
+        inletProfile = InletVelocityProfile(BPM=eval(INLET_DATA), numberOfCycle=eval(NUMBER_OF_CYCLES), baseDir=None)
+        inletProfile.execute()
+
+        # change the format of "points" file to match the timeVaryingMappedFixedValue BC requirements
+        formatter = EnhancedPointsFormatter(format_version=2)
+        formatter.format_coordinates()
+        os.system("cp points constant/boundaryData/{}/".format(inlet_stl))
+
         # wkSetup
         if self.BC_OUTLET == "3EWINDKESSEL":
             wk_setup = wk_Setup(DIRECTORY=self.case_directory, STL_FILES=stl_files, WK_SETTING=self.WK_SETTING)  
@@ -322,7 +337,7 @@ if __name__ == "__main__":
     runner = OpenFOAMRunner(args.geometry, args.refinement)
 
     # Check if the case directory exists
-    if args.command != 'createCase':
+    if args.command != 'createCase' and args.command != 'runAll':
         if not os.path.exists(runner.case_directory):
             print(f"Error: Case directory '{runner.case_directory}' does not exist.")
             sys.exit(1)

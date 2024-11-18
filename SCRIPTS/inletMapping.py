@@ -56,6 +56,9 @@ class InletMapping:
         factor = (1 - (dist / self.radius)**2)
         return vel * face_normal_vectors * factor
 
+    def get_velocity_components_plug(self, vel, face_normal_vectors):
+        return vel * face_normal_vectors
+
     def write_openfoam_data_format(self, file_name, n_points, vel_x_array, vel_y_array, vel_z_array):
         with open(file_name, 'w') as file:
             file.write(f"{n_points}\n(\n")
@@ -88,7 +91,7 @@ class InletMapping:
             U = (delta_P / (omega * rho)) * np.abs(1 - numerator / denominator)
         else:
             # Simplified parabolic profile
-            U = delta_P / (4 * nu) * (1 - (r / R)**2) 
+            U = delta_P_max / (4 * nu) * (1 - (r / R)**2)
 
         # Time-dependent term
         sin_omega_t = np.sin(omega * t)
@@ -190,16 +193,43 @@ class InletMapping:
                     vel_y_array,
                     vel_z_array
                 )
+                # Write the velocity profile to a csv file
+                csv_file_path = os.path.join("constant/boundaryData/", inlet_name, f"BPM{HEART_RATE}.csv")
+                with open(csv_file_path, 'w') as file:
+                    for i in range(len(newTime)):
+                        file.write(f"{newTime[i]},{velocity_magnitude_list[i]}\n")
+                    print(f"Velocity profile saved to {csv_file_path}")
+                print("Womersley velocity profile generated: alpha = ", alpha)
+            else:
+                raise ValueError("Invalid profile type. Choose 'parabolic', 'plug' or 'womersley'.")
 
-            # Write the velocity profile to a csv file
-            csv_file_path = os.path.join("constant/boundaryData/",inlet_name,f"BPM{HEART_RATE}.csv")
-            with open(csv_file_path, 'w') as file:
-                for i in range(len(newTime)):
-                    file.write(f"{newTime[i]},{velocity_magnitude_list[i]}\n")
-                print(f"Velocity profile saved to {csv_file_path}")
-            print("Womersley velocity profile generated: alpha = ", alpha)
-        else:
-            raise ValueError("Invalid profile type. Choose 'parabolic' or 'womersley'.")
+        elif profile == 'plug':
+            times, velocities = self.read_csv_file(
+                'constant/boundaryData/{}/{}'.format(self.inlet_name, self.inlet_data_file))
+            if times.size > 0:
+                for t in times:
+                    vel_x_array, vel_y_array, vel_z_array = [], [], []
+                    for point in points:
+                        point = np.array(point, dtype=float) * scale
+                        dist = self.get_distance_from_center(point)
+                        t_idx = np.where(times == t)[0]
+                        if len(t_idx) > 0:
+                            velocity_magnitude = velocities[t_idx[0]]
+                            vel_x, vel_y, vel_z = self.get_velocity_components_plug(
+                                velocity_magnitude, normal_vector)
+                            vel_x_array.append(vel_x)
+                            vel_y_array.append(vel_y)
+                            vel_z_array.append(vel_z)
+
+                    # Write the velocities for this time step
+                    self.write_openfoam_data_format(
+                        os.path.join(directory, 'U_' + f'{t:.6f}'),
+                        n_points,
+                        vel_x_array,
+                        vel_y_array,
+                        vel_z_array
+                    )
+
 
 
     def run(self):

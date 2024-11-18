@@ -32,7 +32,7 @@
 1. ```userParameter_HL.py```:
 
 2. **STL file**:
-   - The Geomtery folder should be placed in the /CAD folder.
+   - The Geometry folder should be placed in the /CAD folder.
    - Insider the Geometry folder, there should be a .stl file 
    - The .stl file names should contain the name of the geometry and the name of the part. For example, if the geometry is a sphere and the part is the inlet, the .stl file name should be "sphere_inlet.stl".
    - The .stl file should include the following information:
@@ -43,7 +43,7 @@
   
 3. **INLET file**: 
    - The INLET folder should contain the inlet doppler echo data .csv file.
-   - The .csv file is informat of two columns: time and velocity by one cardiac cycle.
+   - The .csv file should have two columns: time and velocity by one cardiac cycle.
    - The .csv that going to be simulated should be updated in the userParameter_HL.py file.
 
 ### Running the Code (Python3 or above)
