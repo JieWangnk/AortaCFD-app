@@ -28,7 +28,6 @@ SIMULATIONTYPE ="laminar" #options: laminar, RAS, LES
 NUMBER_OF_CYCLES = "2"
 START_TIME = "0"
 CARDIAC_PEROID = "0.5"
-INLET_DATA = "120"
 HEART_RATE = "120"
 #-------------------------------------------------------------------------------------------#
 # Solution type
