@@ -11,12 +11,39 @@ from SCRIPTS.cycleDataSetup import *
 from SCRIPTS.solnTypeSetup import *
 from SCRIPTS.wkSetup import *
 from SCRIPTS.formatPoints import *
-import sys, shutil, time, os, argparse
+import sys
+import os
+import time
+import shutil
+import argparse
+import logging
+
 
 class OpenFOAMCase:
-    def __init__(self, geometry_case, refinement, directory, bc_inlet, bc_outlet, initial_condition_U, initial_condition_p,
-                 initial_condition_K, initial_condition_omega, nu, rho, simulation_type, simulation_control, 
-                 soln_type, subdomains, decomposition_method):
+    def __init__(self, geometry_case, refinement, feature_level, surface_refinement_levels, directory, bc_inlet,
+                bc_outlet, initial_condition_U, initial_condition_p,initial_condition_K, initial_condition_omega,
+                nu, rho, simulation_type, simulation_control, soln_type, subdomains, decomposition_method):
+        """ Helper class to create an OpenFOAM case for AortaCFD.
+        Handles the creation of the case directory, system, constant, and 0 folders.
+        Args:
+            geometry_case (str): Name of the geometry case.
+            refinement (str): Mesh refinement level.
+            feature_level (int): Feature level for snappyHexMesh.
+            surface_refinement_levels (tuple): Surface refinement levels for snappyHexMesh.
+            directory (str): Path to the case directory.
+            bc_inlet (str): Inlet boundary condition type.
+            bc_outlet (str): Outlet boundary condition type.
+            initial_condition_U (dict): Initial condition for velocity.
+            initial_condition_p (dict): Initial condition for pressure.
+            initial_condition_K (dict): Initial condition for turbulent kinetic energy.
+            initial_condition_omega (dict): Initial condition for turbulent omega.
+            nu (str): Kinematic viscosity.
+            rho (str): Density.
+            simulation_type (str): Simulation type (laminar, RAS, LES).
+            simulation_control (dict): Simulation control parameters.
+            soln_type (str): Solution type (serial, parallel).
+            subdomains (str): Number of subdomains for parallel processing.
+            decomposition_method (str): Decomposition method for parallel processing."""
         self.geometry_case = geometry_case
         self.refinement = refinement
         self.directory = directory
@@ -36,15 +63,27 @@ class OpenFOAMCase:
            
         self.__create_OFcase()
 
-        self.geometry_analyzer = GeometryAnalyzer(DIRECTORY=self.directory, geometry_case=self.geometry_case,refinement=self.refinement)
-        self.boundary_condition = BoundaryConditionSetup(self.directory, self.geometry_analyzer.stl_files, self.BC_INLET, self.BC_OUTLET, self.initial_condition_U, self.initial_condition_p, self.initial_condition_K, self.initial_condition_omega, self.simulation_type)
+        self.geometry_analyzer = GeometryAnalyzer(DIRECTORY=self.directory, geometry_case=self.geometry_case, 
+                                                  refinement=self.refinement, feature_level=self.feature_level, 
+                                                  surface_refinement_levels=self.surface_refinement_levels)
+        
+        self.boundary_condition = BoundaryConditionSetup(self.directory, self.geometry_analyzer.stl_files, self.BC_INLET, 
+                                                        self.BC_OUTLET, self.initial_condition_U, self.initial_condition_p, 
+                                                        self.initial_condition_K, self.initial_condition_omega, self.simulation_type)
+        
         self.physical_condition = PhysicalPropertiesWriter(self.directory, self.nu, self.rho, self.simulation_type)
+
         self.numericalSetup = FvSchemesWriter(self.directory, self.simulation_type)
+
         self.solverSetup = FvSolutionWriter(self.directory, self.simulation_type)
+
         self.simulationSetup = SimulationSetup(self.directory, self.simulation_control)
+
         self.solnType = SolnType(self.directory, soln_type, subdomains, decomposition_method)
 
     def __create_OFcase(self):
+        """ Creates the OpenFOAM case directory and subdirectories."""
+
         if not os.path.exists(self.directory):
             os.makedirs(self.directory)
         else:
@@ -56,13 +95,22 @@ class OpenFOAMCase:
         # create system, constant, and 0 folders 
         for f in ["system", "constant", "0"]:
             directory = os.path.join(self.directory, f)
-            os.makedirs(directory)
+            try:
+                os.makedirs(directory)
+            except OSError as e:
+                print(f"Error: {e}")
         # create constant/triSurface folder
         directory_con_tri = os.path.join(self.directory, "constant", "triSurface")
-        os.makedirs(directory_con_tri)
+        try:
+            os.makedirs(directory_con_tri)
+        except OSError as e:
+            print(f"Error: {e}")
         # create constant/boundaryData folder
         directory_con_bd = os.path.join(self.directory, "constant", "boundaryData")
-        os.makedirs(directory_con_bd)
+        try:
+            os.makedirs(directory_con_bd)
+        except OSError as e:
+            print(f"Error: {e}")
         # copy stl files to constant/triSurface folder
         CADfolder = os.path.join("CAD", self.geometry_case)
         for f in os.listdir(CADfolder):
@@ -71,7 +119,10 @@ class OpenFOAMCase:
             # if f contains inlet 
             if "inlet" in f:
                 inletBoundary = os.path.join(self.directory, "constant", "boundaryData", f.split(".")[0])
-                os.makedirs(inletBoundary)
+                try:
+                    os.makedirs(inletBoundary)
+                except OSError as e:
+                    print(f"Error: {e}")
                 if INLET_DATA_FILE:
                     shutil.copy(os.path.join("INLET", INLET_DATA_FILE), inletBoundary)
     
@@ -118,6 +169,7 @@ class OpenFOAMCase:
 
 class OpenFOAMRunner:
     def __init__(self, geometry_case, refinement):
+        """ Manages the OpenFOAM simulation workflow for AortaCFD."""
         self.geometry_case = geometry_case
         self.refinement = refinement
         self.case_directory = os.path.join(os.getcwd(), "OPENFOAM", f"{self.geometry_case}_{self.refinement}")
@@ -174,15 +226,14 @@ class OpenFOAMRunner:
         os.system("blockMesh > blockMesh.log")
         # Run surfaceFeatureExtract
         os.system("surfaceFeatures > surfaceFeatures.log")
-        # check if parallel snappyHexMesh is needed
-        if SNAPPY_SETTINGS["parallel"] == "true":
-            # decompose the mesh with simple decomposition
+        # Run snappyHexMesh
+        if SNAPPY_SETTINGS["parallel"]:
             os.system("foamDictionary -entry 'method' -set 'simple' system/decomposeParDict")
-            os.system("foamDictionary -entry 'subdomains' -set '{}' system/decomposeParDict".format(SNAPPY_SETTINGS["n_cores"]))
-            os.system("foamDictionary -entry 'simpleCoeffs/n' -set '(1 1 {})' system/decomposeParDict".format(SNAPPY_SETTINGS["n_cores"]))
-            os.system("decomposePar -noZero -force > decompose.log")
-            os.system("mpirun -np {} snappyHexMesh -overwrite -parallel > snappyHex.log".format(SNAPPY_SETTINGS["n_cores"]))
-            os.system("reconstructParMesh -noZero -constant > reconstruct.log")
+            os.system("foamDictionary -entry 'numberOfSubdomains' -set '{}' system/decomposeParDict".format(SNAPPY_SETTINGS["nProcessors"]))
+            os.system("foamDictionary -entry 'simpleCoeffs/n' -set '(1 1 {})' system/decomposeParDict".format(SNAPPY_SETTINGS["nProcessors"]))
+            os.system("decomposePar -noZero -force > snappyHex.log")
+            os.system("mpirun -np {} snappyHexMesh -overwrite > snappyHex.log".format(SNAPPY_SETTINGS["nProcessors"]))
+            os.system("reconstructParMesh -constant -latestTime > reconstructParMesh.log")
             os.system("rm -r processor*")
         else:
             os.system("snappyHexMesh -overwrite > snappyHex.log")
