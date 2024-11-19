@@ -16,8 +16,6 @@ import os
 import time
 import shutil
 import argparse
-import logging
-
 
 class OpenFOAMCase:
     def __init__(self, geometry_case, refinement, feature_level, surface_refinement_levels, directory, bc_inlet,
