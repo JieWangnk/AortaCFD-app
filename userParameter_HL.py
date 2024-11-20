@@ -1,7 +1,7 @@
 from userParameter_LL import *
 
-GEOMETRY_CASE = "unrepaired_vin"
-REFINEMENT = "medium" #options: "coarse", "medium", "fine"
+GEOMETRY_CASE = "unrepaired_vin_succesful"
+REFINEMENT = "coarse" #options: "coarse", "medium", "fine"
 GEOMETRY_SCALE = "1e-3"
 #-------------------------------------------------------------------------------------------#
 # Boundary conditions
