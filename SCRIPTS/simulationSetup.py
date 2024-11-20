@@ -53,8 +53,6 @@ timePrecision   6;
 
 runTimeModifiable {runTimeModifiable};
 
-allowSystemOperations 1;
-
 adjustTimeStep  true;
 
 maxCo   1;
