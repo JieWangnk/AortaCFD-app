@@ -50,5 +50,5 @@ class CycleDataSetup:
         self.create_time_dirs(timeDirList)
 
 if __name__ == "__main__":
-    inletProfile = InletVelocityProfile(BPM=120, numberOfCycle=2)
+    inletProfile = CycleDataSetup(BPM=120, numberOfCycle=2)
     inletProfile.execute()
