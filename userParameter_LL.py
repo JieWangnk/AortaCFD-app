@@ -2,19 +2,19 @@ import os
 import numpy as np
 
 REFINEMENT_LEVELS = {   
-    "coarse":1,
+    "coarse":2,
     "medium":0.6,
-    "fine":0.1
+    "fine":0.25
 }
 SNAPPY_SETTINGS = {
-    "parallel":True,
+    "parallel":False,
     "nProcessors":2,
     "expansion_factor":0.02,
     "region_refinement":1,
     "nCellsBetweenLevels":3,
     "feature_level":3,
     "surface_refinement_levels": (2,3),
-    "resolveFeatureAngle":30,
+    "resolveFeatureAngle":25,
     "nSmoothPatch":3,
     "nSurfaceLayvers": 5
 }
@@ -56,14 +56,6 @@ SIMULATION_CONTROL = {
     "runTimeModifiable" : "true",
     "functionList" : ["wallShearStress"]
 }
-
-WK_SETTING = {
-    "percentage" : "70",  # Insert percentage flow through branches (30% average) 
-    "SP" : "133.5",  # Systole Pressure   
-    "DP" : "72",   # Dystole Pressure     
-    "HR" : "120"  # Heart Rate
-}
-
 
 
 

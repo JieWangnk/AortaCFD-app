@@ -51,9 +51,9 @@ FoamFile
         print(outlet1,outlet2,outlet3,outlet4)
         # Accessing the WK_SETTING dictionary values
         percentage = eval(self.WK_SETTING["percentage"])
-        SP = eval(self.WK_SETTING["SP"])
-        DP = eval(self.WK_SETTING["DP"])
-        HR = [int(hr) for hr in str(self.WK_SETTING["HR"]).split()]
+        SP = eval(SYSTOLIC_PRESSURE)
+        DP = eval(DIASTOLIC_PRESSURE)
+        HR = [int(hr) for hr in str(HEART_RATE).split()]
         
         perc_branches = percentage / 100 
         PD = SP - DP   # Calculate PD 41

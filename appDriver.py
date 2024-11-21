@@ -238,7 +238,7 @@ class OpenFOAMRunner:
             os.system("decomposePar -noZero -force > snappyHex.log")
             os.system("mpirun -np {} snappyHexMesh -overwrite > snappyHex.log".format(SNAPPY_SETTINGS["nProcessors"]))
             os.system("reconstructParMesh -constant -latestTime > reconstructParMesh.log")
-            os.system("rm -r processor*")
+            #os.system("rm -r processor*")
         else:
             os.system("snappyHexMesh -overwrite > snappyHex.log")
         # run checkMesh
