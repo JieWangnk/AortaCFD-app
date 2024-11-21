@@ -547,7 +547,6 @@ boundaryField
             f.write(template)
             
 #------------------------------------------------------------------------------------------------------------------
-
     
     def write_sampleDict_file(self):
         # Template for sampleDict file
