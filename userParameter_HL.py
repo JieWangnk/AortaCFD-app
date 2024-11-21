@@ -23,6 +23,7 @@ WOMERSLEY_PARAMETERS = {
 NU = "3.3e-06"
 RHO = "1060"
 SIMULATIONTYPE ="laminar" #options: laminar, RAS, LES
+SIMULATIONPERFORMACE = "medium" #options: low, medium, high
 #-------------------------------------------------------------------------------------------#
 # Cardiac cycle details
 NUMBER_OF_CYCLES = "2"

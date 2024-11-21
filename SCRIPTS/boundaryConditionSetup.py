@@ -545,8 +545,6 @@ boundaryField
         # Write to file
         with open(os.path.join(self.DIRECTORY, "0", "omega"), "w") as f:
             f.write(template)
-
-
             
 #------------------------------------------------------------------------------------------------------------------
 
