@@ -1,34 +1,155 @@
 import os
 
 class FvSchemesWriter():
-    def __init__(self, DIRECTORY, SIMULATIONTYPE):
+    def __init__(self, DIRECTORY, SIMULATIONTYPE,SIMULATIONPERFORMANCE):
         self.DIRECTORY = DIRECTORY
         self.SIMULATIONTYPE = SIMULATIONTYPE
+        self.SIMULATIONPERFORMANCE = SIMULATIONPERFORMANCE
 
     def write_fvSchemes_file(self):
         filepath = os.path.join(self.DIRECTORY,"system","fvSchemes")
 
         with open(filepath, 'w') as f:
             if self.SIMULATIONTYPE == 'laminar':
-                f.write(self._get_laminar_fvSchemes())
-            elif self.SIMULATIONTYPE == 'LES':
-                f.write(self._get_LES_fvSchemes())
-            elif self.SIMULATIONTYPE == 'RAS':
-                f.write(self._get_RAS_fvSchemes())
-            else:
-                print("Invalid simulation type.")
+                if self.SIMULATIONPERFORMANCE == "high":
+                    f.write(self._get_laminar_high_fvSchemes())
+                elif self.SIMULATIONPERFORMANCE == "medium":
+                    f.write(self._get_laminar_medium_fvSchemes())
+                elif self.SIMULATIONPERFORMANCE == "low":
+                    f.write(self._get_laminar_low_fvSchemes())
+                else:
+                    print("Invalid simulation performance.")
+            if self.SIMULATIONTYPE == 'LES':
+                if self.SIMULATIONPERFORMANCE == "high":
+                    f.write(self._get_LES_high_fvSchemes())
+                elif self.SIMULATIONPERFORMANCE == "medium":
+                    f.write(self._get_LES_medium_fvSchemes())
+                elif self.SIMULATIONPERFORMANCE == "low":
+                    f.write(self._get_LES_low_fvSchemes())
+                else:
+                    print("Invalid simulation performance.")
                 
-    def _get_laminar_fvSchemes(self):
-        laminar_fvSchemes = """/*--------------------------------*- C++ -*----------------------------------*\\
+    def _get_laminar_high_fvSchemes(self):
+        laminar_fvSchemes = """/*--------------------------------*- C++ -*----------------------------------*\
   =========                 |
   \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
    \\    /   O peration     | Website:  https://openfoam.org
-    \\  /    A nd           | Version:  8
+    \\  /    A nd           | Version:  10
      \\/     M anipulation  |
 \*---------------------------------------------------------------------------*/
 FoamFile
 {
-    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSchemes;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+ddtSchemes
+{
+    default         backward;
+}
+
+gradSchemes
+{
+    default         cellLimited Gauss linear 1;
+    grad(p)         cellLimited Gauss linear 0.5;
+}
+
+divSchemes
+{
+    default         none;
+
+    div(phi,U)      Gauss linearUpwind default;
+    div((nuEff*dev2(T(grad(U)))))  Gauss linear;
+}
+
+laplacianSchemes
+{
+    default         Gauss linear limited 0.5;
+}
+
+interpolationSchemes
+{
+    default         linear;
+}
+
+snGradSchemes
+{
+    default         corrected;
+}
+
+
+// ************************************************************************* //
+"""
+        return laminar_fvSchemes
+
+    def _get_laminar_medium_fvSchemes(self):
+        laminar_fvSchemes = """/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  10
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSchemes;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+ddtSchemes
+{
+    default         backward;
+}
+
+gradSchemes
+{
+    default     cellLimited Gauss linear 0.5;
+}
+
+divSchemes
+{
+    default         none;
+
+    div(phi,U)      Gauss linear;
+    div((nuEff*dev2(T(grad(U)))))  Gauss linear;
+}
+
+laplacianSchemes
+{
+    default         Gauss linear limited 0.5;
+}
+
+interpolationSchemes
+{
+    default         linear;
+}
+
+snGradSchemes
+{
+    default         corrected;
+}
+
+
+// ************************************************************************* //
+"""
+        return laminar_fvSchemes
+
+    def _get_laminar_low_fvSchemes(self):
+        laminar_fvSchemes = """/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  10
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
     format      ascii;
     class       dictionary;
     location    "system";
@@ -43,21 +164,20 @@ ddtSchemes
 
 gradSchemes
 {
-    default         Gauss linear;
+    default         cellLimited Gauss linear 0.5;
 }
 
 divSchemes
 {
-    default             none;
+    default         none;
 
-    div(phi,U)          Gauss linearUpwind grad(U);
-
-    div((nuEff*dev2(T(grad(U))))) Gauss linear;
+    div(phi,U)      Gauss upwind;
+    div((nuEff*dev2(T(grad(U)))))  Gauss linear;
 }
 
 laplacianSchemes
 {
-    default         Gauss linear limited 0.333; //corrected;
+    default         Gauss linear limited 0.5;
 }
 
 interpolationSchemes
@@ -67,14 +187,15 @@ interpolationSchemes
 
 snGradSchemes
 {
-    default         limited 0.333; //corrected;
+    default         corrected;
 }
+
 
 // ************************************************************************* //
 """
         return laminar_fvSchemes
 
-    def _get_LES_fvSchemes(self):
+    def _get_LES_high_fvSchemes(self):
         LES_fvSchemes = """/*--------------------------------*- C++ -*----------------------------------*\\
   =========                 |
   \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
@@ -99,20 +220,76 @@ ddtSchemes
 
 gradSchemes
 {
-    default         Gauss linear;
+    default         cellMDLimited Gauss linear 0.5;
 }
 
 divSchemes
 {
     default         none;
-    /*
-    div(phi,U)      Gauss linearUpwind grad(U);
-    div(phi,k)      Gauss upwind;
-    div(phi,epsilon)      Gauss upwind;
-    div(phi,R)      Gauss upwind;
+    div(phi,U)      Gauss linear;
+    div(phi,k)      Gauss linear;
+    div(phi,epsilon)      Gauss linear;
+    div(phi,R)      Gauss linear;
     div(R)          Gauss linear;
-    div(phi,nuTilda) Gauss upwind;
-    */
+    div(phi,nuTilda)    Gauss linear;
+    div((nuEff*dev2(T(grad(U))))) Gauss linear; 
+}
+
+laplacianSchemes
+{
+    default         Gauss linear corrected;
+}
+
+interpolationSchemes
+{
+    default         linear;
+}
+
+snGradSchemes
+{
+    default         corrected;
+}
+
+wallDist
+{
+    method meshWave;
+}
+// ************************************************************************* //
+"""
+        return LES_fvSchemes
+        
+    def _get_LES_medium_fvSchemes(self):
+        LES_fvSchemes = """/*--------------------------------*- C++ -*----------------------------------*\\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  8
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSchemes;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+ddtSchemes
+{
+    default         backward;
+}
+
+gradSchemes
+{
+    default     cellLimited Gauss linear 1;
+    grad(p)     cellLimited Gauss linear 0.5;
+}
+
+divSchemes
+{
+    default         none;
     div(phi,U)      Gauss linear;
     div(phi,k)      Gauss limitedLinear 1;
     div(phi,epsilon)      Gauss limitedLinear 1;
@@ -144,9 +321,9 @@ wallDist
 // ************************************************************************* //
 """
         return LES_fvSchemes
-        
-    def _get_RAS_fvSchemes(self):
-        RAS_fvSchemes = """/*--------------------------------*- C++ -*----------------------------------*\\
+
+    def _get_LES_low_fvSchemes(self):
+        LES_fvSchemes = """/*--------------------------------*- C++ -*----------------------------------*\\
   =========                 |
   \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
    \\    /   O peration     | Website:  https://openfoam.org
@@ -165,30 +342,24 @@ FoamFile
 
 ddtSchemes
 {
-    default         backward;
+    default         Euler;
 }
 
 gradSchemes
 {
-    default         Gauss linear;
-
-    limited         cellLimited Gauss linear 1;
-    grad(U)         $limited;
-    grad(k)         $limited;
-    grad(omega)     $limited;
+    default         cellLimited Gauss linear 1;
 }
 
 divSchemes
 {
     default         none;
-
-    div(phi,U)      bounded Gauss linearUpwind limited;
-
-    turbulence      bounded Gauss upwind;
-    div(phi,k)      $turbulence;
-    div(phi,omega)  $turbulence;
-
-    div(((rho*nuEff)*dev2(T(grad(U)))))    Gauss linear;
+    div(phi,U)      Gauss upwind;
+    div(phi,k)      Gauss upwind;
+    div(phi,epsilon)    Gauss upwind;
+    div(phi,R)      Gauss upwind;
+    div(R)          Gauss upwind;
+    div(phi,nuTilda)    Gauss upwind;
+    div((nuEff*dev2(T(grad(U)))))   Gauss linear;
 }
 
 laplacianSchemes
@@ -210,9 +381,7 @@ wallDist
 {
     method meshWave;
 }
-
 // ************************************************************************* //
 """
-        return RAS_fvSchemes
-
-
+        return LES_fvSchemes
+    

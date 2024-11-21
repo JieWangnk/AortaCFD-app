@@ -20,7 +20,7 @@ import argparse
 class OpenFOAMCase:
     def __init__(self, geometry_case, refinement, feature_level, surface_refinement_levels, directory, bc_inlet,
                 bc_outlet, initial_condition_U, initial_condition_p,initial_condition_K, initial_condition_omega,
-                nu, rho, simulation_type, simulation_control, soln_type, subdomains, decomposition_method):
+                nu, rho, simulation_type, simulation_performace,simulation_control, soln_type, subdomains, decomposition_method):
         """ Helper class to create an OpenFOAM case for AortaCFD.
         Handles the creation of the case directory, system, constant, and 0 folders.
         Args:
@@ -54,6 +54,7 @@ class OpenFOAMCase:
         self.nu = nu
         self.rho = rho
         self.simulation_type = simulation_type
+        self.simulation_performace = simulation_performace
         self.simulation_control = simulation_control
         self.soln_type = soln_type
         self.subdomains = subdomains
@@ -71,9 +72,9 @@ class OpenFOAMCase:
         
         self.physical_condition = PhysicalPropertiesWriter(self.directory, self.nu, self.rho, self.simulation_type)
 
-        self.numericalSetup = FvSchemesWriter(self.directory, self.simulation_type)
+        self.numericalSetup = FvSchemesWriter(self.directory, self.simulation_type, self.simulation_performace)
 
-        self.solverSetup = FvSolutionWriter(self.directory, self.simulation_type)
+        self.solverSetup = FvSolutionWriter(self.directory, self.simulation_type, self.simulation_performace)
 
         self.simulationSetup = SimulationSetup(self.directory, self.simulation_control)
 
@@ -202,6 +203,7 @@ class OpenFOAMRunner:
             nu=NU,
             rho=RHO,
             simulation_type=SIMULATIONTYPE,
+            simulation_performace=SIMULATIONPERFORMACE,
             simulation_control=SIMULATION_CONTROL,
             soln_type=SOLN_TYPE,
             subdomains=SUBDOMAINS,
