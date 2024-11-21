@@ -43,8 +43,6 @@ class BoundaryConditionSetup():
             self.INLET_TYPE_U = "staticParabolicInletVelocity"
         elif self.BC_INLET == "TIMEVARYING_PARABOLIC_VELOCITY": 
             self.INLET_TYPE_U = "timeVaringParabolicInletVelocity"
-        elif self.BC_INLET == "WAVEFORM":
-            self.INLET_TYPE_U = "timeVaryingMappedFixedValue"
         elif self.BC_INLET == "TIME_VARYING_MAPPED_FIXED_VALUE":
             self.INLET_TYPE_U = "timeVaryingMappedFixedValue"
         else:
