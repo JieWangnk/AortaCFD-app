@@ -15,7 +15,7 @@ class CycleDataSetup:
             if not os.path.exists(timeDirPath):
                 os.mkdir(timeDirPath)
                 
-            # Copy the U_* file to the directory and rename it to U
+            # Copy the U_* z to the directory and rename it to U
             srcFile = os.path.join(self.baseDir, "constant/boundaryData/inlet/BPM" + str(self.BPM) + "/U_" + timeDirList[i])
             destFile = os.path.join(timeDirPath, "U")
             os.system(f"cp {srcFile} {destFile}")
