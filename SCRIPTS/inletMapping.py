@@ -68,7 +68,7 @@ class InletMapping:
             file.write(")\n")
 
     @staticmethod
-    def womersley_velocity_profile_half_sine(t, r, R, rho, nu, delta_P_max,Vmax, HR):
+    def womersley_velocity_profile_half_sine(t, r, R, rho, nu, delta_P_max,Vmax, HR, profile):
         """
         Calculate the Womersley velocity profile at a given time and radial position.
         """
@@ -93,13 +93,15 @@ class InletMapping:
             # Simplified parabolic profile
             U = delta_P / (4 * nu) * (1 - (r / R)**2) 
 
+        
+
         # Time-dependent term
-        sin_omega_t = np.sin(omega * t)
-        heaviside = np.heaviside(sin_omega_t, 0)
-        time_factor = sin_omega_t * heaviside
+        # sin_omega_t = np.sin(omega * t)
+        # heaviside = np.heaviside(sin_omega_t, 0)
+        # time_factor = sin_omega_t * heaviside
 
         # Compute velocity
-        u = time_factor * U
+        u = profile * U
         return u, alpha
 
     def write_out(self, inlet_data_file, inlet_name,n_points, points, normal_vector, scale=1.0, profile='parabolic', **kwargs):
@@ -172,19 +174,22 @@ class InletMapping:
             R = self.radius
             rho = eval(RHO)
             nu = eval(NU)
-            delta_P = eval(WOMERSLEY_PARAMETERS['SYSTOLIC_PRESSURE']) - eval(WOMERSLEY_PARAMETERS['DIASTOLIC_PRESSURE'])
-            vmax = eval(WOMERSLEY_PARAMETERS['MAX_VELOCITY'])
+            times, velocities = self.read_csv_file('constant/boundaryData/{}/{}'.format(self.inlet_name, self.inlet_data_file))
+            # Calculate the Womersley parameters
+            delta_P = eval(SYSTOLIC_PRESSURE) - eval(DIASTOLIC_PRESSURE)
+            vmax = max(velocities)
             HR = eval(HEART_RATE)
 
-            newTime = np.linspace(0, 60/HR, 100)
+            #newTime = np.linspace(0, 60/HR, 100)
             velocity_magnitude_list = []
+            normalised_velocity = velocities / vmax
 
-            for t in newTime:
+            for t in times:
                 vel_x_array, vel_y_array, vel_z_array = [], [], []
 
                 # Calculate the velocity profile at center of the vessel
                 center_velocity, alpha = self.womersley_velocity_profile_half_sine(
-                    t=t, r=0, R=R, rho=rho, nu=nu, delta_P_max=delta_P,Vmax=vmax, HR=HR)
+                    t=t, r=0, R=R, rho=rho, nu=nu, delta_P_max=delta_P,Vmax=vmax, HR=HR, profile=normalised_velocity[np.where(times == t)[0][0]])
                 velocity_magnitude_list.append(center_velocity)
 
                 for point in points:
@@ -193,7 +198,7 @@ class InletMapping:
                     r = dist
                     if dist <= self.radius:
                         velocity_magnitude,alpha  = self.womersley_velocity_profile_half_sine(
-                            t=t, r=r, R=R, rho=rho, nu=nu, delta_P_max=delta_P,Vmax=vmax, HR=HR)
+                            t=t, r=r, R=R, rho=rho, nu=nu, delta_P_max=delta_P,Vmax=vmax, HR=HR, profile=normalised_velocity[np.where(times == t)[0][0]])
                         vel_x, vel_y, vel_z = self.get_velocity_components(
                             velocity_magnitude, normal_vector)
                         vel_x_array.append(vel_x)
@@ -219,8 +224,8 @@ class InletMapping:
             # Write the velocity profile to a csv file
             csv_file_path = os.path.join("constant/boundaryData/",inlet_name,f"BPM{HEART_RATE}.csv")
             with open(csv_file_path, 'w') as file:
-                for i in range(len(newTime)):
-                    file.write(f"{newTime[i]},{velocity_magnitude_list[i]}\n")
+                for i in range(len(times)):
+                    file.write(f"{times[i]},{velocity_magnitude_list[i]}\n")
                 print(f"Velocity profile saved to {csv_file_path}")
             print("Womersley velocity profile generated: alpha = ", alpha)
         else:
