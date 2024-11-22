@@ -12,6 +12,7 @@ BC_OUTLET = "3EWINDKESSEL" #options: ZERO_GRADIENT, 3EWINDKESSEL
 # Inlet details
 INLET_DATA_FILE = "BPM73.csv"
 INLET_PROFILE = "womersley" #options: plug, womersley, parabolic
+INLET_ORINTATION = "out" #options: in or out, as normal vector up to z-axis is out, down to z-axis is in 
 #-------------------------------------------------------------------------------------------#
 # Physical properties: transportProperteis and momentumTransport
 NU = "3.3e-06"
@@ -31,7 +32,7 @@ WK_SETTING = {
 }
 #-------------------------------------------------------------------------------------------#
 # Solution type
-SOLN_TYPE = "parallel" #options: serial or parallel
-SUBDOMAINS = "3"
+SOLN_TYPE = "serial" #options: serial or parallel
+SUBDOMAINS = "2"
 DECOMPOSITION_METHOD = "scotch" #options: scotch, simple, hierarchical
 #-------------------------------------------------------------------------------------------#
