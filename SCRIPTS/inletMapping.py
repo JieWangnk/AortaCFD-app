@@ -239,7 +239,7 @@ class InletMapping:
 
         p1, p2, p3 = points[indices[0]], points[indices[1]], points[indices[2]]
         normal_vector = self.get_face_normal_vectors(
-            np.asarray(p1), np.asarray(p2), np.asarray(p3), 'out')
+            np.asarray(p1), np.asarray(p2), np.asarray(p3), INLET_ORINTATION)
         self.write_out(self.inlet_data_file, self.inlet_name, n_points, points, normal_vector, profile=self.profile, scale=self.scale, **self.kwargs)
 
 if __name__ == "__main__":
