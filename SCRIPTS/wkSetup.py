@@ -64,7 +64,6 @@ FoamFile
             Q_orig = np.zeros((len(U), 2))
             Q_orig[:, 0] = U[:, 0]
             Q_orig[:, 1] = U[:, 1] * inlet
-            print(Q_orig)
             Q_in = Q_orig[:, :]
             fileout_OF = f'{SP}bp{DP}WK_Coef_SP{percentage}_HR{i}'
             # check if file exists and if so, delete it
