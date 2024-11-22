@@ -19,19 +19,14 @@ class CycleDataSetup:
             srcFile = os.path.join(self.baseDir, "constant/boundaryData/inlet/BPM" + str(self.BPM) + "/U_" + timeDirList[i])
             destFile = os.path.join(timeDirPath, "U")
             os.system(f"cp {srcFile} {destFile}")
-            print("cope the U_", srcFile, "to", destFile)
+            # print("cope the U_", srcFile, "to", destFile)
             # Create symbolic links for extra cycles
             for j in range(1, self.numberOfCycle):
                 newTimeDir = "{:.6f}".format(float(timeDirList[i]) + j * self.cardiacPeriod)
                 target_dir = os.path.join(self.baseDir, "constant/boundaryData/inlet/", newTimeDir)
-                
-                # Remove the directory if it already exists
-                if os.path.exists(target_dir):
-                    if os.path.islink(target_dir):
-                        os.remove(target_dir)
-                        
-                # Create the symbolic link
-                os.symlink(timeDirPath, target_dir)
+                # remove the directory if it exists
+                os.system(f"rm -rf {target_dir}")           
+                os.system(f"ln -s {timeDirPath} {target_dir}")     
                 print(f"The symbolic link directory {newTimeDir} is created!")
             
     def execute(self):

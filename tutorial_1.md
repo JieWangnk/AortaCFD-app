@@ -58,3 +58,5 @@ To run your simulation follow the following steps:
    The simulation results can be post processed in paraview (automatic postprocessing coming soon.)
     - Open paraview and load the ``f.foam`` file.
     - Note: If parallel was used as the solution type, in the properties window select``Decompose Case`` under Case Type.
+
+# Some notes 

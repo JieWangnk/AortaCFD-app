@@ -1,6 +1,6 @@
 from userParameter_LL import *
 
-GEOMETRY_CASE = "VOL04"
+GEOMETRY_CASE = "VOL04_plug"
 REFINEMENT = "coarse" #options: "coarse", "medium", "fine"
 GEOMETRY_SCALE = "1e-3"
 #-------------------------------------------------------------------------------------------#
@@ -12,13 +12,13 @@ BC_OUTLET = "3EWINDKESSEL" #options: ZERO_GRADIENT, 3EWINDKESSEL
 # Inlet details
 INLET_DATA_FILE = "BPM73.csv"
 INLET_PROFILE = "parabolic" #options: plug, womersley, parabolic
-INLET_ORINTATION = "in" #options: in or out, as normal vector up to z-axis is out, down to z-axis is in 
+INLET_ORINTATION = "out" # Often is out!!! options: in or out, as normal vector up to z-axis is out, down to z-axis is in 
 #-------------------------------------------------------------------------------------------#
 # Physical properties: transportProperteis and momentumTransport
 NU = "3.3e-06"
 RHO = "1060"
 SIMULATIONTYPE ="LES" #options: laminar, RAS, LES
-SIMULATIONPERFORMACE = "medium" #options: low, medium, high
+SIMULATIONPERFORMACE = "low" #options: low, medium, high
 #-------------------------------------------------------------------------------------------#
 # Cardiac cycle details
 NUMBER_OF_CYCLES = "2"

@@ -24,55 +24,6 @@ AortaCFD-app/
 │       ├── medium/
 │       ├── fine/
 │
-<<<<<<< HEAD
-├── appDriver/
-│   ├── appDriver.py      # Main script to run the app
-│   |   ├── create_OFcase
-│   |   |   ├── system/
-|   |   |   |   ├── controlDict
-|   |   |   |   ├── decomposeParDict
-|   |   |   |   ├── fvSchemes
-|   |   |   |   ├── fvSolution
-|   |   |   |   ├── blockMeshDict
-|   |   |   |   ├── snappyHexMeshDict
-|   |   |   |   ├── ...
-│   |   |   ├── constant/
-|   |   |   |   ├── transportProperties
-|   |   |   |   ├── momentumTransport/
-|   |   |   |   ├── windkesselProperties/
-|   |   |   |   ├── boundaryConditions*/
-|   |   |   |   |   ├── inlet/
-|   |   |   |   |   ├── points
-|   |   |   |   ├── triSurface/
-|   |   |   |   ├── ...
-│   |   |   ├── initial_conditions/
-│   │   |   |   ├── U/
-│   │   |   |   ├── p/
-│   │   |   |   ├── nut/
-|   |   |   |   ├── ...
-│
-├── SCRIPTS/
-│   ├── meshSetup.py
-│   ├── boundaryConditionsSetup.py
-│   ├── physicalPropertiesSetup.py
-│   ├── numericalPropertiesSetup.py
-│   ├── solverSetup.py
-|   ├── simulationSetup.py
-|   ├── inletMapping.py
-|   ├── inletDataSetup.py
-|   ├── solnTypeSetup.py
-|   ├── wkSetup.py
-│
-├── POSTPro/
-│   ├── pvbatch_scripts/   # Paraview pvbatch scripts for post-processing
-|   |   ├── phaseAverage
-│   │   ├── contour.py
-│   │   ├── streamline.py
-│   │   ├── 
-│   │
-│   ├── data/    # Place for generated visualizations
-│   └── images/     # Extracted data from post processing
-=======
 ├── SIMULATION_SETUP/
 │   ├── initial_conditions/
 │   │   ├── U/
@@ -98,7 +49,6 @@ AortaCFD-app/
 │   │
 │   ├── visualizations/    # Place for generated visualizations
 │   └── data_extracts/     # Extracted data from post processing
->>>>>>> 98e3dfd6f57ee2f4239f74b7e5651cee3db6e047
 │
 ├── container/             # Docker or Singularity files for HPC/Cloud
 │   ├── Dockerfile
