@@ -1,3 +1,4 @@
+
 import os
 from stl import mesh 
 import numpy as np
@@ -27,7 +28,8 @@ class GeometryAnalyzer:
         self.addLayers = SNAPPY_SETTINGS["addLayer"]
         self.nCellsBetweenLevels = SNAPPY_SETTINGS["nCellsBetweenLevels"]
         self.resloveFeatureAngle = SNAPPY_SETTINGS["resloveFeatureAngle"]
-        self.region_refinement = SNAPPY_SETTINGS["regionRefinement"]
+        self.region_refinement_level = SNAPPY_SETTINGS["regionRefinementLevel"]
+        self.region_refinement_box = SNAPPY_SETTINGS["regionRefinementBox"]
         # The name of the geometry is the name of the folder containing the STL files
         self.geometry_name = os.path.basename(self.geometry_path)
         # find the main aorta stl file and rest are inlet and outlet patch
@@ -166,7 +168,7 @@ boundary
 
 """
     def generate_snappyHexMeshDict(self):
-                
+        min_vertex, max_vertex = self.get_max_vertex()
         # Template for the snappyHexMeshDict
         template = """
 FoamFile
@@ -185,7 +187,7 @@ addLayers       true;
 geometry
 {{
     {stl_block}
-    region_refinement_box {{ type searchableBox; min ({region_refinement[0]} {region_refinement[1]} {region_refinement[2]}); max ({region_refinement[3]} {region_refinement[4]} {region_refinement[5]}); }}
+    region_refinement_box {{ type searchableBox; min ({region_refinement_box[0]} {region_refinement_box[1]} {region_refinement_box[2]}); max ({region_refinement_box[3]} {region_refinement_box[4]} {region_refinement_box[5]}); }}
 }};
 
 castellatedMeshControls
@@ -304,35 +306,42 @@ mergeTolerance 1E-6;
         """
 
         # Region-based refinement block. Add or exclude based on the user's choice
-        if self.region_refinement is not None:
+        if self.region_refinement_level is not None:
             region_refinement_block = """
-    refinementRegions
-    {
-        region_refinement_box
-        {
-            mode inside;
-            levels ((1E15 2));  // Adjust as needed
-        }
-    };
-    """
+        refinementRegions
+        {{
+            region_refinement_box
+            {{
+                mode inside;
+                levels ((1E15 {}));  // Adjust as needed
+            }}
+        }};
+        """.format(self.region_refinement_level)
         else:
-            region_refinement_block = "refinementRegions{{}}"
+            region_refinement_block = """
+        refinementRegions
+        {};
+        """
 
+        if self.region_refinement_box is None:
+            self.region_refinement_box = (min_vertex[0], min_vertex[1], min_vertex[2], max_vertex[0], max_vertex[1], max_vertex[2])
+        
         # Fill in the template with the provided parameters
         snappy_hex_mesh_dict_content = template.format(
             geometry_name= self.geometry_name,
             feature_level= self.feature_level,
             surface_refinement_levels= self.surface_refinement_levels,
-            region_refinement =self.region_refinement,
             addLayers = self.addLayers,
             stl_block=stl_block,
             features_block=features_block,
-            refinementSurface_block=refinementSurface_block,
             region_refinement_block=region_refinement_block,
+            refinementSurface_block=refinementSurface_block,
+            region_refinement_box= self.region_refinement_box,
             main_aorta_stl=self.main_aorta_stl,
             internal_point2 = self.get_internal_point(offset_factor=0.2)
         )
         return snappy_hex_mesh_dict_content
+
 
     def generate_surfaceFeaturesDict(self):
         surfaces_block = ""
@@ -399,5 +408,3 @@ includedAngle 150;
             f.write(content)
         
         print(f"snappyHexMeshDict written to {output_path}")
-
-

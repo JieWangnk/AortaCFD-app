@@ -18,7 +18,7 @@ import shutil
 import argparse
 
 class OpenFOAMCase:
-    def __init__(self, geometry_case, refinement, feature_level, surface_refinement_levels, directory, bc_inlet,
+    def __init__(self, geometry_case, refinement, directory, bc_inlet,
                 bc_outlet, initial_condition_U, initial_condition_p,initial_condition_K, initial_condition_omega,
                 nu, rho, simulation_type, simulation_performace,simulation_control, soln_type, subdomains, decomposition_method):
         """ Helper class to create an OpenFOAM case for AortaCFD.
@@ -62,9 +62,7 @@ class OpenFOAMCase:
            
         self.__create_OFcase()
 
-        self.geometry_analyzer = GeometryAnalyzer(DIRECTORY=self.directory, geometry_case=self.geometry_case, 
-                                                  refinement=self.refinement, feature_level=self.feature_level, 
-                                                  surface_refinement_levels=self.surface_refinement_levels)
+        self.geometry_analyzer = GeometryAnalyzer(DIRECTORY=self.directory, geometry_case=self.geometry_case, refinement=self.refinement)
         
         self.boundary_condition = BoundaryConditionSetup(self.directory, self.geometry_analyzer.stl_files, self.BC_INLET, 
                                                         self.BC_OUTLET, self.initial_condition_U, self.initial_condition_p, 
