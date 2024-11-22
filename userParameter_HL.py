@@ -11,8 +11,8 @@ BC_OUTLET = "3EWINDKESSEL" #options: ZERO_GRADIENT, 3EWINDKESSEL
 #-------------------------------------------------------------------------------------------#
 # Inlet details
 INLET_DATA_FILE = "BPM73.csv"
-INLET_PROFILE = "womersley" #options: plug, womersley, parabolic
-INLET_ORINTATION = "out" #options: in or out, as normal vector up to z-axis is out, down to z-axis is in 
+INLET_PROFILE = "parabolic" #options: plug, womersley, parabolic
+INLET_ORINTATION = "in" #options: in or out, as normal vector up to z-axis is out, down to z-axis is in 
 #-------------------------------------------------------------------------------------------#
 # Physical properties: transportProperteis and momentumTransport
 NU = "3.3e-06"

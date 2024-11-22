@@ -6,18 +6,18 @@ REFINEMENT_LEVELS = {
     "medium":0.6,
     "fine":0.25
 }
-#TODO: (Jie) Angle
 SNAPPY_SETTINGS = {
-    "parallel":False,
+    "parallel": False,
     "nProcessors":2,
-    "expansion_factor":0.02,
-    "region_refinement":1,
+    "expansionFactor":0.02,
+    "regionRefinementLevel": None,
+    "regionRefinementBox": None,
     "nCellsBetweenLevels":3,
-    "feature_level":3,
-    "surface_refinement_levels": (2,3),
-    "resolveFeatureAngle":25,
+    "featureLevel":3,
+    "surfaceRefinementLevels": (2,3),
+    "resloveFeatureAngle":25,
     "nSmoothPatch":3,
-    "nSurfaceLayvers": 5
+    "addLayer": 5
 }
 # ----------------- #
 # initial condition #

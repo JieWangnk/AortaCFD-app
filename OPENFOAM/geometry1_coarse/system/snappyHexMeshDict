@@ -117,11 +117,6 @@ castellatedMeshControls
     
     refinementRegions
     {
-        region_refinement_box
-        {
-            mode inside;
-            levels ((1E15 2));  // Adjust as needed
-        }
     };
     
 
