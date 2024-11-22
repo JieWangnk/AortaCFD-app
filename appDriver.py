@@ -44,8 +44,6 @@ class OpenFOAMCase:
             decomposition_method (str): Decomposition method for parallel processing."""
         self.geometry_case = geometry_case
         self.refinement = refinement
-        self.feature_level = feature_level
-        self.surface_refinement_levels = surface_refinement_levels
         self.directory = directory
         self.BC_INLET = bc_inlet
         self.BC_OUTLET = bc_outlet
@@ -195,8 +193,6 @@ class OpenFOAMRunner:
         my_case = OpenFOAMCase(
             geometry_case=self.geometry_case, 
             refinement=self.refinement,
-            feature_level=SNAPPY_SETTINGS["feature_level"],
-            surface_refinement_levels=SNAPPY_SETTINGS["surface_refinement_levels"],
             directory=self.case_directory,
             bc_inlet=BC_INLET,
             bc_outlet=BC_OUTLET,

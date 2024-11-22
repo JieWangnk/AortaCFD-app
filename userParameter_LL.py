@@ -6,6 +6,7 @@ REFINEMENT_LEVELS = {
     "medium":0.6,
     "fine":0.25
 }
+#TODO: (Jie) Angle
 SNAPPY_SETTINGS = {
     "parallel":False,
     "nProcessors":2,
