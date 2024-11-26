@@ -27,17 +27,17 @@ check solverSetup.py => done!
     The symbolic link directory 0.821918 is created!
     The symbolic link directory 0.831918 is created!
     The symbolic link directory 0.841918 is created!
-Action: commented in "cycleDataSetup.py"
+Action: commented the corresponding line in "cycleDataSetup.py"
 
 ===========================================================================================================================================================================================================================================================
-4- checking different inlet BCs:
+4- checking different inlet BCs (with Zero gradient outlet BC):
     i- "WAVEFORM"
         ERROR: inlet_type not found
     ii- "TIME_VARYING_MAPPED_FIXED_VALUE"
         working fine
-    iii- "TIME_VARYING_MAPPED_FIXED_VALUE"
-        working fine
-    iv- "TIME_VARYING_MAPPED_FIXED_VALUE"
+    iii- "FIXED_PARABOLIC_VELOCITY"
+        ERROR: inlet_type not found
+    iv- ""
         working fine
 ===========================================================================================================================================================================================================================================================
 5- checking different outlet BCs:
