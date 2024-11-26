@@ -12,6 +12,7 @@ Debugging notes (Dania):
     
     FOAM exiting
 Action required: add an error message to guide the user here.
+Action required2: add an error message for each user speecified option.
 
 ===========================================================================================================================================================================================================================================================
 
@@ -58,7 +59,26 @@ Action: commented the corresponding line in "cycleDataSetup.py"
         working fine
 
 ===========================================================================================================================================================================================================================================================
-6- Inconsistent output of "python3 appDriver.py --geometry VOL04 --refinement coarse createCase"
+6- checking different inlet profiles options (with "TIME_VARYING_MAPPED_FIXED_VALUE" as an inlet BC and "3EWINDKESSEL" as outlet BC):
+    i- "plug" 
+            python3 appDriver.py --geometry VOL04 --refinement coarse runAll
+            Running CFD steps...
+            Running meshing process...
+            Mesh created in 1.19 minutes.
+            Setting boundary conditions...
+            6.0761275e-05 1.6177979e-05 4.178255e-05 0.00026588354
+            windkesselProperties file has been written
+            Boundary condition set in 0.04 minutes.
+            Running simulation...
+        Action required: what are tehe numbers shown when setting the BC ? Are they essential for the user ?
+        trace and comment.
+    ii- "womersley" 
+        working fine
+    iii- "parabolic"
+        working fine
+
+===========================================================================================================================================================================================================================================================
+7- Inconsistent output of "python3 appDriver.py --geometry VOL04 --refinement coarse createCase"
       Creating OpenFOAM case...
       Directory  /home/y95228da/Desktop/Cardio-app-Dania/final4validation/OPENFOAM/VOL04_coarse  Created 
       /home/y95228da/Desktop/Cardio-app-Dania/final4validation/OPENFOAM/VOL04_coarse
