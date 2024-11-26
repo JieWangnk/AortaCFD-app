@@ -70,10 +70,22 @@ Action: commented the corresponding line in "cycleDataSetup.py"
             windkesselProperties file has been written
             Boundary condition set in 0.04 minutes.
             Running simulation...
-        Action required: what are tehe numbers shown when setting the BC ? Are they essential for the user ?
+        Action required: what are the numbers shown when setting the BC ? Are they essential for the user ?
         trace and comment.
     ii- "womersley" 
-        working fine
+            python3 appDriver.py --geometry VOL04 --refinement coarse runAll
+            Running CFD steps...
+            Running meshing process...
+            Mesh created in 1.18 minutes.
+            Setting boundary conditions...
+            Velocity profile saved to constant/boundaryData/inlet/BPM73.csv
+            Womersley velocity profile generated: alpha =  14.443568545202405
+            6.0761275e-05 1.6177979e-05 4.178255e-05 0.00026588354
+            windkesselProperties file has been written
+            Boundary condition set in 0.04 minutes.
+            Running simulation...
+        Action required: what are the numbers shown when setting the BC ? Are they essential for the user ?
+        trace and comment.
     iii- "parabolic"
         working fine
 
@@ -95,5 +107,19 @@ Action reqired: add the full path for all directories for consistency.
 
 ===========================================================================================================================================================================================================================================================
 
-7- 
+7- SIMULATIONTYPE ="LES" #options: laminar, RAS, LES
+SIMULATIONPERFORMACE = "low" #options: low, medium, high
+SOLN_TYPE = "parallel" #options: serial or parallel
+SUBDOMAINS = "10"
+DECOMPOSITION_METHOD = "scotch" #options: scotch, simple, hierarchical
+
+===========================================================================================================================================================================================================================================================
+In the following snippt "heart rate" is repeated; first entry was in userPrameter_HL.py
+
+INITIAL_CONDITION_U = {
+        #"inlet_volumetric_flow_rate": "7.84e-5",
+        "inlet_max_velocity": "0.1",
+        "heart_rate": "120",
+}
+===========================================================================================================================================================================================================================================================
 
