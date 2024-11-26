@@ -1,0 +1,72 @@
+Debugging notes (Dania):
+1- If there is a typo in BC_OUTLET = "ZERO_GRADIENTl", the error retuned is not clear; it only shows the following:
+    Running CFD steps...
+    Running meshing process...
+    
+    
+    --> FOAM FATAL ERROR: 
+    cannot find file "/home/y95228da/Desktop/Cardio-app-Dania/final4validation/OPENFOAM/VOL04_coarse/system/controlDict"
+    
+        From function virtual Foam::autoPtr<Foam::ISstream> Foam::fileOperations::uncollatedFileOperation::readStream(Foam::regIOobject&, const Foam::fileName&, const Foam::word&, bool) const
+        in file global/fileOperations/uncollatedFileOperation/uncollatedFileOperation.C at line 539.
+    
+    FOAM exiting
+Action required: add an error message to guide the user here.
+
+===========================================================================================================================================================================================================================================================
+
+2- pimple_WK_2.1 and pimpleFoam ouput file (log.log) shows residual only for pressure, no velocity (Ux, Uy, Uz)?
+  - no problem with fvSolution 
+  - U data file is saved for each timestep
+Action: add "momentumPredictor yes;" to fvSolution
+check solverSetup.py => done!
+
+===========================================================================================================================================================================================================================================================
+3- Do we actually need the following output:
+      Output saved to 'points' file.
+    The symbolic link directory 0.821918 is created!
+    The symbolic link directory 0.831918 is created!
+    The symbolic link directory 0.841918 is created!
+Action: commented in "cycleDataSetup.py"
+
+===========================================================================================================================================================================================================================================================
+4- checking different inlet BCs:
+    i- "WAVEFORM"
+        ERROR: inlet_type not found
+    ii- "TIME_VARYING_MAPPED_FIXED_VALUE"
+        working fine
+    iii- "TIME_VARYING_MAPPED_FIXED_VALUE"
+        working fine
+    iv- "TIME_VARYING_MAPPED_FIXED_VALUE"
+        working fine
+===========================================================================================================================================================================================================================================================
+5- checking different outlet BCs:
+    i- ""
+        ERROR: inlet_type not found
+    ii- ""
+        working fine
+    iii- ""
+        working fine
+    iv- ""
+        working fine
+
+===========================================================================================================================================================================================================================================================
+6- Inconsistent output of "python3 appDriver.py --geometry VOL04 --refinement coarse createCase"
+      Creating OpenFOAM case...
+      Directory  /home/y95228da/Desktop/Cardio-app-Dania/final4validation/OPENFOAM/VOL04_coarse  Created 
+      /home/y95228da/Desktop/Cardio-app-Dania/final4validation/OPENFOAM/VOL04_coarse
+      blockMeshDict written to /home/y95228da/Desktop/Cardio-app-Dania/final4validation/OPENFOAM/VOL04_coarse/system/blockMeshDict
+      snappyHexMeshDict written to /home/y95228da/Desktop/Cardio-app-Dania/final4validation/OPENFOAM/VOL04_coarse/system/snappyHexMeshDict
+      surfaceFeaturesDict written to /home/y95228da/Desktop/Cardio-app-Dania/final4validation/OPENFOAM/VOL04_coarse/system/surfaceFeaturesDict
+      transportProperties file has been written.
+      momentumProperties file has been written.
+      controlDict file has been written
+      decomposeParDict file has been written.
+      OpenFOAM case created
+
+Action reqired: add the full path for all directories for consistency. 
+
+===========================================================================================================================================================================================================================================================
+
+7- 
+
