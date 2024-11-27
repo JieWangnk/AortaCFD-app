@@ -123,7 +123,7 @@ Action reqired: add the full path for all directories for consistency.
     ii- laminar_low
         working fine
     iii- laminar_med
-
+        working fine
     iv- laminar_high
         working fine
     v- RAS_low
@@ -140,6 +140,7 @@ Action reqired: add the full path for all directories for consistency.
     ix- LES_med
 
     x- LES_high
+        setup is working fine, simulation diverged for coarse mesh
 
 ===========================================================================================================================================================================================================================================================
 9- SOLN_TYPE = "parallel" #options: serial or parallel
