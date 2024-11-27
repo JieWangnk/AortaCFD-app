@@ -16,7 +16,7 @@ Action required2: add an error message for each user speecified option.
 
 ===========================================================================================================================================================================================================================================================
 
-2- pimple_WK_2.1 and pimpleFoam ouput file (log.log) shows residual only for pressure, no velocity (Ux, Uy, Uz)?
+2- pimple_WK_2.1 and pimpleFoam ouput file (log.log) show residual only for pressure, no velocity (Ux, Uy, Uz)?
   - no problem with fvSolution 
   - U data file is saved for each timestep
 Action: add "momentumPredictor yes;" to fvSolution
@@ -51,6 +51,7 @@ Action: commented the corresponding line in "cycleDataSetup.py"
           File "/home/y95228da/Desktop/Cardio-app-Dania/final4validation/SCRIPTS/boundaryConditionSetup.py", line 166, in write_U_file
             inlet_block = inlet_block.format(inlet=self.INLET_STL.split(".")[0], **self.INITIAL_CONDITION_U)
         KeyError: 'self'
+
 ===========================================================================================================================================================================================================================================================
 5- checking different outlet BCs (with "TIME_VARYING_MAPPED_FIXED_VALUE" as an inlet BC):
     i- "ZERO_GRADIENT" 
@@ -106,20 +107,66 @@ Action: commented the corresponding line in "cycleDataSetup.py"
 Action reqired: add the full path for all directories for consistency. 
 
 ===========================================================================================================================================================================================================================================================
-
 7- SIMULATIONTYPE ="LES" #options: laminar, RAS, LES
-SIMULATIONPERFORMACE = "low" #options: low, medium, high
-SOLN_TYPE = "parallel" #options: serial or parallel
-SUBDOMAINS = "10"
-DECOMPOSITION_METHOD = "scotch" #options: scotch, simple, hierarchical
+        i- "laminar"
+
+        ii- "RAS"
+
+        iii- "LES"
 
 ===========================================================================================================================================================================================================================================================
-In the following snippt "heart rate" is repeated; first entry was in userPrameter_HL.py
+8- SIMULATIONPERFORMACE = "low" #options: low, medium, high
+    i- "SIMULATIONPERFORMACE" is a bit confusing here, suggesting chaning it to "parameters_solver" or "numerical_solver" may be?
+    ii- laminar_low
 
-INITIAL_CONDITION_U = {
-        #"inlet_volumetric_flow_rate": "7.84e-5",
-        "inlet_max_velocity": "0.1",
-        "heart_rate": "120",
-}
+    iii- laminar_med
+
+    iv- laminar_high
+
+    v- RAS_low
+
+    vi- RAS_med
+
+    vii- RAS_high
+
+    viii- LES_low
+
+    ix- LES_med
+
+    x- LES_high
+
+===========================================================================================================================================================================================================================================================
+9- SOLN_TYPE = "parallel" #options: serial or parallel
+        i- "serial"
+            working fine
+        ii- "parallel"
+            working fine
+
+===========================================================================================================================================================================================================================================================
+10- DECOMPOSITION_METHOD = "scotch" #options: scotch, simple, hierarchical (BC_INLET = "TIME_VARYING_MAPPED_FIXED_VALUE", BC_OUTLET = "3EWINDKESSEL")
+        i- "scotch"
+            working fine
+        ii- "simple"
+            requiring setting the following "simpleCoeffs" by user to match the total number of subdomains 
+                {
+                    n               (4 2 1); // total must match numberOfSubdomains
+                }
+
+        iii- "hierarchical"
+            requiring setting the following "hierarchicalCoeffs" by user to match the total number of subdomains   
+                {
+                    n               (4 2 1); // total must match numberOfSubdomains
+                    order           xyz;
+                }
+Action reqired: edit "userParameters_HL.py" to add coeffecients and adapt "solnTypeSetup.py"
+
+===========================================================================================================================================================================================================================================================
+11- In the following snippt "heart rate" is repeated; first entry was in userPrameter_HL.py
+
+    INITIAL_CONDITION_U = {
+            #"inlet_volumetric_flow_rate": "7.84e-5",
+            "inlet_max_velocity": "0.1",
+            "heart_rate": "120",
+    }
 ===========================================================================================================================================================================================================================================================
 
