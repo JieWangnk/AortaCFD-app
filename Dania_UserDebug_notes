@@ -1,4 +1,6 @@
 Debugging notes (Dania):
+===========================================================================================================================================================================================================================================================
+
 1- If there is a typo in BC_OUTLET = "ZERO_GRADIENTl", the error retuned is not clear; it only shows the following:
     Running CFD steps...
     Running meshing process...
@@ -123,7 +125,7 @@ Action reqired: add the full path for all directories for consistency.
     iii- laminar_med
 
     iv- laminar_high
-
+        working fine
     v- RAS_low
        error in writing fvSolution dict
        "solverSetup.py" is incomplete for RAS_low, RAS_med and RAS_high
