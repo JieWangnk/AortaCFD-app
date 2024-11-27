@@ -6,9 +6,9 @@
     ```bash
     source /opt/openfoam10/etc/bashrc
     ```
-    For Wind Kessel BC, pimpleFoam_WK should be installed by compiling the following library:
+    For Windkessel BC, pimpleFoam_WK is needed be installed by compiling the following library:
     ```bash
-    source /opt/openfoam10/etc/bashrc
+      check emily's github
     ```
 -  ```/opt/openfoam8/``` can be replaced with the path to your OpenFOAM installation.
 2. **Source pvbatch**:
