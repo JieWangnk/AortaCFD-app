@@ -178,6 +178,7 @@ Action reqired: edit "userParameters_HL.py" to add coeffecients and adapt "solnT
 
 ===========================================================================================================================================================================================================================================================
 12- we needed to specify clearly how the user can stop the simulation, as when I tried "ctrl+C" it stopped "pimpleFOAM" and does not finish the reconstruction part properly then deleted the processors.
+    suggestion: add an if function to read reconstruction.log and check if it is done beofre "rm -r processor*".
 
 ===========================================================================================================================================================================================================================================================
 13- There is a typo in the following snippet in "solnTypeSetup.py"
