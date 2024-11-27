@@ -138,9 +138,9 @@ Action reqired: add the full path for all directories for consistency.
     viii- LES_low
          working fine
     ix- LES_med
-        setup is working fine, simulation diverged for coarse mesh
+        setup is working fine, simulation diverged for coarse mesh, run fine for refined mesh
     x- LES_high
-        setup is working fine, simulation diverged for coarse mesh
+        setup is working fine, simulation diverged for coarse mesh, run fine for refined mesh
 
 ===========================================================================================================================================================================================================================================================
 9- SOLN_TYPE = "parallel" #options: serial or parallel
