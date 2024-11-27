@@ -138,7 +138,7 @@ Action reqired: add the full path for all directories for consistency.
     viii- LES_low
          working fine
     ix- LES_med
-
+        setup is working fine, simulation diverged for coarse mesh
     x- LES_high
         setup is working fine, simulation diverged for coarse mesh
 
@@ -201,7 +201,7 @@ FoamFile
 Action required: replacing "fvSolution" with "decomposeParDict"
 
 ===========================================================================================================================================================================================================================================================
-14- Modify the postProcessing part, i.e., pltting residual to use K and Omega only if it is RAS
+14- Modify the postProcessing part, i.e., plotting residual to use K and Omega only if it is RAS
 
 ===========================================================================================================================================================================================================================================================
 15- 
