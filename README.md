@@ -4,9 +4,9 @@
 1. **Source OpenFOAM**:
    Every time you open a new terminal and want to use OpenFOAM, you should source the bashrc file:
     ```bash
-    source /opt/openfoam8/etc/bashrc
+    source /opt/openfoam10/etc/bashrc
     ```
-    The last version of the code is compatible with OpenFOAM version 10. (This invovled some changes in OF commands)
+    For Wind Kessel BC, pimpleFoam_WK should be installed by compiling the following library:
     ```bash
     source /opt/openfoam10/etc/bashrc
     ```
