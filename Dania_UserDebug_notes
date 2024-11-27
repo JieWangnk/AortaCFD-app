@@ -109,28 +109,29 @@ Action reqired: add the full path for all directories for consistency.
 ===========================================================================================================================================================================================================================================================
 7- SIMULATIONTYPE ="LES" #options: laminar, RAS, LES
         i- "laminar"
-
+            see below
         ii- "RAS"
-
+            see below
         iii- "LES"
+            see below
 
 ===========================================================================================================================================================================================================================================================
 8- SIMULATIONPERFORMACE = "low" #options: low, medium, high
     i- "SIMULATIONPERFORMACE" is a bit confusing here, suggesting chaning it to "numerical_solver" may be?
     ii- laminar_low
-
+        working fine
     iii- laminar_med
 
     iv- laminar_high
 
     v- RAS_low
-
+       working fine
     vi- RAS_med
 
     vii- RAS_high
 
     viii- LES_low
-
+         working fine
     ix- LES_med
 
     x- LES_high
@@ -158,7 +159,7 @@ Action reqired: add the full path for all directories for consistency.
                     n               (4 2 1); // x * y * z must match numberOfSubdomains
                     order           xyz;
                 }
-Action reqired: edit "userParameters_HL.py" to add coeffecients and adapt "solnTypeSetup.py" to check that tje 
+Action reqired: edit "userParameters_HL.py" to add coeffecients and adapt "solnTypeSetup.py" to overwrite the total number of subdomains equals x * y * z for both "simple" and "hierarchical" options 
 
 ===========================================================================================================================================================================================================================================================
 11- In the following snippt "heart rate" is repeated; first entry was in userPrameter_HL.py
@@ -170,7 +171,7 @@ Action reqired: edit "userParameters_HL.py" to add coeffecients and adapt "solnT
     }
 
 ===========================================================================================================================================================================================================================================================
-12- we needed to specify clearly how the user can stop the simulation, as when I tried "ctrl+C" it stopped "pimpleFOAM" and does not finish the reconstruction part properly them deleted the processors.
+12- we needed to specify clearly how the user can stop the simulation, as when I tried "ctrl+C" it stopped "pimpleFOAM" and does not finish the reconstruction part properly then deleted the processors.
 
 ===========================================================================================================================================================================================================================================================
 13- 
