@@ -24,7 +24,7 @@ check solverSetup.py => done!
 
 ===========================================================================================================================================================================================================================================================
 3- Do we actually need the following output:
-      Output saved to 'points' file.
+    Output saved to 'points' file.
     The symbolic link directory 0.821918 is created!
     The symbolic link directory 0.831918 is created!
     The symbolic link directory 0.841918 is created!
@@ -116,7 +116,7 @@ Action reqired: add the full path for all directories for consistency.
 
 ===========================================================================================================================================================================================================================================================
 8- SIMULATIONPERFORMACE = "low" #options: low, medium, high
-    i- "SIMULATIONPERFORMACE" is a bit confusing here, suggesting chaning it to "parameters_solver" or "numerical_solver" may be?
+    i- "SIMULATIONPERFORMACE" is a bit confusing here, suggesting chaning it to "numerical_solver" may be?
     ii- laminar_low
 
     iii- laminar_med
@@ -149,13 +149,13 @@ Action reqired: add the full path for all directories for consistency.
         ii- "simple"
             requiring setting the following "simpleCoeffs" by user to match the total number of subdomains 
                 {
-                    n               (4 2 1); // total must match numberOfSubdomains
+                    n               (4 2 1); // x * y * z must match numberOfSubdomains
                 }
 
         iii- "hierarchical"
             requiring setting the following "hierarchicalCoeffs" by user to match the total number of subdomains   
                 {
-                    n               (4 2 1); // total must match numberOfSubdomains
+                    n               (4 2 1); // x * y * z must match numberOfSubdomains
                     order           xyz;
                 }
 Action reqired: edit "userParameters_HL.py" to add coeffecients and adapt "solnTypeSetup.py"
