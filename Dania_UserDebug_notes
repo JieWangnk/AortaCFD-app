@@ -125,11 +125,14 @@ Action reqired: add the full path for all directories for consistency.
     iv- laminar_high
 
     v- RAS_low
-       working fine
+       error in writing fvSolution dict
+       "solverSetup.py" is incomplete for RAS_low, RAS_med and RAS_high
     vi- RAS_med
-
+        error in writing fvSolution dict
+       "solverSetup.py" is incomplete for RAS_low, RAS_med and R
     vii- RAS_high
-
+        error in writing fvSolution dict
+       "solverSetup.py" is incomplete for RAS_low, RAS_med and RAS_high
     viii- LES_low
          working fine
     ix- LES_med
@@ -174,5 +177,26 @@ Action reqired: edit "userParameters_HL.py" to add coeffecients and adapt "solnT
 12- we needed to specify clearly how the user can stop the simulation, as when I tried "ctrl+C" it stopped "pimpleFOAM" and does not finish the reconstruction part properly then deleted the processors.
 
 ===========================================================================================================================================================================================================================================================
-13- 
+13- There is a typo in the following snippet in "solnTypeSetup.py"
+
+    def write_decomposeParDict(self):
+        content = """/*--------------------------------*- C++ -*----------------------------------*\\
+| =========                 |                                                 |
+| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\\\    /   O peration     | Version:  11                                     |
+|   \\\\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\\\/     M anipulation  |                                                 |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSolution;
+
+Action required: replacing "fvSolution" with "decomposeParDict"
+
+===========================================================================================================================================================================================================================================================
+14- 
 
