@@ -16,6 +16,8 @@ Debugging notes (Dania):
 Action required: add an error message to guide the user here.
 Action required2: add an error message for each user speecified option.
 
+Jie: Agree
+
 ===========================================================================================================================================================================================================================================================
 
 2- pimple_WK_2.1 and pimpleFoam ouput file (log.log) show residual only for pressure, no velocity (Ux, Uy, Uz)?
@@ -31,6 +33,8 @@ check solverSetup.py => done!
     The symbolic link directory 0.831918 is created!
     The symbolic link directory 0.841918 is created!
 Action: commented the corresponding line in "cycleDataSetup.py"
+
+Jie: We don't need this
 
 ===========================================================================================================================================================================================================================================================
 4- checking different inlet BCs (with Zero gradient outlet BC):
@@ -54,6 +58,8 @@ Action: commented the corresponding line in "cycleDataSetup.py"
             inlet_block = inlet_block.format(inlet=self.INLET_STL.split(".")[0], **self.INITIAL_CONDITION_U)
         KeyError: 'self'
 
+Jie: WAVEFORM should be removed as it is same as TIME_VARYING_MAPPED_FIXED_VALUE. 
+TIMEVARYING_PARABOLIC_VELOCITY inlet file need to get fix 
 ===========================================================================================================================================================================================================================================================
 5- checking different outlet BCs (with "TIME_VARYING_MAPPED_FIXED_VALUE" as an inlet BC):
     i- "ZERO_GRADIENT" 
@@ -92,6 +98,7 @@ Action: commented the corresponding line in "cycleDataSetup.py"
     iii- "parabolic"
         working fine
 
+Jie: No the numbers can be removed as it was for testing 
 ===========================================================================================================================================================================================================================================================
 7- Inconsistent output of "python3 appDriver.py --geometry VOL04 --refinement coarse createCase"
       Creating OpenFOAM case...
@@ -108,6 +115,7 @@ Action: commented the corresponding line in "cycleDataSetup.py"
 
 Action reqired: add the full path for all directories for consistency. 
 
+Jie: agree
 ===========================================================================================================================================================================================================================================================
 7- SIMULATIONTYPE ="LES" #options: laminar, RAS, LES
         i- "laminar"
@@ -142,6 +150,7 @@ Action reqired: add the full path for all directories for consistency.
     x- LES_high
         setup is working fine, simulation diverged for coarse mesh, run fine for refined mesh
 
+Jie: as this point the RAS should be not option, the pimpleFoam_WK_2.1 is not completed for RANS model. 
 ===========================================================================================================================================================================================================================================================
 9- SOLN_TYPE = "parallel" #options: serial or parallel
         i- "serial"
@@ -167,6 +176,7 @@ Action reqired: add the full path for all directories for consistency.
                 }
 Action reqired: edit "userParameters_HL.py" to add coeffecients and adapt "solnTypeSetup.py" to overwrite the total number of subdomains equals x * y * z for both "simple" and "hierarchical" options 
 
+Jie: agree
 ===========================================================================================================================================================================================================================================================
 11- In the following snippt "heart rate" is repeated; first entry was in userPrameter_HL.py
 
@@ -175,10 +185,12 @@ Action reqired: edit "userParameters_HL.py" to add coeffecients and adapt "solnT
             "inlet_max_velocity": "0.1",
             "heart_rate": "120",
     }
-
+Jie: I haven't got time to fixed this. and yes we should use the hear rate in the userPrameter_HL.py. 
 ===========================================================================================================================================================================================================================================================
 12- we needed to specify clearly how the user can stop the simulation, as when I tried "ctrl+C" it stopped "pimpleFOAM" and does not finish the reconstruction part properly then deleted the processors.
     suggestion: add an if function to read reconstruction.log and check if it is done beofre "rm -r processor*".
+
+Jie: or we can use if all foamListTimes in processor0/*; then rm -r processor* 
 
 ===========================================================================================================================================================================================================================================================
 13- There is a typo in the following snippet in "solnTypeSetup.py"
@@ -201,8 +213,12 @@ FoamFile
 
 Action required: replacing "fvSolution" with "decomposeParDict"
 
+Jie: Agree
+
 ===========================================================================================================================================================================================================================================================
 14- Modify the postProcessing part, i.e., plotting residual to use K and Omega only if it is RAS
+
+Jie: RAS not in consideration yet
 
 ===========================================================================================================================================================================================================================================================
 15- 
