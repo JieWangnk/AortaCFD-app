@@ -26,19 +26,19 @@ boundaryField
             type            zeroGradient;
         }
     
-        outlet3
-        {
-            type            zeroGradient;
-        }
-        outlet4
-        {
-            type            zeroGradient;
-        }
         outlet1
         {
             type            zeroGradient;
         }
         outlet2
+        {
+            type            zeroGradient;
+        }
+        outlet3
+        {
+            type            zeroGradient;
+        }
+        outlet4
         {
             type            zeroGradient;
         }

@@ -132,8 +132,13 @@ Pressure_start                0;
         for outlet in range(len(branch_names)):
             outletName = branch_names[outlet]
             index = outlet
-            outlet_block += outlet_block_template.format(outlet_name=outletName, index=index, C_val="{:.4e}".format(C[outlet]), R_val="{:.4e}".format(R_2[outlet]), Z_val="{:.4e}".format(R_1[outlet]))
-
+            outlet_block += outlet_block_template.format(
+        outlet_name=outletName,
+        index=index,
+        C_val="{:.4e}".format(C[outlet]),
+        R_val="{:.4e}".format(R_2[outlet]),
+        Z_val="{:.4e}".format(R_1[outlet])
+        )
         # Use the template to fill in the variables and write to the file with tow copy
         with open(os.path.join("constant", "windkesselProperties"), 'w') as f:
             f.write(template.format(outlet_block=outlet_block))

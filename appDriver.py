@@ -230,9 +230,9 @@ class OpenFOAMRunner:
             os.system("foamDictionary -entry 'numberOfSubdomains' -set '{}' system/decomposeParDict".format(SNAPPY_SETTINGS["nProcessors"]))
             os.system("foamDictionary -entry 'simpleCoeffs/n' -set '(1 1 {})' system/decomposeParDict".format(SNAPPY_SETTINGS["nProcessors"]))
             os.system("decomposePar -noZero -force > snappyHex.log")
-            os.system("mpirun -np {} snappyHexMesh -overwrite > snappyHex.log".format(SNAPPY_SETTINGS["nProcessors"]))
+            os.system("mpirun -np {} snappyHexMesh -parallel -overwrite > snappyHex.log".format(SNAPPY_SETTINGS["nProcessors"]))
             os.system("reconstructParMesh -constant -latestTime > reconstructParMesh.log")
-            #os.system("rm -r processor*")
+            os.system("rm -r processor*")
         else:
             os.system("snappyHexMesh -overwrite > snappyHex.log")
         # run checkMesh
@@ -311,7 +311,7 @@ class OpenFOAMRunner:
             os.system("decomposePar > decompose.log")
             os.system("renumberMesh > renumberMesh.log")
             if self.BC_OUTLET == "3EWINDKESSEL":
-                os.system("mpirun -np {} pimpleFoam_WK_2.1 > log.log".format(self.SUBDOMAINS))    # Adjust as needed
+                os.system("mpirun -np {} pimpleFoam_WK_2.1 -parallel  > log.log".format(self.SUBDOMAINS))    # Adjust as needed
             else:
                 os.system("mpirun -np {} pimpleFoam > log.log".format(self.SUBDOMAINS))     
             os.system("reconstructPar > reconstruct.log")

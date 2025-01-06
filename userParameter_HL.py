@@ -1,6 +1,6 @@
 from userParameter_LL import *
 
-GEOMETRY_CASE = "VOL04_plug"
+GEOMETRY_CASE ="PAT1_2024"
 REFINEMENT = "coarse" #options: "coarse", "medium", "fine"
 GEOMETRY_SCALE = "1e-3"
 #-------------------------------------------------------------------------------------------#
@@ -32,7 +32,7 @@ WK_SETTING = {
 }
 #-------------------------------------------------------------------------------------------#
 # Solution type
-SOLN_TYPE = "serial" #options: serial or parallel
-SUBDOMAINS = "2"
+SOLN_TYPE = "parallel" #options: serial or parallel
+SUBDOMAINS = "3"
 DECOMPOSITION_METHOD = "scotch" #options: scotch, simple, hierarchical
 #-------------------------------------------------------------------------------------------#
