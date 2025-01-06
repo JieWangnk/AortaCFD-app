@@ -15,28 +15,16 @@ addLayers       true;
 geometry
 {
     
-        outlet3.stl
-        {
-            type triSurfaceMesh;
-            name outlet3;
-        }
-        
-        wall_aorta.stl
-        {
-            type triSurfaceMesh;
-            name wall_aorta;
-        }
-        
-        inlet.stl
-        {
-            type triSurfaceMesh;
-            name inlet;
-        }
-        
         outlet4.stl
         {
             type triSurfaceMesh;
             name outlet4;
+        }
+        
+        outlet3.stl
+        {
+            type triSurfaceMesh;
+            name outlet3;
         }
         
         outlet1.stl
@@ -45,13 +33,25 @@ geometry
             name outlet1;
         }
         
+        inlet.stl
+        {
+            type triSurfaceMesh;
+            name inlet;
+        }
+        
+        wall_aorta.stl
+        {
+            type triSurfaceMesh;
+            name wall_aorta;
+        }
+        
         outlet2.stl
         {
             type triSurfaceMesh;
             name outlet2;
         }
         
-    region_refinement_box { type searchableBox; min (-8 190 -61); max (1.8 209 -42); }
+    region_refinement_box { type searchableBox; min (-28.011721725463868 -29.010381164550783 -76.78730987548828); max (8.16838752746582 11.280049743652343 37.108797302246096); }
 };
 
 castellatedMeshControls
@@ -65,62 +65,67 @@ castellatedMeshControls
     features
     (
         
-        {file "outlet3.eMesh"; level 2;}
+        {file "outlet4.eMesh"; level 2;}   
         
-        {file "wall_aorta.eMesh"; level 2;}
+        {file "outlet3.eMesh"; level 2;}   
         
-        {file "inlet.eMesh"; level 2;}
+        {file "outlet1.eMesh"; level 2;}   
         
-        {file "outlet4.eMesh"; level 2;}
+        {file "inlet.eMesh"; level 2;}   
         
-        {file "outlet1.eMesh"; level 2;}
+        {file "wall_aorta.eMesh"; level 2;}   
         
-        {file "outlet2.eMesh"; level 2;}
+        {file "outlet2.eMesh"; level 2;}   
         
     );
 
     refinementSurfaces
     {
         
-        outlet3
-        {
-        level (2 3);
-        }
-        
-        wall_aorta
-        {
-        level (2 3);
-        }
-        
-        inlet
-        {
-        level (2 3);
-        }
-        
         outlet4
         {
-        level (2 3);
+        level (1 1);
+        }
+        
+        outlet3
+        {
+        level (1 1);
         }
         
         outlet1
         {
-        level (2 3);
+        level (1 1);
+        }
+        
+        inlet
+        {
+        level (1 1);
+        }
+        
+        wall_aorta
+        {
+        level (1 1);
         }
         
         outlet2
         {
-        level (2 3);
+        level (1 1);
         }
         
     };
 
     
-    refinementRegions
-    {
-    };
-    
+        refinementRegions
+        {
+            region_refinement_box
+            {
+                mode inside;
+                levels ((1E15 2));  // Adjust as needed
+            }
+        };
+        
 
-    locationInMesh (0 0 0);
+    locationInMesh (1.31262  0.88269  -61.91196);
     allowFreeStandingZoneFaces true;
     resolveFeatureAngle 30;
 };
@@ -128,10 +133,10 @@ castellatedMeshControls
 snapControls
 {
     nSmoothPatch 3;
-    tolerance 4.0;
+    tolerance 1.0;
     nSolveIter 30;
-    nRelaxIter 5;
-    nFeatureSnapIter 10;
+    nRelaxIter 3;
+    nFeatureSnapIter 3;
     implicitFeatureSnap false;
     explicitFeatureSnap true;
     multiRegionFeatureSnap false;
@@ -142,18 +147,18 @@ addLayersControls
     relativeSizes true;
     layers
     {
-        "wall_aorta.stl"
+        "wall_aorta"
         {  
             nSurfaceLayers 5;
         }    
     }
-    expansionRatio 1.0;
-    finalLayerThickness 0.3;
-    minThickness 0.1;
+    expansionRatio 1.1;
+    finalLayerThickness 0.2;
+    minThickness 0.001;
     nGrow 0;
-    featureAngle 30;
-    slipFeatureAngle 80;
-    nRelaxIter 3;
+    featureAngle 180;
+    slipFeatureAngle 90;
+    nRelaxIter 30;
     nSmoothSurfaceNormals 1;
     nSmoothNormals 3;
     nSmoothThickness 10;
@@ -161,7 +166,7 @@ addLayersControls
     maxThicknessToMedialRatio 0.3;
     minMedianAxisAngle 90;
     nBufferCellsNoExtrude 0;
-    nLayerIter 50;
+    nLayerIter 80;
 };
 meshQualityControls
 {

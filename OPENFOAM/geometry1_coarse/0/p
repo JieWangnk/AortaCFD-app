@@ -27,28 +27,28 @@ boundaryField
             }
             
     
-            outlet3
+            outlet1
             {
                 type            WKBC;
                 index           0;
                 value           uniform 0;
             }
             
-            outlet4
+            outlet2
             {
                 type            WKBC;
                 index           1;
                 value           uniform 0;
             }
             
-            outlet1
+            outlet3
             {
                 type            WKBC;
                 index           2;
                 value           uniform 0;
             }
             
-            outlet2
+            outlet4
             {
                 type            WKBC;
                 index           3;

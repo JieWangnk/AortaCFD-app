@@ -1,4 +1,5 @@
 import os 
+import re
 import sys
 from userParameter_HL import *
 from SCRIPTS.patchProcessing import *
@@ -34,10 +35,11 @@ class BoundaryConditionSetup():
         # find the inlet stl file 
         self.INLET_STL = [f for f in self.STL_FILES if "inlet" in f][0]
         # find all the outlet stl file append in list
-        self.OUTLET_STL = []
-        for f in self.STL_FILES:
-            if "outlet" in f:
-                self.OUTLET_STL.append(f)
+        self.OUTLET_STL = sorted(
+            [f for f in self.STL_FILES if "outlet" in f],
+            key=lambda x: int(re.findall(r"\d+", x)[0])
+        )
+
 
         if self.BC_INLET == "FIXED_PARABOLIC_VELCOITY":
             self.INLET_TYPE_U = "staticParabolicInletVelocity"

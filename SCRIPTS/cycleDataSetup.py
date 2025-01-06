@@ -27,7 +27,7 @@ class CycleDataSetup:
                 # remove the directory if it exists
                 os.system(f"rm -rf {target_dir}")           
                 os.system(f"ln -s {timeDirPath} {target_dir}")     
-                print(f"The symbolic link directory {newTimeDir} is created!")
+                # print(f"The symbolic link directory {newTimeDir} is created!")
             
     def execute(self):
         if not os.path.exists(os.path.join(self.baseDir, "constant/boundaryData/inlet/BPM" + str(self.BPM) + "/")):

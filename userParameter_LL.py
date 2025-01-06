@@ -7,15 +7,15 @@ REFINEMENT_LEVELS = {
     "fine":0.25
 }
 SNAPPY_SETTINGS = {
-    "parallel": False,
-    "nProcessors":2,
+    "parallel": True,
+    "nProcessors":3,
     "expansionFactor":0.02,
-    "regionRefinementLevel": None,
+    "regionRefinementLevel": 2,
     "regionRefinementBox": None,
     "nCellsBetweenLevels":3,
-    "featureLevel":3,
-    "surfaceRefinementLevels": (2,3),
-    "resloveFeatureAngle":25,
+    "featureLevel":2,
+    "surfaceRefinementLevels": (1,2),
+    "resloveFeatureAngle":10,
     "nSmoothPatch":3,
     "addLayer": 5
 }

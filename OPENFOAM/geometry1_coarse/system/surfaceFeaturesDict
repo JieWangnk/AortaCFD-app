@@ -8,15 +8,15 @@ FoamFile
     object      surfaceFeaturesDict;
 }
 surfaces ( 
+        "outlet4.stl"
+    
         "outlet3.stl"
     
-        "wall_aorta.stl"
+        "outlet1.stl"
     
         "inlet.stl"
     
-        "outlet4.stl"
-    
-        "outlet1.stl"
+        "wall_aorta.stl"
     
         "outlet2.stl"
      );
