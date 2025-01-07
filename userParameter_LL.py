@@ -50,7 +50,7 @@ SIMULATION_CONTROL = {
     "startFrom" : "startTime",
     "startTime" : "0",
     "stopAt" : "endTime",
-    "endTime" : "1",
+    "endTime" : "0.2",
     "deltaT" : "0.000001",
     "writeControl" : "adjustableRunTime",    #timeStep, runTime, adjustableRunTime
     "writeInterval" : "0.01",       # 1, 0.1, 0.01

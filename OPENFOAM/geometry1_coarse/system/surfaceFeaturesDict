@@ -8,16 +8,16 @@ FoamFile
     object      surfaceFeaturesDict;
 }
 surfaces ( 
-        "outlet4.stl"
-    
-        "outlet3.stl"
-    
-        "outlet1.stl"
+        "wall_aorta.stl"
     
         "inlet.stl"
     
-        "wall_aorta.stl"
+        "outlet1.stl"
     
         "outlet2.stl"
+    
+        "outlet3.stl"
+    
+        "outlet4.stl"
      );
 includedAngle 150;

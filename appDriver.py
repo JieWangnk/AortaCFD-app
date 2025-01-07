@@ -16,6 +16,19 @@ import os
 import time
 import shutil
 import argparse
+import subprocess
+
+def _generate_time_array(time_steps_dict):
+    start = float(time_steps_dict["START"])
+    end   = float(time_steps_dict["END"])
+    step  = float(time_steps_dict["STEP"])
+
+    times = []
+    val = start
+    while val <= end + 1e-12:
+        times.append(round(val, 4))
+        val += step
+    return times
 
 class OpenFOAMCase:
     def __init__(self, geometry_case, refinement, directory, bc_inlet,
@@ -38,6 +51,7 @@ class OpenFOAMCase:
             nu (str): Kinematic viscosity.
             rho (str): Density.
             simulation_type (str): Simulation type (laminar, RAS, LES).
+            simulation_performace (str): Handling HPC or advanced solver configs.
             simulation_control (dict): Simulation control parameters.
             soln_type (str): Solution type (serial, parallel).
             subdomains (str): Number of subdomains for parallel processing.
@@ -62,21 +76,54 @@ class OpenFOAMCase:
            
         self.__create_OFcase()
 
-        self.geometry_analyzer = GeometryAnalyzer(DIRECTORY=self.directory, geometry_case=self.geometry_case, refinement=self.refinement)
+        self.geometry_analyzer = GeometryAnalyzer(
+            DIRECTORY=self.directory, 
+            geometry_case=self.geometry_case, 
+            refinement=self.refinement
+        )
         
-        self.boundary_condition = BoundaryConditionSetup(self.directory, self.geometry_analyzer.stl_files, self.BC_INLET, 
-                                                        self.BC_OUTLET, self.initial_condition_U, self.initial_condition_p, 
-                                                        self.initial_condition_K, self.initial_condition_omega, self.simulation_type)
+        self.boundary_condition = BoundaryConditionSetup(
+            self.directory, 
+            self.geometry_analyzer.stl_files, 
+            self.BC_INLET, 
+            self.BC_OUTLET, 
+            self.initial_condition_U, 
+            self.initial_condition_p, 
+            self.initial_condition_K, 
+            self.initial_condition_omega, 
+            self.simulation_type
+        )
         
-        self.physical_condition = PhysicalPropertiesWriter(self.directory, self.nu, self.rho, self.simulation_type)
+        self.physical_condition = PhysicalPropertiesWriter(
+            self.directory, 
+            self.nu, 
+            self.rho, 
+            self.simulation_type
+        )
 
-        self.numericalSetup = FvSchemesWriter(self.directory, self.simulation_type, self.simulation_performace)
+        self.numericalSetup = FvSchemesWriter(
+            self.directory, 
+            self.simulation_type, 
+            self.simulation_performace
+        )
 
-        self.solverSetup = FvSolutionWriter(self.directory, self.simulation_type, self.simulation_performace)
+        self.solverSetup = FvSolutionWriter(
+            self.directory, 
+            self.simulation_type, 
+            self.simulation_performace
+        )
 
-        self.simulationSetup = SimulationSetup(self.directory, self.simulation_control)
+        self.simulationSetup = SimulationSetup(
+            self.directory, 
+            self.simulation_control
+        )
 
-        self.solnType = SolnType(self.directory, soln_type, subdomains, decomposition_method)
+        self.solnType = SolnType(
+            self.directory, 
+            soln_type, 
+            subdomains, 
+            decomposition_method
+        )
 
     def __create_OFcase(self):
         """ Creates the OpenFOAM case directory and subdirectories."""
@@ -84,7 +131,7 @@ class OpenFOAMCase:
         if not os.path.exists(self.directory):
             os.makedirs(self.directory)
         else:
-            # remove and create new one 
+            # Remove if exists to ensure a clean directory
             shutil.rmtree(self.directory)
             os.makedirs(self.directory)
         print("Directory ", self.directory, " Created ")
@@ -96,24 +143,26 @@ class OpenFOAMCase:
                 os.makedirs(directory)
             except OSError as e:
                 print(f"Error: {e}")
+        
         # create constant/triSurface folder
         directory_con_tri = os.path.join(self.directory, "constant", "triSurface")
         try:
             os.makedirs(directory_con_tri)
         except OSError as e:
             print(f"Error: {e}")
+        
         # create constant/boundaryData folder
         directory_con_bd = os.path.join(self.directory, "constant", "boundaryData")
         try:
             os.makedirs(directory_con_bd)
         except OSError as e:
             print(f"Error: {e}")
-        # copy stl files to constant/triSurface folder
+
+        # Copy STL files to constant/triSurface folder
         CADfolder = os.path.join("CAD", self.geometry_case)
         for f in os.listdir(CADfolder):
-            # copy stl files to constant/triSurface folder
             shutil.copy(os.path.join(CADfolder, f), directory_con_tri)
-            # if f contains inlet 
+            # if file name indicates "inlet"
             if "inlet" in f:
                 inletBoundary = os.path.join(self.directory, "constant", "boundaryData", f.split(".")[0])
                 try:
@@ -136,7 +185,8 @@ class OpenFOAMCase:
         if self.simulation_type == "RAS":
             self.boundary_condition.write_k_file()
             self.boundary_condition.write_omega_file()
-        self.boundary_condition.write_sampleDict_file()   # for inlet extraction
+        # for inlet extraction
+        self.boundary_condition.write_sampleDict_file()   
 
     def write_physical_properties(self):
         self.physical_condition.write_transportProperties_file()
@@ -156,6 +206,8 @@ class OpenFOAMCase:
            
 
     def casePoilt(self):
+        """Call the geometry, boundary, physical property,
+           numerical, solver, simulation and parallel-subdomains setup writers."""
         self.write_geometry_files()
         self.write_boundary_conditions()
         self.write_physical_properties()
@@ -163,6 +215,7 @@ class OpenFOAMCase:
         self.write_solverSetup()
         self.write_simulationSetup()
         self.write_decomposeParDict()
+
 
 class OpenFOAMRunner:
     def __init__(self, geometry_case, refinement):
@@ -238,7 +291,9 @@ class OpenFOAMRunner:
         # run checkMesh
         os.system("checkMesh > checkMesh.log")
         # transfer mesh scale based on GEOMETRY_SCALE
-        os.system("transformPoints 'scale=({} {} {})' > transform.log".format(self.GEOMETRY_SCALE, self.GEOMETRY_SCALE, self.GEOMETRY_SCALE))
+        os.system("transformPoints 'scale=({} {} {})' > transform.log".format(
+            self.GEOMETRY_SCALE, self.GEOMETRY_SCALE, self.GEOMETRY_SCALE)
+        )
         os.system("touch f.foam")
         end_time = time.time()
         elapsed_time = end_time - start_time
@@ -267,19 +322,36 @@ class OpenFOAMRunner:
         
         stl_files = [f for f in os.listdir(os.path.join("constant", "triSurface")) if f.endswith(".stl")]
         # Create an instance of PatchProcessing
-        inlet_radius_calculator = PatchProcessing(DIRECTORY=self.case_directory, STL_FILES=stl_files, PATH_NAME="inlet")
+        inlet_radius_calculator = PatchProcessing(
+            DIRECTORY=self.case_directory, 
+            STL_FILES=stl_files, 
+            PATH_NAME="inlet"
+        )
         # calculate the inlet radius
         inlet_center, inlet_radius, inlet_normal = inlet_radius_calculator.calculate_inlet_center_radius()
  
-         # run inletMapping 
-        processor = InletMapping(center=inlet_center * eval(self.GEOMETRY_SCALE), radius=inlet_radius * eval(self.GEOMETRY_SCALE), inlet_data_file=self.INLET_DATA_FILE, inlet_name="inlet", profile=self.INLET_PROFILE)
+        # run inletMapping 
+        processor = InletMapping(
+            center=inlet_center * eval(self.GEOMETRY_SCALE), 
+            radius=inlet_radius * eval(self.GEOMETRY_SCALE), 
+            inlet_data_file=self.INLET_DATA_FILE, 
+            inlet_name="inlet", 
+            profile=self.INLET_PROFILE
+        )
         processor.run()
         # run cycleDataSetup
-        cycle_data = CycleDataSetup(BPM=int(self.HEART_RATE), numberOfCycle=int(self.NUMBER_OF_CYCLES))
+        cycle_data = CycleDataSetup(
+            BPM=int(self.HEART_RATE), 
+            numberOfCycle=int(self.NUMBER_OF_CYCLES)
+        )
         cycle_data.execute()
-        # wkSetup
+        # wkSetup for 3-element Windkessel if applicable
         if self.BC_OUTLET == "3EWINDKESSEL":
-            wk_setup = wk_Setup(DIRECTORY=self.case_directory, STL_FILES=stl_files, WK_SETTING=self.WK_SETTING)  
+            wk_setup = wk_Setup(
+                DIRECTORY=self.case_directory, 
+                STL_FILES=stl_files, 
+                WK_SETTING=self.WK_SETTING
+            )  
             wk_setup.write_WK_Setup()
         
         # change the format of "points" file to match the timeVaryingMappedFixedValue BC requirements
@@ -311,12 +383,12 @@ class OpenFOAMRunner:
             os.system("decomposePar > decompose.log")
             os.system("renumberMesh > renumberMesh.log")
             if self.BC_OUTLET == "3EWINDKESSEL":
-                os.system("mpirun -np {} pimpleFoam_WK_2.1 -parallel  > log.log".format(self.SUBDOMAINS))    # Adjust as needed
+                os.system("mpirun -np {} pimpleFoam_WK_2.1 -parallel  > log.log".format(self.SUBDOMAINS))
             else:
                 os.system("mpirun -np {} pimpleFoam > log.log".format(self.SUBDOMAINS))     
             os.system("reconstructPar > reconstruct.log")
             os.system("rm -r processor*")
-            os.system("foamLog log.log") #extract residuals from log file
+            os.system("foamLog log.log")  # Extract residuals from log file
         else:
             print("Invalid solution mode. Please specify either 'serial' or 'parallel'.")
         end_time = time.time()
@@ -327,16 +399,48 @@ class OpenFOAMRunner:
     def run_postprocessing(self):
         print("Running post-processing...")
         start_time = time.time()
-        # Change to case directory
-        os.chdir(self.case_directory)
-        # plot residuals
-        os.system("gnuplot -e \"set terminal jpeg size 1400,700; set output 'Residuals.jpeg'; set logscale y; plot 'logs/Ux_0' u 1:2 w l title 'Ux','logs/Uy_0' u 1:2 w l title 'Uy','logs/Uz_0' u 1:2 w l title 'Uz','logs/pFinalRes_0' u 1:2 w l title 'p','logs/CourantMax_0' u 1:2 w l title 'Co','logs/k_0' u 1:2 w l title 'k','logs/omega_0' u 1:2 w l title 'omega'\"")
-        
-        # Logic to run post-processing
+
+        # Build the time array based on user parameters or foamListTimes results
+        if TIME_STEPS.get("Customized"):  # Safely check for a customized setting
+            time_array = _generate_time_array(TIME_STEPS)
+        else:
+            # Save the current working directory
+            original_dir = os.getcwd()
+
+            # Change to the case directory where foamListTimes should be executed
+            os.chdir(self.case_directory)  # Ensure this variable is defined in context
+
+            try:
+                # Run the foamListTimes command using subprocess
+                result = subprocess.check_output(["foamListTimes"], text=True)
+                # Process the output: split into lines and remove empty entries
+                time_array = [line for line in result.splitlines() if line.strip()]
+            except subprocess.CalledProcessError as e:
+                print(f"Error running foamListTimes: {e}")
+                time_array = []
+            except Exception as e:
+                print(f"Unexpected error: {e}")
+                time_array = []
+
+            # Restore the original directory
+            os.chdir(original_dir)
+
+        # Set up environment variables if needed
+        os.environ["CASE_TYPE"]   = CASE_TYPE
+        os.environ["CASE_PATH"]   = self.case_directory
+        os.environ["TIME_ARRAY"]  = ",".join(str(x) for x in time_array)
+
+        # Compute the absolute path to the postProcessParaView.py script
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        # Assuming appDriver.py is in the repo root and SCRIPTS is a subfolder:
+        pv_script_path = os.path.join(current_dir, "SCRIPTS", "postProcessParaView.py")
+
+        # Run the ParaView script using pvbatch with the dynamic path
+        os.system(f"pvbatch {pv_script_path}")
+
         end_time = time.time()
         elapsed_time = end_time - start_time
-
-        print("Post-processing done in {:.2f} minutes.".format(elapsed_time / 60))
+        print(f"Post-processing done in {elapsed_time/60:.2f} minutes.")
 
     def run_all(self):
         print("Running all steps...")
@@ -344,6 +448,7 @@ class OpenFOAMRunner:
         self.run_bc()
         self.run_simulation()
         self.run_postprocessing()
+
 
 if __name__ == "__main__":
     # Create the top-level parser
@@ -377,7 +482,7 @@ if __name__ == "__main__":
     # Create an instance of OpenFOAMRunner
     runner = OpenFOAMRunner(args.geometry, args.refinement)
 
-    # Check if the case directory exists
+    # Check if the case directory exists if we're not creating it
     if args.command != 'createCase':
         if not os.path.exists(runner.case_directory):
             print(f"Error: Case directory '{runner.case_directory}' does not exist.")

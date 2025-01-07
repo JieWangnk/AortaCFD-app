@@ -10,17 +10,19 @@
     ```bash
       check emily's github
     ```
--  ```/opt/openfoam8/``` can be replaced with the path to your OpenFOAM installation.
-2. **Source pvbatch**:
-   Every time you open a new terminal and want to use pvbatch, you should source the bashrc file:
-    ```bash
-    source /opt/ParaView-5.9.1-MPI-Linux-Python3.8-64bit/bin/pvbatch
-    ```
--  ```/opt/ParaView-5.9.1-MPI-Linux-Python3.8-64bit/``` can be replaced with the path to your paraview installation.
+-  ```/opt/openfoam10/``` can be replaced with the path to your OpenFOAM installation.
+1. **ParaView / pvbatch**:
+   Easily run ParaView headless tools (pvbatch, pvpython) without hard-coding paths.
+   Locate your ParaView installation, for example:
+   ```/opt/ParaView-5.11.2-MPI-Linux-Python3.8-64bit/bin```
+   Add it to your PATH in ~/.bashrc
+   ```export PATH="/opt/ParaView-5.11.2-MPI-Linux-Python3.8-64bit/bin:$PATH"```
+   Reload your shell:
+   ```source ~/.bashrc```
 
 **Troubleshooting**: If you encounter issues, please referernce [OpenFOAM installation](https://openfoam.org/download/) and [paraview installation](https://www.paraview.org/download/).
 
-3. **Python Library**
+1. **Python Library**
    - python version 3.10
    - numpy-stl: Allowed to handle both ASCII and Binary STL format.
    - pip install numpy
@@ -69,3 +71,4 @@
    
 3.  **Post-Processing**
     1.  [```phaseAverage.py```](./SCRIPTS/phaseAverage.py): 
+
