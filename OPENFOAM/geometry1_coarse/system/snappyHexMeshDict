@@ -15,22 +15,10 @@ addLayers       true;
 geometry
 {
     
-        outlet4.stl
+        wall_aorta.stl
         {
             type triSurfaceMesh;
-            name outlet4;
-        }
-        
-        outlet3.stl
-        {
-            type triSurfaceMesh;
-            name outlet3;
-        }
-        
-        outlet1.stl
-        {
-            type triSurfaceMesh;
-            name outlet1;
+            name wall_aorta;
         }
         
         inlet.stl
@@ -39,10 +27,10 @@ geometry
             name inlet;
         }
         
-        wall_aorta.stl
+        outlet1.stl
         {
             type triSurfaceMesh;
-            name wall_aorta;
+            name outlet1;
         }
         
         outlet2.stl
@@ -51,7 +39,24 @@ geometry
             name outlet2;
         }
         
-    region_refinement_box { type searchableBox; min (-28.011721725463868 -29.010381164550783 -76.78730987548828); max (8.16838752746582 11.280049743652343 37.108797302246096); }
+        outlet3.stl
+        {
+            type triSurfaceMesh;
+            name outlet3;
+        }
+        
+        outlet4.stl
+        {
+            type triSurfaceMesh;
+            name outlet4;
+        }
+        
+    region_refinement_box 
+    { 
+        type searchableBox; 
+        min (-28.011721725463868 -29.010381164550783 -76.78730987548828); 
+        max (8.16838752746582 11.280049743652343 37.108797302246096); 
+    }
 };
 
 castellatedMeshControls
@@ -65,53 +70,53 @@ castellatedMeshControls
     features
     (
         
-        {file "outlet4.eMesh"; level 2;}   
-        
-        {file "outlet3.eMesh"; level 2;}   
-        
-        {file "outlet1.eMesh"; level 2;}   
-        
-        {file "inlet.eMesh"; level 2;}   
-        
         {file "wall_aorta.eMesh"; level 2;}   
-        
-        {file "outlet2.eMesh"; level 2;}   
-        
+            
+        {file "inlet.eMesh"; level 2;}   
+            
+        {file "outlet1.eMesh"; level 3;}   
+            
+        {file "outlet2.eMesh"; level 3;}   
+            
+        {file "outlet3.eMesh"; level 3;}   
+            
+        {file "outlet4.eMesh"; level 2;}   
+            
     );
 
     refinementSurfaces
     {
         
-        outlet4
-        {
-        level (1 1);
-        }
-        
-        outlet3
-        {
-        level (1 1);
-        }
-        
-        outlet1
-        {
-        level (1 1);
-        }
-        
-        inlet
-        {
-        level (1 1);
-        }
-        
         wall_aorta
         {
-        level (1 1);
+            level (1 2);
         }
-        
+            
+        inlet
+        {
+            level (1 2);
+        }
+            
+        outlet1
+        {
+            level (1 3);
+        }
+            
         outlet2
         {
-        level (1 1);
+            level (1 3);
         }
-        
+            
+        outlet3
+        {
+            level (1 3);
+        }
+            
+        outlet4
+        {
+            level (1 2);
+        }
+            
     };
 
     
@@ -120,21 +125,21 @@ castellatedMeshControls
             region_refinement_box
             {
                 mode inside;
-                levels ((1E15 2));  // Adjust as needed
+                levels ((1E15 2));
             }
         };
-        
+            
 
     locationInMesh (1.31262  0.88269  -61.91196);
     allowFreeStandingZoneFaces true;
-    resolveFeatureAngle 30;
+    resolveFeatureAngle 10;
 };
 
 snapControls
 {
     nSmoothPatch 3;
-    tolerance 1.0;
-    nSolveIter 30;
+    tolerance 2.0;
+    nSolveIter 10;
     nRelaxIter 3;
     nFeatureSnapIter 3;
     implicitFeatureSnap false;
