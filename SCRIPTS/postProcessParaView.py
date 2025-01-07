@@ -1,20 +1,13 @@
-"""
-A class to automate ParaView visualization for an OpenFOAM case.
-
-This script:
-1. Loads an OpenFOAM case (decomposed or reconstructed).
-2. For each time step, captures three different fields:
-    - Velocity (U)           -> volume rendering, 'Rainbow Desaturated'
-    - Pressure (p)           -> volume rendering, 'Blue - Green - Orange'
-    - wallShearStress (wss)  -> surface rendering, 'Viridis (matplotlib)'
-3. Ensures that only ONE color legend is shown at a time by manually hiding all
-   other scalar bars before displaying the new one.
-"""
 import os
 import vtk
 from vtk.util.numpy_support import vtk_to_numpy
 import numpy as np
 from scipy.spatial import ConvexHull
+import re
+import subprocess
+from paraview import servermanager
+from paraview.simple import *
+paraview.simple._DisableFirstRenderCameraReset()
 
 def get_all_points_from_multiblock(mb_dataset):
     """
@@ -41,11 +34,6 @@ def get_all_points_from_multiblock(mb_dataset):
     else:
         return None
 
-from paraview import servermanager
-
-from paraview.simple import *
-paraview.simple._DisableFirstRenderCameraReset()
-
 def hideAllScalarBarsManually(renderView, arrayNames):
     """
     For each arrayName in arrayNames, get the color transfer function (LUT) and
@@ -70,19 +58,20 @@ class OpenFOAMParaView:
             caseType  (str): 'ReconstructedCase' or 'DecomposedCase'.
             timeSteps (list): A list of times at which to save images, 
                               e.g. [0.0, 0.02, 0.04].
-                              If None, uses just the first available timestep.
+                              If None, uses just the last available timestep.
+            fields    (list): List of fields to process (optional).
         """
         self.casePath  = casePath
         self.caseType  = caseType
         self.foamFile  = f"{casePath}/f.foam"
         self.imageDir  = f"{casePath}/Images"
         self.timeSteps = timeSteps
-        self.fields    = fields
+        self.fields    = fields if fields else ["U", "p", "wallShearStress"]
 
     def run(self):
         """
         Execute the ParaView pipeline and save screenshots for each time.
-        We capture three fields: Velocity (U), Pressure (p), and wallShearStress.
+        Captures specified fields with appropriate visualization settings.
         """
         # Ensure the Images directory exists
         if not os.path.exists(self.imageDir):
@@ -94,7 +83,6 @@ class OpenFOAMParaView:
         ffoam = OpenFOAMReader(FileName=self.foamFile)
         ffoam.CaseType    = self.caseType + " Case"
         ffoam.MeshRegions = ['internalMesh']
-        #ffoam.CellArrays  = ['U', 'nut', 'p', 'wallShearStress']
 
         # 2) Create one RenderView
         renderView1 = CreateView('RenderView')
@@ -146,8 +134,11 @@ class OpenFOAMParaView:
 
             best_index = np.argmax(areas)
             best_axis = eigenvectors[best_index]
-            with open(f"{case_path}/Images/postProcessing.log", "w") as log:
-                log.write(f"[INFO] Selected principal axis index {best_index} with projected area {areas[best_index]}") 
+            
+            # Log the selected axis
+            log_file = os.path.join(self.imageDir, "postProcessing.log")
+            with open(log_file, "a") as log:
+                log.write(f"[INFO] Selected principal axis index {best_index} with projected area {areas[best_index]}\n")
 
             # Get the bounding box to determine an appropriate distance (radius)
             info = ffoam.GetDataInformation()
@@ -160,7 +151,7 @@ class OpenFOAMParaView:
 
             # Set camera properties using the best axis
             renderView1.CameraFocalPoint = mean.tolist()
-            camera_position = mean +  5 * radius * best_axis
+            camera_position = mean + 5 * radius * best_axis  # Using a multiplier of 5 as per user preference
             renderView1.CameraPosition = camera_position.tolist()
 
             # Compute a view-up vector orthogonal to the chosen axis
@@ -177,13 +168,16 @@ class OpenFOAMParaView:
 
             renderView1.CameraParallelScale = radius
 
-            log.write(f"[INFO] Camera set with position {renderView1.CameraPosition}, view up {renderView1.CameraViewUp}")
+            # Log the camera settings
+            with open(log_file, "a") as log:
+                log.write(f"[INFO] Camera set with position {renderView1.CameraPosition}, view up {renderView1.CameraViewUp}\n")
 
         except Exception as e:
             print(f"[WARNING] PCA-based camera adjustment failed: {e}")
+            with open(log_file, "a") as log:
+                log.write(f"[WARNING] PCA-based camera adjustment failed: {e}\n")
             renderView1.ResetCamera()
             renderView1.CameraViewUp = [0.0, 0.0, 1.0]
-
 
         # 5) Define the properties of interest (arrays, color presets, etc.)
         properties = [
@@ -218,6 +212,20 @@ class OpenFOAMParaView:
         # 6) Prepare to iterate over timesteps
         animationScene1 = GetAnimationScene()
         timeKeeper1     = GetTimeKeeper()
+
+        # If no timeSteps provided, default to the last available time step
+        if not self.timeSteps:
+            availableTimes = timeKeeper1.TimestepValues if timeKeeper1 else []
+            if availableTimes:
+                self.timeSteps = [max(availableTimes)]
+                print(f"[INFO] No time steps provided. Defaulting to last time step: {self.timeSteps}")
+                with open(log_file, "a") as log:
+                    log.write(f"[INFO] No time steps provided. Defaulting to last time step: {self.timeSteps}\n")
+            else:
+                self.timeSteps = [0.0]
+                print(f"[INFO] No available timesteps found. Defaulting to 0.0.")
+                with open(log_file, "a") as log:
+                    log.write(f"[INFO] No available timesteps found. Defaulting to 0.0.\n")
 
         # For each requested time
         for t in self.timeSteps:
@@ -257,7 +265,7 @@ class OpenFOAMParaView:
                 # g) Update the view
                 renderView1.Update()
 
-                # h) Build the screenshot filename
+                # h) Build the screenshot filename with trimmed decimals
                 formatted_t = f"{t:.6f}".rstrip('0').rstrip('.')
                 screenshotFile = f"{self.imageDir}/{prop['filePrefix']}_{formatted_t}.png"
 
@@ -269,9 +277,81 @@ class OpenFOAMParaView:
                     OverrideColorPalette='WhiteBackground',
                     TransparentBackground=0
                 )
-                # log the saved screenshot into postProcessing.log
-                with open(f"{case_path}/Images/postProcessing.log", "a") as log:
+                # Log the saved screenshot
+                with open(log_file, "a") as log:
                     log.write(f"[INFO] Saved screenshot: {screenshotFile}\n")
+                print(f"[INFO] Saved screenshot: {screenshotFile}")
+
+    def anima(self):
+        """
+        Create AVI animations for each property by stacking the corresponding PNG images.
+        Requires ffmpeg to be installed and accessible in the system's PATH.
+        """
+        print("[INFO] Starting animation creation...")
+        log_file = os.path.join(self.imageDir, "postProcessing.log")
+        with open(log_file, "a") as log:
+            properties = ["Velocity", "Pressure", "wallShearStress"]
+            for prop in properties:
+                # Collect all images for the property
+                pattern = re.compile(rf"{re.escape(prop)}_(\d+\.?\d*)\.png")
+                images = []
+                for filename in os.listdir(self.imageDir):
+                    match = pattern.match(filename)
+                    if match:
+                        time_step = float(match.group(1))
+                        images.append((time_step, filename))
+                
+                if not images:
+                    log.write(f"[WARNING] No images found for property '{prop}'. Skipping animation.\n")
+                    print(f"[WARNING] No images found for property '{prop}'. Skipping animation.")
+                    continue
+                
+                # Sort images by time_step
+                images.sort(key=lambda x: x[0])
+                
+                # Generate a temporary list file for ffmpeg
+                list_file = os.path.join(self.imageDir, f"{prop}_files.txt")
+                with open(list_file, "w") as lf:
+                    for _, filename in images:
+                        lf.write(f"file '{filename}'\n")
+                
+                # Define output video file
+                output_video = os.path.join(self.imageDir, f"{prop}.avi")
+                
+                # Build the ffmpeg command
+                # -r is the frame rate
+                # -f is the format
+                # -i is the input list file
+                # -c:v specifies the codec, here 'mpeg4' for AVI
+                ffmpeg_cmd = [
+                    "ffmpeg",
+                    "-y",  # Overwrite output file if it exists
+                    "-f", "concat",
+                    "-safe", "0",
+                    "-r", "15",  # Frame rate
+                    "-i", list_file,
+                    "-c:v", "mpeg4",
+                    "-q:v", "5",  # Quality (1-31, lower is better)
+                    output_video
+                ]
+                
+                try:
+                    log.write(f"[INFO] Creating animation for '{prop}'...\n")
+                    print(f"[INFO] Creating animation for '{prop}'...")
+                    # Run the ffmpeg command
+                    result = subprocess.run(ffmpeg_cmd, check=True, cwd=self.imageDir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    log.write(f"[INFO] Animation for '{prop}' saved as '{output_video}'.\n")
+                    print(f"[INFO] Animation for '{prop}' saved as '{output_video}'.")
+                except subprocess.CalledProcessError as e:
+                    log.write(f"[ERROR] ffmpeg failed for property '{prop}': {e.stderr}\n")
+                    print(f"[ERROR] ffmpeg failed for property '{prop}': {e.stderr}")
+                finally:
+                    # Remove the temporary list file
+                    if os.path.exists(list_file):
+                        os.remove(list_file)
+        
+            log.write("[INFO] Animation creation completed.\n")
+            #print("[INFO] Animation creation completed.")
 
 
 if __name__ == "__main__":
@@ -288,4 +368,4 @@ if __name__ == "__main__":
         fields = None
     )
     pv_script.run()
-
+    pv_script.anima()

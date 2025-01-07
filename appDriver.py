@@ -437,6 +437,7 @@ class OpenFOAMRunner:
 
         # Run the ParaView script using pvbatch with the dynamic path
         os.system(f"pvbatch {pv_script_path}")
+        
 
         end_time = time.time()
         elapsed_time = end_time - start_time
