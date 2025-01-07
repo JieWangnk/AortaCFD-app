@@ -280,7 +280,7 @@ class OpenFOAMParaView:
                 # Log the saved screenshot
                 with open(log_file, "a") as log:
                     log.write(f"[INFO] Saved screenshot: {screenshotFile}\n")
-                print(f"[INFO] Saved screenshot: {screenshotFile}")
+                #print(f"[INFO] Saved screenshot: {screenshotFile}")
 
     def anima(self):
         """
