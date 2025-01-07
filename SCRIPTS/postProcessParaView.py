@@ -87,7 +87,7 @@ class OpenFOAMParaView:
         # Ensure the Images directory exists
         if not os.path.exists(self.imageDir):
             os.makedirs(self.imageDir)
-            log.write(f"[INFO] Created directory: {self.imageDir}\n")
+            print(f"[INFO] Created directory: {self.imageDir}\n")
 
         # ---------------------------------------------------------------------
         # 1) Create the OpenFOAM reader
@@ -146,7 +146,8 @@ class OpenFOAMParaView:
 
             best_index = np.argmax(areas)
             best_axis = eigenvectors[best_index]
-            log.write(f"[INFO] Selected principal axis index {best_index} with projected area {areas[best_index]}")
+            with open(f"{case_path}/Images/postProcessing.log", "w") as log:
+                log.write(f"[INFO] Selected principal axis index {best_index} with projected area {areas[best_index]}") 
 
             # Get the bounding box to determine an appropriate distance (radius)
             info = ffoam.GetDataInformation()
@@ -182,7 +183,6 @@ class OpenFOAMParaView:
             print(f"[WARNING] PCA-based camera adjustment failed: {e}")
             renderView1.ResetCamera()
             renderView1.CameraViewUp = [0.0, 0.0, 1.0]
-
 
 
         # 5) Define the properties of interest (arrays, color presets, etc.)
@@ -258,7 +258,8 @@ class OpenFOAMParaView:
                 renderView1.Update()
 
                 # h) Build the screenshot filename
-                screenshotFile = f"{self.imageDir}/{prop['filePrefix']}_{t:.6f}.png"
+                formatted_t = f"{t:.6f}".rstrip('0').rstrip('.')
+                screenshotFile = f"{self.imageDir}/{prop['filePrefix']}_{formatted_t}.png"
 
                 # i) Save screenshot
                 SaveScreenshot(
@@ -269,7 +270,8 @@ class OpenFOAMParaView:
                     TransparentBackground=0
                 )
                 # log the saved screenshot into postProcessing.log
-                log.write(f"[INFO] Saved screenshot: {screenshotFile}\n")
+                with open(f"{case_path}/Images/postProcessing.log", "a") as log:
+                    log.write(f"[INFO] Saved screenshot: {screenshotFile}\n")
 
 
 if __name__ == "__main__":
@@ -278,13 +280,12 @@ if __name__ == "__main__":
     time_array  = os.getenv("TIME_ARRAY").split(",")
     time_array  = [float(x) for x in time_array]
 
-    with open(f"{case_path}/Images/postProcessing.log", "w") as log:
-        # Now pass them into your OpenFOAMParaView:
-        pv_script = OpenFOAMParaView(
-            casePath = case_path,
-            caseType = case_type,
-            timeSteps = time_array,
-            fields = None
-        )
-        pv_script.run()
+    # Now pass them into your OpenFOAMParaView:
+    pv_script = OpenFOAMParaView(
+        casePath = case_path,
+        caseType = case_type,
+        timeSteps = time_array,
+        fields = None
+    )
+    pv_script.run()
 

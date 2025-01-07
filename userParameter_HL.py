@@ -10,20 +10,20 @@ BC_INLET = "TIME_VARYING_MAPPED_FIXED_VALUE" #options: FIXED_PARABOLIC_VELOCITY,
 BC_OUTLET = "3EWINDKESSEL" #options: ZERO_GRADIENT, 3EWINDKESSEL
 #-------------------------------------------------------------------------------------------#
 # Inlet details
-INLET_DATA_FILE = "BPM73.csv"
+INLET_DATA_FILE = "BPM120.csv"
 INLET_PROFILE = "plug" #options: plug, womersley, parabolic
 INLET_ORINTATION = "out" # Often is out!!! options: in or out, as normal vector up to z-axis is out, down to z-axis is in 
 #-------------------------------------------------------------------------------------------#
 # Physical properties: transportProperteis and momentumTransport
 NU = "3.3e-06"
 RHO = "1060"
-SIMULATIONTYPE ="LES" #options: laminar, RAS, LES
+SIMULATIONTYPE ="laminar" #options: laminar, RAS, LES
 SIMULATIONPERFORMACE = "low" #options: low, medium, high
 #-------------------------------------------------------------------------------------------#
 # Cardiac cycle details
 NUMBER_OF_CYCLES = "1"
 START_TIME = "0"
-HEART_RATE = "73"
+HEART_RATE = "120"
 SYSTOLIC_PRESSURE = "133.5"
 DIASTOLIC_PRESSURE = "72"   
 
