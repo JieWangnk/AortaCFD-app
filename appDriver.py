@@ -294,6 +294,7 @@ class OpenFOAMRunner:
         os.system("transformPoints 'scale=({} {} {})' > transform.log".format(
             self.GEOMETRY_SCALE, self.GEOMETRY_SCALE, self.GEOMETRY_SCALE)
         )
+        os.system("renumberMesh -overwrite > renumberMesh.log")
         os.system("touch f.foam")
         end_time = time.time()
         elapsed_time = end_time - start_time
@@ -381,7 +382,6 @@ class OpenFOAMRunner:
                 os.system("pimpleFoam > log.log")
         elif self.SOLN_TYPE == "parallel":
             os.system("decomposePar > decompose.log")
-            os.system("renumberMesh > renumberMesh.log")
             if self.BC_OUTLET == "3EWINDKESSEL":
                 os.system("mpirun -np {} pimpleFoam_WK_2.1 -parallel  > log.log".format(self.SUBDOMAINS))
             else:
