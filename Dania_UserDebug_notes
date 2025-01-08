@@ -201,6 +201,8 @@ FoamFile
 
 Action required: replacing "fvSolution" with "decomposeParDict"
 
+<!-- Jie --> Fixed by 8th Jan
+
 ===========================================================================================================================================================================================================================================================
 14- Modify the postProcessing part, i.e., plotting residual to use K and Omega only if it is RAS
 

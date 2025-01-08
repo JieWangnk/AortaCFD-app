@@ -1,0 +1,80 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \    /   O peration     | Version:  4.0                                   |
+|   \  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     4.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      windkesselProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+
+outlet1
+{
+C                   1.0471e-09;
+R                   1.5485e+09;
+Z                   2.8507e+08;
+outIndex            0;     
+FDM_order           3;      
+Flowrate_threeStepBefore      0;    
+Flowrate_twoStepBefore        0;
+Flowrate_oneStepBefore        0;
+Pressure_twoStepBefore        0;
+Pressure_oneStepBefore        0;
+Pressure_start                0;
+}
+        
+outlet2
+{
+C                   3.9595e-10;
+R                   3.9768e+09;
+Z                   8.7230e+08;
+outIndex            1;     
+FDM_order           3;      
+Flowrate_threeStepBefore      0;    
+Flowrate_twoStepBefore        0;
+Flowrate_oneStepBefore        0;
+Pressure_twoStepBefore        0;
+Pressure_oneStepBefore        0;
+Pressure_start                0;
+}
+        
+outlet3
+{
+C                   6.6420e-10;
+R                   2.4095e+09;
+Z                   4.8118e+08;
+outIndex            2;     
+FDM_order           3;      
+Flowrate_threeStepBefore      0;    
+Flowrate_twoStepBefore        0;
+Flowrate_oneStepBefore        0;
+Pressure_twoStepBefore        0;
+Pressure_oneStepBefore        0;
+Pressure_start                0;
+}
+        
+outlet4
+{
+C                   9.0312e-10;
+R                   1.9282e+09;
+Z                   1.9777e+08;
+outIndex            3;     
+FDM_order           3;      
+Flowrate_threeStepBefore      0;    
+Flowrate_twoStepBefore        0;
+Flowrate_oneStepBefore        0;
+Pressure_twoStepBefore        0;
+Pressure_oneStepBefore        0;
+Pressure_start                0;
+}
+        
+
+// ************************************************************************* //

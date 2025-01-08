@@ -1,0 +1,78 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  10
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      binary;
+    class       dictionary;
+    location    "constant";
+    object      windkesselProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+outlet1
+{
+    C               1.0471e-09;
+    R               1.5485e+09;
+    Z               2.8507e+08;
+    outIndex        0;
+    FDM_order       3;
+    Flowrate_threeStepBefore 2.43732e-09;
+    Flowrate_twoStepBefore 2.43727e-09;
+    Flowrate_oneStepBefore 2.43722e-09;
+    Pressure_twoStepBefore 0.6952;
+    Pressure_oneStepBefore 0.695188;
+    Pressure_start  0.695176;
+}
+
+outlet2
+{
+    C               3.9595e-10;
+    R               3.9768e+09;
+    Z               8.723e+08;
+    outIndex        1;
+    FDM_order       3;
+    Flowrate_threeStepBefore 7.9029e-10;
+    Flowrate_twoStepBefore 7.90275e-10;
+    Flowrate_oneStepBefore 7.90259e-10;
+    Pressure_twoStepBefore 0.689697;
+    Pressure_oneStepBefore 0.689685;
+    Pressure_start  0.689673;
+}
+
+outlet3
+{
+    C               6.642e-10;
+    R               2.4095e+09;
+    Z               4.8118e+08;
+    outIndex        2;
+    FDM_order       3;
+    Flowrate_threeStepBefore 1.43133e-09;
+    Flowrate_twoStepBefore 1.43132e-09;
+    Flowrate_oneStepBefore 1.43131e-09;
+    Pressure_twoStepBefore 0.689042;
+    Pressure_oneStepBefore 0.689038;
+    Pressure_start  0.689034;
+}
+
+outlet4
+{
+    C               9.0312e-10;
+    R               1.9282e+09;
+    Z               1.9777e+08;
+    outIndex        3;
+    FDM_order       3;
+    Flowrate_threeStepBefore 3.44334e-09;
+    Flowrate_twoStepBefore 3.44342e-09;
+    Flowrate_oneStepBefore 3.44349e-09;
+    Pressure_twoStepBefore 0.681423;
+    Pressure_oneStepBefore 0.681442;
+    Pressure_start  0.681461;
+}
+
+
+// ************************************************************************* //

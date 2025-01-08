@@ -15,40 +15,39 @@ AortaCFD-app/
 │   │   ├── outlet4.stl
 │   │   ├── wall_aorta.stl
 |
-├── MESH/
-│   ├── blockMeshDicts/   # blockMesh dictionaries for each geometry
-│   │   ├── geometry*
-│   │
-│   ├── snappyHexMeshDicts/ # snappyHexMesh dictionaries for refinements
-│       ├── coarse/
-│       ├── medium/
-│       ├── fine/
-│
-├── SIMULATION_SETUP/
-│   ├── initial_conditions/
-│   │   ├── U/
-│   │   ├── p/
-│   │   ...
-│   │
-│   ├── transportProperties/
-│   ├── moment/
-│   └── ...
+├── OPENFOAM_CASES/
+│   ├── geometry*/         # OpenFOAM cases for each geometry
+│   │   ├── 0/
+│   │   │   ├── U
+│   │   │   ├── p
+│   │   │   └── ...
+│   │   ├── constant/
+│   │   │   ├── transportProperties
+│   │   │   ├── momentumTransport
+│   │   ├── |── windkesselProperties
+│   │   ├── |── boundaryData  # Boundary conditions
+│   │   |   |   |── inlet
+│   │   |   |   |   ├── points # Inlet points
+│   │   |   |   |   ├── inletBCs # Inlet boundary conditions one cycle
+│   │   |   |   |   |   ├── U_0 
+│   │   |   |   |   |   ├── U_1
+│   │   |   |   |   ├── U_0 # symbolic link to U_0
+│   │   |   |   |   ├── U_1 # symbolic link to U_1
+│   │   |   |   |   ├── ...
+│   │   │   └── ...
+│   │   ├── system/
+│   │   │   ├── controlDict
+│   │   │   ├── fvSchemes
+│   │   │   ├── fvSolution
+│   │   │   └── ...
+│   │   └── ...
 │
 ├── SCRIPTS/
-│   ├── run_preprocessing.py
-│   ├── run_simulation.py
-│   ├── post_process.py
-│   ├── hpc_submission.sh  # If using HPC that requires job scripts
+│   ├── boundaryConditionSetup.py
+│   ├── cycleDataSetup.py
+│   ├── formatPoints.py
+│   ├── simulationSetup.py  
 │   └── ...
-│
-├── post_processing/
-│   ├── pvbatch_scripts/   # Paraview pvbatch scripts for post-processing
-│   │   ├── contour.py
-│   │   ├── streamline.py
-│   │   ...
-│   │
-│   ├── visualizations/    # Place for generated visualizations
-│   └── data_extracts/     # Extracted data from post processing
 │
 ├── container/             # Docker or Singularity files for HPC/Cloud
 │   ├── Dockerfile
@@ -57,6 +56,5 @@ AortaCFD-app/
 │
 └── docs/                  # Documentation other than README
     ├── setup.md
-    ├── usage.md
-    ├── results.md
+    ├── simulation.md
     └── ...
