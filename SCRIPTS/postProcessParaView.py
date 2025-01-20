@@ -307,8 +307,9 @@ class OpenFOAMParaView:
                     continue
                 
                 # Sort images by time_step
-                images.sort(key=lambda x: x[0])
-                
+                images.sort(key=lambda x: float(x[0]))
+                print(sorted(images))
+
                 # Generate a temporary list file for ffmpeg
                 list_file = os.path.join(self.imageDir, f"{prop}_files.txt")
                 with open(list_file, "w") as lf:
@@ -359,11 +360,13 @@ if __name__ == "__main__":
     case_path   = os.getenv("CASE_PATH")
     time_array  = os.getenv("TIME_ARRAY").split(",")
     time_array  = [float(x) for x in time_array]
-
+    print(f"[INFO] Received case type: {case_type}")
+    print(f"[INFO] Received case path: {case_path}")
+    print(f"[INFO] Received time array: {time_array}")
     # Now pass them into your OpenFOAMParaView:
     pv_script = OpenFOAMParaView(
-        casePath = case_path,
-        caseType = case_type,
+        casePath = str(case_path),
+        caseType = str(case_type),
         timeSteps = time_array,
         fields = None
     )

@@ -2,7 +2,6 @@ import os
 import re
 from stl import mesh
 import numpy as np
-from userParameter_LL import *
 
 def is_binary_file(file_path):
     """Check if the given file is binary."""
@@ -16,7 +15,7 @@ def is_binary_file(file_path):
     return False
 
 class GeometryAnalyzer:
-    def __init__(self, DIRECTORY, geometry_case, refinement="coarse"):
+    def __init__(self, DIRECTORY, geometry_case, refinement="coarse",refinement_levels=None,snappy_settings=None):
         self.DIRECTORY = DIRECTORY
         self.geometry_case = geometry_case
         self.geometry_path = os.path.join("CAD", geometry_case)
@@ -34,16 +33,16 @@ class GeometryAnalyzer:
         )
 
         # Read refinement and snappy parameters from userParameter_LL
-        self.refinement = REFINEMENT_LEVELS[refinement]
-        self.expansion_factor = SNAPPY_SETTINGS["expansionFactor"]
-        self.feature_level = SNAPPY_SETTINGS["featureLevel"]
-        self.surface_refinement_levels = SNAPPY_SETTINGS["surfaceRefinementLevels"]
-        self.addLayers = SNAPPY_SETTINGS["addLayer"]
-        self.nCellsBetweenLevels = SNAPPY_SETTINGS["nCellsBetweenLevels"]
-        self.resloveFeatureAngle = SNAPPY_SETTINGS["resloveFeatureAngle"]
-        self.nSmoothPatch = SNAPPY_SETTINGS["nSmoothPatch"]
-        self.region_refinement_level = SNAPPY_SETTINGS["regionRefinementLevel"]
-        self.region_refinement_box = SNAPPY_SETTINGS["regionRefinementBox"]
+        self.refinement = refinement_levels[refinement]
+        self.expansion_factor = snappy_settings["expansionFactor"]
+        self.feature_level = snappy_settings["featureLevel"]
+        self.surface_refinement_levels = snappy_settings["surfaceRefinementLevels"]
+        self.addLayers = snappy_settings["addLayer"]
+        self.nCellsBetweenLevels = snappy_settings["nCellsBetweenLevels"]
+        self.resloveFeatureAngle = snappy_settings["resolveFeatureAngle"]
+        self.nSmoothPatch = snappy_settings["nSmoothPatch"]
+        self.region_refinement_level = snappy_settings["regionRefinementLevel"]
+        self.region_refinement_box = snappy_settings["regionRefinementBox"]
 
         # The folder name is the geometry name
         self.geometry_name = os.path.basename(self.geometry_path)
