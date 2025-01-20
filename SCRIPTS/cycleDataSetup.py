@@ -1,9 +1,10 @@
 import os
 
 class CycleDataSetup:
-    def __init__(self, BPM, numberOfCycle, baseDir=None):
-        self.BPM = BPM
-        self.cardiacPeriod = 60 / self.BPM
+    def __init__(self, INELT_DATA_FILE, cardiacCycle, numberOfCycle, baseDir=None):
+        self.INELT_DATA_FILE = os.path.splitext(INELT_DATA_FILE)[0]
+        self.BPM = int(60/cardiacCycle)
+        self.cardiacPeriod = float(cardiacCycle)
         self.numberOfCycle = numberOfCycle
         self.baseDir = baseDir if baseDir else os.getcwd()
         
@@ -16,7 +17,7 @@ class CycleDataSetup:
                 os.mkdir(timeDirPath)
                 
             # Copy the U_* file to the directory and rename it to U
-            srcFile = os.path.join(self.baseDir, "constant/boundaryData/inlet/BPM" + str(self.BPM) + "/U_" + timeDirList[i])
+            srcFile = os.path.join(self.baseDir, "constant/boundaryData/inlet/" + str(self.INELT_DATA_FILE) + "/U_" + timeDirList[i])
             destFile = os.path.join(timeDirPath, "U")
             os.system(f"cp {srcFile} {destFile}")
             # print("cope the U_", srcFile, "to", destFile)
@@ -27,15 +28,15 @@ class CycleDataSetup:
                 # remove the directory if it exists
                 os.system(f"rm -rf {target_dir}")           
                 os.system(f"ln -s {timeDirPath} {target_dir}")     
-                # print(f"The symbolic link directory {newTimeDir} is created!")
+                print(f"The symbolic link directory {newTimeDir} is created!")
             
     def execute(self):
-        if not os.path.exists(os.path.join(self.baseDir, "constant/boundaryData/inlet/BPM" + str(self.BPM) + "/")):
-            print("There is no inlet velocity profile data for BPM = " + str(self.BPM))
+        if not os.path.exists(os.path.join(self.baseDir, "constant/boundaryData/inlet/" + str(self.INELT_DATA_FILE) + "/")):
+            print("There is no inlet velocity profile data for BPM = " + str(self.INELT_DATA_FILE))
             return
 
         timeDirList = []
-        subFile = os.listdir(os.path.join(self.baseDir, "constant/boundaryData/inlet/BPM" + str(self.BPM) + "/"))
+        subFile = os.listdir(os.path.join(self.baseDir, "constant/boundaryData/inlet/" + str(self.INELT_DATA_FILE) + "/"))
         subFile.sort()
         
         for i in range(len(subFile)):
@@ -45,5 +46,5 @@ class CycleDataSetup:
         self.create_time_dirs(timeDirList)
 
 if __name__ == "__main__":
-    inletProfile = CycleDataSetup(BPM=120, numberOfCycle=2)
+    inletProfile = CycleDataSetup(cardiacCycle=0.81, numberOfCycle=2)
     inletProfile.execute()

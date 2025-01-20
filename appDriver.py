@@ -1,16 +1,10 @@
-from userParameter_HL import * 
-from SCRIPTS.meshSetup import *
-from SCRIPTS.boundaryConditionSetup import *
-from SCRIPTS.physicalProperitesSetup import *
-from SCRIPTS.numericalSetup import *
-from SCRIPTS.solverSetup import *
-from SCRIPTS.simulationSetup import *
-from SCRIPTS.inletMapping import *
-from SCRIPTS.patchProcessing import *
-from SCRIPTS.cycleDataSetup import *
-from SCRIPTS.solnTypeSetup import *
-from SCRIPTS.wkSetup import *
-from SCRIPTS.formatPoints import *
+#!/usr/bin/env python3.10
+"""
+appDriver.py
+------------
+Main pilot file for running the Aorta CFD case using a single config.py.
+"""
+
 import sys
 import os
 import time
@@ -18,10 +12,31 @@ import shutil
 import argparse
 import subprocess
 
+# Import the unified configuration dictionary
+from config import CONFIG
+
+# Import all relevant setup scripts (unchanged from your original code)
+from SCRIPTS.meshSetup import GeometryAnalyzer
+from SCRIPTS.boundaryConditionSetup import BoundaryConditionSetup
+from SCRIPTS.physicalProperitesSetup import PhysicalPropertiesWriter
+from SCRIPTS.numericalSetup import FvSchemesWriter
+from SCRIPTS.solverSetup import FvSolutionWriter
+from SCRIPTS.simulationSetup import SimulationSetup
+from SCRIPTS.inletMapping import InletMapping
+from SCRIPTS.patchProcessing import PatchProcessing
+from SCRIPTS.cycleDataSetup import CycleDataSetup
+from SCRIPTS.solnTypeSetup import SolnType
+from SCRIPTS.wkSetup import wk_Setup
+from SCRIPTS.formatPoints import EnhancedPointsFormatter
+
 def _generate_time_array(time_steps_dict):
+    """
+    Generates an array of time values based on the dictionary specifying
+    start, end, and step. 
+    """
     start = float(time_steps_dict["START"])
-    end   = float(time_steps_dict["END"])
-    step  = float(time_steps_dict["STEP"])
+    end = float(time_steps_dict["END"])
+    step = float(time_steps_dict["STEP"])
 
     times = []
     val = start
@@ -30,56 +45,65 @@ def _generate_time_array(time_steps_dict):
         val += step
     return times
 
+
 class OpenFOAMCase:
-    def __init__(self, geometry_case, refinement, directory, bc_inlet,
-                bc_outlet, initial_condition_U, initial_condition_p,initial_condition_K, initial_condition_omega,
-                nu, rho, simulation_type, simulation_performace,simulation_control, soln_type, subdomains, decomposition_method):
-        """ Helper class to create an OpenFOAM case for AortaCFD.
-        Handles the creation of the case directory, system, constant, and 0 folders.
-        Args:
-            geometry_case (str): Name of the geometry case.
-            refinement (str): Mesh refinement level.
-            feature_level (int): Feature level for snappyHexMesh.
-            surface_refinement_levels (tuple): Surface refinement levels for snappyHexMesh.
-            directory (str): Path to the case directory.
-            bc_inlet (str): Inlet boundary condition type.
-            bc_outlet (str): Outlet boundary condition type.
-            initial_condition_U (dict): Initial condition for velocity.
-            initial_condition_p (dict): Initial condition for pressure.
-            initial_condition_K (dict): Initial condition for turbulent kinetic energy.
-            initial_condition_omega (dict): Initial condition for turbulent omega.
-            nu (str): Kinematic viscosity.
-            rho (str): Density.
-            simulation_type (str): Simulation type (laminar, RAS, LES).
-            simulation_performace (str): Handling HPC or advanced solver configs.
-            simulation_control (dict): Simulation control parameters.
-            soln_type (str): Solution type (serial, parallel).
-            subdomains (str): Number of subdomains for parallel processing.
-            decomposition_method (str): Decomposition method for parallel processing."""
-        self.geometry_case = geometry_case
-        self.refinement = refinement
-        self.directory = directory
-        self.BC_INLET = bc_inlet
-        self.BC_OUTLET = bc_outlet
-        self.initial_condition_U = initial_condition_U
-        self.initial_condition_p = initial_condition_p
-        self.initial_condition_K = initial_condition_K
-        self.initial_condition_omega = initial_condition_omega
-        self.nu = nu
-        self.rho = rho
-        self.simulation_type = simulation_type
-        self.simulation_performace = simulation_performace
-        self.simulation_control = simulation_control
-        self.soln_type = soln_type
-        self.subdomains = subdomains
-        self.decomposition_method = decomposition_method
-           
+    """
+    Helper class to create an OpenFOAM case for AortaCFD.
+    Handles the creation of the case directory, system, constant, and 0 folders.
+    """
+    def __init__(self):
+        # Pull in geometry config
+        geom_cfg   = CONFIG["geometry"]
+        self.geometry_case = geom_cfg["case_name"]
+        self.refinement    = geom_cfg["refinement_level"]
+        
+        # Create the actual case directory name
+        # e.g., "OPENFOAM/geometry1_coarse"
+        self.directory = os.path.join(
+            os.getcwd(), 
+            "OPENFOAM", 
+            f"{self.geometry_case}_{self.refinement}"
+        )
+
+        # Boundary config
+        boundary_cfg = CONFIG["boundary"]
+        self.BC_INLET  = boundary_cfg["BC_INLET"]
+        self.BC_OUTLET = boundary_cfg["BC_OUTLET"]
+
+        # Physics config
+        phys_cfg = CONFIG["physics"]
+        self.nu  = phys_cfg["nu"]
+        self.rho = phys_cfg["rho"]
+        self.simulation_type        = phys_cfg["simulation_type"]
+        self.simulation_performance = phys_cfg["simulation_performance"]
+
+        # Simulation control config
+        sim_ctrl_cfg     = CONFIG["simulation_control"]
+        self.simulation_control = sim_ctrl_cfg
+
+        # Run settings (solver type, parallelization, etc.)
+        run_cfg       = CONFIG["run_settings"]
+        self.soln_type          = run_cfg["solution_type"]
+        self.subdomains         = run_cfg["subdomains"]
+        self.decomposition_method = run_cfg["decomposition_method"]
+
+        # Initial conditions
+        init_cfg = CONFIG["initial_conditions"]
+        self.initial_condition_U     = init_cfg["velocity"]
+        self.initial_condition_p     = init_cfg["pressure"]
+        self.initial_condition_K     = init_cfg["k"]    
+        self.initial_condition_omega = init_cfg["omega"]
+
+        # Create the case folder structure
         self.__create_OFcase()
 
+        # Initialize the geometry analyzer
         self.geometry_analyzer = GeometryAnalyzer(
             DIRECTORY=self.directory, 
             geometry_case=self.geometry_case, 
-            refinement=self.refinement
+            refinement=self.refinement,
+            refinement_levels=CONFIG["mesh"]["refinement_levels"],
+            snappy_settings=CONFIG["mesh"]["SNAPPY_SETTINGS"]
         )
         
         self.boundary_condition = BoundaryConditionSetup(
@@ -104,13 +128,13 @@ class OpenFOAMCase:
         self.numericalSetup = FvSchemesWriter(
             self.directory, 
             self.simulation_type, 
-            self.simulation_performace
+            self.simulation_performance
         )
 
         self.solverSetup = FvSolutionWriter(
             self.directory, 
             self.simulation_type, 
-            self.simulation_performace
+            self.simulation_performance
         )
 
         self.simulationSetup = SimulationSetup(
@@ -120,14 +144,13 @@ class OpenFOAMCase:
 
         self.solnType = SolnType(
             self.directory, 
-            soln_type, 
-            subdomains, 
-            decomposition_method
+            self.soln_type, 
+            self.subdomains, 
+            self.decomposition_method
         )
 
     def __create_OFcase(self):
-        """ Creates the OpenFOAM case directory and subdirectories."""
-
+        """Creates the OpenFOAM case directory and subdirectories."""
         if not os.path.exists(self.directory):
             os.makedirs(self.directory)
         else:
@@ -139,39 +162,25 @@ class OpenFOAMCase:
         # create system, constant, and 0 folders 
         for f in ["system", "constant", "0"]:
             directory = os.path.join(self.directory, f)
-            try:
-                os.makedirs(directory)
-            except OSError as e:
-                print(f"Error: {e}")
+            os.makedirs(directory, exist_ok=True)
         
         # create constant/triSurface folder
         directory_con_tri = os.path.join(self.directory, "constant", "triSurface")
-        try:
-            os.makedirs(directory_con_tri)
-        except OSError as e:
-            print(f"Error: {e}")
-        
+        os.makedirs(directory_con_tri, exist_ok=True)
+
         # create constant/boundaryData folder
         directory_con_bd = os.path.join(self.directory, "constant", "boundaryData")
-        try:
-            os.makedirs(directory_con_bd)
-        except OSError as e:
-            print(f"Error: {e}")
+        os.makedirs(directory_con_bd, exist_ok=True)
 
         # Copy STL files to constant/triSurface folder
         CADfolder = os.path.join("CAD", self.geometry_case)
+        if not os.path.exists(CADfolder):
+            raise FileNotFoundError(f"CAD folder {CADfolder} does not exist.")
         for f in os.listdir(CADfolder):
-            shutil.copy(os.path.join(CADfolder, f), directory_con_tri)
-            # if file name indicates "inlet"
-            if "inlet" in f:
-                inletBoundary = os.path.join(self.directory, "constant", "boundaryData", f.split(".")[0])
-                try:
-                    os.makedirs(inletBoundary)
-                except OSError as e:
-                    print(f"Error: {e}")
-                if INLET_DATA_FILE:
-                    shutil.copy(os.path.join("INLET", INLET_DATA_FILE), inletBoundary)
-    
+            src = os.path.join(CADfolder, f)
+            dst = os.path.join(directory_con_tri, f)
+            shutil.copy(src, dst)
+
     def write_geometry_files(self):
         self.geometry_analyzer.write_blockMeshDict()
         self.geometry_analyzer.write_snappyHexMeshDict()
@@ -204,10 +213,17 @@ class OpenFOAMCase:
     def write_decomposeParDict(self):
         self.solnType.write_decomposeParDict()
            
-
-    def casePoilt(self):
-        """Call the geometry, boundary, physical property,
-           numerical, solver, simulation and parallel-subdomains setup writers."""
+    def casePilot(self):
+        """
+        Call all setup writers:
+            1. Geometry (blockMesh, snappyHexMesh)
+            2. Boundary (U, p, etc.)
+            3. Physical properties
+            4. Numerical setup
+            5. Solver setup
+            6. Simulation control
+            7. Decompose par (parallel)
+        """
         self.write_geometry_files()
         self.write_boundary_conditions()
         self.write_physical_properties()
@@ -218,21 +234,50 @@ class OpenFOAMCase:
 
 
 class OpenFOAMRunner:
-    def __init__(self, geometry_case, refinement):
-        """ Manages the OpenFOAM simulation workflow for AortaCFD."""
-        self.geometry_case = geometry_case
-        self.refinement = refinement
-        self.case_directory = os.path.join(os.getcwd(), "OPENFOAM", f"{self.geometry_case}_{self.refinement}")
-        self.GEOMETRY_SCALE = GEOMETRY_SCALE
-        self.HEART_RATE = HEART_RATE
-        self.NUMBER_OF_CYCLES = NUMBER_OF_CYCLES
-        self.SOLN_TYPE = SOLN_TYPE
-        self.SUBDOMAINS = SUBDOMAINS
-        self.BC_OUTLET = BC_OUTLET
-        self.BC_INLET = BC_INLET
-        self.INLET_DATA_FILE = INLET_DATA_FILE
-        self.INLET_PROFILE = INLET_PROFILE
-        self.WK_SETTING = WK_SETTING
+    """
+    Manages the OpenFOAM simulation workflow for AortaCFD.
+    """
+    def __init__(self):
+        geom_cfg = CONFIG["geometry"]
+        self.geometry_case = geom_cfg["case_name"]
+        self.refinement    = geom_cfg["refinement_level"]
+        self.case_directory = os.path.join(
+            os.getcwd(), 
+            "OPENFOAM", 
+            f"{self.geometry_case}_{self.refinement}"
+        )
+
+        boundary_cfg = CONFIG["boundary"]
+        self.BC_INLET     = boundary_cfg["BC_INLET"]
+        self.BC_OUTLET    = boundary_cfg["BC_OUTLET"]
+        self.INLET_DATA_FILE = boundary_cfg.get("INLET_DATA_FILE", None)
+        self.INLET_DATA_TYPE = boundary_cfg["INLET_DATA_TYPE"]
+        self.INLET_ORIENTATION = boundary_cfg.get("INLET_ORIENTATION", "in")
+        self.INLET_PROFILE   = boundary_cfg.get("INLET_PROFILE", None)
+        self.WK_SETTING      = boundary_cfg["WK_SETTING"]
+
+        phys_cfg = CONFIG["physics"]
+        self.simulation_type = phys_cfg["simulation_type"]
+
+        sim_ctrl_cfg = CONFIG["simulation_control"]
+        self.CARDIAC_CYCLE  = sim_ctrl_cfg["cardiac_cycle"]
+        self.NUMBER_OF_CYCLES = sim_ctrl_cfg["number_of_cycles"]
+
+        run_cfg = CONFIG["run_settings"]
+        self.SOLN_TYPE        = run_cfg["solution_type"]
+        self.SUBDOMAINS       = run_cfg["subdomains"]
+
+        # Mesh config
+        mesh_cfg         = CONFIG["mesh"]["SNAPPY_SETTINGS"]
+        self.SNAPPY_SETTINGS = mesh_cfg
+
+        # For geometry scale (if using transformPoints)
+        self.GEOMETRY_SCALE = geom_cfg["scale_factor"]
+
+        # For post-processing
+        pp_cfg  = CONFIG["post_processing"]
+        self.TIME_STEPS = pp_cfg["time_steps"]
+        self.CASE_TYPE  = pp_cfg["case_type"]
 
     def create_openfoam_case(self):
         """
@@ -241,26 +286,8 @@ class OpenFOAMRunner:
             None
         """
         print("Creating OpenFOAM case...")
-        my_case = OpenFOAMCase(
-            geometry_case=self.geometry_case, 
-            refinement=self.refinement,
-            directory=self.case_directory,
-            bc_inlet=BC_INLET,
-            bc_outlet=BC_OUTLET,
-            initial_condition_U=INITIAL_CONDITION_U,
-            initial_condition_p=INITIAL_CONDITION_P,
-            initial_condition_K=INITIAL_CONDITION_K,
-            initial_condition_omega=INITIAL_CONDITION_OMEGA,
-            nu=NU,
-            rho=RHO,
-            simulation_type=SIMULATIONTYPE,
-            simulation_performace=SIMULATIONPERFORMACE,
-            simulation_control=SIMULATION_CONTROL,
-            soln_type=SOLN_TYPE,
-            subdomains=SUBDOMAINS,
-            decomposition_method=DECOMPOSITION_METHOD
-        )
-        my_case.casePoilt()
+        my_case = OpenFOAMCase()
+        my_case.casePilot()
         print("OpenFOAM case created")
 
     def run_mesh(self):
@@ -273,32 +300,41 @@ class OpenFOAMRunner:
         start_time = time.time()
         # Change to case directory
         os.chdir(self.case_directory)
+
         # Run blockMesh
         os.system("blockMesh > blockMesh.log")
+
         # Run surfaceFeatureExtract
         os.system("surfaceFeatures > surfaceFeatures.log")
+
         # Run snappyHexMesh
-        if SNAPPY_SETTINGS["parallel"]:
-            os.system("foamDictionary -entry 'method' -set 'simple' system/decomposeParDict")
-            os.system("foamDictionary -entry 'numberOfSubdomains' -set '{}' system/decomposeParDict".format(SNAPPY_SETTINGS["nProcessors"]))
-            os.system("foamDictionary -entry 'simpleCoeffs/n' -set '(1 1 {})' system/decomposeParDict".format(SNAPPY_SETTINGS["nProcessors"]))
-            os.system("decomposePar -noZero -force > snappyHex.log")
-            os.system("mpirun -np {} snappyHexMesh -parallel -overwrite > snappyHex.log".format(SNAPPY_SETTINGS["nProcessors"]))
+        if self.SNAPPY_SETTINGS["parallel"]:
+            n_proc = self.SNAPPY_SETTINGS["nProcessors"]
+            # Overwrite decomposition method for snappyHexMesh
+            os.system(f"foamDictionary -entry 'method' -set 'simple' system/decomposeParDict")
+            os.system(f"foamDictionary -entry 'numberOfSubdomains' -set '{n_proc}' system/decomposeParDict")
+            os.system(f"foamDictionary -entry 'simpleCoeffs/n' -set '(1 1 {n_proc})' system/decomposeParDict")
+            os.system("decomposePar -noZero -force > decomposePar_snappy.log")
+            os.system(f"mpirun -np {n_proc} snappyHexMesh -parallel -overwrite > snappyHex.log")
             os.system("reconstructParMesh -constant -latestTime > reconstructParMesh.log")
-            os.system("rm -r processor*")
+            os.system("rm -rf processor*")
         else:
             os.system("snappyHexMesh -overwrite > snappyHex.log")
+
         # run checkMesh
         os.system("checkMesh > checkMesh.log")
-        # transfer mesh scale based on GEOMETRY_SCALE
-        os.system("transformPoints 'scale=({} {} {})' > transform.log".format(
-            self.GEOMETRY_SCALE, self.GEOMETRY_SCALE, self.GEOMETRY_SCALE)
-        )
+
+        # transformPoints (scaling)
+        os.system(f"transformPoints 'scale=({self.GEOMETRY_SCALE} {self.GEOMETRY_SCALE} {self.GEOMETRY_SCALE})' > transform.log")
+
+        # renumberMesh
         os.system("renumberMesh -overwrite > renumberMesh.log")
+
+        # Create a dummy file f.foam for ParaView
         os.system("touch f.foam")
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        print("Mesh created in {:.2f} minutes.".format(elapsed_time / 60))
+
+        elapsed_time = time.time() - start_time
+        print(f"Mesh created in {elapsed_time/60:.2f} minutes.")
 
     def run_bc(self):
         """
@@ -308,61 +344,87 @@ class OpenFOAMRunner:
         """
         print("Setting boundary conditions...")
         start_time = time.time()
-        # Change to case directory
+
         os.chdir(self.case_directory)
+
         # get inlet stl file name
-        inlet_stl = [f for f in os.listdir(os.path.join("constant", "triSurface")) if "inlet" in f][0].split(".")[0] 
+        triSurfaceDir = os.path.join("constant", "triSurface")
+        stl_files = [f for f in os.listdir(triSurfaceDir) if f.endswith(".stl")]
+        inlet_stl = [f for f in stl_files if "inlet" in f][0].split(".")[0]
+
         # write the inlet cell centers to map the inlet velocity
         os.system("writeMeshObj > meshObj.log")
         os.system("mv patch_inlet_0.obj points-new")
-        os.system("rm -r mesh* patch*")
+        os.system("rm -rf mesh* patch*")
+
         formatter = EnhancedPointsFormatter(format_version=1)
         formatter.format_coordinates()
-        os.system("cp points constant/boundaryData/{}/".format(inlet_stl))
-        os.system("rm points")
+        boundaryDataInletDir = os.path.join("constant", "boundaryData", inlet_stl)
+        os.makedirs(boundaryDataInletDir, exist_ok=True)
         
-        stl_files = [f for f in os.listdir(os.path.join("constant", "triSurface")) if f.endswith(".stl")]
-        # Create an instance of PatchProcessing
+        # get directory of current location and level up
+        inlet_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),"INLET")
+
+        if self.INLET_DATA_FILE:
+            source_file = os.path.join(inlet_dir, self.INLET_DATA_FILE)
+            if not os.path.isfile(source_file):
+                raise FileNotFoundError(f"INLET_DATA_FILE '{self.INLET_DATA_FILE}' does not exist in '{inlet_dir}'.")
+            os.system(f"cp {source_file} {boundaryDataInletDir}")
+        else:
+            print("No INLET_DATA_FILE specified. using default values.")
+            os.system(f"cp {os.path.join(inlet_dir, 'inletFlowRate.csv')} {boundaryDataInletDir}")
+        os.system(f"cp points {boundaryDataInletDir}")
+        os.system("rm points")
+
+        # Calculate the inlet radius
         inlet_radius_calculator = PatchProcessing(
-            DIRECTORY=self.case_directory, 
-            STL_FILES=stl_files, 
+            DIRECTORY=self.case_directory,
+            STL_FILES=stl_files,
             PATH_NAME="inlet"
         )
-        # calculate the inlet radius
-        inlet_center, inlet_radius, inlet_normal = inlet_radius_calculator.calculate_inlet_center_radius()
- 
-        # run inletMapping 
+        inlet_center, inlet_radius, inlet_normal = inlet_radius_calculator.calculate_inlet_center_radius(scale_factor=self.GEOMETRY_SCALE)
+
+        # run inletMapping
+        scale_val = float(self.GEOMETRY_SCALE)
         processor = InletMapping(
-            center=inlet_center * eval(self.GEOMETRY_SCALE), 
-            radius=inlet_radius * eval(self.GEOMETRY_SCALE), 
-            inlet_data_file=self.INLET_DATA_FILE, 
-            inlet_name="inlet", 
+            center=inlet_center,
+            radius=inlet_radius,
+            inlet_data_file=self.INLET_DATA_FILE,
+            data_type= self.INLET_DATA_TYPE,
+            inlet_name= "inlet",
+            orientation= self.INLET_ORIENTATION,    # Default value
             profile=self.INLET_PROFILE
         )
         processor.run()
+
         # run cycleDataSetup
         cycle_data = CycleDataSetup(
-            BPM=int(self.HEART_RATE), 
+            INELT_DATA_FILE=self.INLET_DATA_FILE,
+            cardiacCycle= float(processor.cardiac_cycle),
             numberOfCycle=int(self.NUMBER_OF_CYCLES)
         )
         cycle_data.execute()
-        # wkSetup for 3-element Windkessel if applicable
+
+        # Windkessel setup
         if self.BC_OUTLET == "3EWINDKESSEL":
             wk_setup = wk_Setup(
-                DIRECTORY=self.case_directory, 
-                STL_FILES=stl_files, 
-                WK_SETTING=self.WK_SETTING
-            )  
+                DIRECTORY=self.case_directory,
+                GEOMETRY_SCALE = scale_val,
+                STL_FILES=stl_files,
+                WK_SETTING=self.WK_SETTING,
+                CARDIAC_CYCLE = float(processor.cardiac_cycle),
+                INLET_DATA_FILE=self.INLET_DATA_FILE,
+                DATA_TYPE= self.INLET_DATA_TYPE,
+            )
             wk_setup.write_WK_Setup()
-        
-        # change the format of "points" file to match the timeVaryingMappedFixedValue BC requirements
+
+        # Format "points" file to match timeVaryingMappedFixedValue BC requirements
         formatter = EnhancedPointsFormatter(format_version=2)
         formatter.format_coordinates()
-        os.system("cp points constant/boundaryData/{}/".format(inlet_stl))
-        end_time = time.time()
-        elapsed_time = end_time - start_time
+        os.system(f"cp points {boundaryDataInletDir}")
 
-        print("Boundary condition set in {:.2f} minutes.".format(elapsed_time / 60))
+        elapsed_time = time.time() - start_time
+        print(f"Boundary condition set in {elapsed_time/60:.2f} minutes.")
 
     def run_simulation(self):
         """
@@ -372,79 +434,74 @@ class OpenFOAMRunner:
         """
         print("Running simulation...")
         start_time = time.time()
-        # Change to case directory
+
         os.chdir(self.case_directory)
-        # Logic to run simulation
+
         if self.SOLN_TYPE == "serial":
             if self.BC_OUTLET == "3EWINDKESSEL":
-                os.system("pimpleFoam_WK_2.1 > log.log")    # Adjust as needed
+                os.system("pimpleFoam_WK_2.1 > log.log")  # Adjust as needed
             else:
                 os.system("pimpleFoam > log.log")
         elif self.SOLN_TYPE == "parallel":
-            os.system("decomposePar > decompose.log")
+            os.system("decomposePar -force -latestTime > decompose.log")
             if self.BC_OUTLET == "3EWINDKESSEL":
-                os.system("mpirun -np {} pimpleFoam_WK_2.1 -parallel  > log.log".format(self.SUBDOMAINS))
+                os.system(f"mpirun -np {self.SUBDOMAINS} pimpleFoam_WK_2.1 -parallel  > log.log")
             else:
-                os.system("mpirun -np {} pimpleFoam > log.log".format(self.SUBDOMAINS))     
+                os.system(f"mpirun -np {self.SUBDOMAINS} pimpleFoam -parallel > log.log")
             os.system("reconstructPar > reconstruct.log")
-            os.system("rm -r processor*")
+            os.system("rm -rf processor*")
             os.system("foamLog log.log")  # Extract residuals from log file
         else:
             print("Invalid solution mode. Please specify either 'serial' or 'parallel'.")
-        end_time = time.time()
-        elapsed_time = end_time - start_time
 
-        print("Simulation run in {:.2f} minutes.".format(elapsed_time / 60))
+        elapsed_time = time.time() - start_time
+        print(f"Simulation run in {elapsed_time/60:.2f} minutes.")
 
     def run_postprocessing(self):
+        """
+        Example: run ParaView-based post-processing from a parent directory.
+        Ensures we can find postProcessParaView.py even if not co-located with this code.
+        """
         print("Running post-processing...")
         start_time = time.time()
 
-        # Build the time array based on user parameters or foamListTimes results
-        if TIME_STEPS.get("Customized"):  # Safely check for a customized setting
-            time_array = _generate_time_array(TIME_STEPS)
+        # 1) Build the time array (either customized or from foamListTimes).
+        if self.TIME_STEPS.get("Customized"):
+            time_array = _generate_time_array(self.TIME_STEPS)  # your function
         else:
-            # Save the current working directory
+            # If not customized, try to get times from foamListTimes
             original_dir = os.getcwd()
-
-            # Change to the case directory where foamListTimes should be executed
-            os.chdir(self.case_directory)  # Ensure this variable is defined in context
-
+            os.chdir(self.case_directory)
             try:
-                # Run the foamListTimes command using subprocess
                 result = subprocess.check_output(["foamListTimes"], text=True)
-                # Process the output: split into lines and remove empty entries
-                time_array = [line for line in result.splitlines() if line.strip()]
+                time_array = [line.strip() for line in result.splitlines() if line.strip()]
             except subprocess.CalledProcessError as e:
                 print(f"Error running foamListTimes: {e}")
                 time_array = []
             except Exception as e:
                 print(f"Unexpected error: {e}")
                 time_array = []
+            finally:
+                os.chdir(original_dir)
 
-            # Restore the original directory
-            os.chdir(original_dir)
+        # 2) Set environment variables for the ParaView script
+        os.environ["CASE_TYPE"]  = self.CASE_TYPE
+        os.environ["CASE_PATH"]  = self.case_directory
+        os.environ["TIME_ARRAY"] = ",".join(str(x) for x in time_array)
 
-        # Set up environment variables if needed
-        os.environ["CASE_TYPE"]   = CASE_TYPE
-        os.environ["CASE_PATH"]   = self.case_directory
-        os.environ["TIME_ARRAY"]  = ",".join(str(x) for x in time_array)
+        script_path = os.path.join(os.getcwd(), "SCRIPTS", "postProcessParaView.py")
+        pvbatch_exe = "/home/jie/ParaView-5.11.2-MPI-Linux-Python3.9-x86_64/bin/pvbatch"
+        cmd = f"{pvbatch_exe} {script_path}"
+        os.system(cmd)
 
-        # Compute the absolute path to the postProcessParaView.py script
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        # Assuming appDriver.py is in the repo root and SCRIPTS is a subfolder:
-        pv_script_path = os.path.join(current_dir, "SCRIPTS", "postProcessParaView.py")
-
-        # Run the ParaView script using pvbatch with the dynamic path
-        os.system(f"pvbatch {pv_script_path}")
-        
-
-        end_time = time.time()
-        elapsed_time = end_time - start_time
+        elapsed_time = time.time() - start_time
         print(f"Post-processing done in {elapsed_time/60:.2f} minutes.")
 
     def run_all(self):
-        print("Running all steps...")
+        """
+        Runs all steps of the simulation pipeline.
+        """
+        print("Running entire workflow: mesh, BC, simulation, post-processing...")
         self.run_mesh()
         self.run_bc()
         self.run_simulation()
@@ -452,55 +509,58 @@ class OpenFOAMRunner:
 
 
 if __name__ == "__main__":
-    # Create the top-level parser
     parser = argparse.ArgumentParser(
-        description="Script to manage OpenFOAM simulations.",
+        description="Script to manage OpenFOAM simulations (Aorta CFD).",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    # Define the subcommands
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    
     # Subcommand: createCase
-    parser_create = subparsers.add_parser('createCase', help='Create the OpenFOAM case setup.')
+    subparsers.add_parser('createCase', help='Create the OpenFOAM case setup.')
     # Subcommand: runMesh
-    parser_mesh = subparsers.add_parser('runMesh', help='Run mesh generation.')
+    subparsers.add_parser('runMesh', help='Run mesh generation.')
     # Subcommand: runBC
-    parser_bc = subparsers.add_parser('runBC', help='Run boundary conditions setup.')
+    subparsers.add_parser('runBC', help='Run boundary conditions setup.')
     # Subcommand: runSimulation
-    parser_simulation = subparsers.add_parser('runSimulation', help='Run the simulation.')
+    subparsers.add_parser('runSimulation', help='Run the simulation.')
     # Subcommand: runPost
-    parser_post = subparsers.add_parser('runPost', help='Run post-processing.')
+    subparsers.add_parser('runPost', help='Run post-processing.')
     # Subcommand: runAll
-    parser_all = subparsers.add_parser('runAll', help='Run the entire workflow.')
-    # Add common arguments if necessary
-    parser.add_argument('--geometry', type=str, default=GEOMETRY_CASE,
-                        help='Geometry case name.')
-    parser.add_argument('--refinement', type=str, default=REFINEMENT,
-                        help='Mesh refinement level.')
+    subparsers.add_parser('runAll', help='Run the entire workflow.')
+    
+    # (Optional) Add arguments that override config.py values
+    parser.add_argument('--geometry', type=str, help='Override geometry case name.')
+    parser.add_argument('--refinement', type=str, help='Override mesh refinement level.')
 
-    # Parse the arguments
     args = parser.parse_args()
 
-    # Create an instance of OpenFOAMRunner
-    runner = OpenFOAMRunner(args.geometry, args.refinement)
+    # Decide whether to override config values from CLI
+    if args.geometry:
+        CONFIG["geometry"]["case_name"] = args.geometry
+    if args.refinement:
+        CONFIG["geometry"]["refinement_level"] = args.refinement
 
-    # Check if the case directory exists if we're not creating it
-    if args.command != 'createCase':
-        if not os.path.exists(runner.case_directory):
+    # If 'createCase', build the base folder structure + dicts
+    if args.command == 'createCase':
+        runner_case = OpenFOAMCase()
+        runner_case.casePilot()
+    else:
+        # For other commands, we assume the case has already been created
+        runner = OpenFOAMRunner()
+        if not os.path.exists(runner.case_directory) and args.command != 'createCase':
             print(f"Error: Case directory '{runner.case_directory}' does not exist.")
             sys.exit(1)
 
-    # Execute the corresponding function based on the command
-    if args.command == 'createCase':
-        runner.create_openfoam_case()
-    elif args.command == 'runMesh':
-        runner.run_mesh()
-    elif args.command == 'runBC':
-        runner.run_bc()
-    elif args.command == 'runSimulation':
-        runner.run_simulation()
-    elif args.command == 'runPost':
-        runner.run_postprocessing()
-    elif args.command == 'runAll':
-        runner.run_all()
-    else:
-        parser.print_help()
+        # Route subcommands
+        if args.command == 'runMesh':
+            runner.run_mesh()
+        elif args.command == 'runBC':
+            runner.run_bc()
+        elif args.command == 'runSimulation':
+            runner.run_simulation()
+        elif args.command == 'runPost':
+            runner.run_postprocessing()
+        elif args.command == 'runAll':
+            runner.run_all()
+        else:
+            parser.print_help()

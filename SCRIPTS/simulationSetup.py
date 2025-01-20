@@ -66,13 +66,13 @@ functions
 '''
         function_block = ""
         # Create the function block
-        for f in self.SIMULATION_CONTROL["functionList"]:
+        for f in self.SIMULATION_CONTROL["controlDict"]["functionList"]:
             template_v2 = """
             #includeFunc    {function}"""
             function_block += template_v2.format(function=f)
 
         # Use the template to fill in the variables and write to the file
         with open(os.path.join(self.DIRECTORY,"system","controlDict"), 'w') as f:
-            f.write(template.format(function_block=function_block,**self.SIMULATION_CONTROL))
+            f.write(template.format(function_block=function_block,**self.SIMULATION_CONTROL["controlDict"]))
         print("controlDict file has been written")
         

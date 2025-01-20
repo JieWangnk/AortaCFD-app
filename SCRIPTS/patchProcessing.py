@@ -2,78 +2,190 @@ import os
 import numpy as np
 from stl import mesh
 from scipy.spatial import ConvexHull
-from userParameter_HL import GEOMETRY_CASE
 
 class PatchProcessing:
+    """
+    A class that loads a specified patch (e.g., inlet/outlet) from an STL file 
+    and can compute properties like bounding box, surface area, or an "equivalent 
+    inlet radius" for an arbitrarily oriented patch.
+    """
+
     def __init__(self, DIRECTORY, STL_FILES, PATH_NAME):
         self.DIRECTORY = DIRECTORY
         self.STL_FILES = STL_FILES
-        self.geometry_case = GEOMETRY_CASE
 
-        # Construct the path to the CAD folder
-        # TODO: Jie need update
-        self.CAD_FOLDER = os.path.join("constant","triSurface")
+        # Points to constant/triSurface in your OpenFOAM case directory
+        self.CAD_FOLDER = os.path.join("constant", "triSurface")
 
-        # Find the inlet stl file 
+        # Find the STL file matching PATH_NAME (e.g., "inlet")
         self.STL = [f for f in self.STL_FILES if PATH_NAME in f][0]
-        self.STL_PATH = os.path.join(self.DIRECTORY,self.CAD_FOLDER, self.STL)
-        
+        self.STL_PATH = os.path.join(self.DIRECTORY, self.CAD_FOLDER, self.STL)
+
+        # Load the mesh and store vertices
         self.mesh_data = self.load_mesh(self.STL_PATH)
-        self.all_points = self.extract_points()
-      
-    def load_mesh(self,path):
-        # Load the STL file
+        self.all_points = self.extract_points()  # Nx3 array
+
+    def load_mesh(self, path):
+        """Loads an STL file using numpy-stl."""
         return mesh.Mesh.from_file(path)
 
     def extract_points(self):
-        # Extract all points in the mesh
-        return np.concatenate([self.mesh_data.v0, self.mesh_data.v1, self.mesh_data.v2])
+        """
+        Extracts all triangle vertices from the loaded mesh into 
+        a single Nx3 NumPy array.
+        """
+        return np.concatenate([self.mesh_data.v0, self.mesh_data.v1, self.mesh_data.v2], axis=0)
 
     def get_bounding_box(self):
-        # Calculate minimum and maximum bounds
+        """
+        Returns the axis-aligned bounding box for the patch as (min_coords, max_coords).
+        """
         min_coords = self.all_points.min(axis=0)
         max_coords = self.all_points.max(axis=0)
         return min_coords, max_coords
 
-    def calculate_inlet_center_radius(self):
-        # Initialize variables for normal accumulation
+    def compute_average_normal(self, points_3n):
+        """
+        Computes the average normal by summing face normals for each triangle
+        (grouped in sets of three points).
+        """
+        if len(points_3n) % 3 != 0:
+            raise ValueError("Points array should be a multiple of 3 in size.")
+        num_triangles = len(points_3n) // 3
         normal_sum = np.zeros(3)
-        num_triangles = self.mesh_data.v0.shape[0]
 
-        # Calculate averaged normal
         for i in range(num_triangles):
-            p1, p2, p3 = self.mesh_data.v0[i], self.mesh_data.v1[i], self.mesh_data.v2[i]
-            normal = np.cross(p2 - p1, p3 - p1)
-            normal = normal / np.linalg.norm(normal)
-            normal_sum += normal
+            p1 = points_3n[3*i]
+            p2 = points_3n[3*i + 1]
+            p3 = points_3n[3*i + 2]
+            v1 = p2 - p1
+            v2 = p3 - p1
+            face_normal = np.cross(v1, v2)
+            norm_len = np.linalg.norm(face_normal)
+            if norm_len > 1e-15:
+                face_normal /= norm_len
+            normal_sum += face_normal
 
-        average_normal = normal_sum / num_triangles
-        average_normal = average_normal / np.linalg.norm(average_normal)
+        avg_normal = normal_sum / num_triangles
+        norm_avg = np.linalg.norm(avg_normal)
+        if norm_avg < 1e-15:
+            raise ValueError("Average normal is near zero; check STL geometry.")
+        return avg_normal / norm_avg
 
-        # Calculate centroid and project onto plane
-        centroid = np.mean(self.all_points, axis=0)
-        distance_to_plane = np.dot(centroid - centroid, average_normal)
-        projected_centroid = centroid - distance_to_plane * average_normal
+    def project_points_onto_plane(self, points_3d, normal_vec):
+        """
+        Projects an Nx3 array of points into a 2D plane orthonormal to 'normal_vec'.
+        Steps:
+          1) Translate to centroid = 0
+          2) Create vectors u, v orthonormal to normal_vec
+          3) Compute new coords: (x dot u, x dot v)
+        Returns:
+          - translated_3d (points centered at origin)
+          - points_2d (the Nx2 projected coords)
+          - centroid (original centroid)
+        """
+        centroid = np.mean(points_3d, axis=0)
+        translated_3d = points_3d - centroid
 
-        # Project points onto inlet plane
-        points_2d = self.all_points[:, :2]
+        normal_vec = normal_vec / np.linalg.norm(normal_vec)
+        # pick an arbitrary axis not parallel to normal
+        ref_axis = np.array([1, 0, 0])
+        if abs(np.dot(normal_vec, ref_axis)) > 0.9:
+            ref_axis = np.array([0, 1, 0])
 
-        # Calculate area and perimeter using a convex hull
+        u = np.cross(normal_vec, ref_axis)
+        u /= np.linalg.norm(u)
+        v = np.cross(normal_vec, u)
+        v /= np.linalg.norm(v)
+
+        points_2d = np.zeros((len(translated_3d), 2))
+        for i in range(len(translated_3d)):
+            points_2d[i, 0] = np.dot(translated_3d[i], u)
+            points_2d[i, 1] = np.dot(translated_3d[i], v)
+
+        return translated_3d, points_2d, centroid
+
+    def calculate_inlet_center_radius(self, scale_factor=1e-3):
+        """
+        Computes a hydraulic/equivalent radius for an arbitrarily oriented patch:
+          1) Average normal via face-based summation.
+          2) Project points to plane orthonormal to that normal.
+          3) Compute convex hull area => 'volume' in 2D, perimeter => 'area' in 2D.
+          4) Radius = 2*area / perimeter, then multiplied by scale_factor.
+
+        Args:
+            scale_factor (float): If your STL is in mm and you want radius in meters, 
+                                  use 1e-3.
+
+        Returns:
+            (centroid, radius, average_normal)
+        """
+        # 1) Ensure points_3n has sets of 3 points for each triangle
+        #    Our self.all_points is Nx3, but each face is repeated. It's okay as is,
+        #    or we can unify them. We'll just proceed.
+        points_3n = self.all_points
+        if len(points_3n) < 9:
+            raise ValueError("Not enough points to compute a valid inlet radius.")
+
+        # 2) Compute average normal
+        avg_normal = self.compute_average_normal(points_3n)
+
+        # 3) Project to 2D
+        translated_3d, points_2d, centroid = self.project_points_onto_plane(points_3n, avg_normal)
+
+        # centroid scaled by scale_factor
+        centroid *= scale_factor
+
+        # 4) Use 2D convex hull to find area + perimeter
+        if len(points_2d) < 3:
+            raise ValueError("Not enough points for a hull. Patch is degenerate.")
+
         hull = ConvexHull(points_2d)
-        area = hull.volume
-        perimeter = hull.area
+        area_2d = hull.volume      # polygon area in 2D
+        perimeter_2d = hull.area   # polygon perimeter in 2D
 
-        # Calculate hydraulic radius
-        hydraulic_radius = (2 * area) / perimeter  # assuming a scaling factor of 10^-3
+        # 5) Hydraulic radius
+        radius = 2.0 * area_2d / perimeter_2d
+        radius *= scale_factor
 
-        return projected_centroid, hydraulic_radius, average_normal
+        return centroid, radius, avg_normal
 
-    def calculate_surface_area(self):
+    def calculate_surface_area(self,scale_factor=1e-3):
+        """
+        Computes the total surface area of the patch by summing triangle areas.
+        This is a 3D area, not the cross-sectional or projected area.
+        """
         total_area = 0.0
         for i in range(len(self.mesh_data.vectors)):
             p0, p1, p2 = self.mesh_data.vectors[i]
             triangle_area = 0.5 * np.linalg.norm(np.cross(p1 - p0, p2 - p0))
             total_area += triangle_area
+
+        # scale by scale_factor
+        total_area *= scale_factor**2
         return total_area
+
+# -------------- Example Usage --------------
+if __name__ == "__main__":
+    directory = "/home/jie/AortaCFD-app/OPENFOAM/VOL04_coarse/"
+    stl_files = ["inlet.stl", "outlet1.stl", "outlet2.stl"]
+
+    # Suppose you want to compute the radius for 'inlet.stl'
+    patch_processor = PatchProcessing(directory, stl_files, "inlet")
+
+    # Get bounding box (optional)
+    min_coords, max_coords = patch_processor.get_bounding_box()
+    print("Bounding box:", min_coords, max_coords)
+
+    # Compute center + radius + normal
+    center, inlet_radius, inlet_normal = patch_processor.calculate_inlet_center_radius(scale_factor=1e-3)
+
+    print("Inlet Center:", center)
+    print("Inlet Radius (m):", inlet_radius)
+    print("Inlet Normal:", inlet_normal)
+
+    # Get 3D surface area if needed
+    area_3d = patch_processor.calculate_surface_area()
+    print("3D Surface Area:", area_3d)
 
 

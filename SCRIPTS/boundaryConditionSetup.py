@@ -1,7 +1,7 @@
 import os 
 import re
 import sys
-from userParameter_HL import *
+from config import CONFIG 
 from SCRIPTS.patchProcessing import *
 from SCRIPTS.meshSetup import GeometryAnalyzer
 
@@ -9,7 +9,7 @@ from SCRIPTS.meshSetup import GeometryAnalyzer
 
 # create the intial condition for the case DIRECTORY/0
 class BoundaryConditionSetup():
-    def __init__(self, DIRECTORY, STL_FILES, BC_INLET, BC_OUTLET , INITIAL_CONDITION_U, INITIAL_CONDITION_p, INITIAL_CONDITION_K, INITIAL_CONDITION_OMEGA, SIMULATIONTYPE):
+    def __init__(self, DIRECTORY, STL_FILES, BC_INLET, BC_OUTLET, INITIAL_CONDITION_U, INITIAL_CONDITION_p, INITIAL_CONDITION_K, INITIAL_CONDITION_OMEGA, SIMULATIONTYPE):
         self.DIRECTORY = DIRECTORY
         self.STL_FILES = STL_FILES
         self.BC_INLET = BC_INLET
@@ -40,25 +40,23 @@ class BoundaryConditionSetup():
             key=lambda x: int(re.findall(r"\d+", x)[0])
         )
 
-
-        if self.BC_INLET == "FIXED_PARABOLIC_VELCOITY":
-            self.INLET_TYPE_U = "staticParabolicInletVelocity"
-        elif self.BC_INLET == "TIMEVARYING_PARABOLIC_VELOCITY": 
-            self.INLET_TYPE_U = "timeVaringParabolicInletVelocity"
-        elif self.BC_INLET == "TIME_VARYING_MAPPED_FIXED_VALUE":
+        if self.BC_INLET == "TIMEVARYING":
+            self.INLET_TYPE_U = "timeVaryingMappedFixedValue"
+        elif self.BC_INLET == "STEADYSTATE":
             self.INLET_TYPE_U = "timeVaryingMappedFixedValue"
         else:
             print("ERROR: inlet_type not found")
             sys.exit()
 
+
     def write_U_file(self):
         # write U file based on initial condition 
-        template = """/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
-| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\\\    /   O peration     | Version:  v1906                                 |
-|   \\\\  /    A nd           | Website:  www.openfoam.com                      |
-|    \\\\/     M anipulation  |                                                 |
+        template = """/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  10
+     \\/     M anipulation  |
 \*---------------------------------------------------------------------------*/
 FoamFile
 {{
@@ -81,92 +79,21 @@ boundaryField
 }}
 // ************************************************************************* """
             
-        if self.INLET_TYPE_U == "staticParabolicInletVelocity":
+        if self.INLET_TYPE_U == "timeVaryingMappedFixedValue":
             inlet_block = """
             {inlet}
-        {{  
-            type            codedFixedValue;
-            value           uniform (0 0 0); // Initial value (will be overwritten by the code)
-
-            code
-            #{{
-                const vectorField& points = this->db().time().lookupObject<volVectorField>("U").mesh().C().boundaryField()[patch().index()];
-                vectorField::subField values = this->patchInternalField();
-
-                const scalar maxVelocity = {inlet_max_velocity};
-                const scalar R = {inlet_radius}; // Radius of the pipe
-
-                // User-defined direction vector
-                vector direction = vector{inlet_normal}; // Replace with the direction you want
-
-                forAll(values, i)
-                {{
-                    const vector& pt = points[i];
-                    scalar r = sqrt(pt.y()*pt.y() + pt.z()*pt.z());
-                    scalar u = maxVelocity*(1 - (r / R)*(r / R));
-                    values[i] = direction * u;
-                }}
-
-                operator==(values);
-            #}};
-        }}"""
-            
-        elif self.INLET_TYPE_U == "timeVaringParabolicInletVelocity":
-            inlet_block = """
-            {inlet}
-        {{
-            type            codedFixedValue;
-            value           uniform (0 0 0); // Initial value (will be overwritten by the code)
-
-            code
-            #{{
-                const vectorField& points = this->db().time().lookupObject<volVectorField>("U").mesh().C().boundaryField()[patch().index()];
-                vectorField::subField values = this->patchInternalField();
-
-                scalar maxVelocity = {inlet_max_velocity};
-                scalar R = {self.inlet_radius}; // Radius of the pipe
-
-                // Heart rate in BPM
-                scalar heartRate = {heart_rate}; // for example, 75 beats per minute
-                scalar frequencyInHz = heartRate / 60.0;
-
-                // Time varying aspect (positive part of a sine wave)
-                scalar omega = 2 * M_PI * frequencyInHz;
-                scalar time = this->db().time().value();
-                scalar sineValue = std::sin(omega * time);
-                scalar amplitude = std::max(0.0, sineValue);
-
-                // User-defined direction vector
-                vector direction = vector{self.inlet_normal}; // Replace with the direction you want
-
-                forAll(values, i)
-                {{
-                const vector& pt = points[i];
-                scalar r = sqrt(pt.y()*pt.y() + pt.z()*pt.z());
-                scalar u = amplitude * maxVelocity * (1 - (r / R)*(r / R));
-                values[i] = direction * u;
-                }}
-
-                operator==(values);
-            #}};  
-        }}"""
-            
-        elif self.INLET_TYPE_U == "timeVaryingMappedFixedValue":
-            inlet_block = """
-            inlet
         {{
             type            timeVaryingMappedFixedValue;
             offset          (0 0 0);
             setAverage       off;
         }}"""
-        
             
         else:
             print("ERROR: inlet_type not found")
             sys.exit()
 
-        inlet_block = inlet_block.format(inlet=self.INLET_STL.split(".")[0], **self.INITIAL_CONDITION_U)
-        
+        inlet_block = inlet_block.format(inlet=self.INLET_STL.split(".")[0])    
+
         # ------------------------------------------------------------------------ #
         if self.BC_OUTLET == "ZERO_GRADIENT":  
             outlet_block_template = """
@@ -210,12 +137,12 @@ boundaryField
 
     def write_p_file(self):
         # Template for p file
-        template = """/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
-| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\\\    /   O peration     | Version:  v1906                                 |
-|   \\\\  /    A nd           | Website:  www.openfoam.com                      |
-|    \\\\/     M anipulation  |                                                 |
+        template = """/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  10
+     \\/     M anipulation  |
 \*---------------------------------------------------------------------------*/
 FoamFile
 {{
@@ -319,16 +246,17 @@ boundaryField
         # Write to file
         with open(os.path.join(self.DIRECTORY, "0", "p"), "w") as f:
             f.write(p_file_content)
+
 #------------------------------------------------------------------------------------------------------------------
 
     def write_nut_file(self):
         # Template for nut file
-        template = """/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
-| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\\\    /   O peration     | Version:  v1906                                 |
-|   \\\\  /    A nd           | Website:  www.openfoam.com                      |
-|    \\\\/     M anipulation  |                                                 |
+        template = """/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  10
+     \\/     M anipulation  |
 \*---------------------------------------------------------------------------*/
 FoamFile
 {{
@@ -439,14 +367,13 @@ boundaryField
 """.format(wall=self.MAIN_AORTA_STL.split(".")[0])
         
         # Template for k file
-        template = """/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
-| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\\\    /   O peration     | Version:  v1906                                 |
-|   \\\\  /    A nd           | Website:  www.openfoam.com                      |
-|    \\\\/     M anipulation  |                                                 |
+        template = """/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  10
+     \\/     M anipulation  |
 \*---------------------------------------------------------------------------*/
-
 FoamFile
 {{
     version     2.0;
@@ -516,7 +443,7 @@ boundaryField
   =========                 |
   \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
    \\    /   O peration     | Website:  https://openfoam.org
-    \\  /    A nd           | Version:  11
+    \\  /    A nd           | Version:  10
      \\/     M anipulation  |
 \*---------------------------------------------------------------------------*/
 FoamFile
@@ -550,12 +477,12 @@ boundaryField
     
     def write_sampleDict_file(self):
         # Template for sampleDict file
-        template = """/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
-| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\\\    /   O peration     | Version:  v1906                                 |
-|   \\\\  /    A nd           | Website:  www.openfoam.com                      |
-|    \\\\/     M anipulation  |                                                 |
+        template = """/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  10
+     \\/     M anipulation  |
 \*---------------------------------------------------------------------------*/
 FoamFile
 {{
