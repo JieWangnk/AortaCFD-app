@@ -76,6 +76,7 @@ class OpenFOAMCase:
         self.rho = phys_cfg["rho"]
         self.simulation_type        = phys_cfg["simulation_type"]
         self.simulation_performance = phys_cfg["simulation_performance"]
+        self.outter_corr            = phys_cfg["outter_correction_loop"]
 
         # Simulation control config
         sim_ctrl_cfg     = CONFIG["simulation_control"]
@@ -134,7 +135,8 @@ class OpenFOAMCase:
         self.solverSetup = FvSolutionWriter(
             self.directory, 
             self.simulation_type, 
-            self.simulation_performance
+            self.simulation_performance,
+            self.outter_corr  
         )
 
         self.simulationSetup = SimulationSetup(
@@ -246,13 +248,15 @@ class OpenFOAMRunner:
             "OPENFOAM", 
             f"{self.geometry_case}_{self.refinement}"
         )
+        # save the parents directory 
+        self.parent_directory = os.path.join(os.path.dirname(os.path.abspath(__file__)))
 
         boundary_cfg = CONFIG["boundary"]
         self.BC_INLET     = boundary_cfg["BC_INLET"]
         self.BC_OUTLET    = boundary_cfg["BC_OUTLET"]
         self.INLET_DATA_FILE = boundary_cfg.get("INLET_DATA_FILE", None)
         self.INLET_DATA_TYPE = boundary_cfg["INLET_DATA_TYPE"]
-        self.INLET_ORIENTATION = boundary_cfg.get("INLET_ORIENTATION", "in")
+        self.INLET_ORIENTATION = boundary_cfg.get("INLET_ORIENTATION")
         self.INLET_PROFILE   = boundary_cfg.get("INLET_PROFILE", None)
         self.WK_SETTING      = boundary_cfg["WK_SETTING"]
 
@@ -392,7 +396,7 @@ class OpenFOAMRunner:
             inlet_data_file=self.INLET_DATA_FILE,
             data_type= self.INLET_DATA_TYPE,
             inlet_name= "inlet",
-            orientation= self.INLET_ORIENTATION,    # Default value
+            orientation= self.INLET_ORIENTATION,    
             profile=self.INLET_PROFILE
         )
         processor.run()
@@ -489,7 +493,7 @@ class OpenFOAMRunner:
         os.environ["CASE_PATH"]  = self.case_directory
         os.environ["TIME_ARRAY"] = ",".join(str(x) for x in time_array)
 
-        script_path = os.path.join(os.getcwd(), "SCRIPTS", "postProcessParaView.py")
+        script_path = os.path.join(self.parent_directory , "SCRIPTS", "postProcessParaView.py")
         pvbatch_exe = "/home/jie/ParaView-5.11.2-MPI-Linux-Python3.9-x86_64/bin/pvbatch"
         cmd = f"{pvbatch_exe} {script_path}"
         os.system(cmd)

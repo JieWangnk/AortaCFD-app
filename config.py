@@ -34,9 +34,9 @@ CONFIG = {
     "boundary": {
         "BC_INLET": "TIMEVARYING", # only two options: "TIMEVARYING", "STEADYSATE"  
         "BC_OUTLET": "3EWINDKESSEL", # only two options: "3EWINDKESSEL", "ZERO_GRADIENT"
-        "INLET_DATA_FILE": "BPM120.csv",
+        "INLET_DATA_FILE": "BPM73.csv",
         "INLET_DATA_TYPE": "velocity", # only two options: "flowRate", "velocity"
-        "INLET_PROFILE": "plug", # only three profiles: "plug", "parabolic" and "womersley"
+        "INLET_PROFILE": "parabolic", # only three profiles: "plug", "parabolic" and "womersley"
         "INLET_ORIENTATION": "out",
         "WK_SETTING": {
             "percentage": 30,        
@@ -48,17 +48,18 @@ CONFIG = {
         "nu": 3.3e-06,
         "rho": 1060,
         "simulation_type": "laminar",
-        "simulation_performance": "low"
+        "simulation_performance": "low",
+        "outter_correction_loop": 10
     },
     "simulation_control": {
         "number_of_cycles": 1,
         "start_time": 0.0,
-        "cardiac_cycle": 0.5, # can be removed
+        "cardiac_cycle": 0.82, # can be removed
         "controlDict": {
             "startFrom": "startTime",
             "startTime": 0.0,
             "stopAt": "endTime",
-            "endTime": 0.2,
+            "endTime": 0.5,
             "deltaT": 1e-6,
             "writeControl": "adjustableRunTime",
             "writeInterval": 0.01,

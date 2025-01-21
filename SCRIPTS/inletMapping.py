@@ -93,7 +93,7 @@ class InletMapping:
                 points.append(xyz)
         return n_points, np.array(points, dtype=float)
 
-    def get_face_normal_vectors(self, p1, p2, p3, orientation='in'):
+    def get_face_normal_vectors(self, p1, p2, p3, orientation):
         """
         Computes the normal vector for three points on the plane, flipping
         direction if orientation='in' or 'out' doesn't match the z-component.
@@ -124,21 +124,21 @@ class InletMapping:
         return vx, vy, vz
 
     # ------------------------ BASIC PROFILE HELPERS -------------------------
-    def plug_profile_speed(self, flow_rate):
+    def plug_profile_speed(self, data_val):
         """
         If CSV data is flow (m^3/s), compute the uniform (plug) velocity = flow / area.
         If CSV data is already velocity (m/s), just return it as is.
         """
         if self.data_type == 'flowrate':
             cross_area = np.pi * (self.radius * self.scale)**2
-            return flow_rate / cross_area
+            return data_val / cross_area
         elif self.data_type == 'velocity':
             # The CSV data is already velocity
-            return flow_rate
+            return data_val
         else:
             raise ValueError("data_type must be 'flowRate' or 'velocity'.")
 
-    def parabolic_centerline_speed(self, flow_rate):
+    def parabolic_centerline_speed(self, data_val):
         """
         For a laminar parabolic flow, the centerline velocity = 2 * average velocity.
         - If the CSV data is flow, average velocity = flow / area => centerline = 2 * avg_vel.
@@ -147,10 +147,10 @@ class InletMapping:
         """
         if self.data_type == 'flowrate':
             cross_area = np.pi * (self.radius * self.scale)**2
-            avg_vel = flow_rate / cross_area
+            avg_vel = data_val / cross_area
             return 2.0 * avg_vel  # centerline velocity
         elif self.data_type == 'velocity':
-            return 2.0 * flow_rate
+            return 2.0 * data_val  # centerline velocity
         else:
             raise ValueError("data_type must be 'flowRate' or 'velocity'.")
 
