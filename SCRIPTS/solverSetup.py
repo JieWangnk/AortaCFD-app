@@ -2,10 +2,11 @@ import os
 from typing import Any
 
 class FvSolutionWriter():
-    def __init__(self, DIRECTORY, SIMULATIONTYPE,SIMULATIONPERFORMACE):
+    def __init__(self, DIRECTORY, SIMULATIONTYPE,SIMULATIONPERFORMACE, OUTTER_CORR):
         self.DIRECTORY = DIRECTORY
         self.SIMULATIONTYPE = SIMULATIONTYPE
         self.SIMULATIONPERFORMACE = SIMULATIONPERFORMACE
+        self.OUTTER_CORR = OUTTER_CORR
 
     def write_fvSolution_file(self):
         filepath = os.path.join(self.DIRECTORY,"system","fvSolution")
@@ -125,7 +126,7 @@ solvers
 PIMPLE
 {
     momentumPredictor   no;
-    nOuterCorrectors    100;
+    nOuterCorrectors    10;
     nCorrectors         2;
     nNonOrthogonalCorrectors 1;
     pRefCell        0;
@@ -271,7 +272,7 @@ solvers
 PIMPLE
 {
     momentumPredictor   no;
-    nOuterCorrectors    100;
+    nOuterCorrectors    10;
     nCorrectors         2;
     nNonOrthogonalCorrectors 1;
     pRefCell        0;
@@ -417,7 +418,7 @@ solvers
 PIMPLE
 {
     momentumPredictor   no;
-    nOuterCorrectors    100;
+    nOuterCorrectors    10;
     nCorrectors         2;
     nNonOrthogonalCorrectors 1;
     pRefCell        0;
@@ -700,7 +701,7 @@ solvers
 PIMPLE
 {
     momentumPredictor   no;
-    nOuterCorrectors    100;
+    nOuterCorrectors    10;
     nCorrectors         2;
     nNonOrthogonalCorrectors 1;
     pRefCell        0;
@@ -846,7 +847,7 @@ solvers
 PIMPLE
 {
     momentumPredictor   no;
-    nOuterCorrectors    100;
+    nOuterCorrectors    10;
     nCorrectors         2;
     nNonOrthogonalCorrectors 1;
     pRefCell        0;
