@@ -59,7 +59,7 @@ CONFIG = {
             "startFrom": "startTime",
             "startTime": 0.0,
             "stopAt": "endTime",
-            "endTime": 0.5,
+            "endTime": 0.82,
             "deltaT": 1e-6,
             "writeControl": "adjustableRunTime",
             "writeInterval": 0.01,
