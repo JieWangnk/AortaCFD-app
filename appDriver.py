@@ -494,7 +494,12 @@ class OpenFOAMRunner:
         os.environ["TIME_ARRAY"] = ",".join(str(x) for x in time_array)
 
         script_path = os.path.join(self.parent_directory , "SCRIPTS", "postProcessParaView.py")
-        pvbatch_exe = "/home/jie/ParaView-5.11.2-MPI-Linux-Python3.9-x86_64/bin/pvbatch"
+        pvbatch_exe = "/home/jie/ParaView-5.11.2-MPI-Linux-Python3.9-x86_64/bin/pvbatch"   # Adjust as needed
+        if not os.path.isfile(pvbatch_exe):
+            raise FileNotFoundError(f"ParaView executable '{pvbatch_exe}' not found.")
+        if not os.path.isfile(script_path):
+            raise FileNotFoundError(f"Post-processing script '{script_path}' not found.")
+        # 3) Run the ParaView script
         cmd = f"{pvbatch_exe} {script_path}"
         os.system(cmd)
 
