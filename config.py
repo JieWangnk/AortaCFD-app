@@ -7,7 +7,7 @@ All simulation parameters are stored here in Python dictionaries.
 
 CONFIG = {
     "geometry": {
-        "case_name": "PAT1_2024",
+        "case_name": "VOL04",
         "scale_factor": 1e-3,
         "refinement_level": "coarse"
     },
