@@ -3,14 +3,19 @@ import numpy as np
 from stl import mesh
 from scipy.spatial import ConvexHull
 from numpy.linalg import norm
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 def load_stl_points(stl_path):
     """
     Loads an STL file using numpy-stl, returns all triangle vertices as an Nx3 numpy array.
     """
-    stl_mesh = mesh.Mesh.from_file(stl_path)
-    # Each face has 3 vertices: v0, v1, v2
-    # Concatenate into a single array of points
+    try:
+        stl_mesh = mesh.Mesh.from_file(stl_path)
+    except Exception as e:
+        raise RuntimeError(f"Error loading STL file {stl_path}: {e}")
+    
     all_points = np.concatenate([stl_mesh.v0, stl_mesh.v1, stl_mesh.v2], axis=0)
     return all_points
 
@@ -18,31 +23,27 @@ def compute_average_normal(stl_points):
     """
     Computes the average normal by summing face normals for each triangle,
     then normalizing.
-    stl_points: Nx3 array of points, grouped in sets of 3 for each triangle.
     """
     if len(stl_points) % 3 != 0:
         raise ValueError("The STL points array should be a multiple of 3 in size.")
 
-    num_triangles = len(stl_points) // 3
-    normal_sum = np.zeros(3)
+    # Reshape points into triangles
+    triangles = stl_points.reshape(-1, 3, 3)
+    v1 = triangles[:, 1] - triangles[:, 0]
+    v2 = triangles[:, 2] - triangles[:, 0]
+    face_normals = np.cross(v1, v2)
 
-    for i in range(num_triangles):
-        p1 = stl_points[3*i]
-        p2 = stl_points[3*i+1]
-        p3 = stl_points[3*i+2]
-        v1 = p2 - p1
-        v2 = p3 - p1
-        face_normal = np.cross(v1, v2)
-        face_len = norm(face_normal)
-        if face_len > 1e-15:
-            face_normal /= face_len
-        normal_sum += face_normal
+    # Normalize face normals
+    face_lengths = np.linalg.norm(face_normals, axis=1)
+    valid_faces = face_lengths > 1e-15
+    face_normals[valid_faces] /= face_lengths[valid_faces][:, np.newaxis]
 
-    avg_normal = normal_sum / num_triangles
-    if norm(avg_normal) < 1e-15:
+    # Compute average normal
+    avg_normal = np.mean(face_normals[valid_faces], axis=0)
+    if np.linalg.norm(avg_normal) < 1e-15:
         raise ValueError("Average normal is near zero; check geometry.")
 
-    return avg_normal / norm(avg_normal)
+    return avg_normal / np.linalg.norm(avg_normal)
 
 def project_points_onto_plane(points_3d, normal_vec):
     """
@@ -133,6 +134,7 @@ if __name__ == "__main__":
         raise FileNotFoundError(f"Could not find STL at {stl_path}")
 
     # 1) Load STL and get points
+    logging.info("Loading STL file...")
     all_points = load_stl_points(stl_path)
 
     # 2) Possibly your STL is in mm, and you want radius in m => scale_factor=1e-3
@@ -140,8 +142,9 @@ if __name__ == "__main__":
     scale_factor = 1e-3
 
     # 3) Compute the radius
+    logging.info("Computing inlet radius...")
     centroid, inlet_radius, inlet_normal = compute_inlet_radius(all_points, scale_factor)
 
-    print("Inlet Centroid:", centroid)
-    print("Inlet Radius:", inlet_radius)
-    print("Inlet Normal:", inlet_normal)
+    logging.info(f"Inlet Centroid: {centroid}")
+    logging.info(f"Inlet Radius: {inlet_radius}")
+    logging.info(f"Inlet Normal: {inlet_normal}")

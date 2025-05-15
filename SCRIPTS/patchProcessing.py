@@ -2,6 +2,9 @@ import os
 import numpy as np
 from stl import mesh
 from scipy.spatial import ConvexHull
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 class PatchProcessing:
     """
@@ -15,11 +18,14 @@ class PatchProcessing:
         self.STL_FILES = STL_FILES
 
         # Points to constant/triSurface in your OpenFOAM case directory
-        self.CAD_FOLDER = os.path.join("constant", "triSurface")
+        #self.CAD_FOLDER = os.path.join("constant", "triSurface")
 
         # Find the STL file matching PATH_NAME (e.g., "inlet")
         self.STL = [f for f in self.STL_FILES if PATH_NAME in f][0]
-        self.STL_PATH = os.path.join(self.DIRECTORY, self.CAD_FOLDER, self.STL)
+        self.STL_PATH = os.path.join(self.DIRECTORY, self.STL)
+
+        if not os.path.exists(self.STL_PATH):
+            raise FileNotFoundError(f"STL file not found: {self.STL_PATH}")
 
         # Load the mesh and store vertices
         self.mesh_data = self.load_mesh(self.STL_PATH)
@@ -27,7 +33,10 @@ class PatchProcessing:
 
     def load_mesh(self, path):
         """Loads an STL file using numpy-stl."""
-        return mesh.Mesh.from_file(path)
+        try:
+            return mesh.Mesh.from_file(path)
+        except Exception as e:
+            raise RuntimeError(f"Error loading STL file {path}: {e}")
 
     def extract_points(self):
         """
@@ -150,42 +159,68 @@ class PatchProcessing:
 
         return centroid, radius, avg_normal
 
-    def calculate_surface_area(self,scale_factor=1e-3):
+    def calculate_surface_area(self, scale_factor=1e-3):
         """
         Computes the total surface area of the patch by summing triangle areas.
         This is a 3D area, not the cross-sectional or projected area.
         """
-        total_area = 0.0
-        for i in range(len(self.mesh_data.vectors)):
-            p0, p1, p2 = self.mesh_data.vectors[i]
-            triangle_area = 0.5 * np.linalg.norm(np.cross(p1 - p0, p2 - p0))
-            total_area += triangle_area
+        vectors = self.mesh_data.vectors
+        cross_products = np.cross(vectors[:, 1] - vectors[:, 0], vectors[:, 2] - vectors[:, 0])
+        triangle_areas = 0.5 * np.linalg.norm(cross_products, axis=1)
+        total_area = np.sum(triangle_areas)
 
         # scale by scale_factor
         total_area *= scale_factor**2
         return total_area
+
+    def compute_rotation_vector(self, vector1, vector2):
+        """
+        Computes the rotation vector (axis and angle) required to rotate from vector1 to vector2.
+
+        Args:
+            vector1 (np.ndarray): The starting vector (3D).
+            vector2 (np.ndarray): The target vector (3D).
+
+        Returns:
+            tuple: (rotation_axis, rotation_angle)
+                - rotation_axis (np.ndarray): The unit vector representing the axis of rotation.
+                - rotation_angle (float): The angle of rotation in radians.
+        """
+        v1 = vector1 / np.linalg.norm(vector1)
+        v2 = vector2 / np.linalg.norm(vector2)
+        rotation_axis = np.cross(v1, v2)
+        axis_norm = np.linalg.norm(rotation_axis)
+
+        if axis_norm < 1e-15:
+            if np.allclose(v1, v2):
+                return np.zeros(3), 0.0
+            else:
+                orthogonal_axis = np.array([1, 0, 0]) if abs(v1[0]) < 0.9 else np.array([0, 1, 0])
+                rotation_axis = np.cross(v1, orthogonal_axis)
+                rotation_axis /= np.linalg.norm(rotation_axis)
+                return rotation_axis, np.pi
+
+        rotation_axis /= axis_norm
+        rotation_angle = np.arccos(np.clip(np.dot(v1, v2), -1.0, 1.0))
+        return rotation_axis, rotation_angle
 
 # -------------- Example Usage --------------
 if __name__ == "__main__":
     directory = "/home/jie/AortaCFD-app/OPENFOAM/VOL04_coarse/"
     stl_files = ["inlet.stl", "outlet1.stl", "outlet2.stl"]
 
-    # Suppose you want to compute the radius for 'inlet.stl'
+    logging.info("Loading STL file...")
     patch_processor = PatchProcessing(directory, stl_files, "inlet")
 
-    # Get bounding box (optional)
     min_coords, max_coords = patch_processor.get_bounding_box()
-    print("Bounding box:", min_coords, max_coords)
+    logging.info(f"Bounding box: {min_coords}, {max_coords}")
 
-    # Compute center + radius + normal
     center, inlet_radius, inlet_normal = patch_processor.calculate_inlet_center_radius(scale_factor=1e-3)
+    logging.info(f"Inlet Center: {center}")
+    logging.info(f"Inlet Radius (m): {inlet_radius}")
+    logging.info(f"Inlet Normal: {inlet_normal}")
 
-    print("Inlet Center:", center)
-    print("Inlet Radius (m):", inlet_radius)
-    print("Inlet Normal:", inlet_normal)
-
-    # Get 3D surface area if needed
     area_3d = patch_processor.calculate_surface_area()
-    print("3D Surface Area:", area_3d)
+    logging.info(f"3D Surface Area: {area_3d}")
 
 

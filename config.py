@@ -6,35 +6,39 @@ All simulation parameters are stored here in Python dictionaries.
 """
 
 CONFIG = {
+    # OpenFOAM version
+    "openfoam_version": "8",
+    # Directory where the case will be created
     "geometry": {
-        "case_name": "VOL04",
+        "case_name": "PAT002_rotated",
         "scale_factor": 1e-3,
-        "refinement_level": "coarse"
+        "refinement_level": "medium", # options: "coarse", "medium", "fine"
+        "rotation": True # options to adjust geometry alignment of coordinate system, defult is (0,0,1)
     },
     "mesh": {
         "SNAPPY_SETTINGS": {
-            "parallel": True,
+            "parallel": True, # options: True, False
             "nProcessors": 3,
             "expansionFactor": 0.02,
             "regionRefinementLevel": 2,
             "regionRefinementBox": None,
             "nCellsBetweenLevels": 3,
             "featureLevel": 2,
-            "surfaceRefinementLevels": [1, 2],
-            "resolveFeatureAngle": 10,
+            "surfaceRefinementLevels": [1, 1],
+            "resolveFeatureAngle": 30,
             "nSmoothPatch": 3,
             "addLayer": 5
         },
         "refinement_levels": {
             "coarse": 2,
-            "medium": 0.6,
-            "fine": 0.25
-        }
+            "medium": 1.5,
+            "fine": 1
+        } 
     },
     "boundary": {
         "BC_INLET": "TIMEVARYING", # only two options: "TIMEVARYING", "STEADYSATE"  
-        "BC_OUTLET": "3EWINDKESSEL", # only two options: "3EWINDKESSEL", "ZERO_GRADIENT"
-        "INLET_DATA_FILE": "BPM73.csv",
+        "BC_OUTLET": "3EWINDKESSEL", # only two options: "3EWINDKESSEL", "ZEROGRADIENT"
+        "INLET_DATA_FILE": "BPM75.csv",
         "INLET_DATA_TYPE": "velocity", # only two options: "flowRate", "velocity"
         "INLET_PROFILE": "parabolic", # only three profiles: "plug", "parabolic" and "womersley"
         "INLET_ORIENTATION": "out",
@@ -48,18 +52,18 @@ CONFIG = {
         "nu": 3.3e-06,
         "rho": 1060,
         "simulation_type": "laminar",
-        "simulation_performance": "low",
-        "outter_correction_loop": 10
+        "simulation_performance": "high",
+        "outter_correction_loop": 100
     },
     "simulation_control": {
-        "number_of_cycles": 1,
+        "number_of_cycles": 2,
         "start_time": 0.0,
-        "cardiac_cycle": 0.82, # can be removed
+        "cardiac_cycle": 0.8, # can be removed
         "controlDict": {
             "startFrom": "startTime",
             "startTime": 0.0,
             "stopAt": "endTime",
-            "endTime": 0.82,
+            "endTime": 0.8,
             "deltaT": 1e-6,
             "writeControl": "adjustableRunTime",
             "writeInterval": 0.01,
