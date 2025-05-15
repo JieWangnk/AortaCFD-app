@@ -3,13 +3,10 @@ import re
 import sys
 from config import CONFIG 
 from SCRIPTS.patchProcessing import *
-from SCRIPTS.meshSetup import GeometryAnalyzer
-
-
 
 # create the intial condition for the case DIRECTORY/0
 class BoundaryConditionSetup():
-    def __init__(self, DIRECTORY, STL_FILES, BC_INLET, BC_OUTLET, INITIAL_CONDITION_U, INITIAL_CONDITION_p, INITIAL_CONDITION_K, INITIAL_CONDITION_OMEGA, SIMULATIONTYPE):
+    def __init__(self, DIRECTORY, STL_FILES, BC_INLET, BC_OUTLET, INITIAL_CONDITION_U, INITIAL_CONDITION_p, INITIAL_CONDITION_K, INITIAL_CONDITION_OMEGA, SIMULATIONTYPE,openfoam_version):
         self.DIRECTORY = DIRECTORY
         self.STL_FILES = STL_FILES
         self.BC_INLET = BC_INLET
@@ -19,9 +16,10 @@ class BoundaryConditionSetup():
         self.INITIAL_CONDITION_K = INITIAL_CONDITION_K
         self.INITIAL_CONDITION_OMEGA = INITIAL_CONDITION_OMEGA
         self.SIMULATIONTYPE = SIMULATIONTYPE
-        print(os.path.join(os.getcwd(),self.DIRECTORY))
+        self.openfoam_version = openfoam_version  # Store the OpenFOAM version
+        
         # Create an instance of PatchProcessing
-        inlet_radius_calculator = PatchProcessing(self.DIRECTORY, self.STL_FILES,"inlet")
+        inlet_radius_calculator = PatchProcessing(os.path.join(self.DIRECTORY, "constant", "triSurface"), self.STL_FILES,"inlet")
         
         # Get the inlet parameters from inletRadius module
         self.inlet_center, self.inlet_radius, self.inlet_normal = inlet_radius_calculator.calculate_inlet_center_radius()
@@ -30,13 +28,15 @@ class BoundaryConditionSetup():
         self.INITIAL_CONDITION_U["inlet_center"] = self.inlet_center
         self.INITIAL_CONDITION_U["inlet_normal"] = self.inlet_normal
 
-        # find the main aorta stl file and rest are inlet and outlet patch
-        self.MAIN_AORTA_STL = [f for f in self.STL_FILES if "wall" in f][0]
-        # find the inlet stl file 
-        self.INLET_STL = [f for f in self.STL_FILES if "inlet" in f][0]
-        # find all the outlet stl file append in list
+        # Find the main aorta STL file
+        self.MAIN_AORTA_STL = os.path.basename([f for f in self.STL_FILES if "wall" in f][0])
+
+        # Find the inlet STL file
+        self.INLET_STL = os.path.basename([f for f in self.STL_FILES if "inlet" in f][0])
+
+        # Find all the outlet STL files and append them to a list
         self.OUTLET_STL = sorted(
-            [f for f in self.STL_FILES if "outlet" in f],
+            [os.path.basename(f) for f in self.STL_FILES if "outlet" in f],
             key=lambda x: int(re.findall(r"\d+", x)[0])
         )
 
@@ -47,111 +47,147 @@ class BoundaryConditionSetup():
         else:
             print("ERROR: inlet_type not found")
             sys.exit()
-
-
-    def write_U_file(self):
-        # write U file based on initial condition 
-        template = """/*--------------------------------*- C++ -*----------------------------------*\
+    
+    def _get_foam_file_header(self, object_class, object_name):
+        """
+        Generate the FoamFile header dynamically based on the OpenFOAM version.
+        """
+        return f"""/*--------------------------------*- C++ -*----------------------------------*\\
   =========                 |
   \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
    \\    /   O peration     | Website:  https://openfoam.org
-    \\  /    A nd           | Version:  10
+    \\  /    A nd           | Version:  {self.openfoam_version}
      \\/     M anipulation  |
-\*---------------------------------------------------------------------------*/
+\\*---------------------------------------------------------------------------*/
 FoamFile
 {{
     version     2.0;
     format      ascii;
-    class       volVectorField;
+    class       {object_class};
     location    "0";
-    object      U;  
+    object      {object_name};
 }}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+"""
 
-dimensions      [0 1 -1 0 0 0 0];
-
-internalField   uniform (0 0 0);
-
-boundaryField
-{{
-    {inlet_block}
-    {outlet_block}
-    {wall_aorta_block}
-}}
-// ************************************************************************* """
-            
+    def write_U_file(self):
+        """
+        Write the U file dynamically based on OpenFOAM version.
+        """
+        foam_file_header = self._get_foam_file_header("volVectorField", "U")
         if self.INLET_TYPE_U == "timeVaryingMappedFixedValue":
             inlet_block = """
-            {inlet}
+        {inlet}
         {{
             type            timeVaryingMappedFixedValue;
             offset          (0 0 0);
-            setAverage       off;
-        }}"""
-            
+            setAverage      off;
+        }}
+    """.format(inlet=self.INLET_STL.split(".")[0])
         else:
             print("ERROR: inlet_type not found")
             sys.exit()
 
-        inlet_block = inlet_block.format(inlet=self.INLET_STL.split(".")[0])    
-
         # ------------------------------------------------------------------------ #
-        if self.BC_OUTLET == "ZERO_GRADIENT":  
+        if self.BC_OUTLET == "ZERO_GRADIENT":
             outlet_block_template = """
-            {outlet}
+        {outlet}
         {{
             type            zeroGradient;
         }}
-        """
+    """
         elif self.BC_OUTLET == "3EWINDKESSEL":
             outlet_block_template = """
-            {outlet}
+        {outlet}
         {{
             type            pressureInletOutletVelocity;
             phi             phi;
             value           uniform (0 0 0);
         }}
-        """
+    """
         else:
             print("ERROR: outlet_type not found")
             sys.exit()
-        
+
         outlet_block = ""
         for outlet in self.OUTLET_STL:
-            # remove .stl 
             outlet_name = outlet.split(".")[0]
-            # append the outlet_block
             outlet_block += outlet_block_template.format(outlet=outlet_name)
 
-        # -------------------------------------------------------------------------- # 
+        # -------------------------------------------------------------------------- #
         wall_aorta_block = """
-            {wall}
+        {wall}
         {{
             type            noSlip;
-        }}"""
+        }}
+    """.format(wall=self.MAIN_AORTA_STL.split(".")[0])
 
-        wall_aorta_block = wall_aorta_block.format(wall=self.MAIN_AORTA_STL.split(".")[0])
-        # write U file
+        # Template for the U file
+        template = f"""{foam_file_header}
+
+    dimensions      [0 1 -1 0 0 0 0];
+
+    internalField   uniform (0 0 0);
+
+    boundaryField
+    {{
+        {inlet_block}
+        {outlet_block}
+        {wall_aorta_block}
+    }}
+    // ************************************************************************* //
+    """
+
+        # Write the U file
         with open(os.path.join(self.DIRECTORY, "0", "U"), "w") as f:
-            f.write(template.format(inlet_block=inlet_block, outlet_block=outlet_block, wall_aorta_block=wall_aorta_block))
+            f.write(template)
 #------------------------------------------------------------------------------------------------------------------
 
     def write_p_file(self):
-        # Template for p file
-        template = """/*--------------------------------*- C++ -*----------------------------------*\
-  =========                 |
-  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
-   \\    /   O peration     | Website:  https://openfoam.org
-    \\  /    A nd           | Version:  10
-     \\/     M anipulation  |
-\*---------------------------------------------------------------------------*/
-FoamFile
-{{
-    version     2.0;
-    format      ascii;
-    class       volScalarField;
-    location    "0";
-    object      p;  
-}}
+        """
+        Write the p file dynamically based on OpenFOAM version.
+        """
+        # Boundary condition for inlet
+        inlet_block = """
+    {inlet}
+    {{
+        type            zeroGradient;
+    }}
+    """.format(inlet=self.INLET_STL.split(".")[0])  # Extract only the file name without path
+
+        # Boundary condition for outlets
+        outlet_block_template = """
+    {outlet_name}
+    {{
+        type            zeroGradient;
+    }}
+    """
+        outlet_block_template_v2 = """
+    {outlet_name}
+    {{
+        type            fixedValue;
+        value           uniform 0; 
+    }}
+    """
+
+        outlet_block = ""
+        for outlet in self.OUTLET_STL:
+            outlet_name = outlet.split(".")[0]  # Extract only the file name without path
+            if outlet == self.OUTLET_STL[-1]:  # Special handling for the last outlet
+                outlet_block += outlet_block_template_v2.format(outlet_name=outlet_name)
+            else:
+                outlet_block += outlet_block_template.format(outlet_name=outlet_name)
+
+        # Boundary condition for wall
+        wall_block = """
+    {wall}
+    {{
+        type            zeroGradient;
+    }}
+    """.format(wall=self.MAIN_AORTA_STL.split(".")[0])  # Extract only the file name without path
+
+        foam_file_header = self._get_foam_file_header("volScalarField", "p")
+        template = f"""{foam_file_header}
 
 dimensions      [0 2 -2 0 0 0 0];
 
@@ -164,122 +200,18 @@ boundaryField
     {wall_block}
 }}
 // ************************************************************************* """
-        if self.BC_OUTLET == "3EWINDKESSEL":
-            # Boundary condition for inlet
-            inlet_block = """
-            {inlet}
-            {{
-                type            zeroGradient;
-            }}
-            """.format(inlet=self.INLET_STL.split(".")[0])
-
-            outlet_block_template = """
-            {outlet_name}
-            {{
-                type            {outlet_type};
-                index           {index};
-                value           uniform 0;
-            }}
-            """
-            
-            outlet_blocks = ""
-            # sort self.OUTLET_STL
-            for outlet in range(0,len(self.OUTLET_STL)):
-                outletName = self.OUTLET_STL[outlet].split(".")[0]
-                outlet_type = "WKBC"
-                index = outlet
-                outlet_blocks += outlet_block_template.format(outlet_name=outletName, outlet_type=outlet_type, index=index)
-
-        elif self.BC_OUTLET == "ZERO_GRADIENT":
-            # Boundary condition for inlet
-            inlet_block = """
-            {inlet}
-            {{
-                type            zeroGradient;
-            }}
-            """.format(inlet=self.INLET_STL.split(".")[0])
-
-            outlet_block_template = """
-            {outlet_name}
-            {{
-                type            zeroGradient;
-            }}
-
-            """
-
-            outlet_block_template_v2 = """
-            {outlet_name}
-            {{
-                type            fixedValue;
-                value           uniform 0; 
-            }}
-            """
-
-            outlet_blocks = ""
-            for outlet in self.OUTLET_STL:
-                outletName = outlet.split(".")[0]
-                if outlet is self.OUTLET_STL[-1]:
-                    outlet_blocks += outlet_block_template_v2.format(outlet_name=outletName)
-                else:
-                    outlet_blocks += outlet_block_template.format(outlet_name=outletName)
-
-        else:
-            print("ERROR: outlet_type not found")
-            sys.exit()        
-
-        # Boundary condition for wall
-        wall_block = """
-            {wall}
-            {{
-                type            zeroGradient;
-            }}
-        """.format(wall=self.MAIN_AORTA_STL.split(".")[0])
         
-
-        # Combine all blocks into the final template
-        p_file_content = template.format(
-            inlet_block=inlet_block,
-            outlet_block = outlet_blocks,
-            wall_block=wall_block
-        )
-
         # Write to file
         with open(os.path.join(self.DIRECTORY, "0", "p"), "w") as f:
-            f.write(p_file_content)
+            f.write(template)
 
 #------------------------------------------------------------------------------------------------------------------
 
     def write_nut_file(self):
-        # Template for nut file
-        template = """/*--------------------------------*- C++ -*----------------------------------*\
-  =========                 |
-  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
-   \\    /   O peration     | Website:  https://openfoam.org
-    \\  /    A nd           | Version:  10
-     \\/     M anipulation  |
-\*---------------------------------------------------------------------------*/
-FoamFile
-{{
-    version     2.0;
-    format      ascii;
-    class       volScalarField;
-    location    "0";
-    object      nut;  
-}}
-
-dimensions      [0 2 -1 0 0 0 0];
-
-internalField   uniform 0;
-
-boundaryField
-{{
-    {inlet_block_nut}
-    {outlet_block_nut}
-    {wall_block_nut}
-}}
-// ************************************************************************* """
-            
-            
+        """
+        Write the nut file dynamically based on OpenFOAM version.
+        """
+                   
         # Boundary condition for inlet
         inlet_block_nut = """
         {inlet}
@@ -293,11 +225,11 @@ boundaryField
             type            zeroGradient;
         }}"""
         
-        outlet_blocks_nut = ""
+        outlet_block_nut = ""
         # sort self.OUTLET_STL
         for outlet in range(0, len(self.OUTLET_STL)):
             outletName = self.OUTLET_STL[outlet].split(".")[0]
-            outlet_blocks_nut += outlet_block_nut_template.format(outlet_name=outletName)
+            outlet_block_nut += outlet_block_nut_template.format(outlet_name=outletName)
 
         # Boundary condition for wall
         
@@ -319,15 +251,23 @@ boundaryField
             type            zeroGradient;
         }}""".format(wall=self.MAIN_AORTA_STL.split(".")[0])
  
-        # Combine all blocks into the final template
-        nut_file_content = template.format(
-            inlet_block_nut = inlet_block_nut,
-            outlet_block_nut = outlet_blocks_nut,
-            wall_block_nut = wall_block_nut
-        )
+        foam_file_header = self._get_foam_file_header("volScalarField", "nut")
+        template = f"""{foam_file_header}
+dimensions      [0 2 -1 0 0 0 0];
+
+internalField   uniform 0;
+
+boundaryField
+{{
+    {inlet_block_nut}
+    {outlet_block_nut}
+    {wall_block_nut}
+}}
+// ************************************************************************* 
+"""
         # Write to file
         with open(os.path.join(self.DIRECTORY, "0", "nut"), "w") as f:
-            f.write(nut_file_content)
+            f.write(template)
 
 #------------------------------------------------------------------------------------------------------------------
             
@@ -366,25 +306,12 @@ boundaryField
 }}
 """.format(wall=self.MAIN_AORTA_STL.split(".")[0])
         
+        foam_file_header = self._get_foam_file_header("volScalarField", "k")
         # Template for k file
-        template = """/*--------------------------------*- C++ -*----------------------------------*\
-  =========                 |
-  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
-   \\    /   O peration     | Website:  https://openfoam.org
-    \\  /    A nd           | Version:  10
-     \\/     M anipulation  |
-\*---------------------------------------------------------------------------*/
-FoamFile
-{{
-    version     2.0;
-    format      ascii;
-    class       volScalarField;
-    location    "0";
-    object      k;
-}}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+        template = """{header}
 
 kInlet          {kInlet};
+
 intensityInlet  {intensityInlet};
 
 dimensions      [0 2 -2 0 0 0 0];
@@ -398,8 +325,7 @@ boundaryField
     {wall_blockk}
 }}
 
-// ************************************************************************* """.format(kInlet=self.INITIAL_CONDITION_K['kInlet'], intensityInlet=self.INITIAL_CONDITION_K['intensityInlet'], inlet_blockk=inlet_blockk, outlet_blockk=outlet_blockks, wall_blockk=wall_blockk)
-	
+// ************************************************************************* """.format(header=foam_file_header, kInlet=self.INITIAL_CONDITION_K['kInlet'], intensityInlet=self.INITIAL_CONDITION_K['intensityInlet'], inlet_blockk=inlet_blockk, outlet_blockk=outlet_blockks, wall_blockk=wall_blockk)
         # Write to file
         with open(os.path.join(self.DIRECTORY, "0", "k"), "w") as f:
             f.write(template)
@@ -407,8 +333,6 @@ boundaryField
 #------------------------------------------------------------------------------------------------------------------
             
     def write_omega_file(self):
-        
-
         # Boundary condition for inlet
         inlet_blocko = """    {inlet}
 {{
@@ -438,21 +362,9 @@ boundaryField
 }}
 """.format(wall=self.MAIN_AORTA_STL.split(".")[0])
         
+        foam_file_header = self._get_foam_file_header("volScalarField", "omega")
         # Template for omega file
-        template = """/*--------------------------------*- C++ -*----------------------------------*\
-  =========                 |
-  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
-   \\    /   O peration     | Website:  https://openfoam.org
-    \\  /    A nd           | Version:  10
-     \\/     M anipulation  |
-\*---------------------------------------------------------------------------*/
-FoamFile
-{{
-    format      ascii;
-    class       volScalarField;
-    object      omega;
-}}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+        template = """{header}
 
 omegaInlet      {omegaInlet};
 
@@ -467,7 +379,7 @@ boundaryField
     {wall_blocko}
 }}
 
-// ************************************************************************* """.format(omegaInlet=self.INITIAL_CONDITION_OMEGA['omegaInlet'], inlet_blocko=inlet_blocko, outlet_blocko=outlet_blockos, wall_blocko=wall_blocko)
+// ************************************************************************* """.format(header=foam_file_header ,omegaInlet=self.INITIAL_CONDITION_OMEGA['omegaInlet'], inlet_blocko=inlet_blocko, outlet_blocko=outlet_blockos, wall_blocko=wall_blocko)
 	
         # Write to file
         with open(os.path.join(self.DIRECTORY, "0", "omega"), "w") as f:
@@ -476,21 +388,11 @@ boundaryField
 #------------------------------------------------------------------------------------------------------------------
     
     def write_sampleDict_file(self):
+
+        # FoamFile header
+        foam_file_header = self._get_foam_file_header("dictionary", "sampleDict")
         # Template for sampleDict file
-        template = """/*--------------------------------*- C++ -*----------------------------------*\
-  =========                 |
-  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
-   \\    /   O peration     | Website:  https://openfoam.org
-    \\  /    A nd           | Version:  10
-     \\/     M anipulation  |
-\*---------------------------------------------------------------------------*/
-FoamFile
-{{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    object      sampleDict;
-}}
+        template = """{header}
 
 interpolationScheme cellPoint;
 setFormat       raw;
@@ -513,4 +415,4 @@ surfaces
 """
         # write sampleDict file
         with open(os.path.join(self.DIRECTORY, "system", "sampleDict"), "w") as f:
-            f.write(template.format(inlet=self.INLET_STL))    
+            f.write(template.format(header = foam_file_header,inlet=self.INLET_STL))

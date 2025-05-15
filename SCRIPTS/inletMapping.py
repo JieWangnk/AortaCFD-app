@@ -3,6 +3,9 @@ import re
 import glob
 import numpy as np
 from scipy.special import jv
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 
 class InletMapping:
@@ -55,24 +58,26 @@ class InletMapping:
         self.nu = kwargs.get("nu", 3.3e-6)  # default blood kinematic viscosity
         self.delta_p = kwargs.get("delta_p", 1.0)  # default pressure gradient amplitude if needed
 
+        VALID_PROFILES = ['plug', 'parabolic', 'womersley']
+        VALID_DATA_TYPES = ['flowrate', 'velocity']
+
+        if self.profile not in VALID_PROFILES:
+            raise ValueError(f"Invalid profile: {self.profile}. Must be one of {VALID_PROFILES}.")
+        if self.data_type not in VALID_DATA_TYPES:
+            raise ValueError(f"Invalid data_type: {self.data_type}. Must be one of {VALID_DATA_TYPES}.")
+
+    def compute_cross_sectional_area(self):
+        return np.pi * (self.radius * self.scale)**2
+
     def read_csv_file(self, file_name):
-        # Now skip the first line with "Time,Flowrate"
-        data = np.genfromtxt(file_name, delimiter=',', skip_header=1)
-
-        if data.ndim < 2 or data.shape[1] < 2:
-            raise ValueError(f"CSV file {file_name} must have at least 2 columns.")
-
-        time = data[:, 0]
-        yval = data[:, 1]
-
-        if len(time) < 2:
-            raise ValueError(f"CSV file {file_name} seems too short or badly formatted.")
-
-        cardiac_cycle = time[-1] - time[0]
-        print(f"Read {len(time)} time steps from {time[0]} to {time[-1]} (s)")
-        print(f"Data type = {self.data_type}")
-        return time, yval, cardiac_cycle
-
+        try:
+            data = np.genfromtxt(file_name, delimiter=',', skip_header=1)
+            if data.ndim < 2 or data.shape[1] < 2:
+                raise ValueError(f"CSV file {file_name} must have at least 2 columns.")
+        except Exception as e:
+            logging.error(f"Error reading CSV file {file_name}: {e}")
+            raise
+        return data[:, 0], data[:, 1], data[-1, 0] - data[0, 0]
 
     def read_points_file(self, file_name):
         """
@@ -130,8 +135,7 @@ class InletMapping:
         If CSV data is already velocity (m/s), just return it as is.
         """
         if self.data_type == 'flowrate':
-            cross_area = np.pi * (self.radius * self.scale)**2
-            return data_val / cross_area
+            return data_val / self.compute_cross_sectional_area()
         elif self.data_type == 'velocity':
             # The CSV data is already velocity
             return data_val
@@ -265,6 +269,9 @@ class InletMapping:
         self.times = times
         self.csv_vals = yval
         self.cardiac_cycle = cycle
+
+        logging.info(f"Read {len(times)} time steps from {times[0]} to {times[-1]} (s)")
+        logging.info(f"Data type = {self.data_type}")
 
         # 4) Create a subfolder to hold time-varying velocity files
         parent_dir = os.path.join(

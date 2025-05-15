@@ -2,6 +2,9 @@ import os
 import re
 from stl import mesh
 import numpy as np
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 def is_binary_file(file_path):
     """Check if the given file is binary."""
@@ -15,56 +18,56 @@ def is_binary_file(file_path):
     return False
 
 class GeometryAnalyzer:
-    def __init__(self, DIRECTORY, geometry_case, refinement="coarse",refinement_levels=None,snappy_settings=None):
-        self.DIRECTORY = DIRECTORY
+    def __init__(self, DIRECTORY, geometry_case, refinement, refinement_levels, snappy_settings, stl_files, geometry_path, expansion_factor=0.02):
+        self.directory = DIRECTORY
         self.geometry_case = geometry_case
-        self.geometry_path = os.path.join("CAD", geometry_case)
-
-        # Gather all .stl files in the geometry path
-        all_stl_files = [f for f in os.listdir(self.geometry_path) if f.endswith('.stl')]
-
-        # Sort them so that 'wall' -> 'inlet' -> 'outletN' in ascending numeric order
-        self.stl_files = sorted(
-            all_stl_files,
-            key=lambda x: (
-                0 if "wall" in x else (1 if "inlet" in x else 2),
-                int(re.findall(r"\d+", x)[0]) if "outlet" in x else 0
-            )
-        )
-
-        # Read refinement and snappy parameters from userParameter_LL
-        self.refinement = refinement_levels[refinement]
-        self.expansion_factor = snappy_settings["expansionFactor"]
+        self.refinement = refinement
+        self.refinement_levels = refinement_levels[refinement]
+        self.snappy_settings = snappy_settings
+        self.stl_files = stl_files  # Use the rotated STL files
+        self.geometry_path = geometry_path  # Path to the directory containing the rotated STL files
+        self.expansion_factor = expansion_factor  # Expansion factor for bounding box
         self.feature_level = snappy_settings["featureLevel"]
         self.surface_refinement_levels = snappy_settings["surfaceRefinementLevels"]
-        self.addLayers = snappy_settings["addLayer"]
-        self.nCellsBetweenLevels = snappy_settings["nCellsBetweenLevels"]
-        self.resloveFeatureAngle = snappy_settings["resolveFeatureAngle"]
-        self.nSmoothPatch = snappy_settings["nSmoothPatch"]
         self.region_refinement_level = snappy_settings["regionRefinementLevel"]
         self.region_refinement_box = snappy_settings["regionRefinementBox"]
+        self.resloveFeatureAngle = snappy_settings["resolveFeatureAngle"]
+        self.nSmoothPatch = snappy_settings["nSmoothPatch"]
+        self.addLayers = snappy_settings["addLayer"]
 
-        # The folder name is the geometry name
-        self.geometry_name = os.path.basename(self.geometry_path)
+        # Set main_aorta_stl to the correct STL file (e.g., wall_aorta.stl)
+        self.main_aorta_stl = next((f for f in stl_files if "wall" in f), stl_files[0])
+        
 
-        # Find the main aorta STL file (the one containing "wall")
-        self.main_aorta_stl = [f for f in self.stl_files if "wall" in f][0]
+    def sort_stl_files(self, files):
+        def sort_key(x):
+            if "wall" in x:
+                return (0, 0)  # Highest priority
+            elif "inlet" in x:
+                return (1, 0)  # Second priority
+            elif "outlet" in x:
+                match = re.findall(r"\d+", x)  # Extract numbers from the file name
+                return (2, int(match[0]) if match else 0)  # Sort outlets numerically
+            return (3, 0)  # Default priority for non-matching files
+
+        return sorted(files, key=sort_key)
 
     def extract_vertices_from_stl(self, stl_file):
-        stl_mesh = mesh.Mesh.from_file(stl_file)
-        vertices = stl_mesh.vectors.reshape(-1, 3)
-        # Get unique vertices to avoid duplicates
-        unique_vertices = np.unique(vertices, axis=0)
-        return unique_vertices
+        try:
+            stl_mesh = mesh.Mesh.from_file(stl_file)
+            vertices = stl_mesh.vectors.reshape(-1, 3)
+            unique_vertices = np.unique(vertices, axis=0)
+            return unique_vertices
+        except Exception as e:
+            raise RuntimeError(f"Error processing STL file {stl_file}: {e}")
 
     def get_max_vertex(self):
         max_x, max_y, max_z = float('-inf'), float('-inf'), float('-inf')
         min_x, min_y, min_z = float('inf'), float('inf'), float('inf')
 
         for stl_file in self.stl_files:
-            full_path = os.path.join(self.geometry_path, stl_file)
+            full_path = os.path.join(self.geometry_path, stl_file)  # Use geometry_path
             vertices = self.extract_vertices_from_stl(full_path)
-
             for vertex in vertices:
                 x, y, z = vertex
                 max_x = max(max_x, x)
@@ -74,7 +77,7 @@ class GeometryAnalyzer:
                 min_y = min(min_y, y)
                 min_z = min(min_z, z)
 
-        # Expand bounding box by a factor (2% default in your code)
+        # Expand bounding box by the expansion factor
         x_range = max_x - min_x
         y_range = max_y - min_y
         z_range = max_z - min_z
@@ -90,21 +93,33 @@ class GeometryAnalyzer:
         return (min_x, min_y, min_z), (max_x, max_y, max_z)
 
     def calculate_cells(self, min_vertex, max_vertex):
-        x_cells = int((max_vertex[0] - min_vertex[0]) / self.refinement)
-        y_cells = int((max_vertex[1] - min_vertex[1]) / self.refinement)
-        z_cells = int((max_vertex[2] - min_vertex[2]) / self.refinement)
+        x_cells = int((max_vertex[0] - min_vertex[0]) / self.refinement_levels)
+        y_cells = int((max_vertex[1] - min_vertex[1]) / self.refinement_levels)
+        z_cells = int((max_vertex[2] - min_vertex[2]) / self.refinement_levels)
         return x_cells, y_cells, z_cells
 
     def load_mesh_points(self):
-        all_points = np.empty((0, 3))
+        all_points = []
         for stl_file in self.stl_files:
             full_path = os.path.join(self.geometry_path, stl_file)
+            logging.info(f"Loading STL file: {full_path}")
             vertices = self.extract_vertices_from_stl(full_path)
-            all_points = np.concatenate([all_points, vertices])
+            all_points.append(vertices)
+        all_points = np.vstack(all_points)
         centroid = np.mean(all_points, axis=0)
         return all_points, centroid
 
     def get_internal_point(self, offset_factor=0.2):
+        """
+        Calculate an internal point within the geometry by moving inward
+        from the farthest vertex toward the centroid.
+
+        Args:
+            offset_factor (float): Factor to scale the inward movement.
+
+        Returns:
+            str: Internal point formatted as "(x y z)".
+        """
         # Load the STL file and compute the centroid
         all_points, centroid = self.load_mesh_points()
 
@@ -294,9 +309,12 @@ mergeTolerance 1E-6;
         features_block = ""
         refinementSurface_block = ""
 
-        for stl_file in self.stl_files:
-            stl_file_name = stl_file.split(".")[0]
-            eMesh_file = stl_file.replace(".stl", ".eMesh")
+        # Sort STL files before processing
+        sorted_stl_files = self.sort_stl_files(self.stl_files)
+
+        for stl_file in sorted_stl_files:
+            stl_file_name = os.path.basename(stl_file).split(".")[0]  # Extract file name without extension
+            eMesh_file = os.path.basename(stl_file).replace(".stl", ".eMesh")  # Extract eMesh file name
 
             # Default feature/refinement levels
             current_feature_level = self.feature_level
@@ -308,18 +326,12 @@ mergeTolerance 1E-6;
                 max_ref += 1
 
             # Build geometry block
-            stl_block += f"""
-        {stl_file}
-        {{
-            type triSurfaceMesh;
-            name {stl_file_name};
-        }}
-        """
+            stl_block += self.build_geometry_block(stl_file, stl_file_name)
 
             # Build features block
             features_block += f"""
         {{file "{eMesh_file}"; level {current_feature_level};}}   
-            """
+        """
 
             # Build refinementSurfaces block
             refinementSurface_block += f"""
@@ -327,7 +339,7 @@ mergeTolerance 1E-6;
         {{
             level ({min_ref} {max_ref});
         }}
-            """
+        """
 
         # Region-based refinement block
         if self.region_refinement_level is not None:
@@ -340,12 +352,12 @@ mergeTolerance 1E-6;
                 levels ((1E15 {self.region_refinement_level}));
             }}
         }};
-            """
+        """
         else:
             region_refinement_block = """
         refinementRegions
         {};
-            """
+        """
 
         # If user hasn't defined a region_refinement_box, use bounding box
         if self.region_refinement_box is None:
@@ -363,19 +375,22 @@ mergeTolerance 1E-6;
             resloveFeatureAngle=self.resloveFeatureAngle,
             nSmoothPatch=self.nSmoothPatch,
             region_refinement_box=self.region_refinement_box,
-            main_aorta_stl=self.main_aorta_stl.split(".")[0],
+            main_aorta_stl=os.path.basename(self.main_aorta_stl).split(".")[0],
             addLayers=self.addLayers,
             internal_point2=self.get_internal_point(offset_factor=0.2)
         )
         return snappy_hex_mesh_dict_content
 
     def generate_surfaceFeaturesDict(self):
+        # Sort STL files before processing
+        sorted_stl_files = self.sort_stl_files(self.stl_files)
+
         surfaces_block = ""
-        for stl_file in self.stl_files:
-            surfaces_block += f"""
-        "{stl_file}"
-    """
-        content = """
+        for stl_file in sorted_stl_files:
+            stl_file_name = os.path.basename(stl_file)  # Extract only the file name
+            surfaces_block += f'    "{stl_file_name}"\n'
+
+        content = f"""
 FoamFile
 {{
     version     2.0;
@@ -384,15 +399,15 @@ FoamFile
     location    "system";
     object      surfaceFeaturesDict;
 }}
-surfaces ( {surfaces_block} );
+surfaces ( 
+{surfaces_block} );
 includedAngle 150;
 """
-        content = content.format(surfaces_block=surfaces_block)
         return content
 
     def write_surfaceFeaturesDict(self):
         content = self.generate_surfaceFeaturesDict()
-        output_dir = os.path.join(self.DIRECTORY, "system")
+        output_dir = os.path.join(self.directory, "system")
         os.makedirs(output_dir, exist_ok=True)
         output_path = os.path.join(output_dir, "surfaceFeaturesDict")
 
@@ -402,20 +417,30 @@ includedAngle 150;
 
     def write_blockMeshDict(self):
         content = self.generate_blockMeshDict_bounds()
-        output_dir = os.path.join(self.DIRECTORY, "system")
+        output_dir = os.path.join(self.directory, "system")
         os.makedirs(output_dir, exist_ok=True)
         output_path = os.path.join(output_dir, "blockMeshDict")
 
         with open(output_path, 'w') as f:
             f.write(content)
-        print(f"blockMeshDict written to {output_path}")
+        logging.info(f"blockMeshDict written to {output_path}")
 
     def write_snappyHexMeshDict(self):
         content = self.generate_snappyHexMeshDict()
-        output_dir = os.path.join(self.DIRECTORY, "system")
+        output_dir = os.path.join(self.directory, "system")
         os.makedirs(output_dir, exist_ok=True)
         output_path = os.path.join(output_dir, "snappyHexMeshDict")
 
         with open(output_path, 'w') as f:
             f.write(content)
         print(f"snappyHexMeshDict written to {output_path}")
+
+    def build_geometry_block(self, stl_file, stl_file_name):
+        stl_file_name_only = os.path.basename(stl_file)  # Extract only the file name
+        return f"""
+        {stl_file_name_only}
+        {{
+            type triSurfaceMesh;
+            name {stl_file_name};
+        }}
+    """

@@ -1,15 +1,16 @@
 import os 
 
 class SimulationSetup:
-    def __init__(self,DIRECTORY ,SIMULATION_CONTROL):
+    def __init__(self, DIRECTORY, SIMULATION_CONTROL, OPENFOAM_VERSION):
         self.DIRECTORY = DIRECTORY
         self.SIMULATION_CONTROL = SIMULATION_CONTROL
+        self.openfoam_version = OPENFOAM_VERSION  # Store the OpenFOAM version
 
     def write_controlDict(self, filename="controlDict"):
         template = '''/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\\\    /   O peration     | Version:  5                                     |
+|  \\\\    /   O peration     | Version:  {openfoam_version}                              |
 |   \\\\  /    A nd           | Web:      www.OpenFOAM.org                      |
 |    \\\\/     M anipulation  |                                                 |
 \\*---------------------------------------------------------------------------*/
@@ -55,7 +56,7 @@ runTimeModifiable {runTimeModifiable};
 
 adjustTimeStep  true;
 
-maxCo   1;
+maxCo           1;
 
 functions
 {{
@@ -72,7 +73,11 @@ functions
             function_block += template_v2.format(function=f)
 
         # Use the template to fill in the variables and write to the file
-        with open(os.path.join(self.DIRECTORY,"system","controlDict"), 'w') as f:
-            f.write(template.format(function_block=function_block,**self.SIMULATION_CONTROL["controlDict"]))
-        print("controlDict file has been written")
-        
+        with open(os.path.join(self.DIRECTORY, "system", filename), 'w') as f:
+            f.write(template.format(
+                openfoam_version=self.openfoam_version,
+                function_block=function_block,
+                **self.SIMULATION_CONTROL["controlDict"]
+            ))
+        print(f"{filename} file has been written")
+
