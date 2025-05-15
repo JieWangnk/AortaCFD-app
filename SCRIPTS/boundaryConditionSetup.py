@@ -148,43 +148,76 @@ FoamFile
         Write the p file dynamically based on OpenFOAM version.
         """
         # Boundary condition for inlet
-        inlet_block = """
-    {inlet}
-    {{
-        type            zeroGradient;
-    }}
-    """.format(inlet=self.INLET_STL.split(".")[0])  # Extract only the file name without path
+        if self.BC_OUTLET == "3EWINDKESSEL":
+            # Boundary condition for inlet
+            inlet_block = """
+            {inlet}
+            {{
+                type            zeroGradient;
+            }}
+            """.format(inlet=self.INLET_STL.split(".")[0])
 
-        # Boundary condition for outlets
-        outlet_block_template = """
-    {outlet_name}
-    {{
-        type            zeroGradient;
-    }}
-    """
-        outlet_block_template_v2 = """
-    {outlet_name}
-    {{
-        type            fixedValue;
-        value           uniform 0; 
-    }}
-    """
+            outlet_block_template = """
+            {outlet_name}
+            {{
+                type            {outlet_type};
+                index           {index};
+                value           uniform 0;
+            }}
+            """
+            
+            outlet_block = ""
+            # sort self.OUTLET_STL
+            for outlet in range(0,len(self.OUTLET_STL)):
+                outletName = self.OUTLET_STL[outlet].split(".")[0]
+                outlet_type = "WKBC"
+                index = outlet
+                outlet_block += outlet_block_template.format(outlet_name=outletName, outlet_type=outlet_type, index=index)
 
-        outlet_block = ""
-        for outlet in self.OUTLET_STL:
-            outlet_name = outlet.split(".")[0]  # Extract only the file name without path
-            if outlet == self.OUTLET_STL[-1]:  # Special handling for the last outlet
-                outlet_block += outlet_block_template_v2.format(outlet_name=outlet_name)
-            else:
-                outlet_block += outlet_block_template.format(outlet_name=outlet_name)
+        elif self.BC_OUTLET == "ZERO_GRADIENT":
+            # Boundary condition for inlet
+            inlet_block = """
+            {inlet}
+            {{
+                type            zeroGradient;
+            }}
+            """.format(inlet=self.INLET_STL.split(".")[0])
+
+            outlet_block_template = """
+            {outlet_name}
+            {{
+                type            zeroGradient;
+            }}
+
+            """
+
+            outlet_block_template_v2 = """
+            {outlet_name}
+            {{
+                type            fixedValue;
+                value           uniform 0; 
+            }}
+            """
+
+            outlet_block = ""
+            for outlet in self.OUTLET_STL:
+                outletName = outlet.split(".")[0]
+                if outlet is self.OUTLET_STL[-1]:
+                    outlet_block += outlet_block_template_v2.format(outlet_name=outletName)
+                else:
+                    outlet_block += outlet_block_template.format(outlet_name=outletName)
+
+        else:
+            print("ERROR: outlet_type not found")
+            sys.exit()        
 
         # Boundary condition for wall
         wall_block = """
-    {wall}
-    {{
-        type            zeroGradient;
-    }}
-    """.format(wall=self.MAIN_AORTA_STL.split(".")[0])  # Extract only the file name without path
+            {wall}
+            {{
+                type            zeroGradient;
+            }}
+        """.format(wall=self.MAIN_AORTA_STL.split(".")[0])
 
         foam_file_header = self._get_foam_file_header("volScalarField", "p")
         template = f"""{foam_file_header}
