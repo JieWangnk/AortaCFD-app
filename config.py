@@ -40,7 +40,7 @@ CONFIG = {
         "BC_OUTLET": "3EWINDKESSEL", # only two options: "3EWINDKESSEL", "ZEROGRADIENT"
         "INLET_DATA_FILE": "BPM75.csv",
         "INLET_DATA_TYPE": "velocity", # only two options: "flowRate", "velocity"
-        "INLET_PROFILE": "parabolic", # only three profiles: "plug", "parabolic" and "womersley"
+        "INLET_PROFILE": "womersley", # only three profiles: "plug", "parabolic" and "womersley"
         "INLET_ORIENTATION": "out",
         "WK_SETTING": {
             "percentage": 30,        

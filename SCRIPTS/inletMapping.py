@@ -168,15 +168,46 @@ class InletMapping:
         rel = dist / scaled_radius
         return max(0.0, 1.0 - rel**2)
 
+    def womersley_profile(self, r, t, omega, alpha):
+        """
+        Compute the Womersley velocity profile at a given radius `r` and time `t`.
+        Args:
+            r (float): Radial distance from the center (0 <= r <= R).
+            t (float): Time (s).
+            omega (float): Angular frequency of the pulsatile flow (rad/s).
+            alpha (float): Womersley number.
+        Returns:
+            float: Velocity at radius `r` and time `t`.
+        """
+        # Compute the complex Womersley profile
+        R = self.radius * self.scale  # Scaled radius
+        z = 1j**1.5 * alpha * r / R  # Argument for Bessel functions
+        z0 = 1j**1.5 * alpha  # Argument for centerline velocity
+
+        # Bessel function ratio
+        bessel_ratio = jv(0, z) / jv(0, z0)
+
+        # Oscillatory velocity profile
+        v_r_t = (1 - bessel_ratio) * np.exp(1j * omega * t)
+
+        # Return the real part (physical velocity)
+        return np.real(v_r_t)
+
     def generate_time_data(self, directory, time_array, points, normal_vec):
         """
         The main routine for generating velocity files (U_<time>),
         depending on 'plug', 'parabolic', or 'womersley' profile.
         """
+        # Compute Womersley parameters if the profile is 'womersley'
+        if self.profile == 'womersley':
+            cardiac_cycle = self.cardiac_cycle  # Period of the cardiac cycle (s)
+            omega = 2 * np.pi / cardiac_cycle  # Angular frequency (rad/s)
+            alpha = self.radius * np.sqrt(omega / self.nu)  # Womersley number
+            logging.info(f"Womersley number (alpha): {alpha:.4f}")
+
         for i in range(len(time_array)):
             t = time_array[i]
-            # CSV's second column is either flowRate(t) or velocity(t)
-            y_val = self.csv_vals[i]
+            y_val = self.csv_vals[i]  # CSV's second column is either flowRate(t) or velocity(t)
 
             # ---------- Determine a "base speed" -----------
             if self.profile == 'plug':
@@ -186,10 +217,8 @@ class InletMapping:
                 speed = self.parabolic_centerline_speed(y_val)
 
             elif self.profile == 'womersley':
-                # Simplified approach: treat CSV data as average flow or velocity
-                # and convert it to an effective centerline speed * parabolic shape
-                speed = self.parabolic_centerline_speed(y_val)
-                # For a truly advanced Womersley solution, you'd do a more elaborate approach.
+                # Use the Womersley profile to compute the centerline velocity
+                speed = self.parabolic_centerline_speed(y_val)  # Approximate centerline velocity
 
             else:
                 raise ValueError("profile must be 'plug', 'parabolic', or 'womersley'.")
@@ -205,9 +234,13 @@ class InletMapping:
                 if dist <= scaled_radius:
                     if self.profile == 'plug':
                         vx, vy, vz = self.get_velocity_components(speed, normal_vec)
-                    else:
+                    elif self.profile == 'parabolic':
                         shape_fac = self.parabolic_factor(dist)
                         local_speed = speed * shape_fac
+                        vx, vy, vz = self.get_velocity_components(local_speed, normal_vec)
+                    elif self.profile == 'womersley':
+                        # Compute the Womersley velocity at this radius and time
+                        local_speed = self.womersley_profile(dist, t, omega, alpha)
                         vx, vy, vz = self.get_velocity_components(local_speed, normal_vec)
                 else:
                     vx, vy, vz = 0.0, 0.0, 0.0
