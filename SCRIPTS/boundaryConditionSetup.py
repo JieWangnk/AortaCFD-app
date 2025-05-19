@@ -1,12 +1,17 @@
-import os 
+import os
 import re
 import sys
-from config import CONFIG 
+from config import CONFIG
 from SCRIPTS.patchProcessing import *
+from SCRIPTS.logger import Logger
 
-# create the intial condition for the case DIRECTORY/0
-class BoundaryConditionSetup():
-    def __init__(self, DIRECTORY, STL_FILES, BC_INLET, BC_OUTLET, INITIAL_CONDITION_U, INITIAL_CONDITION_p, INITIAL_CONDITION_K, INITIAL_CONDITION_OMEGA, SIMULATIONTYPE,openfoam_version):
+# Initialize the logger
+log_file_path = os.path.join(os.getcwd(), "boundaryConditionSetup.log")
+logger = Logger(log_file_path).get_logger()
+
+# Create the initial condition for the case DIRECTORY/0
+class BoundaryConditionSetup:
+    def __init__(self, DIRECTORY, STL_FILES, BC_INLET, BC_OUTLET, INITIAL_CONDITION_U, INITIAL_CONDITION_p, INITIAL_CONDITION_K, INITIAL_CONDITION_OMEGA, SIMULATIONTYPE, openfoam_version):
         self.DIRECTORY = DIRECTORY
         self.STL_FILES = STL_FILES
         self.BC_INLET = BC_INLET
@@ -17,37 +22,49 @@ class BoundaryConditionSetup():
         self.INITIAL_CONDITION_OMEGA = INITIAL_CONDITION_OMEGA
         self.SIMULATIONTYPE = SIMULATIONTYPE
         self.openfoam_version = openfoam_version  # Store the OpenFOAM version
-        
-        # Create an instance of PatchProcessing
-        inlet_radius_calculator = PatchProcessing(os.path.join(self.DIRECTORY, "constant", "triSurface"), self.STL_FILES,"inlet")
-        
-        # Get the inlet parameters from inletRadius module
-        self.inlet_center, self.inlet_radius, self.inlet_normal = inlet_radius_calculator.calculate_inlet_center_radius()
-        # Update the initial condition dictionary
-        self.INITIAL_CONDITION_U["inlet_radius"] = self.inlet_radius
-        self.INITIAL_CONDITION_U["inlet_center"] = self.inlet_center
-        self.INITIAL_CONDITION_U["inlet_normal"] = self.inlet_normal
 
-        # Find the main aorta STL file
-        self.MAIN_AORTA_STL = os.path.basename([f for f in self.STL_FILES if "wall" in f][0])
+        try:
+            # Create an instance of PatchProcessing
+            inlet_radius_calculator = PatchProcessing(
+                os.path.join(self.DIRECTORY, "constant", "triSurface"), self.STL_FILES, "inlet"
+            )
 
-        # Find the inlet STL file
-        self.INLET_STL = os.path.basename([f for f in self.STL_FILES if "inlet" in f][0])
+            # Get the inlet parameters from inletRadius module
+            self.inlet_center, self.inlet_radius, self.inlet_normal = inlet_radius_calculator.calculate_inlet_center_radius()
+            # Update the initial condition dictionary
+            self.INITIAL_CONDITION_U["inlet_radius"] = self.inlet_radius
+            self.INITIAL_CONDITION_U["inlet_center"] = self.inlet_center
+            self.INITIAL_CONDITION_U["inlet_normal"] = self.inlet_normal
 
-        # Find all the outlet STL files and append them to a list
-        self.OUTLET_STL = sorted(
-            [os.path.basename(f) for f in self.STL_FILES if "outlet" in f],
-            key=lambda x: int(re.findall(r"\d+", x)[0])
-        )
+            logger.info(f"Inlet parameters calculated: center={self.inlet_center}, radius={self.inlet_radius}, normal={self.inlet_normal}")
 
-        if self.BC_INLET == "TIMEVARYING":
-            self.INLET_TYPE_U = "timeVaryingMappedFixedValue"
-        elif self.BC_INLET == "STEADYSTATE":
-            self.INLET_TYPE_U = "timeVaryingMappedFixedValue"
-        else:
-            print("ERROR: inlet_type not found")
-            sys.exit()
-    
+            # Find the main aorta STL file
+            self.MAIN_AORTA_STL = os.path.basename([f for f in self.STL_FILES if "wall" in f][0])
+            logger.info(f"Main aorta STL file: {self.MAIN_AORTA_STL}")
+
+            # Find the inlet STL file
+            self.INLET_STL = os.path.basename([f for f in self.STL_FILES if "inlet" in f][0])
+            logger.info(f"Inlet STL file: {self.INLET_STL}")
+
+            # Find all the outlet STL files and append them to a list
+            self.OUTLET_STL = sorted(
+                [os.path.basename(f) for f in self.STL_FILES if "outlet" in f],
+                key=lambda x: int(re.findall(r"\d+", x)[0])
+            )
+            logger.info(f"Outlet STL files: {self.OUTLET_STL}")
+
+            # Set inlet type
+            if self.BC_INLET == "TIMEVARYING":
+                self.INLET_TYPE_U = "timeVaryingMappedFixedValue"
+            elif self.BC_INLET == "STEADYSTATE":
+                self.INLET_TYPE_U = "timeVaryingMappedFixedValue"
+            else:
+                logger.error("ERROR: inlet_type not found")
+                sys.exit(1)
+        except Exception as e:
+            logger.error(f"Error initializing BoundaryConditionSetup: {e}")
+            raise
+
     def _get_foam_file_header(self, object_class, object_name):
         """
         Generate the FoamFile header dynamically based on the OpenFOAM version.
@@ -74,30 +91,36 @@ FoamFile
         """
         Write the U file dynamically based on OpenFOAM version.
         """
-        foam_file_header = self._get_foam_file_header("volVectorField", "U")
-        if self.INLET_TYPE_U == "timeVaryingMappedFixedValue":
-            inlet_block = """
-        {inlet}
+        try:
+            foam_file_header = self._get_foam_file_header("volVectorField", "U")
+            
+            # Handle inlet type
+            if self.INLET_TYPE_U == "timeVaryingMappedFixedValue":
+                inlet_block = f"""
+        {self.INLET_STL.split(".")[0]}
         {{
             type            timeVaryingMappedFixedValue;
             offset          (0 0 0);
             setAverage      off;
         }}
-    """.format(inlet=self.INLET_STL.split(".")[0])
-        else:
-            print("ERROR: inlet_type not found")
-            sys.exit()
+    """
+                logger.info(f"Inlet type set to {self.INLET_TYPE_U} for {self.INLET_STL}")
+            else:
+                error_message = f"Unsupported inlet type: {self.INLET_TYPE_U}"
+                logger.error(error_message)
+                raise ValueError(error_message)
 
-        # ------------------------------------------------------------------------ #
-        if self.BC_OUTLET == "ZERO_GRADIENT":
-            outlet_block_template = """
+            # Handle outlet type
+            if self.BC_OUTLET == "ZERO_GRADIENT":
+                outlet_block_template = """
         {outlet}
         {{
             type            zeroGradient;
         }}
     """
-        elif self.BC_OUTLET == "3EWINDKESSEL":
-            outlet_block_template = """
+                logger.info("Outlet type set to ZERO_GRADIENT")
+            elif self.BC_OUTLET == "3EWINDKESSEL":
+                outlet_block_template = """
         {outlet}
         {{
             type            pressureInletOutletVelocity;
@@ -105,25 +128,30 @@ FoamFile
             value           uniform (0 0 0);
         }}
     """
-        else:
-            print("ERROR: outlet_type not found")
-            sys.exit()
+                logger.info("Outlet type set to 3EWINDKESSEL")
+            else:
+                error_message = f"Unsupported outlet type: {self.BC_OUTLET}"
+                logger.error(error_message)
+                raise ValueError(error_message)
 
-        outlet_block = ""
-        for outlet in self.OUTLET_STL:
-            outlet_name = outlet.split(".")[0]
-            outlet_block += outlet_block_template.format(outlet=outlet_name)
+            # Generate outlet blocks
+            outlet_block = ""
+            for outlet in self.OUTLET_STL:
+                outlet_name = outlet.split(".")[0]
+                outlet_block += outlet_block_template.format(outlet=outlet_name)
+                logger.info(f"Added outlet block for {outlet_name}")
 
-        # -------------------------------------------------------------------------- #
-        wall_aorta_block = """
-        {wall}
+            # Generate wall block
+            wall_aorta_block = f"""
+        {self.MAIN_AORTA_STL.split(".")[0]}
         {{
             type            noSlip;
         }}
-    """.format(wall=self.MAIN_AORTA_STL.split(".")[0])
+    """
+            logger.info(f"Wall block set for {self.MAIN_AORTA_STL}")
 
-        # Template for the U file
-        template = f"""{foam_file_header}
+            # Combine all blocks into the U file template
+            template = f"""{foam_file_header}
 
     dimensions      [0 1 -1 0 0 0 0];
 
@@ -138,10 +166,18 @@ FoamFile
     // ************************************************************************* //
     """
 
-        # Write the U file
-        with open(os.path.join(self.DIRECTORY, "0", "U"), "w") as f:
-            f.write(template)
-#------------------------------------------------------------------------------------------------------------------
+            # Write the U file
+            u_file_path = os.path.join(self.DIRECTORY, "0", "U")
+            with open(u_file_path, "w") as f:
+                f.write(template)
+            logger.info(f"U file successfully written to {u_file_path}")
+
+        except ValueError as ve:
+            logger.error(f"ValueError encountered: {ve}")
+            raise
+        except Exception as e:
+            logger.error(f"An unexpected error occurred: {e}")
+            raise
 
     def write_p_file(self):
         """
@@ -208,8 +244,8 @@ FoamFile
                     outlet_block += outlet_block_template.format(outlet_name=outletName)
 
         else:
-            print("ERROR: outlet_type not found")
-            sys.exit()        
+            logger.error("ERROR: outlet_type not found")
+            sys.exit(1) 
 
         # Boundary condition for wall
         wall_block = """
@@ -306,8 +342,8 @@ boundaryField
             
     def write_k_file(self):
         if 'kInlet' not in self.INITIAL_CONDITION_K or 'intensityInlet' not in self.INITIAL_CONDITION_K:
-            print("ERROR: Required keys 'kInlet' and 'intensityInlet' not found in INITIAL_CONDITION_K dictionary.")
-            return
+            logger.error("ERROR: kInlet or intensityInlet not found in INITIAL_CONDITION_K")
+            sys.exit(1)
 
         # Boundary condition for inlet
         inlet_blockk = """    {inlet}

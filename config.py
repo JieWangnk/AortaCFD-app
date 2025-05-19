@@ -12,7 +12,7 @@ CONFIG = {
     "geometry": {
         "case_name": "PAT002_rotated",
         "scale_factor": 1e-3,
-        "refinement_level": "medium", # options: "coarse", "medium", "fine"
+        "refinement_level": "coarse", # options: "coarse", "medium", "fine"
         "rotation": True # options to adjust geometry alignment of coordinate system, defult is (0,0,1)
     },
     "mesh": {
@@ -63,7 +63,7 @@ CONFIG = {
             "startFrom": "startTime",
             "startTime": 0.0,
             "stopAt": "endTime",
-            "endTime": 0.8,
+            "endTime": 0.01,
             "deltaT": 1e-6,
             "writeControl": "adjustableRunTime",
             "writeInterval": 0.01,
@@ -93,13 +93,24 @@ CONFIG = {
         "decomposition_method": "scotch"
     },
     "post_processing": {
+        "pvbatch_exe": "/home/jie/ParaView-5.11.2-MPI-Linux-Python3.9-x86_64/bin/pvbatch",
         "case_type": "Reconstructed",
         "time_steps": {
             "customized": False,
             "start": 0.0,
-            "end": 0.008,
-            "step": 0.0001
+            "end": 0.01,
+            "step": 0.01
         },
-        "fields": ["U", "p", "wallShearStress"]  # Could be ["U", "p", "wallShearStress"], etc.
+        "fields": ["U"],  # Could be ["U", "p", "wallShearStress", "KE"], etc.
+        "rescaleSettings": {
+        "U": {"rescaleToData": True, "rescaleRange": [0, 1]},
+        "p": {"rescaleToData": False, "rescaleRange": [0, 13332]},
+        "wallShearStress": {"rescaleToData": False, "rescaleRange": [0, 10]},
+        "KE": {"rescaleToData": True, "rescaleRange": [0, 0.1]},
+        },
+        "animation": {
+            "enabled": True,
+            "fps": 10
+        }
     }
 }

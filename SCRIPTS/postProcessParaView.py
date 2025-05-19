@@ -1,12 +1,17 @@
 import os
+import sys
 import vtk
 from vtk.util.numpy_support import vtk_to_numpy
 import numpy as np
 from scipy.spatial import ConvexHull
 import re
 import subprocess
+import json
 from paraview import servermanager
 from paraview.simple import *
+
+from logger import Logger
+
 paraview.simple._DisableFirstRenderCameraReset()
 
 def get_all_points_from_multiblock(mb_dataset):
@@ -48,31 +53,67 @@ def hideAllScalarBarsManually(renderView, arrayNames):
                 scalarBar.Visibility = 0
 
 class OpenFOAMParaView:
-    """
-    Automate ParaView-based visualization for an OpenFOAM case,
-    including KE (Pa), WSS (Pa), and Pressure (Pa) as calculated fields.
-    """
-    def __init__(self, casePath, caseType='Reconstructed', timeSteps=None, fields=None):
-        """
-        Args:
-            casePath  (str): Path to the OpenFOAM case directory (contains f.foam).
-            caseType  (str): 'ReconstructedCase' or 'DecomposedCase'.
-            timeSteps (list): A list of times at which to save images, e.g. [0.0, 0.02].
-                              If None, uses just the last available timestep.
-            fields    (list): Additional fields to process. (We already handle KE, WSS, P.)
-        """
+    def __init__(self, casePath, caseType='Reconstructed', timeSteps=None, fields=None, rescaleSettings=None):
         self.casePath  = casePath
         self.caseType  = caseType
         self.foamFile  = f"{casePath}/f.foam"
         self.imageDir  = f"{casePath}/Images"
         self.timeSteps = timeSteps
-        # Default fields: keep your original logic if you want
         self.fields    = fields if fields else ["U", "p", "wallShearStress"]
+        
+        self.property_map = {
+            "U": {
+                "name": "U",
+                "derived": False,
+                "prefix": "Velocity",
+                "component": ('POINTS', 'U', 'Magnitude'),
+                "preset": "Rainbow Desaturated",
+                "representation": "Volume",
+                "unit": "m/s"
+            },
+            "p": {
+                "name": "Pressure",
+                "derived": True,
+                "prefix": "Pressure",
+                "component": ('POINTS', 'Pressure'),
+                "preset": "Blue - Green - Orange",
+                "representation": "Surface",
+                "unit": "Pa"
+            },
+            "wallShearStress": {
+                "name": "WSS",
+                "derived": True,
+                "prefix": "WSS",
+                "component": ('POINTS', 'WSS'),
+                "preset": "Viridis (matplotlib)",
+                "representation": "Surface",
+                "unit": "Pa"
+            },
+            "KE": {
+                "name": "KE",
+                "derived": True,
+                "prefix": "KE",
+                "component": ('POINTS', 'KE'),
+                "preset": "Inferno (matplotlib)",
+                "representation": "Volume",
+                "unit": "Pa"
+            }
+        }
 
-    def run(self):
+        default_ranges = {
+            "U": [0, 1],
+            "KE": [0, 100],
+            "WSS": [0, 10],
+            "Pressure": [0, 20]
+        }
+        self.rescaleSettings = rescaleSettings or {
+            key: {"rescaleToData": False, "rescaleRange": val} for key, val in default_ranges.items()
+        }
+        
+    def generate_screenshots(self):
         """
         Build the pipeline, do PCA-based camera orientation, generate
-        new 'KE (Pa)', 'WSS (Pa)', and 'Pressure (Pa)' fields, and save screenshots.
+        new 'KE', 'WSS', and 'Pressure' fields, and save screenshots.
         """
         # Ensure the Images directory exists
         if not os.path.exists(self.imageDir):
@@ -83,7 +124,7 @@ class OpenFOAMParaView:
 
         # 1) Create the OpenFOAM reader
         ffoam = OpenFOAMReader(FileName=self.foamFile)
-        ffoam.CaseType    = self.caseType + " Case"
+        ffoam.CaseType = self.caseType + " Case"
         ffoam.MeshRegions = ['internalMesh']
 
         # 2) Create one RenderView
@@ -92,9 +133,6 @@ class OpenFOAMParaView:
 
         # 3) Show the raw data first, so we can do camera PCA
         ffoamDisplay = Show(ffoam, renderView1)
-        # annotateTimeFilter1 = AnnotateTimeFilter(registrationName='AnnotateTimeFilter1',Input=ffoam)
-        # annotateTimeFilter1Display = Show(annotateTimeFilter1, renderView1, 'TextSourceRepresentation')
-        # annotateTimeFilter1Display.WindowLocation = 'UpperCenter'  
         ffoamDisplay.SetScalarBarVisibility(renderView1, False)
         renderView1.Update()
 
@@ -130,7 +168,7 @@ class OpenFOAMParaView:
                     areas.append(0)
 
             best_index = np.argmax(areas)
-            best_axis  = eigenvectors[best_index]
+            best_axis = eigenvectors[best_index]
 
             info = ffoam.GetDataInformation()
             bounds = info.GetBounds()
@@ -171,79 +209,47 @@ class OpenFOAMParaView:
         # 5) Create new Calculator filters for KE, WSS, Pressure:
         #    chain them so final pipeline is ffoam -> calcKE -> calcWSS -> calcP
         calculatorKE = Calculator(Input=ffoam)
-        calculatorKE.ResultArrayName = 'KE (Pa)'
-        # 0.5 * 1060 * (U_X^2 + U_Y^2 + U_Z^2) <--- note we need Z^2
+        calculatorKE.ResultArrayName = 'KE'
         calculatorKE.Function = '0.5*1060*(U_X^2 + U_Y^2 + U_Z^2)'
 
         calculatorWSS = Calculator(Input=calculatorKE)
-        calculatorWSS.ResultArrayName = 'WSS (Pa)'
-        # 1060 * mag(wallShearStress)
+        calculatorWSS.ResultArrayName = 'WSS'
         calculatorWSS.Function = '1060*mag(wallShearStress)'
 
         calculatorP = Calculator(Input=calculatorWSS)
-        calculatorP.ResultArrayName = 'Pressure (Pa)'
-        # p * 1060 / 133.32
+        calculatorP.ResultArrayName = 'Pressure'
         calculatorP.Function = 'p*1060/133.32'
 
         # 6) Create a single Display object for the final pipeline object
-        #    (We will switch color arrays for KE, WSS, Pressure, etc.)
         finalDisplay = Show(calculatorP, renderView1)
-        # Hide the original ffoam display to avoid overlap
         Hide(ffoam, renderView1)
         renderView1.Update()
 
-        # We'll define a property dictionary for the newly calculated fields:
-        # Similar structure to your old approach
-        new_properties = [
-            # ADD THIS BLOCK FOR VELOCITY:
-            {
-                "name": "U",                       #  <--- important
-                "component": ('POINTS', 'U', 'Magnitude'),  
-                "preset": "Rainbow Desaturated",   # or any preset you like
-                "representation": "Volume",        # or "Surface"
-                "filePrefix": "Velocity",          # how you want the .png named
-                "rescaleToData": False,             # rescale to data range
-                "rescaleRange": [0, 1]            # optional custom range
-            },
-            {
-                "name": "KE (Pa)",
-                "component": ('POINTS', 'KE (Pa)'),
-                "preset": "Inferno (matplotlib)",
-                "representation": "Volume",
-                "filePrefix": "KE",
-                "rescaleToData": False,
-                "rescaleRange": [0, 1e2]
-            },
-            {
-                "name": "WSS (Pa)",
-                "component": ('POINTS', 'WSS (Pa)'),
-                "preset": "Viridis (matplotlib)",
-                "representation": "Surface",
-                "filePrefix": "WSS",
-                "rescaleToData": False,
-                "rescaleRange": [0,10]
-            },
-            {
-                "name": "Pressure (Pa)",
-                "component": ('POINTS', 'Pressure (Pa)'),
-                "preset": "Blue - Green - Orange",
-                "representation": "Surface",
-                "filePrefix": "Pressure",
-                "rescaleToData": True,
-                "rescaleRange": [0, 20]
-            }
-        ]
+        # 7) Construct new_properties dynamically based on fields
+        new_properties = []
+        for field in self.fields:
+            if field in self.property_map:
+                prop = self.property_map[field]
+                rescale_setting = self.rescaleSettings.get(
+                    field, {"rescaleToData": False, "rescaleRange": [0, 10]}
+                )
 
-        # We also combine them with your old fields if desired...
-        # But in this example, we'll only generate screenshots for new properties.
-        # If you want to hide old fields or show them, you can adapt as needed.
-
+                new_properties.append({
+                    "name": prop["name"],
+                    "component": prop["component"],
+                    "preset": prop["preset"],
+                    "representation": prop["representation"],
+                    "filePrefix": prop["prefix"],
+                    "unit": prop["unit"],
+                    "rescaleToData": rescale_setting.get("rescaleToData", False),
+                    "rescaleRange": rescale_setting.get("rescaleRange", [0, 1])
+                })
         # We'll gather all array names for hideAllScalarBarsManually
         arrayList = [prop["name"] for prop in new_properties]
 
-        # 7) Prepare time steps
+        # 8) Prepare time steps
         animationScene1 = GetAnimationScene()
-        timeKeeper1     = GetTimeKeeper()
+        timeKeeper1 = GetTimeKeeper()
         if not self.timeSteps:
             availableTimes = timeKeeper1.TimestepValues if timeKeeper1 else []
             if availableTimes:
@@ -255,11 +261,11 @@ class OpenFOAMParaView:
                 with open(log_file, "a") as log:
                     log.write("[INFO] No available timesteps found. Using 0.0.\n")
 
-        # 8) Loop over time steps and new properties, saving screenshots
+        # 9) Loop over time steps and new properties, saving screenshots
         for t in self.timeSteps:
             animationScene1.AnimationTime = t
             timeKeeper1.Time = t
-            renderView1.Update() 
+            renderView1.Update()
 
             for prop in new_properties:
                 # Hide previously shown scalar bars
@@ -271,29 +277,26 @@ class OpenFOAMParaView:
 
                 # Get the LUT
                 lut = GetColorTransferFunction(prop["name"])
-                # get PWF
                 pwf = GetOpacityTransferFunction(prop["name"])
-                # Optionally apply preset
                 lut.ApplyPreset(prop["preset"], True)
 
-                # Rescale data if needed
-                if prop.get("rescaleToData", False):
+                if prop["rescaleToData"]:
                     finalDisplay.RescaleTransferFunctionToDataRange(False, True)
                 else:
-                    # rescale to custom range if needed
-                    lut.RescaleTransferFunction(*prop.get("rescaleRange", [0, 1]))
-                    pwf.RescaleTransferFunction(*prop.get("rescaleRange", [0, 1]))                    
-
-                # Show colorbar
+                    lut.RescaleTransferFunction(*prop["rescaleRange"])
+                    pwf.RescaleTransferFunction(*prop["rescaleRange"])
+                    
+                # Show colorbar with units
                 finalDisplay.SetScalarBarVisibility(renderView1, True)
                 scalarBar = GetScalarBar(lut, renderView1)
                 if scalarBar:
-                    scalarBar.TitleBold      = 1
-                    scalarBar.TitleFontSize  = 20
-                    scalarBar.LabelBold      = 1
-                    scalarBar.LabelFontSize  = 20
+                    scalarBar.Title = f"{prop['name']} ({prop['unit']})"
+                    scalarBar.TitleBold = 1
+                    scalarBar.TitleFontSize = 20
+                    scalarBar.LabelBold = 1
+                    scalarBar.LabelFontSize = 20
                     scalarBar.AddRangeLabels = 0
-                    scalarBar.Visibility     = 1
+                    scalarBar.Visibility = 1
 
                 # Update
                 renderView1.Update()
@@ -312,18 +315,10 @@ class OpenFOAMParaView:
                 with open(log_file, "a") as log:
                     log.write(f"[INFO] Saved screenshot for {prop['name']} at t={t}: {screenshotFile}\n")
 
-    def anima(self):
-        """
-        Create AVI animations for each property by stacking the corresponding PNG images.
-        Requires ffmpeg to be installed and accessible in the system PATH.
-        """
-        print("[INFO] Starting animation creation...")
+    def anima(self, fps=30):
         log_file = os.path.join(self.imageDir, "postProcessing.log")
         with open(log_file, "a") as log:
-            # We want animations for the new property prefixes: "KE", "WSS", "Pressure"
-            # plus any old ones you used before, e.g. "Velocity", "Pressure", "wallShearStress"
-            properties = ["KE", "WSS", "Pressure","Velocity"]  # feel free to add "Velocity", etc.
-
+            properties = [self.property_map[f]["prefix"] for f in self.fields if f in self.property_map]
             for prop in properties:
                 pattern = re.compile(rf"{re.escape(prop)}_(\d+\.?\d*)\.png")
                 images = []
@@ -332,67 +327,34 @@ class OpenFOAMParaView:
                     if match:
                         time_step = float(match.group(1))
                         images.append((time_step, filename))
-                
+
                 if not images:
                     log.write(f"[WARNING] No images found for property '{prop}'. Skipping animation.\n")
-                    print(f"[WARNING] No images found for property '{prop}'. Skipping animation.")
                     continue
-                
-                # Sort by numeric time
-                images.sort(key=lambda x: float(x[0]))
 
-                # Generate a temporary list file for ffmpeg
+                images.sort(key=lambda x: float(x[0]))
                 list_file = os.path.join(self.imageDir, f"{prop}_files.txt")
                 with open(list_file, "w") as lf:
                     for _, filename in images:
                         lf.write(f"file '{filename}'\n")
-                
+
                 output_video = os.path.join(self.imageDir, f"{prop}.avi")
-                
                 ffmpeg_cmd = [
-                    "ffmpeg",
-                    "-y",
-                    "-f", "concat",
-                    "-safe", "0",
-                    "-r", "15",  # frame rate
-                    "-i", list_file,
-                    "-c:v", "mpeg4",
-                    "-q:v", "5",
-                    output_video
+                    "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-r", str(fps),
+                    "-i", list_file, "-c:v", "mpeg4", "-q:v", "5", output_video
                 ]
-                
+
                 try:
                     log.write(f"[INFO] Creating animation for '{prop}'...\n")
-                    print(f"[INFO] Creating animation for '{prop}'...")
                     result = subprocess.run(ffmpeg_cmd, check=True, cwd=self.imageDir,
                                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                     log.write(f"[INFO] Animation for '{prop}' saved as '{output_video}'.\n")
-                    print(f"[INFO] Animation for '{prop}' saved as '{output_video}'.")
                 except subprocess.CalledProcessError as e:
                     log.write(f"[ERROR] ffmpeg failed for property '{prop}': {e.stderr}\n")
-                    print(f"[ERROR] ffmpeg failed for property '{prop}': {e.stderr}")
                 finally:
                     if os.path.exists(list_file):
                         os.remove(list_file)
 
             log.write("[INFO] Animation creation completed.\n")
-            print("[INFO] Animation creation completed.")
-
 
 # ------------------- MAIN for pvbatch usage ----------------------
-if __name__ == "__main__":
-    case_type   = os.getenv("CASE_TYPE")
-    case_path   = os.getenv("CASE_PATH")
-    time_array  = os.getenv("TIME_ARRAY").split(",")
-    time_array  = [float(x) for x in time_array]
-    print(f"[INFO] Received case type: {case_type}")
-    print(f"[INFO] Received case path: {case_path}")
-    print(f"[INFO] Received time array: {time_array}")
-
-    pv_script = OpenFOAMParaView(
-        casePath  = str(case_path),
-        caseType  = str(case_type),
-        timeSteps = time_array
-    )
-    pv_script.run()
-    pv_script.anima()
