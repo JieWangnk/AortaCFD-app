@@ -1,12 +1,14 @@
-import os 
+import os
+from SCRIPTS.logger import Logger
 
 class SolnType:
-    def __init__(self, DIRECTORY, SOLN_TYPE, SUBDOMAINS, DECOMPOSITION_METHOD, OPENFOAM_VERSION):
+    def __init__(self, DIRECTORY, SOLN_TYPE, SUBDOMAINS, DECOMPOSITION_METHOD, OPENFOAM_VERSION, log_file="solnTypeSetup.log"):
         self.DIRECTORY = DIRECTORY
         self.SOLN_TYPE = SOLN_TYPE
         self.SUBDOMAINS = SUBDOMAINS
         self.DECOMPOSITION_METHOD = DECOMPOSITION_METHOD
         self.openfoam_version = OPENFOAM_VERSION  # Store the OpenFOAM version
+        self.logger = Logger(log_file).get_logger()
 
     def write_decomposeParDict(self):
         """
@@ -70,7 +72,11 @@ hierarchicalCoeffs
 
         # Write the file
         filepath = os.path.join(self.DIRECTORY, "system", "decomposeParDict")
-        with open(filepath, "w") as f:
-            f.write(content)
-        print("decomposeParDict file has been written.")
+        try:
+            with open(filepath, "w") as f:
+                f.write(content)
+        except Exception as e:
+            self.logger.error(f"Failed to write decomposeParDict file: {e}")
+            raise
+
 

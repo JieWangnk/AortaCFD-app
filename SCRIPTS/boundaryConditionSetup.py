@@ -36,22 +36,17 @@ class BoundaryConditionSetup:
             self.INITIAL_CONDITION_U["inlet_center"] = self.inlet_center
             self.INITIAL_CONDITION_U["inlet_normal"] = self.inlet_normal
 
-            logger.info(f"Inlet parameters calculated: center={self.inlet_center}, radius={self.inlet_radius}, normal={self.inlet_normal}")
-
             # Find the main aorta STL file
             self.MAIN_AORTA_STL = os.path.basename([f for f in self.STL_FILES if "wall" in f][0])
-            logger.info(f"Main aorta STL file: {self.MAIN_AORTA_STL}")
 
             # Find the inlet STL file
             self.INLET_STL = os.path.basename([f for f in self.STL_FILES if "inlet" in f][0])
-            logger.info(f"Inlet STL file: {self.INLET_STL}")
 
             # Find all the outlet STL files and append them to a list
             self.OUTLET_STL = sorted(
                 [os.path.basename(f) for f in self.STL_FILES if "outlet" in f],
                 key=lambda x: int(re.findall(r"\d+", x)[0])
             )
-            logger.info(f"Outlet STL files: {self.OUTLET_STL}")
 
             # Set inlet type
             if self.BC_INLET == "TIMEVARYING":
@@ -104,7 +99,6 @@ FoamFile
             setAverage      off;
         }}
     """
-                logger.info(f"Inlet type set to {self.INLET_TYPE_U} for {self.INLET_STL}")
             else:
                 error_message = f"Unsupported inlet type: {self.INLET_TYPE_U}"
                 logger.error(error_message)
@@ -118,7 +112,6 @@ FoamFile
             type            zeroGradient;
         }}
     """
-                logger.info("Outlet type set to ZERO_GRADIENT")
             elif self.BC_OUTLET == "3EWINDKESSEL":
                 outlet_block_template = """
         {outlet}
@@ -128,7 +121,6 @@ FoamFile
             value           uniform (0 0 0);
         }}
     """
-                logger.info("Outlet type set to 3EWINDKESSEL")
             else:
                 error_message = f"Unsupported outlet type: {self.BC_OUTLET}"
                 logger.error(error_message)
@@ -139,7 +131,7 @@ FoamFile
             for outlet in self.OUTLET_STL:
                 outlet_name = outlet.split(".")[0]
                 outlet_block += outlet_block_template.format(outlet=outlet_name)
-                logger.info(f"Added outlet block for {outlet_name}")
+
 
             # Generate wall block
             wall_aorta_block = f"""
@@ -148,8 +140,6 @@ FoamFile
             type            noSlip;
         }}
     """
-            logger.info(f"Wall block set for {self.MAIN_AORTA_STL}")
-
             # Combine all blocks into the U file template
             template = f"""{foam_file_header}
 
@@ -170,7 +160,6 @@ FoamFile
             u_file_path = os.path.join(self.DIRECTORY, "0", "U")
             with open(u_file_path, "w") as f:
                 f.write(template)
-            logger.info(f"U file successfully written to {u_file_path}")
 
         except ValueError as ve:
             logger.error(f"ValueError encountered: {ve}")

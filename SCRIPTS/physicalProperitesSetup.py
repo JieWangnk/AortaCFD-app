@@ -1,12 +1,14 @@
 import os
+from SCRIPTS.logger import Logger
 
 class PhysicalPropertiesWriter:
-    def __init__(self, DIRECTORY, NU, RHO, SIMULATIONTYPE, OPENFOAM_VERSION):
+    def __init__(self, DIRECTORY, NU, RHO, SIMULATIONTYPE, OPENFOAM_VERSION, log_file="physicalPropertiesSetup.log"):
         self.DIRECTORY = DIRECTORY
         self.NU = NU
         self.RHO = RHO
         self.SIMULATIONTYPE = SIMULATIONTYPE
         self.openfoam_version = OPENFOAM_VERSION  # Store the OpenFOAM version
+        self.logger = Logger(log_file).get_logger()
 
     def _get_foam_file_header(self, object_name):
         """
@@ -46,9 +48,12 @@ rho             [1 -3 0 0 0 0 0] {self.RHO};
 // ************************************************************************* //
 """
         filepath = os.path.join(self.DIRECTORY, "constant", "transportProperties")
-        with open(filepath, "w") as f:
-            f.write(content)
-        print("transportProperties file has been written.")
+        try:
+            with open(filepath, "w") as f:
+                f.write(content)
+        except Exception as e:
+            self.logger.error(f"Failed to write transportProperties file: {e}")
+            raise
 
     def write_momentumProperties_file(self):
         """
@@ -99,8 +104,8 @@ LES
 }
 """
         else:
-            print("Invalid simulation type.")
-            return
+            self.logger.error("Invalid simulation type.")
+            raise ValueError("Invalid simulation type.")
 
         foam_file_header = self._get_foam_file_header("momentumTransport")
         content = f"""{foam_file_header}
@@ -110,7 +115,10 @@ LES
 // ************************************************************************* //
 """
         filepath = os.path.join(self.DIRECTORY, "constant", "momentumTransport")
-        with open(filepath, "w") as f:
-            f.write(content)
-        print("momentumProperties file has been written.")
+        try:
+            with open(filepath, "w") as f:
+                f.write(content)
+        except Exception as e:
+            self.logger.error(f"Failed to write momentumProperties file: {e}")
+            raise
 

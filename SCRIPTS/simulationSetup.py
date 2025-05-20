@@ -1,10 +1,12 @@
-import os 
+import os
+from SCRIPTS.logger import Logger
 
 class SimulationSetup:
-    def __init__(self, DIRECTORY, SIMULATION_CONTROL, OPENFOAM_VERSION):
+    def __init__(self, DIRECTORY, SIMULATION_CONTROL, OPENFOAM_VERSION, log_file="simulationSetup.log"):
         self.DIRECTORY = DIRECTORY
         self.SIMULATION_CONTROL = SIMULATION_CONTROL
         self.openfoam_version = OPENFOAM_VERSION  # Store the OpenFOAM version
+        self.logger = Logger(log_file).get_logger()
 
     def write_controlDict(self, filename="controlDict"):
         template = '''/*--------------------------------*- C++ -*----------------------------------*\\
@@ -73,11 +75,16 @@ functions
             function_block += template_v2.format(function=f)
 
         # Use the template to fill in the variables and write to the file
-        with open(os.path.join(self.DIRECTORY, "system", filename), 'w') as f:
-            f.write(template.format(
-                openfoam_version=self.openfoam_version,
-                function_block=function_block,
-                **self.SIMULATION_CONTROL["controlDict"]
-            ))
-        print(f"{filename} file has been written")
+        filepath = os.path.join(self.DIRECTORY, "system", filename)
+        try:
+            with open(filepath, 'w') as f:
+                f.write(template.format(
+                    openfoam_version=self.openfoam_version,
+                    function_block=function_block,
+                    **self.SIMULATION_CONTROL["controlDict"]
+                ))
+                
+        except Exception as e:
+            self.logger.error(f"Failed to write {filename} file: {e}")
+            raise
 

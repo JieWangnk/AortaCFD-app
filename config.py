@@ -10,7 +10,7 @@ CONFIG = {
     "openfoam_version": "8",
     # Directory where the case will be created
     "geometry": {
-        "case_name": "PAT002_rotated",
+        "case_name": "PAT1_2024",
         "scale_factor": 1e-3,
         "refinement_level": "coarse", # options: "coarse", "medium", "fine"
         "rotation": True # options to adjust geometry alignment of coordinate system, defult is (0,0,1)
