@@ -3,9 +3,7 @@ import re
 import glob
 import numpy as np
 from scipy.special import jv
-import logging
-
-logging.basicConfig(level=logging.INFO)
+from SCRIPTS.logger import Logger
 
 
 class InletMapping:
@@ -31,6 +29,7 @@ class InletMapping:
         data_type='flowRate',  # 'flowRate' or 'velocity'
         profile='parabolic',   # 'plug', 'parabolic', or 'womersley'
         scale=1.0,
+        log_file="inletMapping.log",
         **kwargs
     ):
         """
@@ -42,6 +41,7 @@ class InletMapping:
             data_type (str): 'flowRate' (CSV column = flow rate in m^3/s) or 'velocity' (CSV column = speed in m/s).
             profile (str): 'plug', 'parabolic', or 'womersley'.
             scale (float): Additional scaling factor for coordinates, default=1.0.
+            log_file (str): Path to the log file.
             **kwargs: Additional parameters (e.g., orientation='out', rho=..., nu=..., etc.).
         """
         self.center = np.array(center, dtype=float)
@@ -52,6 +52,7 @@ class InletMapping:
         self.profile = profile.lower().strip()        # 'plug', 'parabolic', 'womersley'
         self.scale = scale
         self.kwargs = kwargs
+        self.logger = Logger(log_file).get_logger()
 
         # Potentially read optional parameters from kwargs, if used for Womersley or advanced BC
         self.rho = kwargs.get("rho", 1060)  # default blood density
@@ -75,7 +76,7 @@ class InletMapping:
             if data.ndim < 2 or data.shape[1] < 2:
                 raise ValueError(f"CSV file {file_name} must have at least 2 columns.")
         except Exception as e:
-            logging.error(f"Error reading CSV file {file_name}: {e}")
+            self.logger.error(f"Error reading CSV file {file_name}: {e}")
             raise
         return data[:, 0], data[:, 1], data[-1, 0] - data[0, 0]
 
@@ -203,7 +204,6 @@ class InletMapping:
             cardiac_cycle = self.cardiac_cycle  # Period of the cardiac cycle (s)
             omega = 2 * np.pi / cardiac_cycle  # Angular frequency (rad/s)
             alpha = self.radius * np.sqrt(omega / self.nu)  # Womersley number
-            logging.info(f"Womersley number (alpha): {alpha:.4f}")
 
         for i in range(len(time_array)):
             t = time_array[i]
@@ -280,15 +280,16 @@ class InletMapping:
         # 1) Read the points
         points_file = f"constant/boundaryData/{self.inlet_name}/points"
         if not os.path.isfile(points_file):
+            self.logger.error(f"Points file not found: {points_file}")
             raise FileNotFoundError(f"Points file not found: {points_file}")
         n_points, points = self.read_points_file(points_file)
 
         if n_points < 3:
+            self.logger.error(f"Not enough points in {points_file} to define a plane normal.")
             raise ValueError(f"Not enough points in {points_file} to define a plane normal.")
 
         # 2) Compute normal vector
         orientation = self.kwargs.get("orientation")
-        print(f"Orientation: {orientation}")
         idx_rand = np.random.choice(n_points, 3, replace=False)
         p1, p2, p3 = points[idx_rand[0]], points[idx_rand[1]], points[idx_rand[2]]
         normal_vec = self.get_face_normal_vectors(p1, p2, p3, orientation)
@@ -296,15 +297,13 @@ class InletMapping:
         # 3) Read the CSV
         csv_path = os.path.join("constant", "boundaryData", self.inlet_name, self.inlet_data_file)
         if not os.path.isfile(csv_path):
+            self.logger.error(f"CSV file not found: {csv_path}")
             raise FileNotFoundError(f"CSV file not found: {csv_path}")
         times, yval, cycle = self.read_csv_file(csv_path)
 
         self.times = times
         self.csv_vals = yval
         self.cardiac_cycle = cycle
-
-        logging.info(f"Read {len(times)} time steps from {times[0]} to {times[-1]} (s)")
-        logging.info(f"Data type = {self.data_type}")
 
         # 4) Create a subfolder to hold time-varying velocity files
         parent_dir = os.path.join(
@@ -322,13 +321,6 @@ class InletMapping:
 
         # 5) Generate the velocity distribution
         self.generate_time_data(parent_dir, times, points, normal_vec)
-
-        print(f"\nInletMapping complete for profile={self.profile}, data_type={self.data_type}")
-        print(f" - CSV file: {csv_path}")
-        print(f" - Time steps: {len(times)} from {times[0]} to {times[-1]} s")
-        print(f" - Computed cycle length: {cycle:.4f} s")
-        print(f" - Output: ./{os.path.relpath(parent_dir)}")
-
 
 # ----------------------- Example Usage ---------------------------
 if __name__ == "__main__":

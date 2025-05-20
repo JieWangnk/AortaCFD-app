@@ -20,14 +20,13 @@ class CycleDataSetup:
             # Make the directory if it does not exist
             if not os.path.exists(timeDirPath):
                 os.mkdir(timeDirPath)
-                logger.info(f"Directory created: {timeDirPath}")
 
             # Copy the U_* file to the directory and rename it to U
             srcFile = os.path.join(self.baseDir, "constant/boundaryData/inlet/" + str(self.INELT_DATA_FILE) + "/U_" + timeDirList[i])
             destFile = os.path.join(timeDirPath, "U")
             try:
                 os.system(f"cp {srcFile} {destFile}")
-                logger.info(f"Copied {srcFile} to {destFile}")
+                
             except Exception as e:
                 logger.error(f"Failed to copy {srcFile} to {destFile}: {e}")
                 raise
@@ -41,7 +40,7 @@ class CycleDataSetup:
                     os.system(f"rm -rf {target_dir}")
                     # Create the symbolic link
                     os.system(f"ln -s {timeDirPath} {target_dir}")
-                    logger.info(f"Symbolic link created: {newTimeDir} -> {timeDirPath}")
+                    
                 except Exception as e:
                     logger.error(f"Failed to create symbolic link for {newTimeDir}: {e}")
                     raise
@@ -60,7 +59,6 @@ class CycleDataSetup:
             if file.startswith("U"):
                 timeDirList.append(file.split("_")[1])
 
-        logger.info(f"Time directories identified: {timeDirList}")
         self.create_time_dirs(timeDirList)
 
 if __name__ == "__main__":

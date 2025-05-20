@@ -2,9 +2,7 @@ import os
 import re
 from stl import mesh
 import numpy as np
-import logging
-
-logging.basicConfig(level=logging.INFO)
+from SCRIPTS.logger import Logger
 
 def is_binary_file(file_path):
     """Check if the given file is binary."""
@@ -18,7 +16,7 @@ def is_binary_file(file_path):
     return False
 
 class GeometryAnalyzer:
-    def __init__(self, DIRECTORY, geometry_case, refinement, refinement_levels, snappy_settings, stl_files, geometry_path, expansion_factor=0.02):
+    def __init__(self, DIRECTORY, geometry_case, refinement, refinement_levels, snappy_settings, stl_files, geometry_path, expansion_factor=0.02, log_file="meshSetup.log"):
         self.directory = DIRECTORY
         self.geometry_case = geometry_case
         self.refinement = refinement
@@ -37,7 +35,9 @@ class GeometryAnalyzer:
 
         # Set main_aorta_stl to the correct STL file (e.g., wall_aorta.stl)
         self.main_aorta_stl = next((f for f in stl_files if "wall" in f), stl_files[0])
-        
+
+        # Initialize logger
+        self.logger = Logger(log_file).get_logger()
 
     def sort_stl_files(self, files):
         def sort_key(x):
@@ -59,6 +59,7 @@ class GeometryAnalyzer:
             unique_vertices = np.unique(vertices, axis=0)
             return unique_vertices
         except Exception as e:
+            self.logger.error(f"Error processing STL file {stl_file}: {e}")
             raise RuntimeError(f"Error processing STL file {stl_file}: {e}")
 
     def get_max_vertex(self):
@@ -102,7 +103,6 @@ class GeometryAnalyzer:
         all_points = []
         for stl_file in self.stl_files:
             full_path = os.path.join(self.geometry_path, stl_file)
-            logging.info(f"Loading STL file: {full_path}")
             vertices = self.extract_vertices_from_stl(full_path)
             all_points.append(vertices)
         all_points = np.vstack(all_points)
@@ -413,7 +413,6 @@ includedAngle 150;
 
         with open(output_path, 'w') as f:
             f.write(content)
-        print(f"surfaceFeaturesDict written to {output_path}")
 
     def write_blockMeshDict(self):
         content = self.generate_blockMeshDict_bounds()
@@ -423,7 +422,6 @@ includedAngle 150;
 
         with open(output_path, 'w') as f:
             f.write(content)
-        logging.info(f"blockMeshDict written to {output_path}")
 
     def write_snappyHexMeshDict(self):
         content = self.generate_snappyHexMeshDict()
@@ -433,7 +431,6 @@ includedAngle 150;
 
         with open(output_path, 'w') as f:
             f.write(content)
-        print(f"snappyHexMeshDict written to {output_path}")
 
     def build_geometry_block(self, stl_file, stl_file_name):
         stl_file_name_only = os.path.basename(stl_file)  # Extract only the file name

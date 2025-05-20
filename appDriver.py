@@ -78,7 +78,7 @@ def rotate_stl(stl_path, rotation_axis, rotation_angle, output_path):
 
         # Save the rotated STL file
         stl_mesh.save(output_path)
-        logger.info(f"Rotated STL file saved to {output_path}")
+        
     except Exception as e:
         logger.error(f"Error rotating STL file {stl_path}: {e}")
         raise
@@ -109,8 +109,6 @@ class OpenFOAMCase:
                 "OPENFOAM", 
                 f"{self.geometry_case}_{self.refinement}"
             )
-
-            logger.info(f"OpenFOAM case initialized: {self.directory}")
 
             # Boundary config
             boundary_cfg = CONFIG["boundary"]
@@ -234,8 +232,6 @@ class OpenFOAMCase:
             directory_con_bd = os.path.join(self.directory, "constant", "boundaryData")
             os.makedirs(directory_con_bd, exist_ok=True)
 
-            logger.info("OpenFOAM case folder structure created.")
-
             # Rotate and copy STL files to constant/triSurface folder
             CADfolder = os.path.join("CAD", self.geometry_case)
             if not os.path.exists(CADfolder):
@@ -271,7 +267,7 @@ class OpenFOAMCase:
 
                 # Rotate the STL file and save it directly in the target directory
                 rotate_stl(src_path, rotation_axis, rotation_angle, dst_path)
-                logger.info(f"Rotated {src_path} and saved as {dst_path}")
+                
                 rotated_stl_files.append(dst_path)
 
             # Return the list of rotated STL files
@@ -388,15 +384,12 @@ class OpenFOAMRunner:
         """
         Creates an OpenFOAM case with the specified parameters.
         """
-        logger.info("Creating OpenFOAM case...")
 
         # Create the OpenFOAM case
         my_case = OpenFOAMCase()
 
         # Call the casePilot method to set up the case
         my_case.casePilot()
-
-        logger.info("OpenFOAM case created.")
 
     def run_mesh(self):
         """
@@ -434,9 +427,25 @@ class OpenFOAMRunner:
             if not os.path.isfile(decompose_par_dict):
                 raise FileNotFoundError(f"decomposeParDict file not found: {decompose_par_dict}")
 
-            os.system(f"foamDictionary -entry 'method' -set 'simple' {decompose_par_dict}")
-            os.system(f"foamDictionary -entry 'numberOfSubdomains' -set '{n_proc}' {decompose_par_dict}")
-            os.system(f"foamDictionary -entry 'simpleCoeffs/n' -set '(1 1 {n_proc})' {decompose_par_dict}")
+            # Suppress foamDictionary output and log it
+            try:
+                with open("foamDictionary.log", "a") as log_file:
+                    subprocess.run(
+                        ["foamDictionary", "-entry", "method", "-set", "simple", decompose_par_dict],
+                        stdout=log_file, stderr=subprocess.STDOUT, check=True
+                    )
+                    subprocess.run(
+                        ["foamDictionary", "-entry", "numberOfSubdomains", "-set", str(n_proc), decompose_par_dict],
+                        stdout=log_file, stderr=subprocess.STDOUT, check=True
+                    )
+                    subprocess.run(
+                        ["foamDictionary", "-entry", "simpleCoeffs/n", "-set", f"(1 1 {n_proc})", decompose_par_dict],
+                        stdout=log_file, stderr=subprocess.STDOUT, check=True
+                    )
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Error running foamDictionary: {e}")
+                sys.exit(1)
+
             os.system("decomposePar -noZero -force > decomposePar_snappy.log")
             os.system(f"mpirun -np {n_proc} snappyHexMesh -parallel -overwrite > snappyHex.log")
             os.system("reconstructParMesh -constant -latestTime > reconstructParMesh.log")
@@ -461,8 +470,7 @@ class OpenFOAMRunner:
         # os.system(f"transformPoints 'scale=({self.GEOMETRY_SCALE} {self.GEOMETRY_SCALE} {self.GEOMETRY_SCALE})' > transform.log")
         # optional openfoam 8
         os.system(f"transformPoints -scale '({self.GEOMETRY_SCALE} {self.GEOMETRY_SCALE} {self.GEOMETRY_SCALE})' > transform.log")
-        # Create a dummy file f.foam for ParaView
-        os.system("touch f.foam")
+        os.system("touch f.foam")  # Create a dummy file for ParaView
 
         elapsed_time = time.time() - start_time
         logger.info(f"Mesh created in {elapsed_time/60:.2f} minutes.")
@@ -617,8 +625,20 @@ class OpenFOAMRunner:
             os.system(f"{simulation_command} > log.log")
         elif self.SOLN_TYPE == "parallel":
             # Adjust decomposeParDict for parallel execution
-            os.system(f"foamDictionary -entry 'numberOfSubdomains' -set '{self.SUBDOMAINS}' {decompose_par_dict}")
-            os.system(f"foamDictionary -entry 'simpleCoeffs/n' -set '(1 1 {self.SUBDOMAINS})' {decompose_par_dict}")
+            try:
+                with open("foamDictionary.log", "a") as log_file:
+                    subprocess.run(
+                        ["foamDictionary", "-entry", "numberOfSubdomains", "-set", str(self.SUBDOMAINS), decompose_par_dict],
+                        stdout=log_file, stderr=subprocess.STDOUT, check=True
+                    )
+                    subprocess.run(
+                        ["foamDictionary", "-entry", "simpleCoeffs/n", "-set", f"(1 1 {self.SUBDOMAINS})", decompose_par_dict],
+                        stdout=log_file, stderr=subprocess.STDOUT, check=True
+                    )
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Error running foamDictionary: {e}")
+                sys.exit(1)
+
             os.system(f"{decompose_command} > decompose.log")
             os.system(f"mpirun -np {self.SUBDOMAINS} {simulation_command} -parallel > log.log")
             os.system("reconstructPar > reconstruct.log")
@@ -661,13 +681,13 @@ class OpenFOAMRunner:
         os.environ["CASE_TYPE"]  = self.CASE_TYPE
         os.environ["CASE_PATH"]  = self.case_directory
         os.environ["TIME_ARRAY"] = ",".join(str(x) for x in time_array)
-        os.environ["reAnimate"] = str(reAnimate)
+        os.environ["REANIMATION"] = str(reAnimate)
         os.environ["FIELDS"]     = ",".join(self.FIELDS)
         # Save rescale settings as temp JSON file
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_file:
             json.dump(self.RESCALESETTINGS, temp_file)
             os.environ["RESCALE_JSON"] = temp_file.name
-        os.environ["ANIMATION"]  = str(self.ANIMATION["enabled"])
+        os.environ["ANIMATION_ENABLEd"]  = str(self.ANIMATION["enabled"])
         os.environ["FPS"]        = str(self.ANIMATION["fps"]) if self.ANIMATION["fps"] else "None"
 
         script_path = os.path.join(self.parent_directory , "SCRIPTS", "postProcessParaView.py")
@@ -681,7 +701,7 @@ class OpenFOAMRunner:
         os.system(cmd)
         
         elapsed_time = time.time() - start_time
-        logger.info(f"Post-processing done in {elapsed_time/60:.2f} minutes.")
+        #logger.info(f"Post-processing done in {elapsed_time/60:.2f} minutes.")
 
     def run_all(self):
         """
@@ -720,7 +740,6 @@ if __name__ == "__main__":
         # Subcommand: runPost
         run_post_parser = subparsers.add_parser('runPost', help='Run post-processing.')
         run_post_parser.add_argument('--reAnimate', dest='reAnimate', action='store_true', help='Force re-generation of animation.')
-        run_post_parser.add_argument('--no-reAnimate', dest='reAnimate', action='store_false', help='Skip re-generation of animation (default).')
         run_post_parser.set_defaults(reAnimate=False)
 
         # Subcommand: runAll
