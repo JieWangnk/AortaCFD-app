@@ -6,12 +6,12 @@ log_file_path = os.path.join(os.getcwd(), "cycleDataSetup.log")
 logger = Logger(log_file_path).get_logger()
 
 class CycleDataSetup:
-    def __init__(self, INELT_DATA_FILE, cardiacCycle, numberOfCycle, baseDir=None):
-        self.INELT_DATA_FILE = os.path.splitext(INELT_DATA_FILE)[0]
+    def __init__(self, inletDataFile, cardiacCycle, numberOfCycle, case_directory="."):
+        self.inletDataFile = os.path.splitext(inletDataFile)[0]
         self.BPM = int(60 / cardiacCycle)
         self.cardiacPeriod = float(cardiacCycle)
         self.numberOfCycle = numberOfCycle
-        self.baseDir = baseDir if baseDir else os.getcwd()
+        self.baseDir = case_directory
 
     def create_time_dirs(self, timeDirList):
         for i in range(len(timeDirList) - 1):
@@ -22,7 +22,7 @@ class CycleDataSetup:
                 os.mkdir(timeDirPath)
 
             # Copy the U_* file to the directory and rename it to U
-            srcFile = os.path.join(self.baseDir, "constant/boundaryData/inlet/" + str(self.INELT_DATA_FILE) + "/U_" + timeDirList[i])
+            srcFile = os.path.join(self.baseDir, "constant/boundaryData/inlet/" + str(self.inletDataFile) + "/U_" + timeDirList[i])
             destFile = os.path.join(timeDirPath, "U")
             try:
                 os.system(f"cp {srcFile} {destFile}")
@@ -46,9 +46,9 @@ class CycleDataSetup:
                     raise
 
     def execute(self):
-        inlet_data_dir = os.path.join(self.baseDir, "constant/boundaryData/inlet/" + str(self.INELT_DATA_FILE) + "/")
+        inlet_data_dir = os.path.join(self.baseDir, "constant/boundaryData/inlet/" + str(self.inletDataFile) + "/")
         if not os.path.exists(inlet_data_dir):
-            logger.error(f"No inlet velocity profile data found for BPM = {self.INELT_DATA_FILE}")
+            logger.error(f"No inlet velocity profile data found for BPM = {self.inletDataFile}")
             return
 
         timeDirList = []
@@ -63,7 +63,7 @@ class CycleDataSetup:
 
 if __name__ == "__main__":
     try:
-        inletProfile = CycleDataSetup(INELT_DATA_FILE="inletProfile", cardiacCycle=0.81, numberOfCycle=2)
+        inletProfile = CycleDataSetup(inletDataFile="inletProfile", cardiacCycle=0.81, numberOfCycle=2)
         inletProfile.execute()
     except Exception as e:
         logger.error(f"Unhandled exception: {e}")

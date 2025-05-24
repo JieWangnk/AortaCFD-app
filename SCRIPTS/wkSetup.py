@@ -47,7 +47,7 @@ class wk_Setup:
             area_out4 = PatchProcessing(os.path.join(self.DIRECTORY, "constant", "triSurface"), self.STL_FILES, "outlet4").calculate_surface_area(scale_factor=self.GEOMETRY_SCALE)
 
             # -------------- 2) Read the inlet flow CSV & Check --------------
-            inlet_csv_path = os.path.join("constant", "boundaryData", "inlet", self.INLET_DATA_FILE)
+            inlet_csv_path = os.path.join(self.DIRECTORY, "constant", "boundaryData", "inlet", self.INLET_DATA_FILE)
             if not os.path.isfile(inlet_csv_path):
                 self.logger.error(f"Could not find inlet data file: {inlet_csv_path}")
                 raise FileNotFoundError(f"Could not find inlet data file: {inlet_csv_path}")
@@ -175,7 +175,7 @@ FoamFile
 // ************************************************************************* //
 """
             # -------------- Write to File(s) --------------
-            out_dir = os.path.join("constant")
+            out_dir = os.path.join(self.DIRECTORY, "constant")
             os.makedirs(out_dir, exist_ok=True)
 
             main_file_path = os.path.join(out_dir, filename)
