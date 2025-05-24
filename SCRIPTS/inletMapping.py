@@ -30,6 +30,7 @@ class InletMapping:
         profile='parabolic',   # 'plug', 'parabolic', or 'womersley'
         scale=1.0,
         log_file="inletMapping.log",
+        case_directory=".",    # Added case_directory for resolving paths
         **kwargs
     ):
         """
@@ -42,6 +43,7 @@ class InletMapping:
             profile (str): 'plug', 'parabolic', or 'womersley'.
             scale (float): Additional scaling factor for coordinates, default=1.0.
             log_file (str): Path to the log file.
+            case_directory (str): Directory where the case files are located.
             **kwargs: Additional parameters (e.g., orientation='out', rho=..., nu=..., etc.).
         """
         self.center = np.array(center, dtype=float)
@@ -51,6 +53,7 @@ class InletMapping:
         self.data_type = data_type.lower().strip()    # 'flowRate' or 'velocity'
         self.profile = profile.lower().strip()        # 'plug', 'parabolic', 'womersley'
         self.scale = scale
+        self.case_directory = case_directory  # Store the case directory
         self.kwargs = kwargs
         self.logger = Logger(log_file).get_logger()
 
@@ -278,7 +281,7 @@ class InletMapping:
           4. For each time step, compute velocity distribution and write files.
         """
         # 1) Read the points
-        points_file = f"constant/boundaryData/{self.inlet_name}/points"
+        points_file = os.path.join(self.case_directory, "constant", "boundaryData", self.inlet_name, "points")
         if not os.path.isfile(points_file):
             self.logger.error(f"Points file not found: {points_file}")
             raise FileNotFoundError(f"Points file not found: {points_file}")
@@ -295,7 +298,7 @@ class InletMapping:
         normal_vec = self.get_face_normal_vectors(p1, p2, p3, orientation)
 
         # 3) Read the CSV
-        csv_path = os.path.join("constant", "boundaryData", self.inlet_name, self.inlet_data_file)
+        csv_path = os.path.join(self.case_directory, "constant", "boundaryData", self.inlet_name, self.inlet_data_file)
         if not os.path.isfile(csv_path):
             self.logger.error(f"CSV file not found: {csv_path}")
             raise FileNotFoundError(f"CSV file not found: {csv_path}")
@@ -307,7 +310,7 @@ class InletMapping:
 
         # 4) Create a subfolder to hold time-varying velocity files
         parent_dir = os.path.join(
-            os.getcwd(),
+            self.case_directory,
             "constant",
             "boundaryData",
             self.inlet_name,

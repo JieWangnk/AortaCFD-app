@@ -17,7 +17,7 @@ CONFIG = {
     },
     "mesh": {
         "SNAPPY_SETTINGS": {
-            "parallel": True, # options: True, False
+            "parallel": False, # options: True, False
             "nProcessors": 3,
             "expansionFactor": 0.02,
             "regionRefinementLevel": 2,
