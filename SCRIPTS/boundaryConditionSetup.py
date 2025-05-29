@@ -4,6 +4,7 @@ import sys
 from config import CONFIG
 from SCRIPTS.patchProcessing import *
 from SCRIPTS.logger import Logger
+from SCRIPTS.ofVersionAdapter import OFVersionAdapter
 
 # Initialize the logger
 log_file_path = os.path.join(os.getcwd(), "boundaryConditionSetup.log")
@@ -21,7 +22,10 @@ class BoundaryConditionSetup:
         self.INITIAL_CONDITION_K = INITIAL_CONDITION_K
         self.INITIAL_CONDITION_OMEGA = INITIAL_CONDITION_OMEGA
         self.SIMULATIONTYPE = SIMULATIONTYPE
-        self.openfoam_version = openfoam_version  # Store the OpenFOAM version
+        self.openfoam_version = openfoam_version
+
+        # Initialize the OFVersionAdapter
+        self.version_adapter = OFVersionAdapter(openfoam_version)
 
         try:
             # Create an instance of PatchProcessing
@@ -60,34 +64,12 @@ class BoundaryConditionSetup:
             logger.error(f"Error initializing BoundaryConditionSetup: {e}")
             raise
 
-    def _get_foam_file_header(self, object_class, object_name):
-        """
-        Generate the FoamFile header dynamically based on the OpenFOAM version.
-        """
-        return f"""/*--------------------------------*- C++ -*----------------------------------*\\
-  =========                 |
-  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
-   \\    /   O peration     | Website:  https://openfoam.org
-    \\  /    A nd           | Version:  {self.openfoam_version}
-     \\/     M anipulation  |
-\\*---------------------------------------------------------------------------*/
-FoamFile
-{{
-    version     2.0;
-    format      ascii;
-    class       {object_class};
-    location    "0";
-    object      {object_name};
-}}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-"""
-
     def write_U_file(self):
         """
         Write the U file dynamically based on OpenFOAM version.
         """
         try:
-            foam_file_header = self._get_foam_file_header("volVectorField", "U")
+            foam_file_header = self.version_adapter.get_foam_file_header("volVectorField", "U")
             
             # Handle inlet type
             if self.INLET_TYPE_U == "timeVaryingMappedFixedValue":
@@ -172,6 +154,7 @@ FoamFile
         """
         Write the p file dynamically based on OpenFOAM version.
         """
+        foam_file_header = self.version_adapter.get_foam_file_header("volScalarField", "p")
         # Boundary condition for inlet
         if self.BC_OUTLET == "3EWINDKESSEL":
             # Boundary condition for inlet
@@ -213,7 +196,6 @@ FoamFile
             {{
                 type            zeroGradient;
             }}
-
             """
 
             outlet_block_template_v2 = """
@@ -224,13 +206,16 @@ FoamFile
             }}
             """
 
+            # Sort outlets deterministically
+            self.OUTLET_STL.sort()
+
             outlet_block = ""
             for outlet in self.OUTLET_STL:
-                outletName = outlet.split(".")[0]
-                if outlet is self.OUTLET_STL[-1]:
-                    outlet_block += outlet_block_template_v2.format(outlet_name=outletName)
+                outlet_name = outlet.split(".")[0]
+                if outlet == self.OUTLET_STL[-1]:  # Last outlet gets fixedValue
+                    outlet_block += outlet_block_template_v2.format(outlet_name=outlet_name)
                 else:
-                    outlet_block += outlet_block_template.format(outlet_name=outletName)
+                    outlet_block += outlet_block_template.format(outlet_name=outlet_name)
 
         else:
             logger.error("ERROR: outlet_type not found")
@@ -244,7 +229,6 @@ FoamFile
             }}
         """.format(wall=self.MAIN_AORTA_STL.split(".")[0])
 
-        foam_file_header = self._get_foam_file_header("volScalarField", "p")
         template = f"""{foam_file_header}
 
 dimensions      [0 2 -2 0 0 0 0];
@@ -269,7 +253,7 @@ boundaryField
         """
         Write the nut file dynamically based on OpenFOAM version.
         """
-                   
+        foam_file_header = self.version_adapter.get_foam_file_header("volScalarField", "nut")           
         # Boundary condition for inlet
         inlet_block_nut = """
         {inlet}
@@ -309,7 +293,6 @@ boundaryField
             type            zeroGradient;
         }}""".format(wall=self.MAIN_AORTA_STL.split(".")[0])
  
-        foam_file_header = self._get_foam_file_header("volScalarField", "nut")
         template = f"""{foam_file_header}
 dimensions      [0 2 -1 0 0 0 0];
 
@@ -330,6 +313,7 @@ boundaryField
 #------------------------------------------------------------------------------------------------------------------
             
     def write_k_file(self):
+        foam_file_header = self.version_adapter.get_foam_file_header("volScalarField", "k")
         if 'kInlet' not in self.INITIAL_CONDITION_K or 'intensityInlet' not in self.INITIAL_CONDITION_K:
             logger.error("ERROR: kInlet or intensityInlet not found in INITIAL_CONDITION_K")
             sys.exit(1)
@@ -364,7 +348,6 @@ boundaryField
 }}
 """.format(wall=self.MAIN_AORTA_STL.split(".")[0])
         
-        foam_file_header = self._get_foam_file_header("volScalarField", "k")
         # Template for k file
         template = """{header}
 
@@ -391,6 +374,7 @@ boundaryField
 #------------------------------------------------------------------------------------------------------------------
             
     def write_omega_file(self):
+        foam_file_header = self.version_adapter.get_foam_file_header("volScalarField", "omega")
         # Boundary condition for inlet
         inlet_blocko = """    {inlet}
 {{
@@ -420,7 +404,6 @@ boundaryField
 }}
 """.format(wall=self.MAIN_AORTA_STL.split(".")[0])
         
-        foam_file_header = self._get_foam_file_header("volScalarField", "omega")
         # Template for omega file
         template = """{header}
 
@@ -446,9 +429,7 @@ boundaryField
 #------------------------------------------------------------------------------------------------------------------
     
     def write_sampleDict_file(self):
-
-        # FoamFile header
-        foam_file_header = self._get_foam_file_header("dictionary", "sampleDict")
+        foam_file_header = self.version_adapter.get_foam_file_header("dictionary", "sampleDict")
         # Template for sampleDict file
         template = """{header}
 

@@ -13,7 +13,8 @@ CONFIG = {
         "case_name": "PAT1_2024",
         "scale_factor": 1e-3,
         "refinement_level": "coarse", # options: "coarse", "medium", "fine"
-        "rotation": True # options to adjust geometry alignment of coordinate system, defult is (0,0,1)
+        "rotation": True,
+        "target_normal": [0, 0, 1] # options to adjust geometry alignment of coordinate system, default is (0,0,1)
     },
     "mesh": {
         "SNAPPY_SETTINGS": {
@@ -36,12 +37,12 @@ CONFIG = {
         } 
     },
     "boundary": {
-        "BC_INLET": "TIMEVARYING", # only two options: "TIMEVARYING", "STEADYSATE"  
+        "BC_INLET": "TIMEVARYING", # only two options: "TIMEVARYING", "STEADYSTATE"  
         "BC_OUTLET": "3EWINDKESSEL", # only two options: "3EWINDKESSEL", "ZEROGRADIENT"
         "INLET_DATA_FILE": "BPM75.csv",
         "INLET_DATA_TYPE": "velocity", # only two options: "flowRate", "velocity"
         "INLET_PROFILE": "womersley", # only three profiles: "plug", "parabolic" and "womersley"
-        "INLET_ORIENTATION": "out",
+        "INLET_ORIENTATION": "out", # Specifies the direction of the inlet flow relative to the geometry
         "WK_SETTING": {
             "percentage": 30,        
             "systolic_pressure": 120,
@@ -58,15 +59,14 @@ CONFIG = {
     "simulation_control": {
         "number_of_cycles": 2,
         "start_time": 0.0,
-        "cardiac_cycle": 0.8, # can be removed
         "controlDict": {
             "startFrom": "startTime",
             "startTime": 0.0,
             "stopAt": "endTime",
-            "endTime": 0.01,
+            "endTime": 2e-6, # Placeholder value, must be dynamically set by the script
             "deltaT": 1e-6,
-            "writeControl": "adjustableRunTime",
-            "writeInterval": 0.01,
+            "writeControl": "timeStep", #"adjustableRunTime",
+            "writeInterval": 1, # 0.01,
             "runTimeModifiable": "true",
             "functionList": ["wallShearStress"]
         }
@@ -94,7 +94,7 @@ CONFIG = {
     },
     "post_processing": {
         "pvbatch_exe": "/home/jie/ParaView-5.11.2-MPI-Linux-Python3.9-x86_64/bin/pvbatch",
-        "case_type": "Reconstructed",
+        "case_type": "Reconstructed", # options: "Reconstructed", "Decomposed"
         "time_steps": {
             "customized": False,
             "start": 0.0,

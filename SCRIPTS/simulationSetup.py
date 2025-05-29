@@ -8,7 +8,11 @@ class SimulationSetup:
         self.openfoam_version = OPENFOAM_VERSION  # Store the OpenFOAM version
         self.logger = Logger(log_file).get_logger()
 
-    def write_controlDict(self, filename="controlDict"):
+    def write_controlDict(self, filename="controlDict", cardiac_period=None, number_of_cycles=None):
+        """
+        Writes the controlDict file for the simulation.
+        Dynamically sets endTime if cardiac_period and number_of_cycles are provided.
+        """
         template = '''/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
@@ -67,24 +71,43 @@ functions
 
 // ************************************************************************* //
 '''
-        function_block = ""
+        # Debugging: Log cardiac_period and number_of_cycles
+        self.logger.info(f"Received cardiac_period: {cardiac_period}, number_of_cycles: {number_of_cycles}")
+       
+        # Dynamically calculate endTime
+        if self.SIMULATION_CONTROL["controlDict"]["endTime"] is None:
+            if number_of_cycles is not None and cardiac_period is not None:
+                self.SIMULATION_CONTROL["controlDict"]["endTime"] = cardiac_period * number_of_cycles
+            else:
+                self.SIMULATION_CONTROL["controlDict"]["endTime"] = 1
+
+        # Ensure the system folder exists
+        system_folder = os.path.join(self.DIRECTORY, "system")
+        os.makedirs(system_folder, exist_ok=True)
+
+        # Remove the existing controlDict file if it exists
+        filepath = os.path.join(system_folder, filename)
+        if os.path.exists(filepath):
+            self.logger.info(f"Removing existing {filename} file.")
+            os.remove(filepath)
+
         # Create the function block
+        function_block = ""
         for f in self.SIMULATION_CONTROL["controlDict"]["functionList"]:
             template_v2 = """
             #includeFunc    {function}"""
             function_block += template_v2.format(function=f)
 
-        # Use the template to fill in the variables and write to the file
-        filepath = os.path.join(self.DIRECTORY, "system", filename)
+        # Write the controlDict file
         try:
+            self.logger.info(f"Writing controlDict to: {filepath}")
             with open(filepath, 'w') as f:
                 f.write(template.format(
                     openfoam_version=self.openfoam_version,
                     function_block=function_block,
                     **self.SIMULATION_CONTROL["controlDict"]
                 ))
-                
+            self.logger.info(f"Successfully wrote {filename} to {filepath}.")
         except Exception as e:
             self.logger.error(f"Failed to write {filename} file: {e}")
             raise
-

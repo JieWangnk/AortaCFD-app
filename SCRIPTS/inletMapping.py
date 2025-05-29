@@ -31,6 +31,8 @@ class InletMapping:
         scale=1.0,
         log_file="inletMapping.log",
         case_directory=".",    # Added case_directory for resolving paths
+        rho=None,              # Density, optional for Womersley profile
+        nu=None,               # Kinematic viscosity, optional for Womersley profile
         **kwargs
     ):
         """
@@ -58,8 +60,8 @@ class InletMapping:
         self.logger = Logger(log_file).get_logger()
 
         # Potentially read optional parameters from kwargs, if used for Womersley or advanced BC
-        self.rho = kwargs.get("rho", 1060)  # default blood density
-        self.nu = kwargs.get("nu", 3.3e-6)  # default blood kinematic viscosity
+        self.rho = rho
+        self.nu = nu
         self.delta_p = kwargs.get("delta_p", 1.0)  # default pressure gradient amplitude if needed
 
         VALID_PROFILES = ['plug', 'parabolic', 'womersley']
@@ -73,7 +75,36 @@ class InletMapping:
     def compute_cross_sectional_area(self):
         return np.pi * (self.radius * self.scale)**2
 
+    def _determine_cardiac_period(self, times):
+        """
+        Determines the cardiac cycle period from the time array in the CSV file.
+        Assumes the time array represents one or more cardiac cycles.
+        """
+        if len(times) < 2:
+            self.logger.error("Insufficient time data to determine cardiac cycle period.")
+            raise ValueError("Insufficient time data to determine cardiac cycle period.")
+
+        # Calculate time differences
+        time_diffs = np.diff(times)
+
+        # Check for uniform time steps
+        if not np.allclose(time_diffs, time_diffs[0], atol=1e-6):
+            self.logger.warning("Non-uniform time steps detected in the CSV file.")
+
+        # Determine the cardiac cycle period
+        total_duration = times[-1] - times[0]
+        if total_duration <= 0:
+            self.logger.error("Invalid time range in the CSV file.")
+            raise ValueError("Invalid time range in the CSV file.")
+
+        # Assume the CSV represents one cardiac cycle
+        self.logger.info(f"Determined cardiac cycle period: {total_duration:.6f} seconds.")
+        return total_duration
+
     def read_csv_file(self, file_name):
+        """
+        Reads the CSV file and determines the cardiac cycle period.
+        """
         try:
             data = np.genfromtxt(file_name, delimiter=',', skip_header=1)
             if data.ndim < 2 or data.shape[1] < 2:
@@ -81,7 +112,12 @@ class InletMapping:
         except Exception as e:
             self.logger.error(f"Error reading CSV file {file_name}: {e}")
             raise
-        return data[:, 0], data[:, 1], data[-1, 0] - data[0, 0]
+
+        times = data[:, 0]
+        yval = data[:, 1]
+        cardiac_cycle = self._determine_cardiac_period(times)
+
+        return times, yval, cardiac_cycle
 
     def read_points_file(self, file_name):
         """

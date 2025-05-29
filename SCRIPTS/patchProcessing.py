@@ -28,6 +28,22 @@ class PatchProcessing:
         self.mesh_data = self.load_mesh(self.STL_PATH)
         self.all_points = self.extract_points()  # Nx3 array
 
+        # --- Robustness checks ---
+        num_triangles = len(self.mesh_data.vectors)
+        if num_triangles < 10:
+            self.logger.warning(
+                f"STL patch '{self.STL}' contains very few triangles ({num_triangles}). "
+                "Results may be unreliable or indicate a degenerate or incomplete patch."
+            )
+
+        unique_points = np.unique(self.mesh_data.vectors.reshape(-1, 3), axis=0)
+        if len(unique_points) > 3 * num_triangles:
+            self.logger.warning(
+                f"STL patch '{self.STL}' has an unusually high number of unique vertices "
+                f"({len(unique_points)}) relative to triangles ({num_triangles}). "
+                "This may indicate multiple disconnected surfaces in the patch."
+            )
+
     def load_mesh(self, path):
         """Loads an STL file using numpy-stl."""
         try:
@@ -53,21 +69,19 @@ class PatchProcessing:
         
         return min_coords, max_coords
 
-    def compute_average_normal(self, points_3n):
+    def compute_average_normal(self):
         """
-        Computes the average normal by summing face normals for each triangle
-        (grouped in sets of three points).
+        Computes the average normal by summing face normals for each triangle.
         """
-        if len(points_3n) % 3 != 0:
-            self.logger.error("Points array should be a multiple of 3 in size.")
-            raise ValueError("Points array should be a multiple of 3 in size.")
-        num_triangles = len(points_3n) // 3
+        if self.mesh_data.vectors is None or len(self.mesh_data.vectors) == 0:
+            self.logger.error("Mesh data contains no vectors (triangles).")
+            raise ValueError("Mesh data contains no vectors (triangles).")
+
         normal_sum = np.zeros(3)
+        num_triangles = len(self.mesh_data.vectors)
 
         for i in range(num_triangles):
-            p1 = points_3n[3*i]
-            p2 = points_3n[3*i + 1]
-            p3 = points_3n[3*i + 2]
+            p1, p2, p3 = self.mesh_data.vectors[i]
             v1 = p2 - p1
             v2 = p3 - p1
             face_normal = np.cross(v1, v2)
@@ -110,14 +124,16 @@ class PatchProcessing:
     def calculate_inlet_center_radius(self, scale_factor=1e-3):
         """
         Computes a hydraulic/equivalent radius for an arbitrarily oriented patch.
+        Uses unique vertices for centroid and projection for better geometric accuracy.
         """
-        points_3n = self.all_points
-        if len(points_3n) < 9:
-            self.logger.error("Not enough points to compute a valid inlet radius.")
-            raise ValueError("Not enough points to compute a valid inlet radius.")
+        # Use unique vertices for centroid and projection
+        unique_patch_points = np.unique(self.mesh_data.vectors.reshape(-1, 3), axis=0)
+        if len(unique_patch_points) < 3:
+            self.logger.error("Not enough unique points to compute a valid inlet radius.")
+            raise ValueError("Not enough unique points to compute a valid inlet radius.")
 
-        avg_normal = self.compute_average_normal(points_3n)
-        translated_3d, points_2d, centroid = self.project_points_onto_plane(points_3n, avg_normal)
+        avg_normal = self.compute_average_normal()
+        translated_3d, points_2d, centroid = self.project_points_onto_plane(unique_patch_points, avg_normal)
         centroid *= scale_factor
 
         if len(points_2d) < 3:
@@ -135,7 +151,7 @@ class PatchProcessing:
         """
         Computes the total surface area of the patch by summing triangle areas.
         """
-        vectors = self.mesh_data.vectors
+        vectors = self.mesh_data.vectors  # shape: (N, 3, 3)
         cross_products = np.cross(vectors[:, 1] - vectors[:, 0], vectors[:, 2] - vectors[:, 0])
         triangle_areas = 0.5 * np.linalg.norm(cross_products, axis=1)
         total_area = np.sum(triangle_areas) * scale_factor**2
