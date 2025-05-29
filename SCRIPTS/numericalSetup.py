@@ -1,13 +1,17 @@
 import os
 from SCRIPTS.logger import Logger
+from SCRIPTS.ofVersionAdapter import OFVersionAdapter
 
-class FvSchemesWriter():
+class FvSchemesWriter:
     def __init__(self, DIRECTORY, SIMULATIONTYPE, SIMULATIONPERFORMANCE, OPENFOAM_VERSION, log_file="numericalSetup.log"):
         self.DIRECTORY = DIRECTORY
         self.SIMULATIONTYPE = SIMULATIONTYPE
         self.SIMULATIONPERFORMANCE = SIMULATIONPERFORMANCE
         self.openfoam_version = OPENFOAM_VERSION  # Store the OpenFOAM version
         self.logger = Logger(log_file).get_logger()
+
+        # Initialize the OFVersionAdapter
+        self.version_adapter = OFVersionAdapter(OPENFOAM_VERSION)
 
     def write_fvSchemes_file(self):
         filepath = os.path.join(self.DIRECTORY, "system", "fvSchemes")
@@ -41,27 +45,9 @@ class FvSchemesWriter():
             self.logger.error(f"Failed to write fvSchemes file: {e}")
             raise
 
-    def _get_foam_file_header(self):
-        return f"""/*--------------------------------*- C++ -*----------------------------------*\\
-  =========                 |
-  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
-   \\    /   O peration     | Website:  https://openfoam.org
-    \\  /    A nd           | Version:  {self.openfoam_version}
-     \\/     M anipulation  |
-\\*---------------------------------------------------------------------------*/
-FoamFile
-{{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    location    "system";
-    object      fvSchemes;
-}}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-"""
-
     def _get_laminar_high_fvSchemes(self):
-        return f"""{self._get_foam_file_header()}
+        foam_file_header = self.version_adapter.get_foam_file_header("dictionary", "fvSchemes")
+        return f"""{foam_file_header}
 
 ddtSchemes
 {{
@@ -100,7 +86,8 @@ snGradSchemes
 """
 
     def _get_laminar_medium_fvSchemes(self):
-        return f"""{self._get_foam_file_header()}
+        foam_file_header = self.version_adapter.get_foam_file_header("dictionary", "fvSchemes")
+        return f"""{foam_file_header}
 
 ddtSchemes
 {{
@@ -138,7 +125,8 @@ snGradSchemes
 """
 
     def _get_laminar_low_fvSchemes(self):
-        return f"""{self._get_foam_file_header()}
+        foam_file_header = self.version_adapter.get_foam_file_header("dictionary", "fvSchemes")
+        return f"""{foam_file_header}
 
 ddtSchemes
 {{
@@ -177,7 +165,8 @@ snGradSchemes
 """
 
     def _get_LES_high_fvSchemes(self):
-        return f"""{self._get_foam_file_header()}
+        foam_file_header = self.version_adapter.get_foam_file_header("dictionary", "fvSchemes")
+        return f"""{foam_file_header}
 
 ddtSchemes
 {{
@@ -220,7 +209,8 @@ wallDist
 """
 
     def _get_LES_medium_fvSchemes(self):
-        return f"""{self._get_foam_file_header()}
+        foam_file_header = self.version_adapter.get_foam_file_header("dictionary", "fvSchemes")
+        return f"""{foam_file_header}
 
 ddtSchemes
 {{
@@ -264,7 +254,8 @@ wallDist
 """
 
     def _get_LES_low_fvSchemes(self):
-        return f"""{self._get_foam_file_header()}
+        foam_file_header = self.version_adapter.get_foam_file_header("dictionary", "fvSchemes")
+        return f"""{foam_file_header}
 
 ddtSchemes
 {{

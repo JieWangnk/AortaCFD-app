@@ -21,6 +21,8 @@ class GeometryAnalyzer:
         self.geometry_case = geometry_case
         self.refinement = refinement
         self.refinement_levels = refinement_levels[refinement]
+        if self.refinement_levels <= 0:
+            raise ValueError(f"Invalid refinement level: {self.refinement_levels}. Must be a positive number.")
         self.snappy_settings = snappy_settings
         self.stl_files = stl_files  # Use the rotated STL files
         self.geometry_path = geometry_path  # Path to the directory containing the rotated STL files
@@ -34,7 +36,9 @@ class GeometryAnalyzer:
         self.addLayers = snappy_settings["addLayer"]
 
         # Set main_aorta_stl to the correct STL file (e.g., wall_aorta.stl)
-        self.main_aorta_stl = next((f for f in stl_files if "wall" in f), stl_files[0])
+        self.main_aorta_stl = next((f for f in stl_files if "wall" in f), None)
+        if not self.main_aorta_stl:
+            raise ValueError("No STL file containing 'wall' found. Please specify the main wall STL file explicitly.")
 
         # Initialize logger
         self.logger = Logger(log_file).get_logger()
@@ -109,6 +113,15 @@ class GeometryAnalyzer:
         centroid = np.mean(all_points, axis=0)
         return all_points, centroid
 
+    def validate_internal_point(self, point):
+        min_vertex, max_vertex = self.get_max_vertex()
+        x, y, z = point
+        return (
+            min_vertex[0] <= x <= max_vertex[0] and
+            min_vertex[1] <= y <= max_vertex[1] and
+            min_vertex[2] <= z <= max_vertex[2]
+        )
+    
     def get_internal_point(self, offset_factor=0.2):
         """
         Calculate an internal point within the geometry by moving inward
@@ -130,9 +143,12 @@ class GeometryAnalyzer:
         # Move inward from the farthest point toward the centroid
         direction_vector = centroid - farthest_point
         internal_point = farthest_point + direction_vector * offset_factor
-        internal_point2 = "({:.5f}  {:.5f}  {:.5f})".format(*internal_point)
 
-        return internal_point2
+        # Validate the internal point
+        if not self.validate_internal_point(internal_point):
+            raise ValueError(f"Calculated internal point {internal_point} is outside the geometry.")
+
+        return "({:.5f} {:.5f} {:.5f})".format(*internal_point)
 
     def generate_blockMeshDict_bounds(self):
         min_vertex, max_vertex = self.get_max_vertex()

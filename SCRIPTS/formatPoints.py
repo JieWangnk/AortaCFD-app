@@ -75,12 +75,12 @@ class EnhancedPointsFormatter:
         formatted_coordinates = []
         for line in lines:
             values = line.strip().split()
-            if len(values) >= 3:
+            if len(values) >= 4:  # Ensure there are at least 4 values
                 try:
                     x, y, z = values[1], values[2], values[3]
                     formatted_coordinates.append(f"({x} {y} {z})")
-                except IndexError:
-                    self.logger.warning(f"Skipping malformed line: {line.strip()}")
+                except Exception as e:
+                    self.logger.warning(f"Error processing line '{line.strip()}': {e}")
             else:
                 self.logger.warning(f"Skipping invalid line (not enough values): {line.strip()}")
         return formatted_coordinates
