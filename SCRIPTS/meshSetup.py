@@ -3,6 +3,7 @@ import re
 from stl import mesh
 import numpy as np
 from SCRIPTS.logger import Logger
+from SCRIPTS.aorticAxisEstimator import AxisEstimator
 
 def is_binary_file(file_path):
     """Check if the given file is binary."""
@@ -16,7 +17,10 @@ def is_binary_file(file_path):
     return False
 
 class GeometryAnalyzer:
-    def __init__(self, DIRECTORY, geometry_case, refinement, refinement_levels, snappy_settings, stl_files, geometry_path, expansion_factor=0.02, log_file="meshSetup.log"):
+    def __init__(self, DIRECTORY, geometry_case, refinement, 
+                refinement_levels, snappy_settings, 
+                stl_files, geometry_path, 
+                expansion_factor=0.02, log_file="meshSetup.log"):
         self.directory = DIRECTORY
         self.geometry_case = geometry_case
         self.refinement = refinement

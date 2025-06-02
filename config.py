@@ -14,7 +14,9 @@ CONFIG = {
         "scale_factor": 1e-3,
         "refinement_level": "coarse", # options: "coarse", "medium", "fine"
         "rotation": True,
-        "target_normal": [0, 0, 1] # options to adjust geometry alignment of coordinate system, default is (0,0,1)
+        "target_normal": [0, 0, 1], # options to adjust geometry alignment of coordinate system, default is (0,0,1)
+        "inlet_keyword": "inlet",
+        "outlet_keywords_ordered": ["outlet1", "outlet2","outlet3", "outlet4"], # list of outlet patch keywords
     },
     "mesh": {
         "SNAPPY_SETTINGS": {

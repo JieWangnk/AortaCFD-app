@@ -26,7 +26,7 @@ logger = Logger(log_file_path).get_logger()
 from config import CONFIG
 
 # Import all relevant setup scripts
-from SCRIPTS.meshSetup import GeometryAnalyzer
+from SCRIPTS.meshSetup_2V import GeometryAnalyzer
 from SCRIPTS.boundaryConditionSetup import BoundaryConditionSetup
 from SCRIPTS.physicalProperitesSetup import PhysicalPropertiesWriter
 from SCRIPTS.numericalSetup import FvSchemesWriter
@@ -143,18 +143,20 @@ class OpenFOAMCase:
             # Initialize the geometry analyzer with rotated STL files
             self.geometry_analyzer = GeometryAnalyzer(
                 DIRECTORY=self.directory, 
-                geometry_case=self.geometry_case, 
-                refinement=self.refinement,
-                refinement_levels=CONFIG["mesh"]["refinement_levels"],
-                snappy_settings=CONFIG["mesh"]["SNAPPY_SETTINGS"],
-                stl_files=rotated_stl_files,  # Pass rotated STL files
-                geometry_path=os.path.join(self.directory, "constant", "triSurface"),  # Path to rotated STL files
-                expansion_factor=CONFIG.get("expansion_factor", 0.02)  # Optional: Pass from config or use default
+                geometry_case_name_from_config=geom_cfg["case_name"], 
+                refinement_level_key=geom_cfg["refinement_level"],
+                refinement_levels_dict=CONFIG["mesh"]["refinement_levels"],
+                snappy_settings_dict=CONFIG["mesh"]["SNAPPY_SETTINGS"],
+                rotated_stl_basenames=rotated_stl_files,  # Pass rotated STL files
+                path_to_trisurface_dir=os.path.join(self.directory, "constant", "triSurface"),  # Path to rotated STL files
+                expansion_factor=CONFIG.get("expansion_factor", 0.02),  
+                log_file= os.path.join(self.directory, "geometry_analyzer.log"),
+                global_config= CONFIG
             )
             
             self.boundary_condition = BoundaryConditionSetup(
                 self.directory, 
-                self.geometry_analyzer.stl_files, 
+                self.geometry_analyzer.stl_filenames, 
                 self.BC_INLET, 
                 self.BC_OUTLET, 
                 self.initial_condition_U, 
@@ -282,8 +284,9 @@ class OpenFOAMCase:
 
     def write_geometry_files(self):
         self.geometry_analyzer.write_blockMeshDict()
-        self.geometry_analyzer.write_snappyHexMeshDict()
         self.geometry_analyzer.write_surfaceFeaturesDict()
+        self.geometry_analyzer.write_snappyHexMeshDict()
+        print(f"Principal axis found: {self.geometry_analyzer.principal_aortic_axis}")
 
     def write_boundary_conditions(self):
         self.boundary_condition.write_U_file()
