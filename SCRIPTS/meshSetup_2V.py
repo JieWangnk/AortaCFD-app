@@ -331,7 +331,7 @@ boundary
 
             # Geometry entry
             stl_geometry_entries += f"""
-    {stl_name_for_dict} // Using stl_name_for_dict here
+    {stl_basename} // Using stl_name_for_dict here
     {{
         type triSurfaceMesh;
         name {stl_name_for_dict}; // And here
@@ -408,7 +408,13 @@ boundary
         }}"""
 
 
-        template = f"""
+        template = f"""/*--------------------------------*- C++ -*----------------------------------*\\
+// =========                 |
+// \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+//  \\\\    /   O peration     | Website:  www.OpenFOAM.org
+//   \\\\  /    A nd           | Version:  {self.config["openfoam_version"]}
+//    \\\\/     M anipulation  |
+\\*---------------------------------------------------------------------------*/        
 FoamFile
 {{
     version     2.0;
@@ -479,14 +485,16 @@ addLayersControls
     finalLayerThickness {self.snappy_settings.get("finalLayerThickness", 0.3)}; // Default: 0.3
     minThickness {self.snappy_settings.get("minThickness", 0.1)}; // Default: 0.1
     nGrow {self.snappy_settings.get("nGrow", 0)};
-    
-    // Many other addLayersControls parameters - ensure they are taken from self.snappy_settings
-    // or have sensible defaults if not present in your config structure.
-    // Example for featureAngle:
     featureAngle {self.snappy_settings.get("featureAngle", 60)}; // Default: 60
     slipFeatureAngle {self.snappy_settings.get("slipFeatureAngle", 30)}; // Default: 30
     nRelaxIter {self.snappy_settings.get("addLayers_nRelaxIter", 5)}; // Renamed to avoid clash
-    // ... (continue for all addLayersControls from your template, using self.snappy_settings.get())
+    nSmoothSurfaceNormals {self.snappy_settings.get("nSmoothSurfaceNormals", 1)}; // Default: 1
+    nSmoothThickness {self.snappy_settings.get("nSmoothThickness", 10)}; // Default: 10
+    maxFaceThicknessRatio {self.snappy_settings.get("maxFaceThicknessRatio", 0.5)}; // Default: 0.5
+    minFaceThickness {self.snappy_settings.get("minFaceThickness", 0.05)}; // Default: 0.05
+    maxThicknessToMedialRatio {self.snappy_settings.get("maxThicknessToMedialRatio", 0.3)}; // Default: 0.3
+    nBufferCellsNoExtrude {self.snappy_settings.get("nBufferCellsNoExtrude", 0)}; // Default: 0
+    nLayerIter {self.snappy_settings.get("nLayerIter", 50)}; // Default: 50
 }};
 
 meshQualityControls
@@ -499,8 +507,12 @@ meshQualityControls
     minTetQuality {self.snappy_settings.get("minTetQuality", 1e-30)};
     minArea {self.snappy_settings.get("minArea", -1)}; // Typically -1 (disabled) or small positive
     minTwist {self.snappy_settings.get("minTwist", 0.02)};
+    minTriangleTwist {self.snappy_settings.get("minTriangleTwist", 0.02)}; // Default: 0.02
     minDeterminant {self.snappy_settings.get("minDeterminant", 0.001)};
-    // ... (continue for all meshQualityControls)
+    minFaceWeight {self.snappy_settings.get("minFaceWeight", 0.05)}; // Default: 0.05
+    minVolRatio {self.snappy_settings.get("minVolRatio", 0.01)}; // Default: 0.01
+    nSmoothScale {self.snappy_settings.get("nSmoothScale", 4)}; // Default: 4
+    errorReduction {self.snappy_settings.get("errorReduction", 0.75)}; // Default: 0.75
 }};
 
 writeFlags ( scalarLevels layerSets layerFields ); // Usually not changed often
