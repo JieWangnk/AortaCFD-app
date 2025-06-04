@@ -669,7 +669,7 @@ class OpenFOAMRunner:
         # Build the simulation command
         simulation_command = "pimpleFoam"
         if self.BC_OUTLET == "3EWINDKESSEL":
-            simulation_command = "pimpleFoam_WK_2.0" # Adjust as needed
+            simulation_command = "pimpleFoam_WK" # Adjust as needed
 
         # Run the simulation
         if self.SOLN_TYPE == "serial":
