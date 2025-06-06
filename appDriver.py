@@ -15,7 +15,7 @@ import numpy as np
 import tempfile
 import json
 from scipy.spatial.transform import Rotation as R
-from stl import mesh
+from stl import mesh as np_stl_mesh
 from SCRIPTS.logger import Logger
 
 # Initialize the logger
@@ -66,7 +66,7 @@ def rotate_stl(stl_path, rotation_axis, rotation_angle, output_path):
     """
     try:
         # Load the STL file
-        stl_mesh = mesh.Mesh.from_file(stl_path)
+        stl_mesh = np_stl_mesh.Mesh.from_file(stl_path)
 
         # Create a rotation object
         rotation = R.from_rotvec(rotation_angle * rotation_axis)
@@ -143,13 +143,13 @@ class OpenFOAMCase:
             # Initialize the geometry analyzer with rotated STL files
             self.geometry_analyzer = GeometryAnalyzer(
                 DIRECTORY=self.directory, 
-                geometry_case_name_from_config=geom_cfg["case_name"], 
-                refinement_level_key=geom_cfg["refinement_level"],
-                refinement_levels_dict=CONFIG["mesh"]["refinement_levels"],
-                snappy_settings_dict=CONFIG["mesh"]["SNAPPY_SETTINGS"],
+                #geometry_case_name_from_config=geom_cfg["case_name"], 
+                #refinement_level_key=geom_cfg["refinement_level"],
+                #refinement_levels_dict=CONFIG["mesh"]["refinement_levels"],
+                #snappy_settings_dict=CONFIG["mesh"]["SNAPPY_SETTINGS"],
                 rotated_stl_basenames=rotated_stl_files,  # Pass rotated STL files
                 path_to_trisurface_dir=os.path.join(self.directory, "constant", "triSurface"),  # Path to rotated STL files
-                expansion_factor=CONFIG.get("expansion_factor", 0.02),  
+                #expansion_factor=CONFIG.get("expansion_factor", 0.02),  
                 log_file= os.path.join(self.directory, "geometry_analyzer.log"),
                 global_config= CONFIG
             )

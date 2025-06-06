@@ -7,35 +7,27 @@ from SCRIPTS.patchProcessing import PatchProcessing
 from SCRIPTS.aorticAxisEstimator import AorticAxisEstimator 
 
 class GeometryAnalyzer:
-    def __init__(self, DIRECTORY, geometry_case_name_from_config, refinement_level_key,
-                 refinement_levels_dict, snappy_settings_dict,
-                 rotated_stl_basenames, path_to_trisurface_dir,
-                 expansion_factor=0.02, log_file="meshSetup.log",
-                 global_config=None): # Pass the whole CONFIG dictionary
+    def __init__(self, DIRECTORY, rotated_stl_basenames, path_to_trisurface_dir,
+                 log_file="meshSetup.log", global_config=None): # Pass the whole CONFIG dictionary
 
-        self.case_dir = DIRECTORY  # Main case directory (e.g., OPENFOAM/PATIENT1_coarse)
-        self.geometry_case_name = geometry_case_name_from_config
-        self.refinement_level_key = refinement_level_key # e.g., "coarse"
+        self.case_dir = DIRECTORY 
+        self.config = global_config
+
+        self.geometry_case_name = self.config["geometry"]["case_name"] 
+        self.refinement_level_key = self.config["geometry"]["refinement_level"]  # e.g., "coarse", "medium", "fine"
         
-        # Actual numerical refinement level (e.g., target cell size)
-        if self.refinement_level_key not in refinement_levels_dict:
-            raise ValueError(f"Refinement key '{self.refinement_level_key}' not found in refinement_levels_dict.")
-        self.base_cell_size_target = refinement_levels_dict[self.refinement_level_key]
+        self.base_cell_size_target = self.config["mesh"]["refinement_levels"][self.refinement_level_key] 
+        
         if self.base_cell_size_target <= 0:
             raise ValueError(f"Invalid base_cell_size_target: {self.base_cell_size_target}. Must be positive.")
 
-        self.snappy_settings = snappy_settings_dict
+        self.snappy_settings = self.config["mesh"]["SNAPPY_SETTINGS"]  # e.g., {"parallel": False, "nProcessors": 3, ...}
         self.stl_filenames = [os.path.basename(f) for f in rotated_stl_basenames]  # Extract basenames
         self.tri_surface_path = path_to_trisurface_dir # e.g., ".../constant/triSurface"
 
-        self.expansion_factor = expansion_factor
+        self.expansion_factor = self.config["mesh"].get("expansionFactor", 0.02) # Default to 0.02 if not set
         self.logger = Logger(log_file).get_logger() # Or better, pass a shared logger instance
 
-        if global_config is None:
-            self.logger.error("Global CONFIG not passed to GeometryAnalyzer. Cannot proceed.")
-            raise ValueError("Global CONFIG instance is required.")
-        self.config = global_config
-        
         self.scale_factor = self.config["geometry"]["scale_factor"]
 
         # Identify main wall, inlet, and outlet STL basenames
@@ -46,14 +38,6 @@ class GeometryAnalyzer:
         self.inlet_patch_keyword = self.config["geometry"].get("inlet_keyword", "inlet")
         self.outlet_patch_keywords = self.config["geometry"].get("outlet_keywords_ordered",
                                                                  self._derive_outlet_keywords())
-
-        self.logger.info(f"GeometryAnalyzer initialized for case: {self.geometry_case_name}")
-        self.logger.info(f"Using triSurface path: {self.tri_surface_path}")
-        self.logger.info(f"STL files to process: {self.stl_filenames}")
-        self.logger.info(f"Main wall STL identified as: {self.main_wall_stl_filename}")
-        self.logger.info(f"Inlet keyword: {self.inlet_patch_keyword}")
-        self.logger.info(f"Outlet keywords: {self.outlet_patch_keywords}")
-
         self.principal_aortic_axis = None
         self._calculate_principal_axis()
 
@@ -68,7 +52,6 @@ class GeometryAnalyzer:
         """Finds an STL filename in self.stl_filenames containing the keyword."""
         keyword_lower = keyword.lower()
         found_files = [f for f in self.stl_filenames if keyword_lower in f.lower()]
-        print(f"!!!Searching for STL files with keyword '{keyword}': Found {len(found_files)} files.")
         if found_files:
             if len(found_files) > 1:
                 self.logger.warning(f"Multiple STL files found for keyword '{keyword}': {found_files}. Using first one: {found_files[0]}")
@@ -149,7 +132,7 @@ class GeometryAnalyzer:
         all_scaled_vertices = []
         for stl_file_bn in self.stl_filenames:
             vertices = self.extract_vertices_from_stl(stl_file_bn)
-            all_scaled_vertices.append(vertices * self.scale_factor) # Scale vertices here
+            all_scaled_vertices.append(vertices) # Scale vertices here
 
         if not all_scaled_vertices:
              self.logger.error("No vertices extracted from any STL files.")
@@ -334,9 +317,8 @@ boundary
     {stl_basename} // Using stl_name_for_dict here
     {{
         type triSurfaceMesh;
-        name {stl_name_for_dict}; // And here
-        // file "{stl_basename}"; // No, snappyHexMesh expects this to be relative to case/constant/triSurface if not found globally
-    }}"""
+        name {stl_name_for_dict}; 
+        }}"""
 
             # Features entry
             features_entries += f"""
@@ -355,7 +337,6 @@ boundary
         {stl_name_for_dict}
         {{
             level ({min_ref} {max_ref});
-            // patchInfo {{ type wall; }} // Optional: specify patch type if needed by sHM
         }}"""
         
         # Define main region refinement box (overall geometry or user-defined)
@@ -487,7 +468,14 @@ addLayersControls
     nGrow {self.snappy_settings.get("nGrow", 0)};
     featureAngle {self.snappy_settings.get("featureAngle", 60)}; // Default: 60
     slipFeatureAngle {self.snappy_settings.get("slipFeatureAngle", 30)}; // Default: 30
+    minMedianAxisAngle {self.snappy_settings.get("minMedianAxisAngle", 30)}; // Default: 30
+    nFeatureLayers {self.snappy_settings.get("nFeatureLayers", 1)}; // Default: 1
+    nSurfaceLayers {self.snappy_settings.get("nSurfaceLayers", 5)}; // Default: 5
+    nGrowLayers {self.snappy_settings.get("nGrowLayers", 0)}; // Default: 0
+    nRelaxedLayers {self.snappy_settings.get("nRelaxedLayers", 0)}; // Default: 0
+    nRelaxedLayersForSnappy {self.snappy_settings.get("nRelaxedLayersForSnappy", 0)}; // Default: 0
     nRelaxIter {self.snappy_settings.get("addLayers_nRelaxIter", 5)}; // Renamed to avoid clash
+    nSmoothNormals {self.snappy_settings.get("nSmoothNormals", 1)}; // Default: 1
     nSmoothSurfaceNormals {self.snappy_settings.get("nSmoothSurfaceNormals", 1)}; // Default: 1
     nSmoothThickness {self.snappy_settings.get("nSmoothThickness", 10)}; // Default: 10
     maxFaceThicknessRatio {self.snappy_settings.get("maxFaceThicknessRatio", 0.5)}; // Default: 0.5
