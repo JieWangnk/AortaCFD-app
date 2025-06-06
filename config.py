@@ -15,7 +15,8 @@ CONFIG = {
         "refinement_level": "coarse", # options: "coarse", "medium", "fine"
         "rotation": True,
         "target_normal": [0, 0, 1], # options to adjust geometry alignment of coordinate system, default is (0,0,1)
-        "inlet_keyword": "inlet",
+        "wall_keywords_ordered": "wall", # list of wall patch keywords
+        "inlet_keywords_ordered": "inlet", # list of inlet patch keywords        "inlet_keyword": "inelt",
         "outlet_keywords_ordered": ["outlet1", "outlet2","outlet3", "outlet4"], # list of outlet patch keywords
     },
     "mesh": {

@@ -1,6 +1,6 @@
 import os
 import re
-from stl import mesh
+from stl import mesh as np_stl_mesh
 import numpy as np
 from SCRIPTS.logger import Logger
 from SCRIPTS.aorticAxisEstimator import AxisEstimator
@@ -62,7 +62,7 @@ class GeometryAnalyzer:
 
     def extract_vertices_from_stl(self, stl_file):
         try:
-            stl_mesh = mesh.Mesh.from_file(stl_file)
+            stl_mesh = np_stl_mesh.Mesh.from_file(stl_file)
             vertices = stl_mesh.vectors.reshape(-1, 3)
             unique_vertices = np.unique(vertices, axis=0)
             return unique_vertices
