@@ -61,6 +61,10 @@ class OpenFOAMParaView:
         self.timeSteps = timeSteps
         self.fields    = fields if fields else ["U", "p", "wallShearStress"]
         
+        # check the Images folder
+        if not os.path.exists(self.imageDir):
+            os.makedirs(self.imageDir,exist_ok=True)
+
         self.property_map = {
             "U": {
                 "name": "U",
@@ -317,6 +321,7 @@ class OpenFOAMParaView:
 
     def anima(self, fps=30):
         log_file = os.path.join(self.imageDir, "postProcessing.log")
+
         with open(log_file, "a") as log:
             properties = [self.property_map[f]["prefix"] for f in self.fields if f in self.property_map]
             for prop in properties:

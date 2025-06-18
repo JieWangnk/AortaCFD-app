@@ -198,7 +198,7 @@ FoamFile
             plt.ylabel('Flow Rate (m^3/s)')
             plt.title('Flow Splitting for Windkessel')
             plot_name = f"{filename}_flowSplit.png"
-            plt.savefig(os.path.join("constant", plot_name))
+            plt.savefig(os.path.join(out_dir, plot_name))
             plt.close()
 
         except Exception as e:

@@ -38,6 +38,7 @@ from SCRIPTS.cycleDataSetup import CycleDataSetup
 from SCRIPTS.solnTypeSetup import SolnType
 from SCRIPTS.wkSetup import wk_Setup
 from SCRIPTS.formatPoints import EnhancedPointsFormatter
+from SCRIPTS.error_postProcessPyvista import OpenFOAMPyVista
 
 class AortaCFDError(Exception):
     """Custom exception for AortaCFD errors."""
@@ -669,7 +670,7 @@ class OpenFOAMRunner:
         # Build the simulation command
         simulation_command = "pimpleFoam"
         if self.BC_OUTLET == "3EWINDKESSEL":
-            simulation_command = "pimpleFoam_WK" # Adjust as needed
+            simulation_command = "pimpleFoam_WK_2.0" # Adjust as needed
 
         # Run the simulation
         if self.SOLN_TYPE == "serial":
@@ -731,13 +732,16 @@ class OpenFOAMRunner:
         os.environ["CASE_TYPE"] = self.CASE_TYPE
         os.environ["CASE_PATH"] = self.case_directory
         os.environ["TIME_ARRAY"] = ",".join(str(x) for x in time_array)
-        os.environ["REANIMATION"] = str(reAnimate)
+        os.environ["ANIMATION_ENABLED"] = str(self.ANIMATION["enabled"])
+        os.environ["REANIMATION"] = str(self.ANIMATION["reanimation_only"])
         os.environ["FIELDS"] = ",".join(self.FIELDS)
+        os.environ["FPS"] = str(self.ANIMATION["fps"]) if self.ANIMATION["fps"] else "None"
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as temp_file:
             json.dump(self.RESCALESETTINGS, temp_file)
             os.environ["RESCALE_JSON"] = temp_file.name
-        os.environ["ANIMATION_ENABLED"] = str(self.ANIMATION["enabled"])
-        os.environ["FPS"] = str(self.ANIMATION["fps"]) if self.ANIMATION["fps"] else "None"
+        #animation_enabled = str(self.ANIMATION["enabled"])
+        #re_animation_only = str(self.ANIMATION["reanimation_only"])
+        #fps = str(self.ANIMATION["fps"]) if self.ANIMATION["fps"] else "None"
 
         # Run ParaView script
         script_path = os.path.join(self.parent_directory, "SCRIPTS", "postProcessParaView.py")
@@ -747,6 +751,25 @@ class OpenFOAMRunner:
             os.path.join(self.case_directory, "postProcessing.log"),
             cwd=self.case_directory
         )
+        
+        # try Pyvisat
+        # script_path = os.path.join(self.parent_directory, "SCRIPTS", "postProcessPyvista.py")
+        
+        # pv_script = OpenFOAMPyVista(
+        #     casePath=str(self.case_directory),
+        #     caseType=str(self.CASE_TYPE),
+        #     timeSteps=",".join(str(x) for x in time_array),
+        #     fields=",".join(self.FIELDS),
+        #     rescaleSettings=self.RESCALESETTINGS
+        # )
+        
+        # if re_animation_only:
+        #     if animation_enabled:
+        #         pv_script.anima(fps=fps)
+        # else: 
+        #     pv_script.generate_screenshots()
+        #     if animation_enabled:
+        #         pv_script.anima(fps=fps)
 
         elapsed_time = time.time() - start_time
         logger.info(f"Post-processing completed in {elapsed_time / 60:.2f} minutes.")
@@ -790,8 +813,6 @@ if __name__ == "__main__":
 
         # Subcommand: runPost
         run_post_parser = subparsers.add_parser('runPost', help='Run post-processing.')
-        run_post_parser.add_argument('--reAnimate', dest='reAnimate', action='store_true', help='Force re-generation of animation.')
-        run_post_parser.set_defaults(reAnimate=False)
 
         # Subcommand: runAll
         subparsers.add_parser('runAll', help='Run the entire workflow.')
@@ -836,9 +857,9 @@ if __name__ == "__main__":
                 end_time=args.endTime
             )
         elif args.command == 'runPost':
-            case = OpenFOAMCase(clean=False)  # Do not delete the case directory
-            runner = OpenFOAMRunner(case.simulationSetup)
-            runner.run_postprocessing(reAnimate=args.reAnimate)
+            logger.info("Running post-processing...")
+            runner = OpenFOAMRunner(None)  # Pass None or a minimal setup to avoid CAD dependency
+            runner.run_postprocessing()
         elif args.command == 'runAll':
             logger.info("Running entire workflow: createCase, runMesh, runBC, runSimulation, runPost")
             case = OpenFOAMCase(clean=True)  # Create a clean case directory
