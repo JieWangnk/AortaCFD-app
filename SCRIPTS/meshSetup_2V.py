@@ -15,19 +15,14 @@ class GeometryAnalyzer:
 
         self.geometry_case_name = self.config["geometry"]["case_name"] 
         self.refinement_level_key = self.config["geometry"]["refinement_level"]  # e.g., "coarse", "medium", "fine"
-        
         self.base_cell_size_target = self.config["mesh"]["refinement_levels"][self.refinement_level_key] 
-        
         if self.base_cell_size_target <= 0:
             raise ValueError(f"Invalid base_cell_size_target: {self.base_cell_size_target}. Must be positive.")
-
         self.snappy_settings = self.config["mesh"]["SNAPPY_SETTINGS"]  # e.g., {"parallel": False, "nProcessors": 3, ...}
         self.stl_filenames = [os.path.basename(f) for f in rotated_stl_basenames]  # Extract basenames
         self.tri_surface_path = path_to_trisurface_dir # e.g., ".../constant/triSurface"
-
         self.expansion_factor = self.config["mesh"].get("expansionFactor", 0.02) # Default to 0.02 if not set
         self.logger = Logger(log_file).get_logger() # Or better, pass a shared logger instance
-
         self.scale_factor = self.config["geometry"]["scale_factor"]
 
         # Identify main wall, inlet, and outlet STL basenames
@@ -36,16 +31,13 @@ class GeometryAnalyzer:
              raise ValueError("Critical error: Main wall STL file (containing 'wall') not found.")
 
         self.inlet_patch_keyword = self.config["geometry"].get("inlet_keyword", "inlet")
-        self.outlet_patch_keywords = self.config["geometry"].get("outlet_keywords_ordered",
-                                                                 self._derive_outlet_keywords())
+        self.outlet_patch_keywords = self.config["geometry"].get("outlet_keywords_ordered", self._derive_outlet_keywords())
         self.principal_aortic_axis = None
-        self._calculate_principal_axis()
+        self._calculate_principal_axis(filenames=[self.main_wall_stl_filename])
 
         # Store min/max vertices and cell counts for blockMesh
         self.min_vertex_bm, self.max_vertex_bm = self.get_blockmesh_bounds()
-        self.x_cells_bm, self.y_cells_bm, self.z_cells_bm = self.calculate_blockmesh_cells(
-            self.min_vertex_bm, self.max_vertex_bm
-        )
+        self.x_cells_bm, self.y_cells_bm, self.z_cells_bm = self.calculate_blockmesh_cells(self.min_vertex_bm, self.max_vertex_bm)
         self.internal_point_sHM = self.get_internal_point_for_snappy(offset_factor=0.2)
 
     def _find_stl_by_keyword(self, keyword, default_to_first=False):
@@ -75,32 +67,37 @@ class GeometryAnalyzer:
             self.logger.warning("No outlet STL files found to derive keywords automatically.")
         return keywords
 
-    def _calculate_principal_axis(self):
-        """Calculates and stores the principal aortic axis."""
-        self.logger.info("Attempting to calculate principal aortic axis...")
-        wall_stl_full_path = os.path.join(self.tri_surface_path, self.main_wall_stl_filename)
+    def _calculate_principal_axis(self, filenames):
+        """
+        Calculates and stores the principal aortic axis using specified STL files.
 
-        if not os.path.exists(wall_stl_full_path):
-            self.logger.error(f"Wall STL for axis estimation not found: {wall_stl_full_path}")
-            return
+        Args:
+            filenames (list): List of STL filenames to use for axis calculation.
+                              Must be explicitly provided by the caller.
+        """
+        if not filenames or not isinstance(filenames, list):
+            raise ValueError("The 'filenames' argument must be a non-empty list of STL filenames.")
 
-        # Ensure inlet and all specified outlets exist for robust axis estimation
-        # This relies on PatchProcessing to handle FileNotFoundError if a specific keyword doesn't match a file
+        # Ensure all specified STL files exist
+        full_paths = [os.path.join(self.tri_surface_path, f) for f in filenames]
+        missing_files = [f for f in full_paths if not os.path.exists(f)]
+        if missing_files:
+            self.logger.error(f"Missing STL files for axis estimation: {missing_files}")
+            raise FileNotFoundError(f"Missing STL files: {missing_files}")
+        # Perform axis estimation
         try:
             axis_estimator = AorticAxisEstimator(
-                wall_stl_full_path=wall_stl_full_path,
+                wall_stl_full_path=full_paths[0],  # Assume the first file is the main wall STL
                 inlet_patch_keyword=self.inlet_patch_keyword,
                 outlet_patch_keywords=self.outlet_patch_keywords,
                 tri_surface_dir=self.tri_surface_path,
-                all_stl_filenames_in_trisurface=self.stl_filenames, # Pass basenames
-                patch_processing_class_ref=PatchProcessing, # Pass the actual class [cite: 1]
+                all_stl_filenames_in_trisurface=self.stl_filenames,  # Pass basenames
+                patch_processing_class_ref=PatchProcessing,  # Pass the actual class
                 scale_factor=self.scale_factor,
                 logger_instance=self.logger
             )
-            self.principal_aortic_axis = axis_estimator.get_combined_axis() # [cite: 1]
-            if self.principal_aortic_axis is not None:
-                self.logger.info(f"Successfully calculated principal aortic axis: {self.principal_aortic_axis}")
-            else:
+            self.principal_aortic_axis = axis_estimator.get_combined_axis()
+            if self.principal_aortic_axis is None:
                 self.logger.warning("Principal aortic axis calculation failed or returned None. Slicing may be affected.")
         except Exception as e:
             self.logger.error(f"Error during AorticAxisEstimator initialization or use: {e}")
@@ -429,7 +426,7 @@ castellatedMeshControls
     {{{surface_refinement_entries}
     }};
 
-    {refinement_regions_content} // Insert dynamically built refinementRegions
+    {refinement_regions_content}
 
     locationInMesh {self.internal_point_sHM};
     allowFreeStandingZoneFaces {str(self.snappy_settings.get("allowFreeStandingZoneFaces", "true")).lower()};

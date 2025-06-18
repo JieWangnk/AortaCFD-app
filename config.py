@@ -96,7 +96,7 @@ CONFIG = {
         "decomposition_method": "scotch"
     },
     "post_processing": {
-        "pvbatch_exe": "/home/jie/ParaView-5.11.2-MPI-Linux-Python3.9-x86_64/bin/home/jie/ParaView-5.11.2-MPI-Linux-Python3.9-x86_64/bin/pvbatch",
+        "pvbatch_exe": "/home/jie/ParaView-5.11.2-MPI-Linux-Python3.9-x86_64/bin/pvbatch",
         "case_type": "Reconstructed", # options: "Reconstructed", "Decomposed"
         "time_steps": {
             "customized": False,
@@ -113,7 +113,8 @@ CONFIG = {
         },
         "animation": {
             "enabled": True,
-            "fps": 10
+            "reanimation_only":True,
+            "fps": 1
         }
     }
 }
