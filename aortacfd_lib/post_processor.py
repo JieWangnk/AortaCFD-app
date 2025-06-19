@@ -10,7 +10,7 @@ import json
 from paraview import servermanager
 from paraview.simple import *
 
-from logger import Logger
+from aortacfd_lib.utils.logger import Logger
 
 paraview.simple._DisableFirstRenderCameraReset()
 

@@ -1,4 +1,9 @@
 {
+  "geometry": {
+    "refinement_level": "medium",
+    "rotation": true,
+    "target_normal": [0, 0, 1]
+  },
   "inlet": {
     "csv_file": "BPM75.csv",
     "data_type": "velocity",
@@ -6,17 +11,14 @@
     "orientation": "out"
   },
   "outlets": {
-    "type": "3ElementWindkessel",
+    "type": "3EWINDKESSEL",
     "windkessel_settings": {
       "systolic_pressure": 120,
       "diastolic_pressure": 80,
       "flow_split_percentage_to_main_branches": 30
     }
   },
-  "simulation_settings": {
-    "start_time": 0.0,
-    "end_time": "auto",
-    "time_step": 0.01,
+  "simulation_control": {
     "number_of_cycles": 2
   }
 }

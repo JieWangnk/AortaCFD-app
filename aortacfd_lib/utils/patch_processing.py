@@ -2,7 +2,7 @@ import os
 import numpy as np
 from stl import mesh
 from scipy.spatial import ConvexHull
-from SCRIPTS.logger import Logger
+from logger import Logger
 
 class PatchProcessing:
     """
