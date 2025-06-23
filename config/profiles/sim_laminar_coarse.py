@@ -1,11 +1,11 @@
-# CONFIG/profiles/sim_laminar_coarse.py
+# config/profiles/sim_laminar_coarse.py
 """
 Simulation profile for a coarse-mesh, low-fidelity LAMINAR simulation.
 This profile defines the meshing, run settings, numerics, and solver parameters
 for a fast, lower-accuracy run.
 """
 
-CONFIG = {
+config = {
     # --------------------------------------------------------------------------
     # Mesh Running Settings
     # --------------------------------------------------------------------------

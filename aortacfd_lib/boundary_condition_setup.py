@@ -1,457 +1,63 @@
 import os
-import re
-import sys
-from config import CONFIG
-from SCRIPTS.patchProcessing import *
-from SCRIPTS.logger import Logger
-from SCRIPTS.ofVersionAdapter import OFVersionAdapter
+from jinja2 import Environment, FileSystemLoader
+from .utils.logger import Logger
+from .utils.ofVersionAdapter import OFVersionAdapter
 
-# Initialize the logger
-log_file_path = os.path.join(os.getcwd(), "boundaryConditionSetup.log")
-logger = Logger(log_file_path).get_logger()
-
-# Create the initial condition for the case DIRECTORY/0
 class BoundaryConditionSetup:
-    def __init__(self, DIRECTORY, STL_FILES, BC_INLET, BC_OUTLET, INITIAL_CONDITION_U, INITIAL_CONDITION_p, INITIAL_CONDITION_K, INITIAL_CONDITION_OMEGA, SIMULATIONTYPE, openfoam_version):
-        self.DIRECTORY = DIRECTORY
-        self.STL_FILES = STL_FILES
-        self.BC_INLET = BC_INLET
-        self.BC_OUTLET = BC_OUTLET
-        self.INITIAL_CONDITION_U = INITIAL_CONDITION_U
-        self.INITIAL_CONDITION_p = INITIAL_CONDITION_p
-        self.INITIAL_CONDITION_K = INITIAL_CONDITION_K
-        self.INITIAL_CONDITION_OMEGA = INITIAL_CONDITION_OMEGA
-        self.SIMULATIONTYPE = SIMULATIONTYPE
-        self.openfoam_version = openfoam_version
-
-        # Initialize the OFVersionAdapter
-        self.version_adapter = OFVersionAdapter(openfoam_version)
-
-        try:
-            # Create an instance of PatchProcessing
-            inlet_radius_calculator = PatchProcessing(
-                os.path.join(self.DIRECTORY, "constant", "triSurface"), self.STL_FILES, "inlet"
-            )
-
-            # Get the inlet parameters from inletRadius module
-            self.inlet_center, self.inlet_radius, self.inlet_normal = inlet_radius_calculator.calculate_inlet_center_radius()
-            # Update the initial condition dictionary
-            self.INITIAL_CONDITION_U["inlet_radius"] = self.inlet_radius
-            self.INITIAL_CONDITION_U["inlet_center"] = self.inlet_center
-            self.INITIAL_CONDITION_U["inlet_normal"] = self.inlet_normal
-
-            # Find the main aorta STL file
-            self.MAIN_AORTA_STL = os.path.basename([f for f in self.STL_FILES if "wall" in f][0])
-
-            # Find the inlet STL file
-            self.INLET_STL = os.path.basename([f for f in self.STL_FILES if "inlet" in f][0])
-
-            # Find all the outlet STL files and append them to a list
-            self.OUTLET_STL = sorted(
-                [os.path.basename(f) for f in self.STL_FILES if "outlet" in f],
-                key=lambda x: int(re.findall(r"\d+", x)[0])
-            )
-
-            # Set inlet type
-            if self.BC_INLET == "TIMEVARYING":
-                self.INLET_TYPE_U = "timeVaryingMappedFixedValue"
-            elif self.BC_INLET == "STEADYSTATE":
-                self.INLET_TYPE_U = "timeVaryingMappedFixedValue"
-            else:
-                logger.error("ERROR: inlet_type not found")
-                sys.exit(1)
-        except Exception as e:
-            logger.error(f"Error initializing BoundaryConditionSetup: {e}")
-            raise
-
-    def write_U_file(self):
-        """
-        Write the U file dynamically based on OpenFOAM version.
-        """
-        try:
-            foam_file_header = self.version_adapter.get_foam_file_header("volVectorField", "U")
-            
-            # Handle inlet type
-            if self.INLET_TYPE_U == "timeVaryingMappedFixedValue":
-                inlet_block = f"""
-        {self.INLET_STL.split(".")[0]}
-        {{
-            type            timeVaryingMappedFixedValue;
-            offset          (0 0 0);
-            setAverage      off;
-        }}
     """
-            else:
-                error_message = f"Unsupported inlet type: {self.INLET_TYPE_U}"
-                logger.error(error_message)
-                raise ValueError(error_message)
-
-            # Handle outlet type
-            if self.BC_OUTLET == "ZERO_GRADIENT":
-                outlet_block_template = """
-        {outlet}
-        {{
-            type            zeroGradient;
-        }}
+    Generates the initial condition files (U, p, etc.) by reading from the
+    final config object and using Jinja2 templates.
     """
-            elif self.BC_OUTLET == "3EWINDKESSEL":
-                outlet_block_template = """
-        {outlet}
-        {{
-            type            pressureInletOutletVelocity;
-            phi             phi;
-            value           uniform (0 0 0);
-        }}
-    """
-            else:
-                error_message = f"Unsupported outlet type: {self.BC_OUTLET}"
-                logger.error(error_message)
-                raise ValueError(error_message)
+    def __init__(self, config: dict, case_directory: str):
+        self.config = config
+        self.case_dir = case_directory
+        self.log = Logger("boundaryConditionSetup.log").get_logger()
 
-            # Generate outlet blocks
-            outlet_block = ""
-            for outlet in self.OUTLET_STL:
-                outlet_name = outlet.split(".")[0]
-                outlet_block += outlet_block_template.format(outlet=outlet_name)
-
-
-            # Generate wall block
-            wall_aorta_block = f"""
-        {self.MAIN_AORTA_STL.split(".")[0]}
-        {{
-            type            noSlip;
-        }}
-    """
-            # Combine all blocks into the U file template
-            template = f"""{foam_file_header}
-
-    dimensions      [0 1 -1 0 0 0 0];
-
-    internalField   uniform (0 0 0);
-
-    boundaryField
-    {{
-        {inlet_block}
-        {outlet_block}
-        {wall_aorta_block}
-    }}
-    // ************************************************************************* //
-    """
-
-            # Write the U file
-            u_file_path = os.path.join(self.DIRECTORY, "0", "U")
-            with open(u_file_path, "w") as f:
-                f.write(template)
-
-        except ValueError as ve:
-            logger.error(f"ValueError encountered: {ve}")
-            raise
-        except Exception as e:
-            logger.error(f"An unexpected error occurred: {e}")
-            raise
-
-    def write_p_file(self):
-        """
-        Write the p file dynamically based on OpenFOAM version.
-        """
-        foam_file_header = self.version_adapter.get_foam_file_header("volScalarField", "p")
-        # Boundary condition for inlet
-        if self.BC_OUTLET == "3EWINDKESSEL":
-            # Boundary condition for inlet
-            inlet_block = """
-            {inlet}
-            {{
-                type            zeroGradient;
-            }}
-            """.format(inlet=self.INLET_STL.split(".")[0])
-
-            outlet_block_template = """
-            {outlet_name}
-            {{
-                type            {outlet_type};
-                index           {index};
-                value           uniform 0;
-            }}
-            """
-            
-            outlet_block = ""
-            # sort self.OUTLET_STL
-            for outlet in range(0,len(self.OUTLET_STL)):
-                outletName = self.OUTLET_STL[outlet].split(".")[0]
-                outlet_type = "WKBC"
-                index = outlet
-                outlet_block += outlet_block_template.format(outlet_name=outletName, outlet_type=outlet_type, index=index)
-
-        elif self.BC_OUTLET == "ZERO_GRADIENT":
-            # Boundary condition for inlet
-            inlet_block = """
-            {inlet}
-            {{
-                type            zeroGradient;
-            }}
-            """.format(inlet=self.INLET_STL.split(".")[0])
-
-            outlet_block_template = """
-            {outlet_name}
-            {{
-                type            zeroGradient;
-            }}
-            """
-
-            outlet_block_template_v2 = """
-            {outlet_name}
-            {{
-                type            fixedValue;
-                value           uniform 0; 
-            }}
-            """
-
-            # Sort outlets deterministically
-            self.OUTLET_STL.sort()
-
-            outlet_block = ""
-            for outlet in self.OUTLET_STL:
-                outlet_name = outlet.split(".")[0]
-                if outlet == self.OUTLET_STL[-1]:  # Last outlet gets fixedValue
-                    outlet_block += outlet_block_template_v2.format(outlet_name=outlet_name)
-                else:
-                    outlet_block += outlet_block_template.format(outlet_name=outlet_name)
-
-        else:
-            logger.error("ERROR: outlet_type not found")
-            sys.exit(1) 
-
-        # Boundary condition for wall
-        wall_block = """
-            {wall}
-            {{
-                type            zeroGradient;
-            }}
-        """.format(wall=self.MAIN_AORTA_STL.split(".")[0])
-
-        template = f"""{foam_file_header}
-
-dimensions      [0 2 -2 0 0 0 0];
-
-internalField   uniform 0;
-
-boundaryField
-{{
-    {inlet_block}
-    {outlet_block}
-    {wall_block}
-}}
-// ************************************************************************* """
+        template_path = os.path.join(os.path.dirname(__file__), '..', 'templates')
+        self.jinja_env = Environment(loader=FileSystemLoader(template_path), trim_blocks=True, lstrip_blocks=True)
+        self.version_adapter = OFVersionAdapter(self.config['openfoam_version'])
         
-        # Write to file
-        with open(os.path.join(self.DIRECTORY, "0", "p"), "w") as f:
-            f.write(template)
-
-#------------------------------------------------------------------------------------------------------------------
-
-    def write_nut_file(self):
-        """
-        Write the nut file dynamically based on OpenFOAM version.
-        """
-        foam_file_header = self.version_adapter.get_foam_file_header("volScalarField", "nut")           
-        # Boundary condition for inlet
-        inlet_block_nut = """
-        {inlet}
-        {{
-            type            zeroGradient;
-        }}""".format(inlet=self.INLET_STL.split(".")[0])
-
-        outlet_block_nut_template = """
-        {outlet_name}
-        {{
-            type            zeroGradient;
-        }}"""
+        # Get all the necessary settings from the config
+        self.geom_settings = self.config['geometry']
+        self.inlet_settings = self.config['inlet']
+        self.outlet_settings = self.config['outlets']
+        self.physics_settings = self.config['physics']
         
-        outlet_block_nut = ""
-        # sort self.OUTLET_STL
-        for outlet in range(0, len(self.OUTLET_STL)):
-            outletName = self.OUTLET_STL[outlet].split(".")[0]
-            outlet_block_nut += outlet_block_nut_template.format(outlet_name=outletName)
+        # Get the patch names that were auto-discovered by the ConfigBuilder
+        self.inlet_patch = self.geom_settings['inlet_keywords_ordered']
+        self.outlet_patches = self.geom_settings['outlet_keywords_ordered']
+        self.wall_patch = self.geom_settings['wall_keywords_ordered']
 
-        # Boundary condition for wall
+    def write_all_bc_files(self):
+        """A single method to generate all necessary boundary condition files."""
+        self.log.info("Generating all boundary condition files...")
         
-        if self.SIMULATIONTYPE == "RAS":
-            # Boundary condition for wall
-            wall_block_nut = """
-        {wall}
-        {{
-            type            nutkWallFunction;
-            value           uniform 0;
-        }}""".format(wall=self.MAIN_AORTA_STL.split(".")[0]) 
-                        
-          
-        else:
-            # Boundary condition for wall
-            wall_block_nut = """    
-        {wall}
-        {{
-            type            zeroGradient;
-        }}""".format(wall=self.MAIN_AORTA_STL.split(".")[0])
- 
-        template = f"""{foam_file_header}
-dimensions      [0 2 -1 0 0 0 0];
+        # This context dictionary is now simpler, as it doesn't need initial_conditions
+        context = {
+            "inlet_patch": self.inlet_patch,
+            "outlet_patches": self.outlet_patches,
+            "wall_patch": self.wall_patch,
+            "inlet_settings": self.inlet_settings,
+            "outlet_settings": self.outlet_settings,
+            "physics_settings": self.physics_settings
+        }
 
-internalField   uniform 0;
-
-boundaryField
-{{
-    {inlet_block_nut}
-    {outlet_block_nut}
-    {wall_block_nut}
-}}
-// ************************************************************************* 
-"""
-        # Write to file
-        with open(os.path.join(self.DIRECTORY, "0", "nut"), "w") as f:
-            f.write(template)
-
-#------------------------------------------------------------------------------------------------------------------
-            
-    def write_k_file(self):
-        foam_file_header = self.version_adapter.get_foam_file_header("volScalarField", "k")
-        if 'kInlet' not in self.INITIAL_CONDITION_K or 'intensityInlet' not in self.INITIAL_CONDITION_K:
-            logger.error("ERROR: kInlet or intensityInlet not found in INITIAL_CONDITION_K")
-            sys.exit(1)
-
-        # Boundary condition for inlet
-        inlet_blockk = """    {inlet}
-{{
-    type            turbulentIntensityKineticEnergyInlet;
-    intensity       $intensityInlet;
-    value           uniform $kInlet;
-}}
-""".format(inlet=self.INLET_STL.split(".")[0])
-
-        outlet_block_template = """    {outlet_name}
-{{
-    type            inletOutlet;
-    inletValue      uniform $kInlet;
-    value           uniform $kInlet;
-}}
-"""
-        outlet_blockks = ""
-        # sort self.OUTLET_STL
-        for outlet in range(0, len(self.OUTLET_STL)):
-            outletName = self.OUTLET_STL[outlet].split(".")[0]
-            outlet_blockks += outlet_block_template.format(outlet_name=outletName)
-
-        # Boundary condition for wall
-        wall_blockk = """    {wall}
-{{
-    type            kqRWallFunction;
-    value           uniform $kInlet;
-}}
-""".format(wall=self.MAIN_AORTA_STL.split(".")[0])
+        zero_dir = os.path.join(self.case_dir, "0")
         
-        # Template for k file
-        template = """{header}
-
-kInlet          {kInlet};
-
-intensityInlet  {intensityInlet};
-
-dimensions      [0 2 -2 0 0 0 0];
-
-internalField   uniform $kInlet;
-
-boundaryField
-{{
-    {inlet_blockk}
-    {outlet_blockk}
-    {wall_blockk}
-}}
-
-// ************************************************************************* """.format(header=foam_file_header, kInlet=self.INITIAL_CONDITION_K['kInlet'], intensityInlet=self.INITIAL_CONDITION_K['intensityInlet'], inlet_blockk=inlet_blockk, outlet_blockk=outlet_blockks, wall_blockk=wall_blockk)
-        # Write to file
-        with open(os.path.join(self.DIRECTORY, "0", "k"), "w") as f:
-            f.write(template)
-
-#------------------------------------------------------------------------------------------------------------------
-            
-    def write_omega_file(self):
-        foam_file_header = self.version_adapter.get_foam_file_header("volScalarField", "omega")
-        # Boundary condition for inlet
-        inlet_blocko = """    {inlet}
-{{
-        type            fixedValue;
-        value           uniform $omegaInlet;
-}}
-""".format(inlet=self.INLET_STL.split(".")[0])
-
-        outlet_block_template = """    {outlet_name}
-{{
-        type            inletOutlet;
-        inletValue      uniform $omegaInlet;
-        value           uniform $omegaInlet;
-}}
-"""
-        outlet_blockos = ""
-        # sort self.OUTLET_STL
-        for outlet in range(0, len(self.OUTLET_STL)):
-            outletName = self.OUTLET_STL[outlet].split(".")[0]
-            outlet_blockos += outlet_block_template.format(outlet_name=outletName)
-
-        # Boundary condition for wall
-        wall_blocko = """    {wall}
-{{
-        type            omegaWallFunction;
-        value           uniform $omegaInlet;
-}}
-""".format(wall=self.MAIN_AORTA_STL.split(".")[0])
+        # Add headers to the context for each file
+        context['header'] = self.version_adapter.get_foam_file_header("volVectorField", "U")
+        self._write_file_from_template("U.tpl", os.path.join(zero_dir, "U"), context)
         
-        # Template for omega file
-        template = """{header}
+        context['header'] = self.version_adapter.get_foam_file_header("volScalarField", "p")
+        self._write_file_from_template("p.tpl", os.path.join(zero_dir, "p"), context)
 
-omegaInlet      {omegaInlet};
+        if self.physics_settings['simulation_type'] in ["RAS", "LES"]:
+            context['header'] = self.version_adapter.get_foam_file_header("volScalarField", "nut")
+            self._write_file_from_template("nut.tpl", os.path.join(zero_dir, "nut"), context)
 
-dimensions      [0 0 -1 0 0 0 0];
-
-internalField   uniform $omegaInlet;
-
-boundaryField
-{{
-    {inlet_blocko}
-    {outlet_blocko}
-    {wall_blocko}
-}}
-
-// ************************************************************************* """.format(header=foam_file_header ,omegaInlet=self.INITIAL_CONDITION_OMEGA['omegaInlet'], inlet_blocko=inlet_blocko, outlet_blocko=outlet_blockos, wall_blocko=wall_blocko)
-	
-        # Write to file
-        with open(os.path.join(self.DIRECTORY, "0", "omega"), "w") as f:
-            f.write(template)
-            
-#------------------------------------------------------------------------------------------------------------------
-    
-    def write_sampleDict_file(self):
-        foam_file_header = self.version_adapter.get_foam_file_header("dictionary", "sampleDict")
-        # Template for sampleDict file
-        template = """{header}
-
-interpolationScheme cellPoint;
-setFormat       raw;
-surfaceFormat   foam;
-
-type            surfaces;
-
-fields          ();
-surfaces
-(
-        triSurfaceSampling    {{
-        type        triSurfaceMesh;  
-        surface     {inlet}; 
-        source      cells;  
-        interpolate true;
-    }}
-);
-
-// ************************************************************************* //
-"""
-        # write sampleDict file
-        with open(os.path.join(self.DIRECTORY, "system", "sampleDict"), "w") as f:
-            f.write(template.format(header = foam_file_header,inlet=self.INLET_STL))
+    def _write_file_from_template(self, template_name: str, output_path: str, context: dict):
+        template = self.jinja_env.get_template(template_name)
+        content = template.render(context)
+        with open(output_path, "w") as f:
+            f.write(content)
+        self.log.info(f"Successfully wrote file: {os.path.basename(output_path)}")

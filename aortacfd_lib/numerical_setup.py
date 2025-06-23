@@ -1,299 +1,38 @@
 import os
-from SCRIPTS.logger import Logger
-from SCRIPTS.ofVersionAdapter import OFVersionAdapter
+from jinja2 import Environment, FileSystemLoader
+from .utils.logger import Logger
+from .utils.ofVersionAdapter import OFVersionAdapter
 
 class FvSchemesWriter:
-    def __init__(self, DIRECTORY, SIMULATIONTYPE, SIMULATIONPERFORMANCE, OPENFOAM_VERSION, log_file="numericalSetup.log"):
-        self.DIRECTORY = DIRECTORY
-        self.SIMULATIONTYPE = SIMULATIONTYPE
-        self.SIMULATIONPERFORMANCE = SIMULATIONPERFORMANCE
-        self.openfoam_version = OPENFOAM_VERSION  # Store the OpenFOAM version
-        self.logger = Logger(log_file).get_logger()
+    """
+    Generates the fvSchemes file using a unified config object and a
+    single, intelligent Jinja2 template.
+    """
+    def __init__(self, config: dict, case_directory: str):
+        """The constructor now takes the unified config object."""
+        self.config = config
+        self.case_dir = case_directory
+        self.log = Logger("numericalSetup.log").get_logger()
 
-        # Initialize the OFVersionAdapter
-        self.version_adapter = OFVersionAdapter(OPENFOAM_VERSION)
+        template_path = os.path.join(os.path.dirname(__file__), '..', 'templates')
+        self.jinja_env = Environment(loader=FileSystemLoader(template_path))
+        self.version_adapter = OFVersionAdapter(self.config['openfoam_version'])
 
     def write_fvSchemes_file(self):
-        filepath = os.path.join(self.DIRECTORY, "system", "fvSchemes")
-
-        try:
-            with open(filepath, 'w') as f:
-                if self.SIMULATIONTYPE == 'laminar':
-                    if self.SIMULATIONPERFORMANCE == "high":
-                        f.write(self._get_laminar_high_fvSchemes())
-                    elif self.SIMULATIONPERFORMANCE == "medium":
-                        f.write(self._get_laminar_medium_fvSchemes())
-                    elif self.SIMULATIONPERFORMANCE == "low":
-                        f.write(self._get_laminar_low_fvSchemes())
-                    else:
-                        self.logger.error("Invalid simulation performance for laminar.")
-                        raise ValueError("Invalid simulation performance for laminar.")
-                elif self.SIMULATIONTYPE == 'LES':
-                    if self.SIMULATIONPERFORMANCE == "high":
-                        f.write(self._get_LES_high_fvSchemes())
-                    elif self.SIMULATIONPERFORMANCE == "medium":
-                        f.write(self._get_LES_medium_fvSchemes())
-                    elif self.SIMULATIONPERFORMANCE == "low":
-                        f.write(self._get_LES_low_fvSchemes())
-                    else:
-                        self.logger.error("Invalid simulation performance for LES.")
-                        raise ValueError("Invalid simulation performance for LES.")
-                else:
-                    self.logger.error("Invalid simulation type.")
-                    raise ValueError("Invalid simulation type.")
-        except Exception as e:
-            self.logger.error(f"Failed to write fvSchemes file: {e}")
-            raise
-
-    def _get_laminar_high_fvSchemes(self):
-        foam_file_header = self.version_adapter.get_foam_file_header("dictionary", "fvSchemes")
-        return f"""{foam_file_header}
-
-ddtSchemes
-{{
-    default         backward;
-}}
-
-gradSchemes
-{{
-    default         cellLimited Gauss linear 1;
-    grad(p)         cellLimited Gauss linear 0.5;
-}}
-
-divSchemes
-{{
-    default         none;
-    div(phi,U)      Gauss linearUpwind default;
-    div((nuEff*dev2(T(grad(U)))))  Gauss linear;
-}}
-
-laplacianSchemes
-{{
-    default         Gauss linear limited 0.5;
-}}
-
-interpolationSchemes
-{{
-    default         linear;
-}}
-
-snGradSchemes
-{{
-    default         corrected;
-}}
-
-// ************************************************************************* //
-"""
-
-    def _get_laminar_medium_fvSchemes(self):
-        foam_file_header = self.version_adapter.get_foam_file_header("dictionary", "fvSchemes")
-        return f"""{foam_file_header}
-
-ddtSchemes
-{{
-    default         backward;
-}}
-
-gradSchemes
-{{
-    default         cellLimited Gauss linear 0.5;
-}}
-
-divSchemes
-{{
-    default         none;
-    div(phi,U)      Gauss linear;
-    div((nuEff*dev2(T(grad(U)))))  Gauss linear;
-}}
-
-laplacianSchemes
-{{
-    default         Gauss linear limited 0.5;
-}}
-
-interpolationSchemes
-{{
-    default         linear;
-}}
-
-snGradSchemes
-{{
-    default         corrected;
-}}
-
-// ************************************************************************* //
-"""
-
-    def _get_laminar_low_fvSchemes(self):
-        foam_file_header = self.version_adapter.get_foam_file_header("dictionary", "fvSchemes")
-        return f"""{foam_file_header}
-
-ddtSchemes
-{{
-    default         Euler;
-}}
-
-gradSchemes
-{{
-    default         cellLimited Gauss linear 0.5;
-    grad(p)         cellLimited Gauss linear 0.25;
-}}
-
-divSchemes
-{{
-    default         none;
-    div(phi,U)      Gauss upwind;
-    div((nuEff*dev2(T(grad(U)))))  Gauss linear;
-}}
-
-laplacianSchemes
-{{
-    default         Gauss linear limited 0.5;
-}}
-
-interpolationSchemes
-{{
-    default         linear;
-}}
-
-snGradSchemes
-{{
-    default         corrected;
-}}
-
-// ************************************************************************* //
-"""
-
-    def _get_LES_high_fvSchemes(self):
-        foam_file_header = self.version_adapter.get_foam_file_header("dictionary", "fvSchemes")
-        return f"""{foam_file_header}
-
-ddtSchemes
-{{
-    default         backward;
-}}
-
-gradSchemes
-{{
-    default         cellMDLimited Gauss linear 0.5;
-}}
-
-divSchemes
-{{
-    default         none;
-    div(phi,U)      Gauss linear;
-    div((nuEff*dev2(T(grad(U))))) Gauss linear;
-}}
-
-laplacianSchemes
-{{
-    default         Gauss linear corrected;
-}}
-
-interpolationSchemes
-{{
-    default         linear;
-}}
-
-snGradSchemes
-{{
-    default         corrected;
-}}
-
-wallDist
-{{
-    method meshWave;
-}}
-
-// ************************************************************************* //
-"""
-
-    def _get_LES_medium_fvSchemes(self):
-        foam_file_header = self.version_adapter.get_foam_file_header("dictionary", "fvSchemes")
-        return f"""{foam_file_header}
-
-ddtSchemes
-{{
-    default         backward;
-}}
-
-gradSchemes
-{{
-    default         cellLimited Gauss linear 1;
-    grad(p)         cellLimited Gauss linear 0.5;
-}}
-
-divSchemes
-{{
-    default         none;
-    div(phi,U)      Gauss linear;
-    div((nuEff*dev2(T(grad(U))))) Gauss linear;
-}}
-
-laplacianSchemes
-{{
-    default         Gauss linear corrected;
-}}
-
-interpolationSchemes
-{{
-    default         linear;
-}}
-
-snGradSchemes
-{{
-    default         corrected;
-}}
-
-wallDist
-{{
-    method meshWave;
-}}
-
-// ************************************************************************* //
-"""
-
-    def _get_LES_low_fvSchemes(self):
-        foam_file_header = self.version_adapter.get_foam_file_header("dictionary", "fvSchemes")
-        return f"""{foam_file_header}
-
-ddtSchemes
-{{
-    default         Euler;
-}}
-
-gradSchemes
-{{
-    default         cellLimited Gauss linear 1;
-}}
-
-divSchemes
-{{
-    default         none;
-    div(phi,U)      Gauss upwind;
-    div((nuEff*dev2(T(grad(U)))))   Gauss linear;
-}}
-
-laplacianSchemes
-{{
-    default         Gauss linear corrected;
-}}
-
-interpolationSchemes
-{{
-    default         linear;
-}}
-
-snGradSchemes
-{{
-    default         corrected;
-}}
-
-wallDist
-{{
-    method meshWave;
-}}
-
-// ************************************************************************* //
-"""
-
+        """
+        Generates the fvSchemes file by rendering a template with the
+        physics settings from the config.
+        """
+        # This single method replaces all the previous private _get... methods.
+        template = self.jinja_env.get_template("fvSchemes.tpl")
+        
+        # The template will use these settings to decide which schemes to write.
+        context = {
+            "header": self.version_adapter.get_foam_file_header("dictionary", "fvSchemes"),
+            "physics": self.config['physics']
+        }
+        
+        output_path = os.path.join(self.case_dir, "system", "fvSchemes")
+        with open(output_path, 'w') as f:
+            f.write(template.render(context))
+        self.log.info(f"Successfully wrote fvSchemes file to {output_path}")
