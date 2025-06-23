@@ -1,6 +1,6 @@
 import os
 import sys
-from SCRIPTS.logger import Logger
+from .logger import Logger
 
 class EnhancedPointsFormatter:
     def __init__(self, input_filename="points-new", output_filename="points", format_version=2, log_file="formatPoints.log", case_directory="."):

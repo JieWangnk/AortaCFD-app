@@ -1,82 +1,38 @@
 import os
-from SCRIPTS.logger import Logger
+from jinja2 import Environment, FileSystemLoader
+from .utils.logger import Logger
+from .utils.ofVersionAdapter import OFVersionAdapter
 
 class SolnType:
-    def __init__(self, DIRECTORY, SOLN_TYPE, SUBDOMAINS, DECOMPOSITION_METHOD, OPENFOAM_VERSION, log_file="solnTypeSetup.log"):
-        self.DIRECTORY = DIRECTORY
-        self.SOLN_TYPE = SOLN_TYPE
-        self.SUBDOMAINS = SUBDOMAINS
-        self.DECOMPOSITION_METHOD = DECOMPOSITION_METHOD
-        self.openfoam_version = OPENFOAM_VERSION  # Store the OpenFOAM version
-        self.logger = Logger(log_file).get_logger()
+    """
+    Generates the decomposeParDict file using a unified config object
+    and a Jinja2 template.
+    """
+    def __init__(self, config: dict, case_directory: str):
+        """The constructor now takes the unified config object."""
+        self.config = config
+        self.case_dir = case_directory
+        self.log = Logger("solnTypeSetup.log").get_logger()
+
+        template_path = os.path.join(os.path.dirname(__file__), '..', 'templates')
+        self.jinja_env = Environment(loader=FileSystemLoader(template_path))
+        self.version_adapter = OFVersionAdapter(self.config['openfoam_version'])
 
     def write_decomposeParDict(self):
         """
-        Write the decomposeParDict file dynamically based on OpenFOAM version.
+        Generates the decomposeParDict file by rendering a template with the
+        run settings from the simulation profile.
         """
-        content = """/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
-| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\\\    /   O peration     | Version:  {openfoam_version}                              |
-|   \\\\  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \\\\/     M anipulation  |                                                 |
-\\*---------------------------------------------------------------------------*/
-FoamFile
-{{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    location    "system";
-    object      decomposeParDict;
-}}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-numberOfSubdomains  {no_subdomains};
-
-/*
-    Main methods are:
-    1) Geometric: "simple"; "hierarchical", with ordered sorting, e.g. xyz, yxz
-    2) Scotch: "scotch", when running in serial; "ptscotch", running in parallel
-*/
-
-method              {deco_method}; //scotch; //ptscotch; //simple; //hierarchical;
-
-simpleCoeffs
-{{
-    n               (4 2 1); // total must match numberOfSubdomains
-    {delta_block}
-}}
-
-hierarchicalCoeffs
-{{
-    n               (4 2 1); // total must match numberOfSubdomains
-    order           xyz;
-}}
-
-
-// ************************************************************************* //"""
-
-        # Handle version-specific behavior for `delta` in `simpleCoeffs`
-        if int(self.openfoam_version) == 8:
-            delta_block = "delta           0.001;"  # Mandatory for OpenFOAM 8 and above
-        else:
-            delta_block = ""  # Not required for later versions
-
-        # Format the content with the appropriate values
-        content = content.format(
-            openfoam_version=self.openfoam_version,
-            no_subdomains=self.SUBDOMAINS,
-            deco_method=self.DECOMPOSITION_METHOD,
-            delta_block=delta_block
-        )
-
-        # Write the file
-        filepath = os.path.join(self.DIRECTORY, "system", "decomposeParDict")
-        try:
-            with open(filepath, "w") as f:
-                f.write(content)
-        except Exception as e:
-            self.logger.error(f"Failed to write decomposeParDict file: {e}")
-            raise
-
-
+        template = self.jinja_env.get_template("decomposeParDict.tpl")
+        
+        # The template will use these settings to build the file.
+        context = {
+            "header": self.version_adapter.get_foam_file_header("dictionary", "decomposeParDict"),
+            "run_settings": self.config['run_settings'],
+            "version": self.config['openfoam_version']
+        }
+        
+        output_path = os.path.join(self.case_dir, "system", "decomposeParDict")
+        with open(output_path, 'w') as f:
+            f.write(template.render(context))
+        self.log.info(f"Successfully wrote decomposeParDict file to {output_path}")

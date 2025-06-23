@@ -1,106 +1,80 @@
 import os
 import shutil
-from SCRIPTS.logger import Logger
-
-# Initialize the logger
-log_file_path = os.path.join(os.getcwd(), "cycleDataSetup.log")
-logger = Logger(log_file_path).get_logger()
+from .utils.logger import Logger
 
 class CycleDataSetup:
-    def __init__(self, inletDataFile, determined_cardiac_period, number_of_cycles, case_directory="."):
+    """
+    Sets up data for multiple cardiac cycles by creating symbolic links to the
+    time-step DIRECTORIES generated for the first cycle.
+    """
+    def __init__(self, config: dict, case_directory: str, cardiac_cycle: float):
         """
-        Initializes the CycleDataSetup class.
-
-        Args:
-            inletDataFile (str): Name of the directory containing U-field files for a single cycle.
-            determined_cardiac_period (float): Duration of one cardiac cycle in seconds.
-            number_of_cycles (int): Number of cycles to simulate.
-            case_directory (str): Base directory for the OpenFOAM case.
+        The constructor now correctly receives the cardiac_cycle and saves it
+        as an instance attribute.
         """
-        self.inletDataFile = os.path.splitext(inletDataFile)[0]
-        self.cardiacPeriod = float(determined_cardiac_period)
-        self.numberOfCycles = number_of_cycles
-        self.baseDir = case_directory
-        self.source_U_files_dir = os.path.join(self.baseDir, "constant", "boundaryData", "inlet", self.inletDataFile)
+        self.config = config
+        self.case_dir = case_directory
+        self.log = Logger("cycleDataSetup.log").get_logger()
 
-    def create_time_dirs(self, timeDirList):
-        """
-        Creates time directories for the simulation and sets up symbolic links for extra cycles.
+        # --- THIS IS THE FIX ---
+        # The received cardiac_cycle value is now correctly assigned
+        # to the instance attribute that the execute() method needs.
+        self.cardiac_period = cardiac_cycle
+        
+        # Get other necessary parameters from the config object
+        inlet_settings = self.config['inlet']
+        geom_settings = self.config['geometry']
+        sim_control_settings = self.config.get('simulation_control', {})
 
-        Args:
-            timeDirList (list): List of time directories for the first cycle.
-        """
-        for i in range(len(timeDirList)):  # Include the last time point
-            timeDirPath = os.path.join(self.baseDir, "constant", "boundaryData", "inlet", timeDirList[i])
-
-            # Make the directory if it does not exist
-            if not os.path.exists(timeDirPath):
-                os.mkdir(timeDirPath)
-
-            # Copy the U_* file to the directory and rename it to U
-            srcFile = os.path.join(self.source_U_files_dir, f"U_{timeDirList[i]}")
-            destFile = os.path.join(timeDirPath, "U")
-            try:
-                shutil.copy2(srcFile, destFile)
-            except Exception as e:
-                logger.error(f"Failed to copy {srcFile} to {destFile}: {e}")
-                raise
-
-            # Create symbolic links for extra cycles
-            for j in range(1, self.numberOfCycles):
-                newTimeDir = "{:.6f}".format(float(timeDirList[i]) + j * self.cardiacPeriod)
-                target_dir = os.path.join(self.baseDir, "constant", "boundaryData", "inlet", newTimeDir)
-                try:
-                    # Remove the directory if it exists
-                    if os.path.lexists(target_dir):
-                        os.unlink(target_dir)
-                    # Create the symbolic link
-                    relative_path = os.path.relpath(timeDirPath, os.path.dirname(target_dir))
-                    os.symlink(relative_path, target_dir)
-                except Exception as e:
-                    logger.error(f"Failed to create symbolic link for {newTimeDir}: {e}")
-                    raise
+        inlet_patch_name = geom_settings['inlet_keywords_ordered']
+        self.number_of_cycles = sim_control_settings.get('number_of_cycles', 1)
+        
+        self.data_directory = os.path.join(
+            self.case_dir, "constant", "boundaryData", inlet_patch_name
+        )
 
     def execute(self):
         """
-        Executes the setup of time directories for the simulation.
+        Finds the first-cycle time directories and creates relative symbolic links
+        for all subsequent cycles.
         """
-        if not os.path.exists(self.source_U_files_dir):
-            logger.error(f"No inlet velocity profile data found in {self.source_U_files_dir}")
-            raise FileNotFoundError(f"No inlet velocity profile data found in {self.source_U_files_dir}")
+        self.log.info(f"Setting up {self.number_of_cycles} cardiac cycles in {self.data_directory}")
+        if not os.path.isdir(self.data_directory):
+            raise FileNotFoundError(f"Source data directory not found: {self.data_directory}")
 
-        timeDirList = []
-        subFiles = os.listdir(self.source_U_files_dir)
-        subFiles.sort()
+        try:
+            first_cycle_dirs = [d for d in os.listdir(self.data_directory) if os.path.isdir(os.path.join(self.data_directory, d)) and d.replace('.', '', 1).isdigit()]
+            first_cycle_times = sorted([float(d) for d in first_cycle_dirs])
+            
+            if not first_cycle_times:
+                raise ValueError("No time step directories found in the source directory.")
+        except (ValueError, IndexError) as e:
+            self.log.error(f"Could not parse time values from directories in {self.data_directory}: {e}")
+            raise
+            
+        self.log.debug("Removing any old symbolic links...")
+        for item in os.listdir(self.data_directory):
+            item_path = os.path.join(self.data_directory, item)
+            if os.path.islink(item_path):
+                os.unlink(item_path)
 
-        for file in subFiles:
-            if file.startswith("U_"):
-                timeDirList.append(file.split("_")[1])
+        for t in first_cycle_times:
+            source_dir_name = f"{t:.6f}"
+            
+            for j in range(1, self.number_of_cycles):
+                # This line will now work correctly because self.cardiac_period exists
+                new_time = t + j * self.cardiac_period
+                link_dir_name = f"{new_time:.6f}"
+                link_path = os.path.join(self.data_directory, link_dir_name)
 
-        if not timeDirList:
-            logger.error(f"No U_* files found in {self.source_U_files_dir}")
-            raise ValueError(f"No U_* files found in {self.source_U_files_dir}")
-
-        # Sort timeDirList numerically
-        timeDirList.sort(key=float)
-
-        if self.cardiacPeriod <= 0:
-            raise ValueError(f"Invalid cardiac period: {self.cardiacPeriod}. Must be positive.")
-        if self.numberOfCycles <= 0:
-            raise ValueError(f"Invalid number of cycles: {self.numberOfCycles}. Must be positive.")
-
-        self.create_time_dirs(timeDirList)
-
-if __name__ == "__main__":
-    try:
-        # Example test setup
-        inletProfile = CycleDataSetup(
-            inletDataFile="inletProfileData",
-            determined_cardiac_period=0.81,
-            number_of_cycles=2,
-            case_directory=os.getcwd()
-        )
-        inletProfile.execute()
-    except Exception as e:
-        logger.error(f"Unhandled exception: {e}")
-        raise
+                if not os.path.lexists(link_path):
+                    try:
+                        os.symlink(source_dir_name, link_path, target_is_directory=True)
+                        self.log.debug(f"Created directory symlink: {link_path} -> {source_dir_name}")
+                    except Exception as e:
+                        self.log.error(f"Failed to create symlink at {link_path}: {e}")
+                        raise
+                else:
+                    self.log.debug(f"Skipping link for {link_dir_name}, as it already exists.")
+                    
+        self.log.info("Symbolic links for all cycles created successfully.")

@@ -1,0 +1,36 @@
+/*--------------------------------*- C++ -*----------------------------------*\\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  {{ version }}
+     \\/     M anipulation  |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     4.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      windkesselProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+{# This loop will run for every outlet discovered for the case #}
+{% for outlet in outlets %}
+{{ outlet.name }}
+{
+    C                   {{ outlet.C }};
+    R                   {{ outlet.R }};
+    Z                   {{ outlet.Z }};
+    outIndex            {{ outlet.index }};     
+    FDM_order           3;      
+    Flowrate_threeStepBefore      0;    
+    Flowrate_twoStepBefore        0;
+    Flowrate_oneStepBefore        0;
+    Pressure_twoStepBefore        0;
+    Pressure_oneStepBefore        0;
+    Pressure_start                0;
+}
+{% endfor %}
+
+// ************************************************************************* //

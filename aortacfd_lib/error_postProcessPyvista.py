@@ -5,7 +5,7 @@ from scipy.spatial import ConvexHull
 import re
 import subprocess
 import json
-from SCRIPTS.logger import Logger
+from .utils.logger import Logger
 import pyvista as pv
 
 # --- Helper: Map ParaView Presets to Matplotlib/PyVista CMaps ---

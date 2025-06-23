@@ -3,7 +3,7 @@
 Simulation profile for a high-fidelity, fine-mesh LAMINAR simulation.
 """
 
-CONFIG = {
+config = {
     # Choice of physics model
     "physics": {
         "simulation_type": "laminar",

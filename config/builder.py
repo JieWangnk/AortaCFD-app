@@ -1,4 +1,3 @@
-# CONFIG/builder.py
 import os
 import re
 import json
@@ -6,6 +5,7 @@ import collections.abc
 import importlib
 
 def deep_merge(destination: dict, source: dict) -> dict:
+    """Recursively merges the source dictionary into the destination dictionary."""
     for key, value in source.items():
         if isinstance(value, collections.abc.Mapping):
             node = destination.setdefault(key, {})
@@ -15,13 +15,26 @@ def deep_merge(destination: dict, source: dict) -> dict:
     return destination
 
 class ConfigBuilder:
+    """
+    Builds the final config dictionary by combining profiles and auto-discovery.
+    This version will raise an error immediately if a file is missing or invalid.
+    """
     def build(self, case_name: str, sim_profile_name: str) -> dict:
-        # Load base and simulation profiles
-        base_config = self._load_python_profile(f"CONFIG.base")
-        sim_config = self._load_python_profile(f"CONFIG.profiles.{sim_profile_name}")
+        """
+        Orchestrates the building of the final configuration.
+        This version uses relative imports to be more robust.
+        """
+        try:
+            # --- THE KEY CHANGE IS HERE ---
+            # The '.' tells Python to look inside the current package.
+            # The package='config' argument tells it what the current package is.
+            base_config = self._load_python_profile('.base', package='config')
+            sim_config = self._load_python_profile(f".profiles.{sim_profile_name}", package='config')
+            # --------------------------------
 
-        # Discover all case-specific info
-        case_specific_config = self._discover_case_config(case_name)
+            case_specific_config = self._discover_case_config(case_name)
+        except (FileNotFoundError, AttributeError, ImportError) as e:
+            raise RuntimeError(f"Failed to load configuration files. Please check paths and file contents. Original error: {e}")
 
         # Merge them all together
         final_config = {}
@@ -31,7 +44,22 @@ class ConfigBuilder:
         
         return final_config
 
+    def _load_python_profile(self, profile_path: str, package: str) -> dict:
+        """
+        Dynamically loads a python module using a relative path.
+        """
+        try:
+            # Pass the package argument to import_module
+            module = importlib.import_module(profile_path, package=package)
+            return getattr(module, "config")
+        except ImportError as e:
+            # Add the original error 'e' for more detailed debugging
+            raise ImportError(f"Configuration profile could not be imported: '{profile_path}' from package '{package}'. Check file path and __init__.py files. Original error: {e}")
+        except AttributeError:
+            raise AttributeError(f"File at '{profile_path}' was found, but it does not contain a 'config' dictionary variable.")
+
     def _discover_case_config(self, case_name: str, cad_root_dir: str = "CAD") -> dict:
+        # ... (This method remains the same as before) ...
         case_path = os.path.join(cad_root_dir, case_name)
         if not os.path.isdir(case_path):
             raise FileNotFoundError(f"Case directory for auto-discovery not found: {case_path}")
@@ -57,13 +85,7 @@ class ConfigBuilder:
         if os.path.exists(bc_file_path):
             with open(bc_file_path, 'r') as f:
                 bc_config = json.load(f)
-        
-        return deep_merge(discovered_geom_config, bc_config)
+        else:
+            print(f"Warning: boundary_conditions.json not found in {case_path}. Using defaults.")
 
-    def _load_python_profile(self, profile_path: str) -> dict:
-        try:
-            module = importlib.import_module(profile_path)
-            return getattr(module, "CONFIG", {})
-        except ImportError:
-            print(f"Warning: Configuration profile '{profile_path}' not found.")
-            return {}
+        return deep_merge(discovered_geom_config, bc_config)

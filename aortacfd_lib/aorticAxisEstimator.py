@@ -2,8 +2,8 @@ import os
 import numpy as np
 from sklearn.decomposition import PCA
 from stl import mesh as np_stl_mesh # Using an alias for clarity
-from SCRIPTS.logger import Logger # Will be passed in
-from SCRIPTS.patchProcessing import PatchProcessing # Will be passed in
+from .utils.logger import Logger # Will be passed in
+from .utils.patch_processing import PatchProcessing # Will be passed in
 
 class AorticAxisEstimatorError(Exception):
     """Custom exception for AorticAxisEstimator errors."""
@@ -77,7 +77,6 @@ class AorticAxisEstimator:
             self.logger.error(f"Error loading or scaling wall STL {self.wall_stl_full_path}: {e}")
             raise AorticAxisEstimatorError(f"Failed to load/scale wall STL: {e}")
 
-
     def _get_patch_centroid_by_keyword(self, patch_keyword: str) -> np.ndarray | None:
         """
         Calculates the centroid of a specific patch using the PatchProcessing class.
@@ -106,7 +105,6 @@ class AorticAxisEstimator:
         except Exception as e:
             self.logger.error(f"Error getting centroid for patch '{patch_keyword}' via PatchProcessing: {e}")
             return None
-
 
     def _process(self):
         """Orchestrates the steps to calculate the combined aortic axis."""

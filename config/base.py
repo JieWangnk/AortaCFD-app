@@ -1,13 +1,13 @@
-# CONFIG/base.py
+# config/base.py
 """
 This file holds the universal settings for the entire application.
 These are parameters that rarely, if ever, change.
 """
 
-CONFIG = {
+config = {
     # The OpenFOAM version is a global setting.
     "openfoam_version": "8", #
-
+    "openfoam_env_path": "/home/jie/OpenFOAM/OpenFOAM-8/etc/bashrc", # Path to the OpenFOAM environment script
     # Foundational physical properties of the fluid (blood).
     "physics": {
         "nu": 3.3e-06,      #

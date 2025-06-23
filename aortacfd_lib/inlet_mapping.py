@@ -1,394 +1,183 @@
 import os
 import re
 import glob
+import shutil
 import numpy as np
 from scipy.special import jv
-from SCRIPTS.logger import Logger
 
+from .utils.logger import Logger
+from .utils.patch_processing import PatchProcessing
 
 class InletMapping:
     """
-    A class that reads time-vs-(flowRate or velocity) data from CSV, computes or applies
-    velocity profiles (plug, parabolic, or Womersley), and writes out OpenFOAM
-    time-varying boundary condition files.
-
-    CSV Format (2 columns, no headers):
-        - time, flowOrVel
-        Example:
-            0.00, 1.2e-5
-            0.01, 1.3e-5
-            ...
+    Reads time-series data from a CSV, applies a velocity profile, and writes
+    the time-varying boundary condition files into the correct directory structure.
     """
+    def __init__(self, config: dict, case_directory: str):
+        self.config = config
+        self.case_directory = case_directory
+        self.log = Logger("inletMapping.log").get_logger()
 
-    def __init__(
-        self,
-        center,
-        radius,
-        inlet_data_file,
-        inlet_name,
-        data_type='flowRate',  # 'flowRate' or 'velocity'
-        profile='parabolic',   # 'plug', 'parabolic', or 'womersley'
-        scale=1.0,
-        log_file="inletMapping.log",
-        case_directory=".",    # Added case_directory for resolving paths
-        rho=None,              # Density, optional for Womersley profile
-        nu=None,               # Kinematic viscosity, optional for Womersley profile
-        **kwargs
-    ):
+        # Get all necessary settings from the config dictionary
+        self.inlet_settings = self.config['inlet']
+        self.geom_settings = self.config['geometry']
+        self.phys_settings = self.config['physics']
+        self.inlet_name = self.geom_settings['inlet_keywords_ordered']
+        self.inlet_data_file = self.inlet_settings['csv_file']
+        self.data_type = self.inlet_settings['data_type'].lower().strip()
+        self.profile = self.inlet_settings['profile'].lower().strip()
+        self.nu = self.phys_settings.get('nu')
+
+        self.center = None
+        self.radius = None
+        self.cardiac_cycle = None
+        
+        self.log.info("InletMapping initialized successfully.")
+
+    def run(self):
         """
-        Args:
-            center (array-like): The (x, y, z) center of the inlet face.
-            radius (float): The inlet radius.
-            inlet_data_file (str): CSV containing time and either flowRate or velocity.
-            inlet_name (str): Name of the inlet patch (for file structure).
-            data_type (str): 'flowRate' (CSV column = flow rate in m^3/s) or 'velocity' (CSV column = speed in m/s).
-            profile (str): 'plug', 'parabolic', or 'womersley'.
-            scale (float): Additional scaling factor for coordinates, default=1.0.
-            log_file (str): Path to the log file.
-            case_directory (str): Directory where the case files are located.
-            **kwargs: Additional parameters (e.g., orientation='out', rho=..., nu=..., etc.).
+        Main orchestration method for this class.
         """
-        self.center = np.array(center, dtype=float)
-        self.radius = float(radius)
-        self.inlet_data_file = inlet_data_file
-        self.inlet_name = inlet_name
-        self.data_type = data_type.lower().strip()    # 'flowRate' or 'velocity'
-        self.profile = profile.lower().strip()        # 'plug', 'parabolic', 'womersley'
-        self.scale = scale
-        self.case_directory = case_directory  # Store the case directory
-        self.kwargs = kwargs
-        self.logger = Logger(log_file).get_logger()
+        self.log.info("Calculating inlet patch geometry...")
+        tri_surface_dir = os.path.join(self.case_directory, "constant", "triSurface")
+        stl_files = [f for f in os.listdir(tri_surface_dir) if f.endswith('.stl')]
+        
+        inlet_patch_processor = PatchProcessing(tri_surface_dir, self.inlet_name)
+        scale_factor = self.geom_settings.get('scale_factor', 1e-3)
+        self.center, self.radius, inlet_normal = inlet_patch_processor.calculate_inlet_center_radius(scale_factor=scale_factor)
+        self.log.info(f"Inlet center: {self.center}, Radius: {self.radius}")
 
-        # Potentially read optional parameters from kwargs, if used for Womersley or advanced BC
-        self.rho = rho
-        self.nu = nu
-        self.delta_p = kwargs.get("delta_p", 1.0)  # default pressure gradient amplitude if needed
+        points_file = os.path.join(self.case_directory, "constant", "boundaryData", self.inlet_name, "points")
+        if not os.path.isfile(points_file):
+            raise FileNotFoundError(f"Points file not found: {points_file}")
+        n_points, points = self._read_points_file(points_file)
 
-        VALID_PROFILES = ['plug', 'parabolic', 'womersley']
-        VALID_DATA_TYPES = ['flowrate', 'velocity']
+        csv_path = os.path.join(self.case_directory, "constant", "boundaryData", self.inlet_name, self.inlet_data_file)
+        if not os.path.isfile(csv_path):
+            raise FileNotFoundError(f"Inlet data CSV not found: {csv_path}")
+        times, yval, self.cardiac_cycle = self._read_csv_file(csv_path)
 
-        if self.profile not in VALID_PROFILES:
-            raise ValueError(f"Invalid profile: {self.profile}. Must be one of {VALID_PROFILES}.")
-        if self.data_type not in VALID_DATA_TYPES:
-            raise ValueError(f"Invalid data_type: {self.data_type}. Must be one of {VALID_DATA_TYPES}.")
+        parent_dir = os.path.join(self.case_directory, "constant", "boundaryData", self.inlet_name)
+        self.log.debug(f"Cleaning old time directories and symlinks in {parent_dir}")
+        for item in os.listdir(parent_dir):
+            item_path = os.path.join(parent_dir, item)
+            if item.replace('.', '', 1).isdigit():
+                if os.path.islink(item_path):
+                    os.unlink(item_path)
+                elif os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
 
-    def compute_cross_sectional_area(self):
-        return np.pi * (self.radius * self.scale)**2
+        self.log.info("Generating time-varying velocity data directories...")
+        self._generate_time_data(parent_dir, times, yval, points, inlet_normal)
+        self.log.info(f"Generated velocity data directories in {parent_dir}")
+
+    # --- MISSING HELPER METHODS NOW INCLUDED ---
 
     def _determine_cardiac_period(self, times):
-        """
-        Determines the cardiac cycle period from the time array in the CSV file.
-        Assumes the time array represents one or more cardiac cycles.
-        """
         if len(times) < 2:
-            self.logger.error("Insufficient time data to determine cardiac cycle period.")
             raise ValueError("Insufficient time data to determine cardiac cycle period.")
-
-        # Calculate time differences
-        time_diffs = np.diff(times)
-
-        # Check for uniform time steps
-        if not np.allclose(time_diffs, time_diffs[0], atol=1e-6):
-            self.logger.warning("Non-uniform time steps detected in the CSV file.")
-
-        # Determine the cardiac cycle period
         total_duration = times[-1] - times[0]
         if total_duration <= 0:
-            self.logger.error("Invalid time range in the CSV file.")
             raise ValueError("Invalid time range in the CSV file.")
-
-        # Assume the CSV represents one cardiac cycle
-        self.logger.info(f"Determined cardiac cycle period: {total_duration:.6f} seconds.")
+        self.log.info(f"Determined cardiac cycle period: {total_duration:.6f} seconds.")
         return total_duration
 
-    def read_csv_file(self, file_name):
-        """
-        Reads the CSV file and determines the cardiac cycle period.
-        """
+    def _read_csv_file(self, file_name):
         try:
-            data = np.genfromtxt(file_name, delimiter=',', skip_header=1)
+            with open(file_name, 'r') as f:
+                first_line = f.readline()
+                has_header = any(c.isalpha() for c in first_line)
+            skiprows = 1 if has_header else 0
+            data = np.genfromtxt(file_name, delimiter=',', skip_header=skiprows)
             if data.ndim < 2 or data.shape[1] < 2:
                 raise ValueError(f"CSV file {file_name} must have at least 2 columns.")
         except Exception as e:
-            self.logger.error(f"Error reading CSV file {file_name}: {e}")
-            raise
+            raise RuntimeError(f"Error reading CSV file {file_name}: {e}")
 
         times = data[:, 0]
         yval = data[:, 1]
         cardiac_cycle = self._determine_cardiac_period(times)
-
         return times, yval, cardiac_cycle
 
-    def read_points_file(self, file_name):
-        """
-        Reads an OpenFOAM points file:
-            N
-            (
-              (x0 y0 z0)
-              ...
-            )
-        """
+    def _read_points_file(self, file_name):
         with open(file_name, 'r') as file:
             lines = [line.strip() for line in file if line.strip()]
             n_points = int(lines[0])
             points = []
+            start_index = 2 if lines[1] == '(' else 1
             for i in range(n_points):
-                line_s = re.sub('[()]', '', lines[i + 1])
+                line_s = re.sub('[()]', '', lines[i + start_index])
                 xyz = [float(p) for p in line_s.split()]
                 points.append(xyz)
         return n_points, np.array(points, dtype=float)
 
-    def get_face_normal_vectors(self, p1, p2, p3, orientation):
-        """
-        Computes the normal vector for three points on the plane, flipping
-        direction if orientation='in' or 'out' doesn't match the z-component.
-        """
-        v1 = p2 - p1
-        v2 = p3 - p1
-        v3 = np.cross(v1, v2)
-        v3 /= np.linalg.norm(v3)
-
-        # Flip if needed
-        if (orientation == 'in' and v3[2] > 0) or (orientation == 'out' and v3[2] < 0):
-            v3 = -v3
-        return v3
-
-    def get_distance_from_center(self, point):
-        """
-        Returns the Euclidean distance from the inlet center to 'point'.
-        """
+    def _get_distance_from_center(self, point):
         return np.linalg.norm(point - self.center)
 
-    def get_velocity_components(self, speed_scalar, normal_vec):
-        """
-        Projects a scalar speed onto the inlet's normal direction.
-        """
-        vx = speed_scalar * normal_vec[0]
-        vy = speed_scalar * normal_vec[1]
-        vz = speed_scalar * normal_vec[2]
-        return vx, vy, vz
+    def _get_velocity_components(self, speed_scalar, normal_vec):
+        return speed_scalar * normal_vec
 
-    # ------------------------ BASIC PROFILE HELPERS -------------------------
+    def compute_cross_sectional_area(self):
+        return np.pi * self.radius**2
+
     def plug_profile_speed(self, data_val):
-        """
-        If CSV data is flow (m^3/s), compute the uniform (plug) velocity = flow / area.
-        If CSV data is already velocity (m/s), just return it as is.
-        """
         if self.data_type == 'flowrate':
             return data_val / self.compute_cross_sectional_area()
-        elif self.data_type == 'velocity':
-            # The CSV data is already velocity
-            return data_val
-        else:
-            raise ValueError("data_type must be 'flowRate' or 'velocity'.")
+        return data_val
 
     def parabolic_centerline_speed(self, data_val):
-        """
-        For a laminar parabolic flow, the centerline velocity = 2 * average velocity.
-        - If the CSV data is flow, average velocity = flow / area => centerline = 2 * avg_vel.
-        - If the CSV data is velocity, we assume it is the average velocity => centerline = 2 * velocity_in_csv.
-          (If it's truly the centerline velocity in the CSV, remove the factor of 2.)
-        """
         if self.data_type == 'flowrate':
-            cross_area = np.pi * (self.radius * self.scale)**2
-            avg_vel = data_val / cross_area
-            return 2.0 * avg_vel  # centerline velocity
-        elif self.data_type == 'velocity':
-            return 2.0 * data_val  # centerline velocity
-        else:
-            raise ValueError("data_type must be 'flowRate' or 'velocity'.")
+            avg_vel = data_val / self.compute_cross_sectional_area()
+            return 2.0 * avg_vel
+        return 2.0 * data_val
 
     def parabolic_factor(self, dist):
-        """
-        Returns the radial shape factor for parabolic flow: 1 - (r/R)^2.
-        Clamped to 0 for r>R.
-        """
-        # Ensure we compare dist to the scaled radius
-        scaled_radius = self.radius * self.scale
-        rel = dist / scaled_radius
+        rel = dist / self.radius
         return max(0.0, 1.0 - rel**2)
 
     def womersley_profile(self, r, t, omega, alpha):
-        """
-        Compute the Womersley velocity profile at a given radius `r` and time `t`.
-        Args:
-            r (float): Radial distance from the center (0 <= r <= R).
-            t (float): Time (s).
-            omega (float): Angular frequency of the pulsatile flow (rad/s).
-            alpha (float): Womersley number.
-        Returns:
-            float: Velocity at radius `r` and time `t`.
-        """
-        # Compute the complex Womersley profile
-        R = self.radius * self.scale  # Scaled radius
-        z = 1j**1.5 * alpha * r / R  # Argument for Bessel functions
-        z0 = 1j**1.5 * alpha  # Argument for centerline velocity
-
-        # Bessel function ratio
+        R = self.radius
+        z = 1j**1.5 * alpha * r / R
+        z0 = 1j**1.5 * alpha
         bessel_ratio = jv(0, z) / jv(0, z0)
-
-        # Oscillatory velocity profile
         v_r_t = (1 - bessel_ratio) * np.exp(1j * omega * t)
-
-        # Return the real part (physical velocity)
         return np.real(v_r_t)
 
-    def generate_time_data(self, directory, time_array, points, normal_vec):
-        """
-        The main routine for generating velocity files (U_<time>),
-        depending on 'plug', 'parabolic', or 'womersley' profile.
-        """
-        # Compute Womersley parameters if the profile is 'womersley'
+    def _generate_time_data(self, parent_directory, time_array, csv_values, points, normal_vec):
         if self.profile == 'womersley':
-            cardiac_cycle = self.cardiac_cycle  # Period of the cardiac cycle (s)
-            omega = 2 * np.pi / cardiac_cycle  # Angular frequency (rad/s)
-            alpha = self.radius * np.sqrt(omega / self.nu)  # Womersley number
+            if not self.nu or self.nu <= 0:
+                raise ValueError("Womersley profile requires a positive kinematic viscosity (nu) in config.")
+            omega = 2 * np.pi / self.cardiac_cycle
+            alpha = self.radius * np.sqrt(omega / self.nu)
 
         for i in range(len(time_array)):
             t = time_array[i]
-            y_val = self.csv_vals[i]  # CSV's second column is either flowRate(t) or velocity(t)
+            y_val = csv_values[i]
+            speed = self.parabolic_centerline_speed(y_val) if self.profile != 'plug' else self.plug_profile_speed(y_val)
 
-            # ---------- Determine a "base speed" -----------
-            if self.profile == 'plug':
-                speed = self.plug_profile_speed(y_val)
-
-            elif self.profile == 'parabolic':
-                speed = self.parabolic_centerline_speed(y_val)
-
-            elif self.profile == 'womersley':
-                # Use the Womersley profile to compute the centerline velocity
-                speed = self.parabolic_centerline_speed(y_val)  # Approximate centerline velocity
-
-            else:
-                raise ValueError("profile must be 'plug', 'parabolic', or 'womersley'.")
-
-            # ---------- Distribute velocity to each point -----------
-            vel_x_array, vel_y_array, vel_z_array = [], [], []
-            scaled_radius = self.radius * self.scale
-
+            velocities = []
             for pt in points:
-                pt_scaled = pt * self.scale
-                dist = self.get_distance_from_center(pt_scaled)
-
-                if dist <= scaled_radius:
+                dist = self._get_distance_from_center(pt)
+                if dist <= self.radius:
                     if self.profile == 'plug':
-                        vx, vy, vz = self.get_velocity_components(speed, normal_vec)
+                        local_speed = speed
                     elif self.profile == 'parabolic':
                         shape_fac = self.parabolic_factor(dist)
                         local_speed = speed * shape_fac
-                        vx, vy, vz = self.get_velocity_components(local_speed, normal_vec)
                     elif self.profile == 'womersley':
-                        # Compute the Womersley velocity at this radius and time
                         local_speed = self.womersley_profile(dist, t, omega, alpha)
-                        vx, vy, vz = self.get_velocity_components(local_speed, normal_vec)
+                    velocities.append(self._get_velocity_components(local_speed, normal_vec))
                 else:
-                    vx, vy, vz = 0.0, 0.0, 0.0
+                    velocities.append((0.0, 0.0, 0.0))
 
-                vel_x_array.append(vx)
-                vel_y_array.append(vy)
-                vel_z_array.append(vz)
+            time_dir_path = os.path.join(parent_directory, f"{t:.6f}")
+            os.makedirs(time_dir_path, exist_ok=True)
+            out_file_path = os.path.join(time_dir_path, "U")
+            self._write_openfoam_data_format(out_file_path, len(points), velocities)
 
-            out_file = os.path.join(directory, f"U_{t:.6f}")
-            self.write_openfoam_data_format(
-                out_file, len(points), vel_x_array, vel_y_array, vel_z_array
-            )
-
-    def write_openfoam_data_format(self, file_name, n_points, vel_x_array, vel_y_array, vel_z_array):
-        """
-        Writes velocity vectors into OpenFOAM time-varying format:
-            N
-            (
-              (vx vy vz)
-              ...
-            )
-        """
+    def _write_openfoam_data_format(self, file_name, n_points, velocities):
         with open(file_name, 'w') as file:
             file.write(f"{n_points}\n(\n")
-            for vx, vy, vz in zip(vel_x_array, vel_y_array, vel_z_array):
-                file.write(f"({vx:.6e} {vy:.6e} {vz:.6e})\n")
+            for v in velocities:
+                file.write(f"({v[0]:.6e} {v[1]:.6e} {v[2]:.6e})\n")
             file.write(")\n")
-
-    def run(self):
-        """
-        Orchestrates:
-          1. Read points file.
-          2. Compute normal vector of inlet patch.
-          3. Read CSV data (flow or velocity).
-          4. For each time step, compute velocity distribution and write files.
-        """
-        # 1) Read the points
-        points_file = os.path.join(self.case_directory, "constant", "boundaryData", self.inlet_name, "points")
-        if not os.path.isfile(points_file):
-            self.logger.error(f"Points file not found: {points_file}")
-            raise FileNotFoundError(f"Points file not found: {points_file}")
-        n_points, points = self.read_points_file(points_file)
-
-        if n_points < 3:
-            self.logger.error(f"Not enough points in {points_file} to define a plane normal.")
-            raise ValueError(f"Not enough points in {points_file} to define a plane normal.")
-
-        # 2) Compute normal vector
-        orientation = self.kwargs.get("orientation")
-        idx_rand = np.random.choice(n_points, 3, replace=False)
-        p1, p2, p3 = points[idx_rand[0]], points[idx_rand[1]], points[idx_rand[2]]
-        normal_vec = self.get_face_normal_vectors(p1, p2, p3, orientation)
-
-        # 3) Read the CSV
-        csv_path = os.path.join(self.case_directory, "constant", "boundaryData", self.inlet_name, self.inlet_data_file)
-        if not os.path.isfile(csv_path):
-            self.logger.error(f"CSV file not found: {csv_path}")
-            raise FileNotFoundError(f"CSV file not found: {csv_path}")
-        times, yval, cycle = self.read_csv_file(csv_path)
-
-        self.times = times
-        self.csv_vals = yval
-        self.cardiac_cycle = cycle
-
-        # 4) Create a subfolder to hold time-varying velocity files
-        parent_dir = os.path.join(
-            self.case_directory,
-            "constant",
-            "boundaryData",
-            self.inlet_name,
-            os.path.splitext(self.inlet_data_file)[0]
-        )
-        os.makedirs(parent_dir, exist_ok=True)
-
-        # Clean old files:
-        for oldf in glob.glob(os.path.join(parent_dir, "U_*")):
-            os.remove(oldf)
-
-        # 5) Generate the velocity distribution
-        self.generate_time_data(parent_dir, times, points, normal_vec)
-
-# ----------------------- Example Usage ---------------------------
-if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) < 4:
-        print("Usage: python inletMapping.py <inlet_data_file> <data_type> <profile>")
-        print("  data_type: 'flowRate' or 'velocity'")
-        print("  profile:   'plug', 'parabolic', or 'womersley'")
-        sys.exit(1)
-
-    inlet_data_file = sys.argv[1]   # e.g. "myInlet.csv"
-    data_type       = sys.argv[2]   # "flowRate" or "velocity"
-    profile         = sys.argv[3]   # "plug", "parabolic", "womersley"
-
-    # Example geometry
-    center = [0.0, 0.0, 0.0]
-    radius = 0.01
-
-    # Instantiate
-    inlet_mapping = InletMapping(
-        center=center,
-        radius=radius,
-        inlet_data_file=inlet_data_file,
-        inlet_name="inlet",
-        data_type=data_type,
-        profile=profile,
-        scale=1.0,
-        orientation="in"
-    )
-    # Run
-    inlet_mapping.run()
