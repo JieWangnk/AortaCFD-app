@@ -1,0 +1,50 @@
+site_name: AortaCFD App
+site_url: https://aortacfd.com
+
+# Use the Material for MkDocs theme
+theme:
+  name: material
+  logo: assets/logo.png  # Place your logo in aortacfd-site/docs/assets/
+  favicon: assets/favicon.ico
+  features:
+    - hero:
+        title: AortaCFD App
+        description: A tool for analyzing and visualizing aortic flow data.
+        image: assets/hero.png
+        actions:
+  palette:
+    - scheme: slate  # Use dark mode as default
+      primary: red   # Dark red as the main color
+      accent: amber  # Amber for a polished, shiny accent
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - scheme: default
+      primary: red
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+
+nav:
+  - Home: index.md
+  - What Problem Does This App Solve?: what_problem.md
+  - Core Benefits: core_benefits.md
+  - Features: features.md
+  - System Requirements: system_requirements.md
+  - Pipeline Architecture: pipeline_architecture.md
+  - Installation: installation.md
+  - Getting Started: getting_started.md
+  - Command Reference: command_reference.md
+  - Input Data Structure: input_data_structure.md
+  - Known Issues: known_issues.md
+  - Updates & Roadmap: updates_roadmap.md
+  - Contributing: contributing.md
+  - License: license.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/yourrepo
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/yourhandle
