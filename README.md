@@ -1,33 +1,131 @@
 # AortaCFD: Patient-Specific Aortic Blood Flow Simulation
 
-AortaCFD is an intelligent, Python-driven workflow for simulating blood flow in patient-specific aortic geometries using OpenFOAM. Inspired by the clarity and structure of SimVascular and VMTK, AortaCFD streamlines the process from geometry preparation to simulation and post-processing, making advanced hemodynamic analysis accessible to researchers and clinicians.
-
 ---
 
 ## Table of Contents
+- [What Problem Does This App Solve?](#what-problem-does-this-app-solve)
+- [Core Benefits](#core-benefits)
 - [Features](#features)
+- [System Requirements](#system-requirements)
+- [Pipeline Architecture](#pipeline-architecture)
 - [Installation](#installation)
-- [Requirements](#requirements)
-- [Quick Start](#quick-start)
+- [Getting Started](#getting-started)
+- [Command Reference](#command-reference)
 - [Input Data Structure](#input-data-structure)
-- [Simulation Profiles](#simulation-profiles)
-- [Workflow & Usage](#workflow--usage)
-- [Configuration](#configuration)
-- [Post-Processing](#post-processing)
-- [Troubleshooting](#troubleshooting)
+- [Known Issues](#known-issues)
+- [Updates & Roadmap](#updates--roadmap)
 - [Contributing](#contributing)
-- [Contact](#contact)
+- [License](#license)
+
+---
+
+## What Problem Does This App Solve?
+
+**AortaCFD** addresses the challenge of performing patient-specific aortic blood flow simulations, which are often complex, time-consuming, and require deep expertise in both medical imaging and computational fluid dynamics (CFD). Existing tools can be difficult for clinicians and researchers to use, especially when setting up advanced boundary conditions like Windkessel models. AortaCFD streamlines the entire workflow—from geometry preparation to simulation and post-processing—making advanced hemodynamic analysis accessible, reproducible, and efficient.
+
+---
+
+## Core Benefits
+
+- **End-to-End Automation:** Automates the full pipeline from geometry to results, reducing manual errors and setup time.
+- **User-Friendly:** Simplifies complex CFD workflows for clinicians and researchers.
+- **Advanced Boundary Conditions:** Supports three-element Windkessel (3EWK) models for physiologically realistic simulations ([see requirements](#system-requirements)).
+- **Extensible & Modular:** Built in Python with a clear, task-based architecture for easy customization.
+- **Reproducible Science:** Ensures all steps are logged and repeatable, supporting robust scientific research.
+
+See [Features](#features) for a detailed breakdown.
 
 ---
 
 ## Features
-- **Automated Workflow:** End-to-end automation from geometry import to simulation and post-processing.
-- **Patient-Specific Modeling:** Uses STL geometry and physiological boundary conditions from CSV/JSON.
-- **Flexible Meshing:** Robust mesh generation with OpenFOAM's snappyHexMesh, supporting coarse to fine resolutions.
-- **Advanced Boundary Conditions:** Supports time-varying inlet profiles and 3-element Windkessel outlet models.
-- **Batch Processing:** Easily run multiple cases with different profiles.
-- **Integrated Post-Processing:** Automated ParaView/PyVista-based visualization and result extraction.
-- **Extensible Python Codebase:** Modular design for easy customization and extension.
+
+- Automated case directory and file structure creation
+- Mesh generation from STL geometry
+- Automated boundary condition setup (including Windkessel models)
+- Physical and numerical property file generation
+- Parallel and serial solver execution
+- Integrated post-processing with ParaView scripts
+- Modular, extensible Python codebase
+
+---
+
+## System Requirements
+
+- **OpenFOAM 8** (must be installed and sourced)
+- **ParaView** (for post-processing, including `pvbatch`)
+- **pimpleFOAM_WK** solver for 3-element Windkessel boundary conditions ([see Windkessel code repo](https://github.com/EManchester/OpenFOAM-v8-Windkessel-code))
+
+[See Installation](#installation) for setup instructions.
+
+### Installing OpenFOAM 8 (Ubuntu Example)
+
+```bash
+# Add the OpenFOAM repository and install
+sudo sh -c "wget -O - https://dl.openfoam.org/gpg.key | apt-key add -"
+sudo add-apt-repository http://dl.openfoam.org/ubuntu
+sudo apt-get update
+sudo apt-get install openfoam8
+
+# Add OpenFOAM to your environment (add this to your ~/.bashrc)
+source /opt/openfoam8/etc/bashrc
+```
+
+### Installing ParaView (pvbatch)
+
+You can install ParaView from your package manager or from the [official ParaView website](https://www.paraview.org/download/). Ensure the `pvbatch` executable is available in your PATH.
+
+### Compiling the Windkessel Solver (pimpleFOAM_WK)
+
+For simulations using the 3-element Windkessel (3EWK) boundary condition, you must compile and use the custom `pimpleFOAM_WK` solver:
+
+1. Clone the Windkessel solver repository:
+   ```bash
+   git clone https://github.com/EManchester/OpenFOAM-v8-Windkessel-code.git
+   cd OpenFOAM-v8-Windkessel-code
+   wmake
+   ```
+   This will create the `pimpleFOAM_WK` solver in your `$FOAM_USER_APPBIN` directory.
+
+2. Ensure your case and boundary files are set up as described in the [Windkessel code README](https://github.com/EManchester/OpenFOAM-v8-Windkessel-code/blob/main/README.md).
+
+---
+
+## Pipeline Architecture
+
+AortaCFD is built around a modular, task-based pipeline managed by the `WorkflowManager`. Each workflow command triggers a sequence of tasks, ensuring reproducibility and clarity.
+
+**Pipeline Overview:**
+
+```mermaid
+graph TD
+    A[Start: User Command] --> B[ConfigBuilder: Load Config]
+    B --> C[WorkflowManager: Select Recipe]
+    C --> D[Task 1: Create Case Structure]
+    D --> E[Task 2: Generate Mesh Files]
+    E --> F[Task 3: Generate Physical Properties]
+    F --> G[Task 4: Generate Numerical Schemes]
+    G --> H[Task 5: Generate Solver Settings]
+    H --> I[Task 6: Generate DecomposeParDict]
+    I --> J[Task 7: Generate ControlDict]
+    J --> K[Task 8: Execute Meshing]
+    K --> L[Task 9: Prepare Boundary Data]
+    L --> M[Task 10: Generate BC Files]
+    M --> N[Task 11: Update ControlDict]
+    N --> O[Task 12: Execute Solver]
+    O --> P[Task 13: Execute Post-Processing]
+    P --> Q[End: Results & Logs]
+```
+
+**Key Pipeline Commands:**
+
+- `setup:dict`: Generate all non-mesh-dependent dictionary files.
+- `setup:bc`: Prepare and update boundary condition files after meshing.
+- `run:mesh`: Execute OpenFOAM meshing utilities.
+- `run:solver`: Run the OpenFOAM solver (or `pimpleFOAM_WK` for 3EWK cases).
+- `createCase`: Full setup (structure, mesh, properties, BCs).
+- `runAll`: Complete end-to-end workflow (setup, mesh, BCs, solve, post-process).
+
+Each task is implemented as a Python class, ensuring modularity and easy extension.
 
 ---
 
@@ -35,142 +133,97 @@ AortaCFD is an intelligent, Python-driven workflow for simulating blood flow in 
 
 1. **Clone the repository:**
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/yourusername/AortaCFD-app.git
    cd AortaCFD-app
    ```
+
 2. **Install Python dependencies:**
-   > **Note:** `requirement.txt` is currently empty. Install the following manually (Python 3.8+ recommended):
    ```bash
-   pip install numpy scipy scikit-learn jinja2 matplotlib pyvista
+   pip install -r requirement.txt
    ```
-   - For post-processing: [ParaView](https://www.paraview.org/download/) (5.11+ recommended)
-   - For CFD: [OpenFOAM](https://openfoam.org/download/) (version 8 recommended)
 
-3. **Set up OpenFOAM and ParaView environment variables as needed.**
+3. **Ensure OpenFOAM 8, ParaView, and (if using 3EWK) pimpleFOAM_WK are installed and available in your environment.**
+
+[See System Requirements](#system-requirements) for details.
 
 ---
 
-## Requirements
-- **Python:** 3.8 or higher
-- **OpenFOAM:** Version 8 (or compatible)
-- **ParaView:** 5.11+ (for automated post-processing)
-- **Linux OS** (tested on Ubuntu 20.04+)
-- **Additional Python packages:** numpy, scipy, scikit-learn, jinja2, matplotlib, pyvista
+## Getting Started
+
+1. **Prepare your case data:**
+   - Place STL geometry and inlet flow CSVs in a subfolder under `CAD/`.
+   - Prepare a simulation profile in `config/profiles/`.
+
+2. **Run a workflow command:**
+   ```bash
+   python app.py runAll --case PAT1_2024 --profile sim_laminar_fine
+   ```
+
+   - Use `--clean` to remove previous results and start fresh.
+
+3. **For 3EWK (three-element Windkessel) boundary conditions:**
+   - Ensure you have compiled and are using the `pimpleFOAM_WK` solver from [OpenFOAM-v8-Windkessel-code](https://github.com/EManchester/OpenFOAM-v8-Windkessel-code).
+   - Follow the Windkessel code's instructions for setting up boundary conditions and `windkesselProperties`.
+
+4. **Results and logs will be generated in the `OPENFOAM/` directory.**
 
 ---
 
-## Quick Start
+## Command Reference
 
-1. **Prepare your input data:**
-   - Place your STL geometry and boundary condition files in a subdirectory under `CAD/` (see [Input Data Structure](#input-data-structure)).
-2. **Choose a simulation profile:**
-   - Use one of the provided profiles in `config/profiles/` (e.g., `laminar_medium`, `sim_laminar_coarse`, `sim_laminar_fine`).
-3. **Run the workflow:**
-   ```bash
-   python app.py runAll --case <case_folder> --profile <profile_name>
-   # Example:
-   python app.py runAll --case PAT1_2024 --profile laminar_medium
-   ```
-   - Use `--clean` to delete and recreate the case directory for a fresh run.
+| Command         | Description                                      |
+|-----------------|--------------------------------------------------|
+| setup:dict      | Generate all dictionary files (pre-mesh)         |
+| setup:bc        | Prepare and update boundary condition files       |
+| run:mesh        | Run OpenFOAM meshing utilities                   |
+| run:solver      | Run the OpenFOAM solver (or pimpleFOAM_WK)       |
+| createCase      | Full setup (structure, mesh, properties, BCs)    |
+| runAll          | Complete end-to-end workflow                     |
+
+**Example:**
+```bash
+python app.py runAll --case PAT1_2024 --profile sim_laminar_fine --clean
+```
 
 ---
 
 ## Input Data Structure
 
-Each case should be organized as a subfolder in `CAD/`, e.g.:
-
-```
-CAD/PAT1_2024/
-  ├── inlet.stl
-  ├── outlet1.stl
-  ├── outlet2.stl
-  ├── outlet3.stl
-  ├── outlet4.stl
-  ├── wall_aorta.stl
-  ├── boundary_conditions.json
-  ├── BPM75.csv
-  └── inletFlowRate.csv
-```
-- **STL files:** Define the geometry (inlet, outlets, wall).
-- **CSV files:** Provide time-varying inlet flow/velocity data.
-- **JSON files:** Specify boundary conditions and Windkessel parameters.
+- `CAD/<case_name>/`
+  - `inlet.stl`, `outlet1.stl`, ..., `wall_aorta.stl`
+  - `inletFlowRate.csv`
+  - `boundary_conditions.json` (optional)
+- `config/profiles/<profile_name>.py`
+  - Simulation profile (mesh, physics, solver settings)
 
 ---
 
-## Simulation Profiles
+## Known Issues
 
-Profiles define mesh, physics, and solver settings. Example profiles:
-- `laminar_medium.py`: Medium-fidelity, parallel run, moderate mesh.
-- `sim_laminar_coarse.py`: Fast, coarse mesh, serial run.
-- `sim_laminar_fine.py`: High-fidelity, fine mesh, advanced numerics.
-
-Customize or create new profiles in `config/profiles/` as needed.
+- Ensure all required STL and CSV files are present in the case directory.
+- For Windkessel models, check that flow split ratios sum to 1.0.
+- LES simulations require a fine mesh profile for best results.
+- For 3EWK, ensure the custom solver and boundary files are set up as per [OpenFOAM-v8-Windkessel-code](https://github.com/EManchester/OpenFOAM-v8-Windkessel-code).
 
 ---
 
-## Workflow & Usage
+## Updates & Roadmap
 
-### Main Workflow Commands
-- `runAll`: Full pipeline (setup, mesh, BCs, solve, post-process)
-- `createCase`: Setup, mesh, and BCs (no solve)
-- `run:mesh`: Only mesh generation
-- `run:solver`: Only run the solver
-- `setup:dict`: Generate all dictionary files (no mesh)
-- `setup:bc`: Update boundary conditions after meshing
-
-### Example Usage
-```bash
-python app.py runAll --case PAT1_2024 --profile laminar_medium
-python app.py createCase --case VOL04 --profile sim_laminar_coarse
-```
-
-### Command-line Flags
-- `--case`: Name of the case directory in `CAD/`
-- `--profile`: Name of the simulation profile in `config/profiles/`
-- `--clean`: (Optional) Delete and recreate the case directory
-
----
-
-## Configuration
-
-- **Global settings:** `config/base.py` (OpenFOAM version, physical properties, post-processing paths)
-- **Simulation profiles:** `config/profiles/`
-- **Templates:** `templates/` (Jinja2 templates for OpenFOAM dictionaries)
-
----
-
-## Post-Processing
-
-- **Automated screenshots and animations** using ParaView or PyVista
-- **Output images and videos** are saved in the case's `Images/` directory
-- **Customizable fields:** Velocity, Pressure, Wall Shear Stress, Kinetic Energy
-
----
-
-## Troubleshooting
-- Ensure all dependencies are installed and environment variables are set for OpenFOAM and ParaView.
-- Check log files (e.g., `AortaCFD.log`, `log.blockMesh`, `log.solver`) for error messages.
-- For missing or malformed input files, verify your `CAD/<case>/` directory structure.
+- **v1.0:** Initial public release
+- **Planned:** Multi-patient batch processing, GUI front-end, cloud deployment
 
 ---
 
 ## Contributing
+
 Contributions are welcome! Please open issues or pull requests for bug fixes, new features, or documentation improvements.
 
 ---
 
-## Contact
-- **Project Lead:** (Add your name/email here)
-- **GitHub:** (Add your GitHub link here)
-- **Support:** (Add support email or forum link here)
-
----
-
 ## License
-*Please add a LICENSE file to specify the project license (e.g., MIT, GPL, etc.).*
+
+[MIT License](LICENSE)
 
 ---
 
-## Acknowledgments
-- Inspired by [SimVascular](https://simvascular.github.io/) and [VMTK](http://www.vmtk.org/)
-- Built on [OpenFOAM](https://openfoam.org/) and [ParaView](https://www.paraview.org/)
+**For more information, see the [Documentation](#) or contact [jie.wang-2@manchester.ac.uk](mailto:jie.wang-2@manchester.ac.uk).**
