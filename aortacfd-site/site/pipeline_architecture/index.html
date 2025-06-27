@@ -11,7 +11,7 @@
         <link rel="canonical" href="https://aortacfd.com/pipeline_architecture/">
       
       
-        <link rel="prev" href="../system_requirements/">
+        <link rel="prev" href="../features/">
       
       
         <link rel="next" href="../installation/">
@@ -74,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#pipeline-architecture" class="md-skip">
+        <a href="#aortacfd-pipeline-architecture-overview" class="md-skip">
           Skip to content
         </a>
       
@@ -315,28 +315,6 @@
       
   
   
-  
-  
-    <li class="md-nav__item">
-      <a href="../system_requirements/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    System Requirements
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-    
-      
-      
-  
-  
     
   
   
@@ -390,20 +368,59 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#pipeline-overview" class="md-nav__link">
+  <a href="#architecture-overview" class="md-nav__link">
     <span class="md-ellipsis">
-      Pipeline Overview
+      Architecture Overview
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Architecture Overview">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#architecture-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      Architecture Components
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
+  <a href="#pipeline-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pipeline Architecture
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pipeline Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pipeline-diagram" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pipeline Diagram
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#key-pipeline-commands" class="md-nav__link">
     <span class="md-ellipsis">
       Key Pipeline Commands
     </span>
   </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -618,20 +635,59 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#pipeline-overview" class="md-nav__link">
+  <a href="#architecture-overview" class="md-nav__link">
     <span class="md-ellipsis">
-      Pipeline Overview
+      Architecture Overview
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Architecture Overview">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#architecture-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      Architecture Components
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
+  <a href="#pipeline-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pipeline Architecture
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Pipeline Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pipeline-diagram" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pipeline Diagram
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#key-pipeline-commands" class="md-nav__link">
     <span class="md-ellipsis">
       Key Pipeline Commands
     </span>
   </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -651,9 +707,67 @@
 
 
 
-<h1 id="pipeline-architecture">Pipeline Architecture</h1>
+<h1 id="aortacfd-pipeline-architecture-overview">AortaCFD Pipeline &amp; Architecture Overview</h1>
+<p>This document provides a comprehensive overview of the AortaCFD application's architecture and workflow pipeline. It is intended to help users and developers understand how the main components interact and how the simulation pipeline is executed.</p>
+<hr />
+<h2 id="architecture-overview">Architecture Overview</h2>
+<p><img alt="Workflow Architecture" src="../assets/workflow.png" /></p>
+<p>The diagram above illustrates the high-level architecture and flow of the AortaCFD application. The architecture is designed to be modular, extensible, and robust, supporting both advanced users and newcomers in running complex, patient-specific CFD simulations efficiently.</p>
+<h3 id="architecture-components">Architecture Components</h3>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>User/CLI</strong></td>
+<td>User triggers the app via command line, specifying the workflow, case, and simulation profile.</td>
+</tr>
+<tr>
+<td><strong>app.py</strong></td>
+<td>Main entry point; parses arguments, initializes logging, builds configuration, and starts the workflow manager.</td>
+</tr>
+<tr>
+<td><strong>ConfigBuilder</strong></td>
+<td>Merges static and dynamic config from profiles and CAD data to construct the full configuration.</td>
+</tr>
+<tr>
+<td><strong>WorkflowManager</strong></td>
+<td>Orchestrates the workflow based on user command, mapping commands to a sequence of modular tasks.</td>
+</tr>
+<tr>
+<td><strong>Task Classes</strong></td>
+<td>Modular steps (setup, execution, etc.); each task is a class for mesh generation, BC setup, solver execution, etc.</td>
+</tr>
+<tr>
+<td><strong>Domain Logic</strong></td>
+<td>Core CFD, BC, mesh, and post-processing logic; scientific and engineering logic for all major operations.</td>
+</tr>
+<tr>
+<td><strong>Templates</strong></td>
+<td>Used for file generation; stores template files for OpenFOAM dictionaries and other configuration files.</td>
+</tr>
+<tr>
+<td><strong>CAD Data</strong></td>
+<td>Patient/case-specific geometry and BCs; contains STL geometry, inlet flow CSVs, and optional BC JSONs.</td>
+</tr>
+<tr>
+<td><strong>Logger</strong></td>
+<td>Centralized logging for all components; ensures traceability and easier debugging.</td>
+</tr>
+<tr>
+<td><strong>OPENFOAM Directory</strong></td>
+<td>Output location for simulation results; all generated files, results, and logs are stored here.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="pipeline-architecture">Pipeline Architecture</h2>
 <p>AortaCFD is built around a modular, task-based pipeline managed by the <code>WorkflowManager</code>. Each workflow command triggers a sequence of tasks, ensuring reproducibility and clarity.</p>
-<h2 id="pipeline-overview">Pipeline Overview</h2>
+<h3 id="pipeline-diagram">Pipeline Diagram</h3>
 <pre><code class="language-mermaid">graph TD
     A[Start: User Command] --&gt; B[ConfigBuilder: Load Config]
     B --&gt; C[WorkflowManager: Select Recipe]
@@ -672,7 +786,7 @@
     O --&gt; P[Task 13: Execute Post-Processing]
     P --&gt; Q[End: Results &amp; Logs]
 </code></pre>
-<h2 id="key-pipeline-commands">Key Pipeline Commands</h2>
+<h3 id="key-pipeline-commands">Key Pipeline Commands</h3>
 <ul>
 <li><code>setup:dict</code>: Generate all non-mesh-dependent dictionary files.</li>
 <li><code>setup:bc</code>: Prepare and update boundary condition files after meshing.</li>

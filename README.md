@@ -7,7 +7,7 @@
 - [Core Benefits](#core-benefits)
 - [Features](#features)
 - [System Requirements](#system-requirements)
-- [Pipeline Architecture](#pipeline-architecture)
+- [Pipeline & Architecture Overview](#pipeline--architecture-overview)
 - [Installation](#installation)
 - [Getting Started](#getting-started)
 - [Command Reference](#command-reference)
@@ -90,42 +90,42 @@ For simulations using the 3-element Windkessel (3EWK) boundary condition, you mu
 
 ---
 
-## Pipeline Architecture
+## Pipeline & Architecture Overview
 
 AortaCFD is built around a modular, task-based pipeline managed by the `WorkflowManager`. Each workflow command triggers a sequence of tasks, ensuring reproducibility and clarity.
 
-**Pipeline Overview:**
+**Pipeline vs. Architecture:**
+- The **pipeline** describes the sequence of steps (tasks) performed for a simulation.
+- The **architecture** shows how the main components of the codebase interact to enable this pipeline.
+
+### Pipeline Overview
+
+# (Remove the mermaid pipeline diagram block here)
+
+### Architecture Flow Map
 
 ```mermaid
-graph TD
-    A[Start: User Command] --> B[ConfigBuilder: Load Config]
-    B --> C[WorkflowManager: Select Recipe]
-    C --> D[Task 1: Create Case Structure]
-    D --> E[Task 2: Generate Mesh Files]
-    E --> F[Task 3: Generate Physical Properties]
-    F --> G[Task 4: Generate Numerical Schemes]
-    G --> H[Task 5: Generate Solver Settings]
-    H --> I[Task 6: Generate DecomposeParDict]
-    I --> J[Task 7: Generate ControlDict]
-    J --> K[Task 8: Execute Meshing]
-    K --> L[Task 9: Prepare Boundary Data]
-    L --> M[Task 10: Generate BC Files]
-    M --> N[Task 11: Update ControlDict]
-    N --> O[Task 12: Execute Solver]
-    O --> P[Task 13: Execute Post-Processing]
-    P --> Q[End: Results & Logs]
+flowchart TD
+    A["User/CLI"] --> B["app.py (Entry Point)"]
+    B --> C["ConfigBuilder (config/builder.py)"]
+    B --> D["WorkflowManager (workflow/manager.py)"]
+    C --> I["Profiles & Base Config (config/)"]
+    C --> H["CAD Data (CAD/)"]
+    D --> E["Task Classes (workflow/tasks/)"]
+    E --> F["Domain Logic (aortacfd_lib/)"]
+    E --> G["Templates (templates/)"]
+    E --> H
+    E --> K["OPENFOAM Directory (Output)"]
+    B --> J["Logger (aortacfd_lib/utils/logger.py)"]
+    D --> J
+    E --> J
+    F --> J
+    C --> J
+    G --> E
+    H --> E
+    F --> E
+    J --> K
 ```
-
-**Key Pipeline Commands:**
-
-- `setup:dict`: Generate all non-mesh-dependent dictionary files.
-- `setup:bc`: Prepare and update boundary condition files after meshing.
-- `run:mesh`: Execute OpenFOAM meshing utilities.
-- `run:solver`: Run the OpenFOAM solver (or `pimpleFOAM_WK` for 3EWK cases).
-- `createCase`: Full setup (structure, mesh, properties, BCs).
-- `runAll`: Complete end-to-end workflow (setup, mesh, BCs, solve, post-process).
-
-Each task is implemented as a Python class, ensuring modularity and easy extension.
 
 ---
 
