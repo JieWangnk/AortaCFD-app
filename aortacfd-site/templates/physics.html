@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% block title %}Physics - Vessel Calculators{% endblock %}
+{% block content %}
+<h2>Vessel Reynolds Number Calculator</h2>
+<p><strong>Equation:</strong> <span style="font-size:1.2em;">Re = (ρ × v × D) / μ</span></p>
+<ul>
+  <li><strong>ρ</strong>: Density of blood (kg/m³, default 1060)</li>
+  <li><strong>v</strong>: Velocity (m/s)</li>
+  <li><strong>D</strong>: Diameter (m)</li>
+  <li><strong>μ</strong>: Dynamic viscosity (Pa·s, default 0.0035)</li>
+</ul>
+
+<h2 class="mt-5">Womersley Number Calculator</h2>
+<p><strong>Equation:</strong> <span style="font-size:1.2em;">α = (D / 2) × sqrt(ω / ν)</span></p>
+<ul>
+  <li><strong>Heart Rate (HR)</strong>: beats per minute (bpm, default 75)</li>
+  <li><strong>Cardiac Cycle (T)</strong>: seconds (auto: 60 / HR)</li>
+  <li><strong>Angular Frequency (ω)</strong>: rad/s (auto: 2π / T)</li>
+  <li><strong>ν</strong>: Kinematic viscosity (m²/s, auto: μ / ρ)</li>
+  <li><strong>μ</strong>: Dynamic viscosity (Pa·s, default 0.0035)</li>
+  <li><strong>ρ</strong>: Density (kg/m³, default 1060)</li>
+  <li><strong>D</strong>: Diameter (m, shared with Reynolds)</li>
+</ul>
+
+<form method="post" class="mb-3">
+    <div class="row">
+      <div class="col-md-4 mb-3">
+        <label for="diameter" class="form-label">Vessel Diameter (m):</label>
+        <input type="number" step="any" name="diameter" id="diameter" class="form-control" required value="{{ request.form.diameter or '' }}">
+      </div>
+      <div class="col-md-4 mb-3">
+        <label for="velocity" class="form-label">Blood Velocity (m/s):</label>
+        <input type="number" step="any" name="velocity" id="velocity" class="form-control" required value="{{ request.form.velocity or '' }}">
+      </div>
+      <div class="col-md-4 mb-3">
+        <label for="viscosity" class="form-label">Dynamic Viscosity μ (Pa·s):</label>
+        <input type="number" step="any" name="viscosity" id="viscosity" class="form-control" required value="{{ request.form.viscosity or '0.0035' }}">
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-4 mb-3">
+        <label for="density" class="form-label">Density ρ (kg/m³):</label>
+        <input type="number" step="any" name="density" id="density" class="form-control" required value="{{ request.form.density or '1060' }}">
+      </div>
+      <div class="col-md-4 mb-3">
+        <label for="heart_rate" class="form-label">Heart Rate (bpm):</label>
+        <input type="number" step="any" name="heart_rate" id="heart_rate" class="form-control" required value="{{ request.form.heart_rate or '75' }}">
+      </div>
+      <div class="col-md-4 mb-3">
+        <label for="cardiac_cycle" class="form-label">Cardiac Cycle T (s):</label>
+        <input type="number" step="any" name="cardiac_cycle" id="cardiac_cycle" class="form-control" value="{{ cardiac_cycle or '' }}" readonly>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-4 mb-3">
+        <label for="angular_freq" class="form-label">Angular Frequency ω (rad/s):</label>
+        <input type="number" step="any" name="angular_freq" id="angular_freq" class="form-control" value="{{ angular_freq or '' }}" readonly>
+      </div>
+      <div class="col-md-4 mb-3">
+        <label for="kinematic_visc" class="form-label">Kinematic Viscosity ν (m²/s):</label>
+        <input type="number" step="any" name="kinematic_visc" id="kinematic_visc" class="form-control" value="{{ kinematic_visc or '' }}" readonly>
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Calculate</button>
+</form>
+
+{% if reynolds is not none %}
+    <div class="alert alert-success">
+        <strong>Reynolds Number:</strong> {{ reynolds|round(2) }}
+    </div>
+{% endif %}
+{% if womersley is not none %}
+    <div class="alert alert-info">
+        <strong>Womersley Number (α):</strong> {{ womersley|round(2) }}
+    </div>
+{% endif %}
+{% if error %}
+    <div class="alert alert-danger">Error: {{ error }}</div>
+{% endif %}
+
+<h5 class="mt-4">Equations Used:</h5>
+<ul>
+  <li><strong>Cardiac Cycle:</strong> T = 60 / HR</li>
+  <li><strong>Angular Frequency:</strong> ω = 2π / T</li>
+  <li><strong>Kinematic Viscosity:</strong> ν = μ / ρ</li>
+  <li><strong>Womersley Number:</strong> α = (D / 2) × sqrt(ω / ν)</li>
+</ul>
+{% endblock %} 
