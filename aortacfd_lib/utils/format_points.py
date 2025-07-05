@@ -88,6 +88,46 @@ class EnhancedPointsFormatter:
 # Usage in the terminal
 # python formatPoints.py points-new
 
+def format_points(points, precision=1):
+    """
+    Simple utility function to format a list of 3D points for testing.
+    
+    Args:
+        points: List of tuples (x, y, z)
+        precision: Number of decimal places (default=1)
+        
+    Returns:
+        Formatted string representation of points
+    """
+    if not points:
+        return ""
+    
+    formatted_lines = []
+    for point in points:
+        if len(point) != 3:
+            raise ValueError("Each point must have exactly 3 coordinates")
+        
+        x, y, z = point
+        # Format each coordinate based on its value
+        formatted_coords = []
+        for val in (x, y, z):
+            if abs(val) == 0:
+                formatted_coords.append("0.0")
+            elif abs(val) < 1e-5:
+                # Use scientific notation for very small non-zero numbers
+                formatted_coords.append(f"{val:.1e}")
+            elif abs(val) < 1e-3:
+                # Use fixed-point notation with more precision for small numbers
+                formatted_coords.append(f"{val:.6f}")
+            else:
+                # Use fixed-point notation for regular numbers
+                formatted_coords.append(f"{val:.{precision}f}")
+        
+        formatted_lines.append(" ".join(formatted_coords))
+    
+    return "\n".join(formatted_lines)
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python formatPoints.py <input_filename> [case_directory]")

@@ -1,0 +1,143 @@
+name: AortaCFD Tests
+
+on:
+  push:
+    branches: [ main, develop, claude_update ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.8, 3.9, '3.10']
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirement.txt
+    
+    - name: Create test reports directory
+      run: mkdir -p tests/reports
+    
+    - name: Run unit tests
+      run: |
+        pytest tests/unit/ -v --tb=short --junit-xml=tests/reports/junit-unit.xml
+    
+    - name: Run integration tests
+      run: |
+        pytest tests/integration/ -v --tb=short --junit-xml=tests/reports/junit-integration.xml
+    
+    - name: Run all tests with coverage
+      run: |
+        pytest --cov=aortacfd_lib --cov=config --cov=workflow \
+               --cov-report=xml --cov-report=html \
+               --cov-report=term-missing \
+               --html=tests/reports/report.html \
+               --self-contained-html
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+    
+    - name: Archive test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-${{ matrix.python-version }}
+        path: |
+          tests/reports/
+          htmlcov/
+          coverage.xml
+    
+    - name: Archive coverage report
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: coverage-report-${{ matrix.python-version }}
+        path: htmlcov/
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 black mypy
+    
+    - name: Lint with flake8
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Check code formatting with black
+      run: |
+        black --check --diff .
+    
+    - name: Type checking with mypy
+      run: |
+        mypy aortacfd_lib/ config/ workflow/ --ignore-missing-imports --no-strict-optional
+      continue-on-error: true  # MyPy can be strict, don't fail CI for now
+
+  security:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install security tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit safety
+    
+    - name: Run security scan with bandit
+      run: |
+        bandit -r aortacfd_lib/ config/ workflow/ -f json -o bandit-report.json
+      continue-on-error: true
+    
+    - name: Check for known security vulnerabilities
+      run: |
+        safety check --json --output safety-report.json
+      continue-on-error: true
+    
+    - name: Upload security reports
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-reports
+        path: |
+          bandit-report.json
+          safety-report.json
