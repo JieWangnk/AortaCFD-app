@@ -9,6 +9,44 @@ class CommandExecutionError(Exception):
     """Custom exception for failed command execution."""
     pass
 
+
+class Runner:
+    """Utility class for running external commands."""
+    
+    def __init__(self):
+        """Initialize the Runner."""
+        pass
+    
+    def run_command(
+        self,
+        command,
+        timeout=None,
+        cwd=None,
+        env=None,
+        capture_output=True
+    ):
+        """
+        Run a command and return the result.
+        
+        Args:
+            command: List of command arguments
+            timeout: Timeout in seconds
+            cwd: Working directory
+            env: Environment variables
+            capture_output: Whether to capture stdout/stderr
+            
+        Returns:
+            CompletedProcess result
+        """
+        return subprocess.run(
+            command,
+            timeout=timeout,
+            cwd=cwd,
+            env=env,
+            capture_output=capture_output,
+            text=True
+        )
+
 def run_command(config: dict, command: list, case_directory: str, log_filename: str):
     """
     Executes a shell command after sourcing the OpenFOAM environment.
