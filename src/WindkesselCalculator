@@ -1,0 +1,9 @@
+2025-07-06 13:11:35 - AortaCFD - INFO - Generating Windkessel configuration using research methodology...
+2025-07-06 13:11:35 - AortaCFD - INFO - Calculated outlet areas: {'outlet1': 0.00012, 'outlet2': 8e-05, 'outlet3': 6e-05, 'outlet4': 4e-05}
+2025-07-06 13:11:35 - AortaCFD - INFO - Equivalent radii: {'outlet1': 0.006180387232371034, 'outlet2': 0.00504626504404032, 'outlet3': 0.004370193722368317, 'outlet4': 0.0035682482323055424}
+2025-07-06 13:11:35 - AortaCFD - INFO - Murray's law flow ratios (exponent=2.7): {'outlet1': 0.4550245256476853, 'outlet2': 0.2632155883824989, 'outlet3': 0.17850250348809307, 'outlet4': 0.10325738248172268}
+2025-07-06 13:11:35 - AortaCFD - INFO - Estimated vessel resistances (K*L): {'outlet1': 172588.97000495103, 'outlet2': 317066.18380848086, 'outlet3': 488155.32419401006, 'outlet4': 896798.5946236686}
+2025-07-06 13:11:35 - AortaCFD - INFO - Calculated Windkessel resistances (R_multiplier=15.0): {'outlet1': 13451978.91935503, 'outlet2': 23254626.993851576, 'outlet3': 34290725.38027727, 'outlet4': 59278863.93871783}
+2025-07-06 13:11:35 - AortaCFD - INFO - Calculated capacitances (RC=0.064s): {'outlet1': 4.7576643097407226e-09, 'outlet2': 2.752140467224924e-09, 'outlet3': 1.8663938802767462e-09, 'outlet4': 1.0796428228814044e-09}
+2025-07-06 13:11:35 - AortaCFD - INFO - Calculated peripheral resistances: {'outlet1': 1345197.891935503, 'outlet2': 2325462.699385158, 'outlet3': 3429072.538027727, 'outlet4': 5927886.393871783}
+2025-07-06 13:11:35 - AortaCFD - INFO - Windkessel configuration generated successfully

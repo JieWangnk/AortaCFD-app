@@ -1,0 +1,45 @@
+{
+  "_description": "TEMPLATE 4: Windkessel outlets for physiological boundary conditions",
+  "_profile_recommendation": "sim_laminar_fine",
+  "geometry": {
+    "refinement_level": "medium",
+    "rotation": true,
+    "target_normal": [0, 0, 1],
+    "scale_factor": 0.001
+  },
+  "inlet": {
+    "type": "TIMEVARYING",
+    "csv_file": "BPM75.csv",
+    "data_type": "velocity",
+    "profile": "womersley",
+    "orientation": "out"
+  },
+  "outlets": {
+    "type": "3EWINDKESSEL",
+    "windkessel_settings": {
+      "systolic_pressure": 120,
+      "diastolic_pressure": 80,
+      "flow_split": {
+        "outlet1": 0.35,
+        "outlet2": 0.25,
+        "outlet3": 0.25,
+        "outlet4": 0.15
+      },
+      "resistance_total": 1200,
+      "compliance_total": 1.2e-6,
+      "peripheral_resistance_factor": 0.8
+    }
+  },
+  "simulation_control": {
+    "number_of_cycles": 3,
+    "end_time": 0.15,
+    "target_runtime_minutes": 60
+  },
+  "numerical_settings": {
+    "time_stepping": "adaptive",
+    "initial_deltaT": 1e-5,
+    "maxCo": 1.0,
+    "maxDeltaT": 1e-3,
+    "solver_tolerance": "balanced"
+  }
+}
