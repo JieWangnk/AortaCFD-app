@@ -6,9 +6,9 @@ import os
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
-from config.builder import ConfigBuilder
-from workflow.manager import WorkflowManager
-from workflow.base_task import AortaCFDError
+from src.config.builder import ConfigBuilder
+from src.workflow.manager import WorkflowManager
+from src.workflow.base_task import AortaCFDError
 
 
 class TestFullWorkflowIntegration:
@@ -127,11 +127,11 @@ endsolid test_geometry""")
         
         return temp_dir
     
-    @patch('workflow.tasks.setup_tasks.CreateCaseStructureTask')
-    @patch('workflow.tasks.setup_tasks.GenerateMeshFilesTask')
-    @patch('workflow.tasks.execution_tasks.ExecuteMeshingTask')
-    @patch('config.builder.importlib.import_module')
-    @patch('aortacfd_lib.utils.runner.run_command')
+    @patch('src.workflow.tasks.setup_tasks.CreateCaseStructureTask')
+    @patch('src.workflow.tasks.setup_tasks.GenerateMeshFilesTask')
+    @patch('src.workflow.tasks.execution_tasks.ExecuteMeshingTask')
+    @patch('src.config.builder.importlib.import_module')
+    @patch('src.aortacfd_lib.utils.runner.run_command')
     def test_complete_workflow_mock_execution(self, mock_run_command, mock_import, mock_meshing, mock_mesh_files,
                                             mock_case_structure, full_test_environment):
         """Test complete workflow execution with mocked tasks."""
@@ -537,7 +537,7 @@ endsolid test_geometry""")
         assert shared_data["consumer_called"]
         assert shared_data["received_data"] == "test_data"
     
-    @patch('aortacfd_lib.utils.logger.Logger')
+    @patch('src.aortacfd_lib.utils.logger.Logger')
     def test_end_to_end_workflow_simulation(self, mock_logger, full_test_environment):
         """Test end-to-end workflow simulation."""
         original_cwd = os.getcwd()
@@ -549,7 +549,7 @@ endsolid test_geometry""")
             mock_logger.return_value.get_logger.return_value = mock_logger_instance
             
             # Test the complete workflow pipeline
-            with patch('config.builder.importlib.import_module') as mock_import:
+            with patch('src.config.builder.importlib.import_module') as mock_import:
                 # Setup config modules
                 mock_base = Mock()
                 mock_base.config = {"physics": {"density": 1060.0}}

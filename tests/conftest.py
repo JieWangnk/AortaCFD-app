@@ -109,7 +109,7 @@ def sample_config() -> Dict[str, Any]:
 @pytest.fixture
 def sample_case_directory(temp_dir: Path) -> Path:
     """Create a sample case directory structure."""
-    case_dir = temp_dir / "CAD" / "test_case"
+    case_dir = temp_dir / "data" / "CAD" / "test_case"
     case_dir.mkdir(parents=True)
     
     # Create sample STL files (empty for testing)
@@ -182,7 +182,7 @@ def mock_paraview():
 @pytest.fixture
 def mock_logger():
     """Mock logger for testing."""
-    with patch('aortacfd_lib.utils.logger.Logger') as mock_logger_class:
+    with patch('src.aortacfd_lib.utils.logger.Logger') as mock_logger_class:
         mock_logger_instance = Mock()
         mock_logger_class.return_value.get_logger.return_value = mock_logger_instance
         yield mock_logger_instance
@@ -191,7 +191,7 @@ def mock_logger():
 @pytest.fixture
 def openfoam_case_structure(temp_dir: Path) -> Path:
     """Create a mock OpenFOAM case structure."""
-    case_dir = temp_dir / "OPENFOAM" / "test_case_coarse"
+    case_dir = temp_dir / "output" / "OPENFOAM" / "test_case_coarse"
     case_dir.mkdir(parents=True)
     
     # Create basic OpenFOAM directories

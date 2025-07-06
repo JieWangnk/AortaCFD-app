@@ -4,7 +4,7 @@ Unit tests for WorkflowManager class.
 import pytest
 import os
 from unittest.mock import Mock, patch, MagicMock
-from workflow.manager import WorkflowManager, AortaCFDError
+from src.workflow.manager import WorkflowManager, AortaCFDError
 
 
 class TestWorkflowManager:
@@ -71,12 +71,13 @@ class TestWorkflowManager:
         # Check that case directory path was set correctly
         expected_path = os.path.join(
             os.getcwd(), 
+            "output", 
             "OPENFOAM", 
             f"{sample_config['geometry']['case_name']}_{sample_config['geometry']['refinement_level']}"
         )
         assert manager.context["case_directory"] == expected_path
     
-    @patch('workflow.manager.logger')
+    @patch('src.workflow.manager.logger')
     def test_successful_workflow_execution(self, mock_logger, sample_config):
         """Test successful workflow execution."""
         manager = WorkflowManager(sample_config)
@@ -108,7 +109,7 @@ class TestWorkflowManager:
         # Verify logging
         mock_logger.info.assert_called()
     
-    @patch('workflow.manager.logger')
+    @patch('src.workflow.manager.logger')
     def test_failed_workflow_execution(self, mock_logger, sample_config):
         """Test workflow execution with task failure."""
         manager = WorkflowManager(sample_config)
@@ -282,7 +283,7 @@ class TestWorkflowManager:
         # Verify task was initialized with config
         mock_task_class.assert_called_with(sample_config)
     
-    @patch('workflow.manager.logger')
+    @patch('src.workflow.manager.logger')
     def test_workflow_logging(self, mock_logger, sample_config):
         """Test proper logging during workflow execution."""
         manager = WorkflowManager(sample_config)

@@ -6,9 +6,9 @@ import os
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch, mock_open
-from aortacfd_lib.utils.logger import Logger
-from aortacfd_lib.utils.runner import Runner
-from aortacfd_lib.utils.format_points import format_points
+from src.aortacfd_lib.utils.logger import Logger
+from src.aortacfd_lib.utils.runner import Runner
+from src.aortacfd_lib.utils.format_points import format_points
 
 
 class TestLogger:
@@ -285,7 +285,7 @@ class TestUtilsIntegration:
             point_str = f"{point[0]} {point[1]} {point[2]}"
             assert point_str in result or any(str(coord) in result for coord in point)
     
-    @patch('aortacfd_lib.utils.logger.Logger')
+    @patch('src.aortacfd_lib.utils.logger.Logger')
     def test_error_handling_with_logging(self, mock_logger_class):
         """Test error handling with proper logging."""
         # Setup mock logger

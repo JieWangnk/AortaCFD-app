@@ -9,7 +9,8 @@ setup(
     description="Patient-Specific Aortic Blood Flow Simulation",
     author="AortaCFD Team",
     author_email="contact@aortacfd.org",
-    packages=find_packages(),
+    packages=find_packages(where="src"),
+    package_dir={"": "src"},
     python_requires=">=3.8",
     install_requires=[
         "numpy>=1.21.0",

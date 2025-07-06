@@ -1,0 +1,397 @@
+import os
+import sys
+import vtk
+from vtk.util.numpy_support import vtk_to_numpy
+import numpy as np
+from scipy.spatial import ConvexHull
+import re
+import subprocess
+import json
+from paraview import servermanager
+from paraview.simple import *
+
+from .utils.logger import Logger
+
+paraview.simple._DisableFirstRenderCameraReset()
+
+def get_all_points_from_multiblock(mb_dataset):
+    """
+    Recursively collect all points from a vtkMultiBlockDataSet.
+    Returns a NumPy array of all points or None if no points found.
+    """
+    points_list = []
+    for i in range(mb_dataset.GetNumberOfBlocks()):
+        block = mb_dataset.GetBlock(i)
+        if block is not None:
+            # If the block itself is a MultiBlock, recurse
+            if isinstance(block, vtk.vtkMultiBlockDataSet):
+                pts = get_all_points_from_multiblock(block)
+                if pts is not None:
+                    points_list.append(pts)
+            else:
+                pts = block.GetPoints()
+                if pts is not None:
+                    numpy_pts = vtk_to_numpy(pts.GetData())
+                    if numpy_pts.size > 0:
+                        points_list.append(numpy_pts)
+    if points_list:
+        return np.concatenate(points_list, axis=0)
+    else:
+        return None
+
+def hideAllScalarBarsManually(renderView, arrayNames):
+    """
+    For each arrayName in arrayNames, get the color transfer function (LUT) and
+    retrieve its scalar bar in the given renderView. Then set the visibility to 0.
+    This effectively hides any previously visible legends for those arrays.
+    """
+    for arrayName in arrayNames:
+        ctf = GetColorTransferFunction(arrayName)
+        if ctf is not None:
+            scalarBar = GetScalarBar(ctf, renderView)
+            if scalarBar is not None:
+                scalarBar.Visibility = 0
+
+class OpenFOAMParaView:
+    def __init__(self, casePath, caseType='Reconstructed', timeSteps=None, fields=None, rescaleSettings=None):
+        self.casePath  = casePath
+        self.caseType  = caseType
+        self.foamFile  = f"{casePath}/f.foam"
+        self.imageDir  = f"{casePath}/Images"
+        self.timeSteps = timeSteps
+        self.fields    = fields if fields else ["U", "p", "wallShearStress"]
+        
+        # check the Images folder
+        if not os.path.exists(self.imageDir):
+            os.makedirs(self.imageDir,exist_ok=True)
+
+        self.property_map = {
+            "U": {
+                "name": "U",
+                "derived": False,
+                "prefix": "Velocity",
+                "component": ('POINTS', 'U', 'Magnitude'),
+                "preset": "Rainbow Desaturated",
+                "representation": "Volume",
+                "unit": "m/s"
+            },
+            "p": {
+                "name": "Pressure",
+                "derived": True,
+                "prefix": "Pressure",
+                "component": ('POINTS', 'Pressure'),
+                "preset": "Blue - Green - Orange",
+                "representation": "Surface",
+                "unit": "Pa"
+            },
+            "wallShearStress": {
+                "name": "WSS",
+                "derived": True,
+                "prefix": "WSS",
+                "component": ('POINTS', 'WSS'),
+                "preset": "Viridis (matplotlib)",
+                "representation": "Surface",
+                "unit": "Pa"
+            },
+            "KE": {
+                "name": "KE",
+                "derived": True,
+                "prefix": "KE",
+                "component": ('POINTS', 'KE'),
+                "preset": "Inferno (matplotlib)",
+                "representation": "Volume",
+                "unit": "Pa"
+            }
+        }
+
+        default_ranges = {
+            "U": [0, 1],
+            "KE": [0, 100],
+            "WSS": [0, 10],
+            "Pressure": [0, 20]
+        }
+        self.rescaleSettings = rescaleSettings or {
+            key: {"rescaleToData": False, "rescaleRange": val} for key, val in default_ranges.items()
+        }
+        
+    def generate_screenshots(self):
+        """
+        Build the pipeline, do PCA-based camera orientation, generate
+        new 'KE', 'WSS', and 'Pressure' fields, and save screenshots.
+        """
+        # Ensure the Images directory exists
+        if not os.path.exists(self.imageDir):
+            os.makedirs(self.imageDir)
+            print(f"[INFO] Created directory: {self.imageDir}\n")
+
+        log_file = os.path.join(self.imageDir, "postProcessing.log")
+
+        # 1) Create the OpenFOAM reader
+        ffoam = OpenFOAMReader(FileName=self.foamFile)
+        ffoam.CaseType = self.caseType + " Case"
+        ffoam.MeshRegions = ['internalMesh']
+
+        # 2) Create one RenderView
+        renderView1 = CreateView('RenderView')
+        renderView1.ViewSize = [1600, 900]
+
+        # 3) Show the raw data first, so we can do camera PCA
+        ffoamDisplay = Show(ffoam, renderView1)
+        ffoamDisplay.SetScalarBarVisibility(renderView1, False)
+        renderView1.Update()
+
+        # 4) Attempt PCA for camera orientation
+        try:
+            data = servermanager.Fetch(ffoam)
+            pts = None
+            if hasattr(data, 'GetPoints') and data.GetPoints() is not None:
+                pts = vtk_to_numpy(data.GetPoints().GetData())
+            elif isinstance(data, vtk.vtkMultiBlockDataSet):
+                pts = get_all_points_from_multiblock(data)
+
+            if pts is None or len(pts) == 0:
+                raise Exception("No points found in dataset for camera PCA.")
+
+            mean = np.mean(pts, axis=0)
+            centered = pts - mean
+            cov = np.cov(centered, rowvar=False)
+            eigvals, eigvecs = np.linalg.eigh(cov)
+            sorted_indices = np.argsort(eigvals)[::-1]
+            eigenvectors = [eigvecs[:, sorted_indices[i]] for i in range(3)]
+
+            # Evaluate projected area in the plane perpendicular to each eigenvector
+            areas = []
+            for i, vec in enumerate(eigenvectors):
+                other_indices = [j for j in range(3) if j != i]
+                basis = np.column_stack([eigenvectors[j] for j in other_indices])
+                projected_points = pts.dot(basis)
+                try:
+                    hull = ConvexHull(projected_points)
+                    areas.append(hull.volume)  # 2D area
+                except Exception:
+                    areas.append(0)
+
+            best_index = np.argmax(areas)
+            best_axis = eigenvectors[best_index]
+
+            info = ffoam.GetDataInformation()
+            bounds = info.GetBounds()
+            xmin, xmax, ymin, ymax, zmin, zmax = bounds
+            dx = xmax - xmin
+            dy = ymax - ymin
+            dz = zmax - zmin
+            radius = max(dx, dy, dz) / 2.0
+
+            renderView1.CameraFocalPoint = mean.tolist()
+            camera_position = mean + 5 * radius * best_axis
+            renderView1.CameraPosition = camera_position.tolist()
+
+            # Compute a view-up vector
+            arbitrary = np.array([0, 1, 0])
+            if np.allclose(best_axis, arbitrary) or np.allclose(best_axis, -arbitrary):
+                arbitrary = np.array([1, 0, 0])
+            view_up = np.cross(best_axis, arbitrary)
+            norm = np.linalg.norm(view_up)
+            if norm == 0:
+                view_up = np.array([0, 0, 1])
+            else:
+                view_up /= norm
+            renderView1.CameraViewUp = view_up.tolist()
+            renderView1.CameraParallelScale = radius
+
+            with open(log_file, "a") as log:
+                log.write(f"[INFO] PCA camera axis={best_index}, area={areas[best_index]}, position={renderView1.CameraPosition}, up={renderView1.CameraViewUp}\n")
+
+        except Exception as e:
+            print(f"[WARNING] PCA-based camera failed: {e}")
+            with open(log_file, "a") as log:
+                log.write(f"[WARNING] PCA-based camera failed: {e}\n")
+            renderView1.ResetCamera()
+            renderView1.CameraViewUp = [0.0, 0.0, 1.0]
+
+        # ---------------------------------------------------------------------
+        # 5) Create new Calculator filters for KE, WSS, Pressure:
+        #    chain them so final pipeline is ffoam -> calcKE -> calcWSS -> calcP
+        calculatorKE = Calculator(Input=ffoam)
+        calculatorKE.ResultArrayName = 'KE'
+        calculatorKE.Function = '0.5*1060*(U_X^2 + U_Y^2 + U_Z^2)'
+
+        calculatorWSS = Calculator(Input=calculatorKE)
+        calculatorWSS.ResultArrayName = 'WSS'
+        calculatorWSS.Function = '1060*mag(wallShearStress)'
+
+        calculatorP = Calculator(Input=calculatorWSS)
+        calculatorP.ResultArrayName = 'Pressure'
+        calculatorP.Function = 'p*1060/133.32'
+
+        # 6) Create a single Display object for the final pipeline object
+        finalDisplay = Show(calculatorP, renderView1)
+        Hide(ffoam, renderView1)
+        renderView1.Update()
+
+        # 7) Construct new_properties dynamically based on fields
+        new_properties = []
+        for field in self.fields:
+            if field in self.property_map:
+                prop = self.property_map[field]
+                rescale_setting = self.rescaleSettings.get(
+                    field, {"rescaleToData": False, "rescaleRange": [0, 10]}
+                )
+
+                new_properties.append({
+                    "name": prop["name"],
+                    "component": prop["component"],
+                    "preset": prop["preset"],
+                    "representation": prop["representation"],
+                    "filePrefix": prop["prefix"],
+                    "unit": prop["unit"],
+                    "rescaleToData": rescale_setting.get("rescaleToData", False),
+                    "rescaleRange": rescale_setting.get("rescaleRange", [0, 1])
+                })
+        # We'll gather all array names for hideAllScalarBarsManually
+        arrayList = [prop["name"] for prop in new_properties]
+
+        # 8) Prepare time steps
+        animationScene1 = GetAnimationScene()
+        timeKeeper1 = GetTimeKeeper()
+        if not self.timeSteps:
+            availableTimes = timeKeeper1.TimestepValues if timeKeeper1 else []
+            if availableTimes:
+                self.timeSteps = [max(availableTimes)]
+                with open(log_file, "a") as log:
+                    log.write(f"[INFO] Defaulting to last time step: {self.timeSteps}\n")
+            else:
+                self.timeSteps = [0.0]
+                with open(log_file, "a") as log:
+                    log.write("[INFO] No available timesteps found. Using 0.0.\n")
+
+        # 9) Loop over time steps and new properties, saving screenshots
+        for t in self.timeSteps:
+            animationScene1.AnimationTime = t
+            timeKeeper1.Time = t
+            renderView1.Update()
+
+            for prop in new_properties:
+                # Hide previously shown scalar bars
+                hideAllScalarBarsManually(renderView1, arrayList)
+
+                # Color by the new field
+                ColorBy(finalDisplay, prop["component"])
+                finalDisplay.SetRepresentationType(prop["representation"])
+
+                # Get the LUT
+                lut = GetColorTransferFunction(prop["name"])
+                pwf = GetOpacityTransferFunction(prop["name"])
+                lut.ApplyPreset(prop["preset"], True)
+
+                if prop["rescaleToData"]:
+                    finalDisplay.RescaleTransferFunctionToDataRange(False, True)
+                else:
+                    lut.RescaleTransferFunction(*prop["rescaleRange"])
+                    pwf.RescaleTransferFunction(*prop["rescaleRange"])
+                    
+                # Show colorbar with units
+                finalDisplay.SetScalarBarVisibility(renderView1, True)
+                scalarBar = GetScalarBar(lut, renderView1)
+                if scalarBar:
+                    scalarBar.Title = f"{prop['name']} ({prop['unit']})"
+                    scalarBar.TitleBold = 1
+                    scalarBar.TitleFontSize = 20
+                    scalarBar.LabelBold = 1
+                    scalarBar.LabelFontSize = 20
+                    scalarBar.AddRangeLabels = 0
+                    scalarBar.Visibility = 1
+
+                # Update
+                renderView1.Update()
+
+                # Build filename
+                formatted_t = f"{t:.6f}".rstrip('0').rstrip('.')
+                screenshotFile = f"{self.imageDir}/{prop['filePrefix']}_{formatted_t}.png"
+                SaveScreenshot(
+                    screenshotFile,
+                    renderView1,
+                    ImageResolution=[1600, 900],
+                    OverrideColorPalette='WhiteBackground',
+                    TransparentBackground=0
+                )
+
+                with open(log_file, "a") as log:
+                    log.write(f"[INFO] Saved screenshot for {prop['name']} at t={t}: {screenshotFile}\n")
+
+    def anima(self, fps=30):
+        log_file = os.path.join(self.imageDir, "postProcessing.log")
+
+        with open(log_file, "a") as log:
+            properties = [self.property_map[f]["prefix"] for f in self.fields if f in self.property_map]
+            for prop in properties:
+                pattern = re.compile(rf"{re.escape(prop)}_(\d+\.?\d*)\.png")
+                images = []
+                for filename in os.listdir(self.imageDir):
+                    match = pattern.match(filename)
+                    if match:
+                        time_step = float(match.group(1))
+                        images.append((time_step, filename))
+
+                if not images:
+                    log.write(f"[WARNING] No images found for property '{prop}'. Skipping animation.\n")
+                    continue
+
+                images.sort(key=lambda x: float(x[0]))
+                list_file = os.path.join(self.imageDir, f"{prop}_files.txt")
+                with open(list_file, "w") as lf:
+                    for _, filename in images:
+                        lf.write(f"file '{filename}'\n")
+
+                output_video = os.path.join(self.imageDir, f"{prop}.avi")
+                ffmpeg_cmd = [
+                    "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-r", str(fps),
+                    "-i", list_file, "-c:v", "mpeg4", "-q:v", "5", output_video
+                ]
+
+                try:
+                    log.write(f"[INFO] Creating animation for '{prop}'...\n")
+                    result = subprocess.run(ffmpeg_cmd, check=True, cwd=self.imageDir,
+                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    log.write(f"[INFO] Animation for '{prop}' saved as '{output_video}'.\n")
+                except subprocess.CalledProcessError as e:
+                    log.write(f"[ERROR] ffmpeg failed for property '{prop}': {e.stderr}\n")
+                finally:
+                    if os.path.exists(list_file):
+                        os.remove(list_file)
+
+            log.write("[INFO] Animation creation completed.\n")
+
+# ------------------- MAIN for pvbatch usage ----------------------
+if __name__ == "__main__":
+    case_type   = os.getenv("CASE_TYPE")
+    case_path   = os.getenv("CASE_PATH")
+    time_array  = os.getenv("TIME_ARRAY").split(",")
+    time_array  = [float(x) for x in time_array]
+    rescale_settings = json.loads(os.getenv("RESCALE_SETTINGS", "{}"))
+    fields      = os.getenv("FIELDS").split(",")
+    fields      = [f.strip() for f in fields]
+
+    # re/animation settings
+    animation_enabled = os.getenv("ANIMATION_ENABLED", "True").lower() == "true"
+    fps           = int(os.getenv("FPS", 30))
+    reAnimation = os.getenv("REANIMATION", "False").lower() == "true"
+
+    
+    pv_script = OpenFOAMParaView(
+        casePath  = str(case_path),
+        caseType  = str(case_type),
+        timeSteps = time_array,
+        fields    = fields,
+        rescaleSettings = rescale_settings
+    )
+    
+    # if reAnimation is True, we will just do animation
+    if reAnimation:
+        pv_script.anima(fps=fps)
+    else:
+        pv_script.generate_screenshots()
+        if animation_enabled:
+            pv_script.anima(fps=fps)
+        else:
+            print("[INFO] Animation is disabled. Screenshots are generated without animation.")

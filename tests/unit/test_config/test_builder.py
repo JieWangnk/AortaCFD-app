@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 from unittest.mock import patch, mock_open, Mock
-from config.builder import ConfigBuilder, deep_merge
+from src.config.builder import ConfigBuilder, deep_merge
 
 
 class TestDeepMerge:
@@ -71,7 +71,7 @@ class TestConfigBuilder:
         builder = ConfigBuilder()
         assert builder is not None
     
-    @patch('config.builder.importlib.import_module')
+    @patch('src.config.builder.importlib.import_module')
     def test_load_python_profile_success(self, mock_import):
         """Test successful loading of Python profile."""
         # Setup mock module
@@ -85,7 +85,7 @@ class TestConfigBuilder:
         assert result == {"test": "value"}
         mock_import.assert_called_once_with('.test_profile', package='config')
     
-    @patch('config.builder.importlib.import_module')
+    @patch('src.config.builder.importlib.import_module')
     def test_load_python_profile_import_error(self, mock_import):
         """Test ImportError handling in profile loading."""
         mock_import.side_effect = ImportError("Module not found")
@@ -94,7 +94,7 @@ class TestConfigBuilder:
         with pytest.raises(ImportError, match="Configuration profile could not be imported"):
             builder._load_python_profile('.nonexistent', package='config')
     
-    @patch('config.builder.importlib.import_module')
+    @patch('src.config.builder.importlib.import_module')
     def test_load_python_profile_attribute_error(self, mock_import):
         """Test AttributeError handling when config attribute missing."""
         mock_module = Mock()

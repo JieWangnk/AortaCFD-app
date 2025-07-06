@@ -7,7 +7,6 @@ processor*
 0.orig
 extendedFeatureEdgeMesh
 polyMesh
-OPENFOAM
 *.foam
 *.png
 __pycache__
@@ -35,11 +34,30 @@ coverage.xml
 .hypothesis/
 tests/reports/
 
+# Output directories
+output/
+OPENFOAM/
+
+# Generated documentation
+web/aortacfd-site/site/
+
 # IDEs
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# Testing data
-CAD/test_case/
+# OS files
+.DS_Store
+Thumbs.db
+
+# Testing data (updated paths)
+data/CAD/test_case/
+
+# MyPy
+.mypy_cache/
+
+# Python eggs
+*.egg-info/
+dist/
+build/
