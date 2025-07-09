@@ -1,6 +1,7 @@
 # config/profiles/sim_laminar_fine.py
 """
-Simulation profile for a high-fidelity, fine-mesh LAMINAR simulation.
+OpenFOAM 12 specific simulation profile for high-fidelity laminar simulation.
+All version compatibility removed.
 """
 
 config = {
@@ -19,7 +20,18 @@ config = {
             "surfaceRefinementLevels": [2, 3],  # Higher refinement
             "resolveFeatureAngle": 20,  # More strict angle
             "nSmoothPatch": 5,
-            "addLayer": 5  # More boundary layers
+            "addLayer": 5,  # More boundary layers
+            # Span-based refinement for coarctation
+            "span_refinement_enabled": True,
+            "span_refinement_distance": 1000,  # 1mm
+            "span_refinement_level": 2,
+            "cells_across_span": 20
+        },
+        # Refinement levels for different mesh quality
+        "refinement_levels": {
+            "coarse": 0.002,    # 2mm cells (increased from 5mm to capture inlet/outlet patches)
+            "medium": 0.001,    # 1mm cells (increased from 2mm)
+            "fine": 0.0005      # 0.5mm cells (increased from 1mm)
         }
     },
 
@@ -33,65 +45,60 @@ config = {
     },
 
     # --------------------------------------------------------------------------
-    # Physics and Solver Settings
+    # Physics and Solver Settings (OpenFOAM 12)
     # --------------------------------------------------------------------------
     "physics": {
         "simulation_type": "laminar",
-        "simulation_performance": "high" # Used by old scripts, can be phased out
+        "simulation_performance": "high",
+        "steady_state": False
     },
 
-    # Settings for the fvSolution dictionary
+    # Settings for the fvSolution dictionary (OpenFOAM 12 optimized)
     "fvSolution": {
-        "solvers": {
-            "p": {"solver": "GAMG", "smoother": "GaussSeidel", "tolerance": 1e-6, "relTol": 0.1},
-            "U": {"solver": "smoothSolver", "smoother": "symGaussSeidel", "tolerance": 1e-6, "relTol": 0.1}
+        "SIMPLE": {
+            "nNonOrthogonalCorrectors": 0,
+            "residualControl": {
+                "p": "1e-4",
+                "U": "1e-5",
+                "k": "1e-5"
+            }
         },
         "PIMPLE": {
             "nOuterCorrectors": 100,
             "nCorrectors": 3,
             "nNonOrthogonalCorrectors": 1,
-            "residualControl": {
-                "p": {"tolerance": 1e-4, "relTol": 0},
-                "U": {"tolerance": 1e-5, "relTol": 0}
+            "outerCorrectorResidualControl": {
+                "p": "1e-4",
+                "U": "1e-5",
+                "k": "1e-5"
             }
         },
         "relaxationFactors": {
-            "fields": {"p": 0.3},
-            "equations": {"U": 0.3}
+            "fields": {"p": "0.3"},
+            "equations": {"U": "0.7", "k": "0.7"}
         }
     },
 
-    # Settings for the fvSchemes dictionary
-    "fvSchemes": {
-        "ddtSchemes": {"default": "backward"},
-        "gradSchemes": {"default": "cellLimited Gauss linear 1"},
-        "divSchemes": {"div(phi,U)": "Gauss linearUpwind default"},
-        "laplacianSchemes": {"default": "Gauss linear limited 0.5"},
-        "interpolationSchemes": {"default": "linear"},
-        "snGradSchemes": {"default": "corrected"}
-    },
-
-    # Settings for the controlDict dictionary
+    # Settings for the controlDict dictionary (OpenFOAM 12)
     "simulation_control": {
         "controlDict": {
-            "application": "pimpleFoam",
             "startFrom": "startTime",
             "startTime": 0.0,
             "stopAt": "endTime",
-            "endTime": "auto",  # We can use 'auto' to signal it should be calculated
-            "deltaT": 1e-5,  # Larger initial time step for robustness
+            "endTime": "auto",  # Will be calculated based on cardiac cycles
+            "deltaT": 1e-5,  # Initial time step
             "writeControl": "adjustableRunTime",
             "writeInterval": 0.01,  # Write every 0.01s
             "runTimeModifiable": "true",
             "adjustTimeStep": "yes",
-            "maxCo": 1.2,  # Balanced Courant number for efficiency
-            "maxDeltaT": 1e-3,  # Larger maximum time step
-            "minDeltaT": 1e-8,  # Prevent extremely small time steps
+            "maxCo": 1.2,  # Balanced Courant number
+            "maxDeltaT": 1e-3,  # Maximum time step
+            "minDeltaT": 1e-8,  # Minimum time step
             "functions": ["wallShearStress"]
         }
     },
 
-    # The CHOICE of boundary conditions is defined here.
+    # Boundary conditions (OpenFOAM 12)
     "boundary": {
         "BC_INLET": "TIMEVARYING",
         "BC_OUTLET": "3EWINDKESSEL",
@@ -101,7 +108,8 @@ config = {
         "WK_SETTING": {
             "percentage": 30,
             "systolic_pressure": 120,
-            "diastolic_pressure": 80
+            "diastolic_pressure": 80,
+            "use_murray_law": True  # Enable automatic Murray's law calculation
         }
     }
 }

@@ -1,8 +1,8 @@
-# config/profiles/sim_laminar_coarse.py
+# config/profiles/sim_rans_coarse.py
 """
-Simulation profile for a coarse-mesh, low-fidelity LAMINAR simulation.
+Simulation profile for a coarse-mesh, low-fidelity RANS simulation.
 This profile defines the meshing, run settings, numerics, and solver parameters
-for a fast, lower-accuracy run.
+for a fast, lower-accuracy RANS run using k-omega SST turbulence model.
 """
 
 config = {
@@ -11,21 +11,21 @@ config = {
     # --------------------------------------------------------------------------
     "mesh": {
         # These are the settings for the snappyHexMesh utility.
-        # For a coarse run, we use fewer refinement levels and features.
+        # For a coarse RANS run, we use fewer refinement levels and features.
         "SNAPPY_SETTINGS": {
             # A coarse mesh is small, so we can generate it in serial.
             "parallel": False, #
             "nProcessors": 1, #
             "expansionFactor": 0.02, #
-            "regionRefinementLevel": 3, #
+            "regionRefinementLevel": 2, #
             "nCellsBetweenLevels": 3, #
-            # Higher feature level to capture inlet/outlet patches
-            "featureLevel": 3, #
-            "surfaceRefinementLevels": [2, 3], #
+            # Lower feature level for a coarser capture of geometry.
+            "featureLevel": 2, #
+            "surfaceRefinementLevels": [1, 1], #
             "resolveFeatureAngle": 30, #
             "nSmoothPatch": 3, #
-            # Fewer layers for a coarse boundary layer mesh.
-            "addLayer": 3 #
+            # More layers for RANS boundary layer mesh.
+            "addLayer": 5 #
         },
         # Refinement levels for different mesh quality
         "refinement_levels": {
@@ -49,13 +49,19 @@ config = {
     # Physics and Solver Settings
     # --------------------------------------------------------------------------
     "physics": {
-        "simulation_type": "laminar", #
+        "simulation_type": "RAS", #
+        "turbulence_model": "kOmegaSST", #
+        "turbulence_intensity": 0.05, #
+        "turbulence_viscosity_ratio": 10.0 #
     },
     "fvSolution": {
-        # Using simpler, faster solvers.
+        # Using RANS-appropriate solvers.
         "solvers": {
-            "p": {"solver": "PCG", "preconditioner": "DIC", "tolerance": 1e-5, "relTol": 0.1},
-            "U": {"solver": "PBiCGStab", "preconditioner": "DILU", "tolerance": 1e-5, "relTol": 0.1}
+            "p": {"solver": "GAMG", "smoother": "GaussSeidel", "tolerance": 1e-6, "relTol": 0.05},
+            "U": {"solver": "smoothSolver", "smoother": "symGaussSeidel", "tolerance": 1e-5, "relTol": 0.1},
+            "k": {"solver": "smoothSolver", "smoother": "symGaussSeidel", "tolerance": 1e-5, "relTol": 0.1},
+            "omega": {"solver": "smoothSolver", "smoother": "symGaussSeidel", "tolerance": 1e-5, "relTol": 0.1},
+            "nut": {"solver": "smoothSolver", "smoother": "symGaussSeidel", "tolerance": 1e-5, "relTol": 0.1}
         },
         "PIMPLE": {
             "nOuterCorrectors": 20,
@@ -63,17 +69,32 @@ config = {
             "nNonOrthogonalCorrectors": 1,
             "residualControl": {
                 "p": {"tolerance": 1e-3, "relTol": 0},
-                "U": {"tolerance": 1e-4, "relTol": 0}
+                "U": {"tolerance": 1e-4, "relTol": 0},
+                "k": {"tolerance": 1e-4, "relTol": 0},
+                "omega": {"tolerance": 1e-4, "relTol": 0}
             }
         },
-        "relaxationFactors": { "fields": {"p": 1.0}, "equations": {"U": 1.0} }
+        "relaxationFactors": { 
+            "fields": {"p": 0.3}, 
+            "equations": {"U": 0.7, "k": 0.7, "omega": 0.7} 
+        }
     },
     "fvSchemes": {
-        # Using first-order schemes for stability on coarse meshes.
-        "ddtSchemes": {"default": "Euler"},
-        "gradSchemes": {"default": "cellLimited Gauss linear 0.5"},
-        "divSchemes": {"div(phi,U)": "Gauss upwind"},
-        "laplacianSchemes": {"default": "Gauss linear limited 0.5"},
+        # Using bounded schemes for RANS stability.
+        "ddtSchemes": {"default": "backward"},
+        "gradSchemes": {
+            "default": "cellLimited Gauss linear 0.5",
+            "grad(p)": "cellLimited Gauss linear 0.33",
+            "grad(U)": "cellLimited Gauss linear 0.5"
+        },
+        "divSchemes": {
+            "default": "none",
+            "div(phi,U)": "bounded Gauss linearUpwindV grad(U)",
+            "div(phi,k)": "bounded Gauss limitedLinear 1",
+            "div(phi,omega)": "bounded Gauss limitedLinear 1",
+            "div((nuEff*dev2(T(grad(U)))))": "Gauss linear"
+        },
+        "laplacianSchemes": {"default": "Gauss linear corrected"},
         "interpolationSchemes": {"default": "linear"},
         "snGradSchemes": {"default": "corrected"}
     },
@@ -86,11 +107,11 @@ config = {
             "endTime": "auto",  # Auto-calculate based on cycles
             "deltaT": 1e-4,  # Larger time step for coarse mesh
             "writeControl": "adjustableRunTime",
-            "writeInterval": 0.01,  # Write every 0.01s
+            "writeInterval": 0.02,  # Write every 0.02s (less frequent)
             "runTimeModifiable": "true",
             "adjustTimeStep": "yes",
-            "maxCo": 1.5,  # Higher Courant for coarse mesh
-            "maxDeltaT": 5e-3,  # Larger max time step
+            "maxCo": 1.0,  # Lower Courant for RANS stability
+            "maxDeltaT": 1e-3,  # Smaller max time step for RANS
             "minDeltaT": 1e-7,  # Prevent very small time steps
             "functions": ["wallShearStress"]
         }
@@ -103,5 +124,12 @@ config = {
         "INLET_DATA_TYPE": "velocity",
         "INLET_PROFILE": "womersley",
         "INLET_ORIENTATION": "out"
+    },
+
+    # Add refinement levels for compatibility
+    "refinement_levels": {
+        "coarse": 0.002,    # 2mm cells (increased from 5mm to capture inlet/outlet patches)
+        "medium": 0.001,    # 1mm cells (increased from 2mm)
+        "fine": 0.0005      # 0.5mm cells (increased from 1mm)
     }
 }
