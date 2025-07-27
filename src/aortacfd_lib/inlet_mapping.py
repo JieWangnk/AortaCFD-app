@@ -1,6 +1,5 @@
 import os
 import re
-import glob
 import shutil
 import numpy as np
 from scipy.special import jv
@@ -16,7 +15,7 @@ class InletMapping:
     def __init__(self, config: dict, case_directory: str):
         self.config = config
         self.case_directory = case_directory
-        self.log = Logger("inletMapping.log").get_logger()
+        self.log = Logger("inlet_mapping").get_logger()
 
         # Get all necessary settings from the config dictionary
         self.inlet_settings = self.config['inlet']
@@ -26,11 +25,13 @@ class InletMapping:
         self.inlet_data_file = self.inlet_settings['csv_file']
         self.data_type = self.inlet_settings['data_type'].lower().strip()
         self.profile = self.inlet_settings['profile'].lower().strip()
+        self.orientation = self.inlet_settings.get('orientation', 'auto').lower().strip()
         self.nu = self.phys_settings.get('nu')
 
         self.center = None
         self.radius = None
         self.cardiac_cycle = None
+        self.auto_flip_normal = False  # For automatic orientation detection
         
         self.log.info("InletMapping initialized successfully.")
 
@@ -46,6 +47,12 @@ class InletMapping:
         scale_factor = self.geom_settings.get('scale_factor', 1e-3)
         self.center, self.radius, inlet_normal = inlet_patch_processor.calculate_inlet_center_radius(scale_factor=scale_factor)
         self.log.info(f"Inlet center: {self.center}, Radius: {self.radius}")
+        
+        # Automatic orientation detection
+        if self.orientation == 'auto':
+            self.auto_flip_normal = self._determine_inward_direction(inlet_normal, self.case_directory)
+        else:
+            self.log.info(f"Using manual orientation setting: {self.orientation}")
 
         points_file = os.path.join(self.case_directory, "constant", "boundaryData", self.inlet_name, "points")
         if not os.path.isfile(points_file):
@@ -114,8 +121,77 @@ class InletMapping:
     def _get_distance_from_center(self, point):
         return np.linalg.norm(point - self.center)
 
+    def _determine_inward_direction(self, inlet_normal, case_directory):
+        """
+        Automatically determine if the normal should be flipped to point into the domain.
+        Uses geometric analysis with outlet centroids to determine flow direction.
+        """
+        try:
+            # Get outlet centroids to determine domain interior direction
+            tri_surface_dir = os.path.join(case_directory, "constant", "triSurface")
+            stl_files = [f for f in os.listdir(tri_surface_dir) if f.endswith('.stl')]
+            outlet_files = [f for f in stl_files if "outlet" in f.lower()]
+            
+            if not outlet_files:
+                self.log.warning("No outlet files found for automatic orientation. Using normal as-is.")
+                return False
+            
+            # Calculate average outlet centroid position
+            outlet_centroids = []
+            scale_factor = self.geom_settings.get('scale_factor', 1e-3)
+            
+            for outlet_file in outlet_files:
+                outlet_name = outlet_file.replace('.stl', '')
+                try:
+                    outlet_processor = PatchProcessing(tri_surface_dir, outlet_name)
+                    outlet_center, _, _ = outlet_processor.calculate_inlet_center_radius(scale_factor=scale_factor)
+                    outlet_centroids.append(outlet_center)
+                except Exception as e:
+                    self.log.warning(f"Could not process outlet {outlet_name}: {e}")
+                    continue
+            
+            if not outlet_centroids:
+                self.log.warning("No valid outlet centroids found. Using normal as-is.")
+                return False
+            
+            # Calculate average outlet position
+            avg_outlet_pos = np.mean(outlet_centroids, axis=0)
+            
+            # Vector from inlet center to average outlet center (expected flow direction)
+            inlet_to_outlets = avg_outlet_pos - self.center
+            inlet_to_outlets_normalized = inlet_to_outlets / np.linalg.norm(inlet_to_outlets)
+            
+            # Check if inlet normal aligns with expected flow direction
+            dot_product = np.dot(inlet_normal, inlet_to_outlets_normalized)
+            
+            self.log.info(f"Inlet center: {self.center}")
+            self.log.info(f"Average outlet center: {avg_outlet_pos}")
+            self.log.info(f"Flow direction vector: {inlet_to_outlets_normalized}")
+            self.log.info(f"Inlet normal: {inlet_normal}")
+            self.log.info(f"Dot product (alignment): {dot_product:.4f}")
+            
+            # If dot product is negative, normal points opposite to flow direction
+            should_flip = dot_product < 0
+            
+            if should_flip:
+                self.log.info("Auto-detected: Normal points outward from domain, flipping for inward flow")
+            else:
+                self.log.info("Auto-detected: Normal points inward to domain, keeping as-is")
+                
+            return should_flip
+            
+        except Exception as e:
+            self.log.error(f"Error in automatic orientation detection: {e}")
+            self.log.warning("Falling back to manual orientation setting")
+            return False
+
     def _get_velocity_components(self, speed_scalar, normal_vec):
-        return speed_scalar * normal_vec
+        # Apply orientation: 'out' means positive normal direction, 'in' means negative, 'auto' means automatic detection
+        if self.orientation == 'auto':
+            direction_multiplier = -1.0 if self.auto_flip_normal else 1.0
+        else:
+            direction_multiplier = -1.0 if self.orientation == 'in' else 1.0
+        return speed_scalar * direction_multiplier * normal_vec
 
     def compute_cross_sectional_area(self):
         return np.pi * self.radius**2
@@ -159,13 +235,16 @@ class InletMapping:
             for pt in points:
                 dist = self._get_distance_from_center(pt)
                 if dist <= self.radius:
-                    if self.profile == 'plug':
+                    if self.profile in ['plug', 'plug_flow']:
                         local_speed = speed
                     elif self.profile == 'parabolic':
                         shape_fac = self.parabolic_factor(dist)
                         local_speed = speed * shape_fac
                     elif self.profile == 'womersley':
                         local_speed = self.womersley_profile(dist, t, omega, alpha)
+                    else:
+                        # Default to plug flow if profile not recognized
+                        local_speed = speed
                     velocities.append(self._get_velocity_components(local_speed, normal_vec))
                 else:
                     velocities.append((0.0, 0.0, 0.0))

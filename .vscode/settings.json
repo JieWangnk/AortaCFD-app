@@ -4,6 +4,7 @@
         "controldict": "cpp",
         "fvsolution": "cpp",
         "p": "cpp",
-        "u": "cpp"
+        "u": "cpp",
+        "snappyhexmeshdict": "cpp"
     }
 }

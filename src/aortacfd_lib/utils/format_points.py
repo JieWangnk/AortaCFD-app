@@ -128,24 +128,5 @@ def format_points(points, precision=1):
     return "\n".join(formatted_lines)
 
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python formatPoints.py <input_filename> [case_directory]")
-        sys.exit(1)
-
-    input_filename = sys.argv[1]
-    case_directory = sys.argv[2] if len(sys.argv) > 2 else "."
-    output_filename = "points"
-
-    # Initialize the formatter
-    formatter = EnhancedPointsFormatter(
-        input_filename=input_filename,
-        output_filename=output_filename,
-        format_version=2,  # Default to format version 2
-        case_directory=case_directory
-    )
-
-    # Format the coordinates
-    formatter.format_coordinates()
 
 

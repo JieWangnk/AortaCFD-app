@@ -1,23 +1,21 @@
-/*--------------------------------*- C++ -*----------------------------------*\\
+/*--------------------------------*- C++ -*----------------------------------*\
   =========                 |
   \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
    \\    /   O peration     | Website:  https://openfoam.org
-    \\  /    A nd           | Version:  {{ template_vars.openfoam_version if template_vars else openfoam_version }}
+    \\  /    A nd           | Version:  12
      \\/     M anipulation  |
-\\*---------------------------------------------------------------------------*/
+\*---------------------------------------------------------------------------*/
 FoamFile
 {
-    version     2.0;
     format      ascii;
     class       dictionary;
     location    "system";
     object      fvSchemes;
 }
-// ************************************************************************* //
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 ddtSchemes
 {
-    {% set of_version = template_vars.openfoam_major_version if template_vars else openfoam_major_version %}
     {% if physics.get('steady_state', false) %}
     default         steadyState;
     {% elif physics.simulation_performance == 'low' %}
@@ -29,48 +27,26 @@ ddtSchemes
 
 gradSchemes
 {
-    {% set of_version = template_vars.openfoam_major_version if template_vars else openfoam_major_version %}
-    {% if of_version >= 12 %}
     // Robust gradient schemes for OpenFOAM 12
     default         cellLimited Gauss linear 0.5;
     grad(p)         cellLimited Gauss linear 0.33;
     grad(U)         cellLimited Gauss linear 0.5;
-    {% else %}
-    {% if physics.simulation_type == 'LES' and physics.simulation_performance == 'high' %}
-    default         cellMDLimited Gauss linear 0.5;
-    {% elif physics.simulation_performance == 'high' %}
-    default         cellLimited Gauss linear 1;
-    grad(p)         cellLimited Gauss linear 0.5;
-    {% else %}
-    default         cellLimited Gauss linear 0.5;
-    {% endif %}
-    {% endif %}
 }
 
 divSchemes
 {
     default         none;
-    {% set of_version = template_vars.openfoam_major_version if template_vars else openfoam_major_version %}
     {% if physics.simulation_performance == 'low' %}
     div(phi,U)      Gauss upwind;
     {% elif physics.simulation_performance == 'high' and physics.simulation_type == 'laminar' %}
-        {% if of_version >= 12 %}
     div(phi,U)      bounded Gauss linearUpwindV grad(U);
-        {% else %}
-    div(phi,U)      Gauss linearUpwind default;
-        {% endif %}
     {% else %}
-        {% if of_version >= 12 %}
-    div(phi,U)      bounded Gauss upwind;
-        {% else %}
-    div(phi,U)      Gauss linear;
-        {% endif %}
+    div(phi,U)      bounded Gauss limitedLinearV 1;
     {% endif %}
-    {% if of_version >= 12 %}
+    div(phi,k)      bounded Gauss limitedLinear 1;
+    div(phi,epsilon) bounded Gauss limitedLinear 1;
+    div(phi,omega)  bounded Gauss limitedLinear 1;
     div((nuEff*dev2(T(grad(U)))))  Gauss linear;
-    {% else %}
-    div((nuEff*dev2(T(grad(U)))))  Gauss linear;
-    {% endif %}
 }
 
 laplacianSchemes
@@ -78,7 +54,7 @@ laplacianSchemes
     {% if physics.simulation_type == 'LES' %}
     default         Gauss linear corrected;
     {% else %}
-    default         Gauss linear limited 0.5;
+    default         Gauss linear corrected;
     {% endif %}
 }
 
@@ -92,7 +68,7 @@ snGradSchemes
     default         corrected;
 }
 
-{% if physics.simulation_type == 'LES' %}
+{% if physics.simulation_type in ['LES', 'RAS', 'RANS'] %}
 wallDist
 {
     method meshWave;

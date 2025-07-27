@@ -4,19 +4,24 @@ from stl import mesh as np_stl_mesh
 from jinja2 import Environment, FileSystemLoader
 from .utils.logger import Logger
 from .utils.patch_processing import PatchProcessing
+from .murray_calculator import update_config_with_automatic_refinement
 
 class GeometryAnalyzer:
     """
     Analyzes geometry and generates all mesh-related OpenFOAM dictionaries
     using a robust, centerline-path-aligned method to find locationInMesh.
     """
-    def __init__(self, config: dict, case_directory: str):
+    def __init__(self, config: dict, case_directory: str, enable_automatic_refinement: bool = True):
         self.config = config
         self.case_dir = case_directory
-        self.log = Logger("meshSetup.log").get_logger()
+        self.log = Logger("mesh_setup").get_logger()
 
         template_path = os.path.join(os.path.dirname(__file__), '..', 'templates')
         self.jinja_env = Environment(loader=FileSystemLoader(template_path), trim_blocks=True, lstrip_blocks=True)
+
+        # Apply automatic refinement if enabled
+        if enable_automatic_refinement:
+            self.config = self._apply_automatic_refinement()
 
         self.geom_settings = self.config['geometry']
         self.mesh_settings = self.config['mesh']
@@ -34,6 +39,52 @@ class GeometryAnalyzer:
         self.inlet_normal = None
         self.outlet_centroids = []
         self._calculate_patch_properties()
+
+    def _apply_automatic_refinement(self) -> dict:
+        """
+        Apply automatic refinement level calculation if enabled and STL files exist.
+        
+        Returns:
+            Updated configuration with automatic refinement levels
+        """
+        try:
+            # Check if automatic refinement is explicitly disabled
+            if not self.config.get('mesh', {}).get('automatic_refinement', {}).get('enabled', True):
+                self.log.info("Automatic refinement is disabled in configuration.")
+                return self.config
+            
+            # Check if STL files exist
+            tri_surface_path = os.path.join(self.case_dir, "constant", "triSurface")
+            if not os.path.exists(tri_surface_path):
+                self.log.warning(f"STL directory not found: {tri_surface_path}. Using manual refinement levels.")
+                return self.config
+            
+            # Get cells per patch diameter targets from configuration or use defaults
+            cells_per_patch_diameter = self.config.get('mesh', {}).get('cells_per_patch_diameter')
+            if cells_per_patch_diameter is None:
+                # Use defaults based on profile type if available
+                profile_type = self.config.get('geometry', {}).get('refinement_level', 'medium')
+                if profile_type == 'coarse':
+                    cells_per_patch_diameter = {"coarse": 10, "medium": 15, "fine": 20}
+                elif profile_type == 'fine':
+                    cells_per_patch_diameter = {"coarse": 15, "medium": 20, "fine": 25}
+                else:  # medium or default
+                    cells_per_patch_diameter = {"coarse": 10, "medium": 15, "fine": 20}
+            
+            self.log.info(f"Applying automatic refinement with targets: {cells_per_patch_diameter}")
+            
+            # Apply automatic refinement
+            updated_config = update_config_with_automatic_refinement(
+                self.config, self.case_dir, cells_per_patch_diameter
+            )
+            
+            self.log.info("Automatic refinement levels applied successfully.")
+            return updated_config
+            
+        except Exception as e:
+            self.log.warning(f"Could not apply automatic refinement: {e}")
+            self.log.info("Falling back to manual refinement levels.")
+            return self.config
 
     def _calculate_patch_properties(self):
         """Uses PatchProcessing to find the centroids of all inlet/outlet patches."""
@@ -79,13 +130,14 @@ class GeometryAnalyzer:
         return np.vstack(all_verts)
 
     def _extract_vertices_from_stl(self, stl_file_basename: str) -> np.ndarray:
-        """Extracts unique vertices from a single STL file AND SCALES THEM."""
+        """Extracts unique vertices from a single STL file (NO SCALING - keep in mm)."""
         full_path = os.path.join(self.tri_surface_path, stl_file_basename)
         try:
             stl_mesh = np_stl_mesh.Mesh.from_file(full_path)
             
-            scaled_vectors = stl_mesh.vectors
-            return np.unique(scaled_vectors.reshape(-1, 3), axis=0)
+            # Keep vertices in original units (mm) to match STL files
+            # Scaling will be applied later with transformPoints
+            return np.unique(stl_mesh.vectors.reshape(-1, 3), axis=0)
         except Exception as e:
             raise RuntimeError(f"Error processing STL file {full_path}: {e}") from e
 
@@ -100,18 +152,18 @@ class GeometryAnalyzer:
         min_expanded = min_coords - (expansion_factor * ranges)
         max_expanded = max_coords + (expansion_factor * ranges)
         
-        self.log.info(f"BlockMesh bounds (scaled, expanded): min({min_expanded}), max({max_expanded})")
+        self.log.info(f"BlockMesh bounds (mm, expanded): min({min_expanded}), max({max_expanded})")
         return {"min": min_expanded, "max": max_expanded}
 
     def _calculate_blockmesh_cells(self, bounds: dict) -> dict:
         """Calculates number of cells for blockMesh based on target cell size."""
         ref_level_key = self.geom_settings['refinement_level']
-        # Note: The cell size from refinement_levels is a target size in meters
-        # because the vertices have already been scaled.
-        cell_size = self.mesh_settings['refinement_levels'][ref_level_key]
+        # Cell size is in meters, but bounds are in mm, so convert
+        cell_size_meters = self.mesh_settings['refinement_levels'][ref_level_key]
+        cell_size_mm = cell_size_meters * 1000  # Convert m to mm
         
         ranges = bounds['max'] - bounds['min']
-        num_cells = np.maximum(1, np.round(ranges / cell_size)).astype(int)
+        num_cells = np.maximum(1, np.round(ranges / cell_size_mm)).astype(int)
         
         self.log.info(f"BlockMesh cells: Nx={num_cells[0]}, Ny={num_cells[1]}, Nz={num_cells[2]}")
         return {"x": num_cells[0], "y": num_cells[1], "z": num_cells[2]}
@@ -124,11 +176,12 @@ class GeometryAnalyzer:
         if self.inlet_centroid is None or not self.outlet_centroids:
             raise ValueError("Inlet or outlet centroids have not been calculated.")
             
-        # 1. Calculate the average position of all outlet centers
+        # 1. Calculate the average position of all outlet centers (keep in mm)
         avg_outlet_centroid = np.mean(np.array(self.outlet_centroids), axis=0)
+        inlet_centroid = self.inlet_centroid
         
         # 2. Define a vector for the general direction of flow
-        path_vector = avg_outlet_centroid - self.inlet_centroid
+        path_vector = avg_outlet_centroid - inlet_centroid
         
         # 3. Align the geometric inlet normal with the path vector
         # The dot product tells us if they point in generally the same direction.
@@ -141,9 +194,9 @@ class GeometryAnalyzer:
             inward_normal = self.inlet_normal
             self.log.info("Inlet normal is already aligned inward along the aorta's path.")
             
-        # 4. Move a small distance along this guaranteed inward normal
+        # 4. Move a small distance along this guaranteed inward normal (in mm)
         offset_distance = self.inlet_radius * 0.1  # 10% of the radius
-        internal_point = self.inlet_centroid + (offset_distance * inward_normal)
+        internal_point = inlet_centroid + (offset_distance * inward_normal)
         
         self.log.info(f"Robust locationInMesh calculated: {internal_point}")
         return internal_point

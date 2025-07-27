@@ -17,7 +17,7 @@ class PatchProcessing:
         """
         self.tri_surface_dir = tri_surface_dir #
         self.patch_name = patch_name_to_load #
-        self.log = Logger("patchProcessing.log").get_logger() #
+        self.log = Logger("patch_processing").get_logger() #
 
         self.stl_path = os.path.join(self.tri_surface_dir, f"{self.patch_name}.stl") #
 
@@ -164,16 +164,5 @@ class PatchProcessing:
         rotation_axis /= axis_norm
         rotation_angle = np.arccos(np.clip(np.dot(v1, v2), -1.0, 1.0))
         return rotation_axis, rotation_angle
-
-# -------------- Example Usage --------------
-if __name__ == "__main__":
-    directory = "/home/jie/AortaCFD-app/OPENFOAM/VOL04_coarse/controlDict/triSurface"
-    stl_files = ["inlet.stl", "outlet1.stl", "outlet2.stl"]
-
-    patch_processor = PatchProcessing(directory, "inlet")
-
-    min_coords, max_coords = patch_processor.get_bounding_box()
-    center, inlet_radius, inlet_normal = patch_processor.calculate_inlet_center_radius(scale_factor=1e-3)
-    area_3d = patch_processor.calculate_surface_area()
 
 

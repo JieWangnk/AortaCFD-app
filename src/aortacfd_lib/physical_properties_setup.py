@@ -12,7 +12,7 @@ class PhysicalPropertiesWriter:
         """The constructor now takes the unified config object."""
         self.config = config
         self.case_dir = case_directory
-        self.log = Logger("physicalPropertiesSetup.log").get_logger()
+        self.log = Logger("physical_properties").get_logger()
 
         template_path = os.path.join(os.path.dirname(__file__), '..', 'templates')
         self.jinja_env = Environment(loader=FileSystemLoader(template_path))

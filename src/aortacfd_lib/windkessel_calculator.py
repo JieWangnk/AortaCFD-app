@@ -13,8 +13,7 @@ Key improvements:
 """
 
 import math
-import numpy as np
-from typing import Dict, List, Tuple
+from typing import Dict, List
 from .utils.logger import Logger
 
 logger = Logger("WindkesselCalculator").get_logger()
@@ -298,74 +297,3 @@ class WindkesselCalculator:
         logger.info("Windkessel configuration generated successfully")
         return config
 
-def create_improved_windkessel_template(case_name: str = "PAT1_2024") -> Dict:
-    """
-    Create an improved Windkessel boundary conditions template.
-    
-    Returns:
-        Improved boundary conditions configuration
-    """
-    # Typical aorta fluid properties
-    fluid_properties = {
-        'dynamic_viscosity': 0.004,  # Pa·s (blood at body temperature)
-        'density': 1060  # kg/m³
-    }
-    
-    geometry_config = {
-        'case_name': case_name
-    }
-    
-    calculator = WindkesselCalculator(geometry_config, fluid_properties)
-    
-    # Generate configuration with realistic parameters
-    wk_config = calculator.generate_windkessel_config(
-        case_directory=f"output/OPENFOAM/{case_name}_medium",
-        murray_exponent=2.7,  # Realistic value between 2.5-3.0
-        r_multiplier=15.0,    # Conservative factor for stability
-        rc_multiplier=0.08    # Slightly faster decay for stability
-    )
-    
-    # Create the boundary conditions template
-    template = {
-        "_description": "TEMPLATE 4 IMPROVED: Research-based Windkessel coefficients",
-        "_profile_recommendation": "sim_laminar_fine", 
-        "_methodology": "Based on Murray's law and research paper methodology",
-        "geometry": {
-            "refinement_level": "medium",
-            "rotation": True,
-            "target_normal": [0, 0, 1],
-            "scale_factor": 0.001
-        },
-        "inlet": {
-            "type": "TIMEVARYING",
-            "csv_file": "BPM75.csv", 
-            "data_type": "velocity",
-            "profile": "womersley",
-            "orientation": "out"
-        },
-        "outlets": {
-            "type": "3EWINDKESSEL",
-            "windkessel_settings": {
-                "systolic_pressure": 120,
-                "diastolic_pressure": 80,
-                "methodology": "research_based",
-                "flow_split": wk_config["flow_ratios"],
-                "outlet_parameters": wk_config["outlet_parameters"],
-                "summary": wk_config["summary"]
-            }
-        },
-        "simulation_control": {
-            "number_of_cycles": 3,
-            "end_time": 2.4,  # 3 cardiac cycles at 0.8s each
-            "target_runtime_minutes": 90
-        },
-        "numerical_settings": {
-            "time_stepping": "adaptive",
-            "initial_deltaT": 5e-6,  # Smaller for stability with new coefficients
-            "maxCo": 0.8,           # More conservative
-            "maxDeltaT": 5e-4,      # Smaller max step
-            "solver_tolerance": "balanced"
-        }
-    }
-    
-    return template

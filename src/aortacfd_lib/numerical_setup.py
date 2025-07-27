@@ -12,7 +12,7 @@ class FvSchemesWriter:
         """The constructor now takes the unified config object."""
         self.config = config
         self.case_dir = case_directory
-        self.log = Logger("numericalSetup.log").get_logger()
+        self.log = Logger("numerical_setup").get_logger()
 
         template_path = os.path.join(os.path.dirname(__file__), '..', 'templates')
         self.jinja_env = Environment(loader=FileSystemLoader(template_path))
