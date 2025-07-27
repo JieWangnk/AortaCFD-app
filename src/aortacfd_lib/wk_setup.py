@@ -19,7 +19,7 @@ class WkSetup:
         self.stl_files = stl_files
         self.case_dir = case_directory
         self.cardiac_cycle = cardiac_cycle
-        self.log = Logger("wkSetup.log").get_logger()
+        self.log = Logger("wk_setup").get_logger()
         
         template_path = os.path.join(os.path.dirname(__file__), '..', 'templates')
         self.jinja_env = Environment(loader=FileSystemLoader(template_path))

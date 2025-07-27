@@ -25,13 +25,29 @@ config = {
             "span_refinement_enabled": True,
             "span_refinement_distance": 1000,  # 1mm
             "span_refinement_level": 2,
-            "cells_across_span": 20
+            "cells_across_span": 20,
+            # High-quality mesh constraints for fine mesh
+            "maxAspectRatio": 6,        # Stricter aspect ratio for fine mesh
+            "maxNonOrtho": 50,          # Lower non-orthogonality
+            "maxInternalSkewness": 2,   # Lower skewness
+            "nSmoothScale": 8,          # More smoothing for better quality
+            "errorReduction": 0.85      # Higher error reduction for fine mesh
         },
         # Refinement levels for different mesh quality
         "refinement_levels": {
             "coarse": 0.002,    # 2mm cells (increased from 5mm to capture inlet/outlet patches)
             "medium": 0.001,    # 1mm cells (increased from 2mm)
             "fine": 0.0005      # 0.5mm cells (increased from 1mm)
+        },
+        # Automatic refinement configuration for fine mesh
+        "cells_per_patch_diameter": {
+            "coarse": 12,   # 12 cells across minimum patch diameter (fine profile baseline)
+            "medium": 16,   # 16 cells across minimum patch diameter
+            "fine": 20      # 20 cells across minimum patch diameter
+        },
+        "automatic_refinement": {
+            "enabled": True,    # Enable automatic refinement level calculation
+            "methodology": "murray_law_based"
         }
     },
 

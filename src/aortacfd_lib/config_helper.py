@@ -10,7 +10,7 @@ class BoundaryConditionsHelper:
     """
     
     def __init__(self):
-        self.log = Logger("configHelper.log").get_logger()
+        self.log = Logger("config_helper").get_logger()
         
         # Define key parameters that drive other configurations
         self.key_parameters = {

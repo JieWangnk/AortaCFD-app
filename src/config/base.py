@@ -1,76 +1,72 @@
 # config/base.py
 """
-This file holds the universal settings for the entire application.
-These are parameters that rarely, if ever, change.
+OpenFOAM 12 specific configuration.
+All version compatibility removed for simplicity.
 """
 
 config = {
-    # OpenFOAM version configuration - supports multiple versions
+    # OpenFOAM 12 configuration
     "openfoam": {
-        "default_version": "8",
-        "supported_versions": ["8", "12"],
-        "version_configs": {
-            "8": {
-                "env_path": "/opt/openfoam8/etc/bashrc",
-                "major_version": 8,
-                "foundation": True,
-                "solver_names": {
-                    "incompressible": "pimpleFoam",
-                    "windkessel": "pimpleFOAM_WK"
-                },
-                "windkessel": {
-                    "repository": "https://github.com/EManchester/OpenFOAM-v8-Windkessel-code",
-                    "boundary_condition": "windkesselPressure",
-                    "solver_name": "pimpleFOAM_WK",
-                    "supported": True,
-                    "compilation_required": True
-                }
-            },
-            "12": {
-                "env_path": "/opt/openfoam12/etc/bashrc", 
-                "major_version": 12,
-                "foundation": True,
-                "solver_names": {
-                    "incompressible": "foamRun",
-                    "windkessel": "foamRun"
-                },
-                "solver_modules": {
-                    "incompressible": "incompressibleFluid",
-                    "windkessel": "incompressibleFluid"
-                },
-                "windkessel": {
-                    "repository": "https://github.com/JieWangnk/OpenFOAM-WK",
-                    "boundary_condition": "modularWKPressure",
-                    "library_name": "libmodularWKPressure.so",
-                    "source_path": "src/modularWKPressure",
-                    "supported": True,
-                    "compilation_required": True
-                }
-            }
+        "version": "12",
+        "major_version": 12,
+        "env_path": "/opt/openfoam12/etc/bashrc",
+        "foundation": True,
+        "solver_names": {
+            "incompressible": "foamRun",
+            "windkessel": "foamRun"
+        },
+        "windkessel": {
+            "repository": "https://github.com/EManchester/OpenFOAM-v12-Windkessel-code",
+            "boundary_condition": "modularWKPressure",
+            "solver_name": "foamRun",
+            "solver_module": "incompressibleFluid",
+            "supported": True,
+            "compilation_required": True
         }
     },
     
-    # Legacy support - will be overridden by version-specific config
-    "openfoam_version": "8",
-    "openfoam_env_path": "/opt/openfoam8/etc/bashrc",
+    # Numerical schemes optimized for OpenFOAM 12
+    "numerical": {
+        "default_solver": "GAMG",
+        "pressure_solver": "GAMG",
+        "velocity_solver": "smoothSolver",
+        "time_scheme": "backward",
+        "divergence_scheme": "bounded Gauss limitedLinearV 1",
+        "gradient_scheme": "cellLimited Gauss linear 0.5",
+        "laplacian_scheme": "Gauss linear corrected"
+    },
     
-    # Foundational physical properties of the fluid (blood).
+    # Physics defaults
     "physics": {
-        "nu": 3.3e-06,      #
-        "rho": 1060,        #
+        "default_turbulence": "laminar",
+        "default_viscosity": 0.004,  # Pa·s (blood)
+        "default_density": 1060,     # kg/m³ (blood)
+        "default_temperature": 310,  # K (body temperature)
+        "default_prandtl": 0.7
     },
-
-    # Definitions for what "coarse", "medium", and "fine" mean.
+    
+    # Mesh defaults
     "mesh": {
-        "refinement_levels": {
-            "coarse": 2.0,  #
-            "medium": 1.5,  #
-            "fine": 1.0     #
-        }
+        "default_cell_size": 0.001,  # 1mm
+        "default_refinement_level": 2,
+        "default_layers": 3,
+        "default_expansion_ratio": 1.2
     },
-
-    # Path to external applications used in the workflow.
-    "post_processing": {
-        "pvbatch_exe": "/home/jie/ParaView-5.11.2-MPI-Linux-Python3.9-x86_64/bin/pvbatch", #
+    
+    # Simulation control
+    "simulation": {
+        "default_end_time": 5.0,     # cardiac cycles
+        "default_time_step": 0.001,  # seconds
+        "default_write_interval": 0.1,
+        "default_max_co": 1.0,
+        "default_max_delta_t": 0.01
+    },
+    
+    # Paths
+    "paths": {
+        "templates": "src/templates",
+        "windkessel_lib": "windkessel_of12",
+        "logs": "logs",
+        "results": "results"
     }
 }

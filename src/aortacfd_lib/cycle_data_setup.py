@@ -1,5 +1,4 @@
 import os
-import shutil
 from .utils.logger import Logger
 
 class CycleDataSetup:
@@ -14,7 +13,7 @@ class CycleDataSetup:
         """
         self.config = config
         self.case_dir = case_directory
-        self.log = Logger("cycleDataSetup.log").get_logger()
+        self.log = Logger("cycle_data_setup").get_logger()
 
         # --- THIS IS THE FIX ---
         # The received cardiac_cycle value is now correctly assigned

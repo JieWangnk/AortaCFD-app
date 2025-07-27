@@ -24,14 +24,34 @@ config = {
             "surfaceRefinementLevels": [2, 3], #
             "resolveFeatureAngle": 30, #
             "nSmoothPatch": 3, #
-            # Fewer layers for a coarse boundary layer mesh.
-            "addLayer": 3 #
+            # Disable boundary layers to reduce aspect ratio
+            "addLayer": 0, #            # No boundary layers to improve aspect ratio
+            # Layer thickness controls to reduce aspect ratio
+            "expansionRatio": 1.1,      # Smaller expansion ratio (default 1.2)
+            "finalLayerThickness": 0.5, # Thicker final layer (default 0.3)
+            "minThickness": 0.2,        # Increase minimum thickness (default 0.1)
+            # Mesh quality constraints to improve aspect ratio
+            "maxAspectRatio": 8,        # Limit aspect ratio (default 10) 
+            "maxNonOrtho": 60,          # Reduce non-orthogonality (default 65)
+            "maxInternalSkewness": 3,   # Reduce skewness (default 4)
+            "nSmoothScale": 6,          # More smoothing iterations (default 4)
+            "errorReduction": 0.8       # More aggressive error reduction (default 0.75)
         },
         # Refinement levels for different mesh quality
         "refinement_levels": {
-            "coarse": 0.002,    # 2mm cells (increased from 5mm to capture inlet/outlet patches)
-            "medium": 0.001,    # 1mm cells (increased from 2mm)
-            "fine": 0.0005      # 0.5mm cells (increased from 1mm)
+            "coarse": 0.001,    # 1mm cells (default for coarse)
+            "medium": 0.0005,   # 0.5mm cells (increased from 1mm)
+            "fine": 0.0002      # 0.2mm cells (increased from 0.5mm)
+        },
+        # Automatic refinement configuration
+        "cells_per_patch_diameter": {
+            "coarse": 8,    # 8 cells across minimum patch diameter (truly coarse)
+            "medium": 12,   # 12 cells across minimum patch diameter
+            "fine": 16      # 16 cells across minimum patch diameter
+        },
+        "automatic_refinement": {
+            "enabled": True,    # Enable automatic refinement level calculation
+            "methodology": "murray_law_based"
         }
     },
 
@@ -69,10 +89,10 @@ config = {
         "relaxationFactors": { "fields": {"p": 1.0}, "equations": {"U": 1.0} }
     },
     "fvSchemes": {
-        # Using first-order schemes for stability on coarse meshes.
-        "ddtSchemes": {"default": "Euler"},
-        "gradSchemes": {"default": "cellLimited Gauss linear 0.5"},
-        "divSchemes": {"div(phi,U)": "Gauss upwind"},
+        # Using more stable schemes for initial transients
+        "ddtSchemes": {"default": "backward"},
+        "gradSchemes": {"default": "cellLimited Gauss linear 0.33"},
+        "divSchemes": {"div(phi,U)": "Gauss linearUpwind grad(U)"},
         "laplacianSchemes": {"default": "Gauss linear limited 0.5"},
         "interpolationSchemes": {"default": "linear"},
         "snGradSchemes": {"default": "corrected"}
@@ -84,14 +104,14 @@ config = {
             "startTime": 0.0,
             "stopAt": "endTime",
             "endTime": "auto",  # Auto-calculate based on cycles
-            "deltaT": 1e-4,  # Larger time step for coarse mesh
+            "deltaT": 1e-5,  # Smaller initial time step for stability
             "writeControl": "adjustableRunTime",
             "writeInterval": 0.01,  # Write every 0.01s
             "runTimeModifiable": "true",
             "adjustTimeStep": "yes",
-            "maxCo": 1.5,  # Higher Courant for coarse mesh
-            "maxDeltaT": 5e-3,  # Larger max time step
-            "minDeltaT": 1e-7,  # Prevent very small time steps
+            "maxCo": 1.0,  # Increase Courant for faster simulation
+            "maxDeltaT": 1e-3,  # Smaller max time step for stability
+            "minDeltaT": 1e-6,  # Prevent extremely small time steps
             "functions": ["wallShearStress"]
         }
     },

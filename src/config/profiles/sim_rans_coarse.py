@@ -17,21 +17,25 @@ config = {
             "parallel": False, #
             "nProcessors": 1, #
             "expansionFactor": 0.02, #
-            "regionRefinementLevel": 2, #
+            "regionRefinementLevel": 4, #
             "nCellsBetweenLevels": 3, #
-            # Lower feature level for a coarser capture of geometry.
-            "featureLevel": 2, #
-            "surfaceRefinementLevels": [1, 1], #
+            # Higher feature level to capture inlet/outlet patches
+            "featureLevel": 4, #
+            "surfaceRefinementLevels": [4, 5], #
             "resolveFeatureAngle": 30, #
             "nSmoothPatch": 3, #
             # More layers for RANS boundary layer mesh.
             "addLayer": 5 #
         },
-        # Refinement levels for different mesh quality
-        "refinement_levels": {
-            "coarse": 0.002,    # 2mm cells (increased from 5mm to capture inlet/outlet patches)
-            "medium": 0.001,    # 1mm cells (increased from 2mm)
-            "fine": 0.0005      # 0.5mm cells (increased from 1mm)
+        # Automatic refinement configuration for RANS (targeting actual smallest patch: 3.64mm)
+        "cells_per_patch_diameter": {
+            "coarse": 8,    # 8 cells across minimum patch diameter (coarse for RANS)
+            "medium": 12,   # 12 cells across minimum patch diameter
+            "fine": 16      # 16 cells across minimum patch diameter
+        },
+        "automatic_refinement": {
+            "enabled": True,    # Enable automatic refinement level calculation
+            "methodology": "murray_law_based"
         }
     },
 
@@ -52,7 +56,9 @@ config = {
         "simulation_type": "RAS", #
         "turbulence_model": "kOmegaSST", #
         "turbulence_intensity": 0.05, #
-        "turbulence_viscosity_ratio": 10.0 #
+        "turbulence_viscosity_ratio": 10.0, #
+        "nu": 3.77e-06,  # Kinematic viscosity (m^2/s) for blood
+        "rho": 1060      # Density (kg/m^3) for blood
     },
     "fvSolution": {
         # Using RANS-appropriate solvers.
@@ -107,7 +113,7 @@ config = {
             "endTime": "auto",  # Auto-calculate based on cycles
             "deltaT": 1e-4,  # Larger time step for coarse mesh
             "writeControl": "adjustableRunTime",
-            "writeInterval": 0.02,  # Write every 0.02s (less frequent)
+            "writeInterval": 0.01,  # Write every 0.01s
             "runTimeModifiable": "true",
             "adjustTimeStep": "yes",
             "maxCo": 1.0,  # Lower Courant for RANS stability
@@ -126,10 +132,10 @@ config = {
         "INLET_ORIENTATION": "out"
     },
 
-    # Add refinement levels for compatibility
+    # Fallback manual refinement levels (used if automatic calculation fails)
     "refinement_levels": {
-        "coarse": 0.002,    # 2mm cells (increased from 5mm to capture inlet/outlet patches)
-        "medium": 0.001,    # 1mm cells (increased from 2mm)
-        "fine": 0.0005      # 0.5mm cells (increased from 1mm)
+        "coarse": 0.0012,   # 1.2mm cells (fallback)
+        "medium": 0.0008,   # 0.8mm cells (fallback)
+        "fine": 0.0005      # 0.5mm cells (fallback)
     }
 }

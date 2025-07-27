@@ -13,6 +13,7 @@ from ...aortacfd_lib.simulation_control import SimulationSetup
 from ...aortacfd_lib.decompose_setup import SolnType
 from ...aortacfd_lib.inlet_mapping import InletMapping
 from ...aortacfd_lib.cycle_data_setup import CycleDataSetup
+from ...aortacfd_lib.utils.patch_utils import detect_world_patch_mode
 from ...aortacfd_lib.utils.format_points import EnhancedPointsFormatter
 from ...aortacfd_lib.wk_setup import WkSetup
 
@@ -62,6 +63,15 @@ class PrepareBoundaryDataTask(Task):
         case_dir = context["case_directory"]
 
         try:
+            # Check if we have proper patches or just world patch
+            world_patch_mode = detect_world_patch_mode(case_dir, self.log)
+            
+            if world_patch_mode:
+                # Set a default cardiac cycle for world patch scenario
+                context['cardiac_cycle'] = 1.0
+                self.log.info("Using default cardiac cycle of 1.0s for world patch scenario")
+                return True
+            
             # Run writeMeshObj to get the inlet patch face centers
             run_command(
                 config=self.config,
@@ -124,6 +134,7 @@ class PrepareBoundaryDataTask(Task):
         except (CommandExecutionError, FileNotFoundError, ValueError) as e:
             self.log.error(f"A critical error occurred during boundary data preparation: {e}")
             return False
+
 
     def _cleanup_temp_obj_files(self, case_dir: str):
         """
@@ -222,26 +233,3 @@ class GenerateControlDictTask(Task):
         
         return True
     
-class ValidationTask(Task):
-    def execute(self, context: dict) -> bool:
-        self.log.info("Performing pre-flight validation checks...")
-        
-        # 1. Check if required files exist
-        bc_path = os.path.join("data", "CAD", self.config['geometry']['case_name'], "boundary_conditions.json")
-        if not os.path.exists(bc_path):
-            self.log.error(f"Validation failed: boundary_conditions.json not found at {bc_path}")
-            return False
-
-        # 2. Check for logical consistency
-        if self.config['outlets']['type'] == '3ElementWindkessel':
-            split_ratios = self.config['outlets']['windkessel_settings']['flow_split']
-            total_split = sum(split_ratios.values())
-            if not np.isclose(total_split, 1.0):
-                self.log.warning(f"Validation Warning: Windkessel flow splits add up to {total_split}, not 1.0.")
-
-        # 3. Check for heuristic best practices
-        if self.config['physics']['simulation_type'] == 'LES' and self.config['geometry']['refinement_level'] != 'fine':
-            self.log.warning("Validation Warning: Running an LES simulation with a non-fine mesh profile is not recommended.")
-            
-        self.log.info("Validation checks passed.")
-        return True

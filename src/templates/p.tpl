@@ -20,6 +20,13 @@ internalField   uniform 0;
 
 boundaryField
 {
+    {% if world_patch_mode %}
+    // World patch mode - all boundaries combined into single patch
+    world
+    {
+        type            zeroGradient;
+    }
+    {% else %}
     // The inlet pressure is standardized here
     {{ inlet_patch }}
     {
@@ -72,5 +79,6 @@ boundaryField
     {
         type            zeroGradient;
     }
+    {% endif %}
 }
 // ************************************************************************* //

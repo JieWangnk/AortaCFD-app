@@ -1,16 +1,12 @@
 import os
-import sys
 import vtk
 from vtk.util.numpy_support import vtk_to_numpy
 import numpy as np
 from scipy.spatial import ConvexHull
 import re
 import subprocess
-import json
 from paraview import servermanager
 from paraview.simple import *
-
-from .utils.logger import Logger
 
 paraview.simple._DisableFirstRenderCameraReset()
 
@@ -362,36 +358,3 @@ class OpenFOAMParaView:
 
             log.write("[INFO] Animation creation completed.\n")
 
-# ------------------- MAIN for pvbatch usage ----------------------
-if __name__ == "__main__":
-    case_type   = os.getenv("CASE_TYPE")
-    case_path   = os.getenv("CASE_PATH")
-    time_array  = os.getenv("TIME_ARRAY").split(",")
-    time_array  = [float(x) for x in time_array]
-    rescale_settings = json.loads(os.getenv("RESCALE_SETTINGS", "{}"))
-    fields      = os.getenv("FIELDS").split(",")
-    fields      = [f.strip() for f in fields]
-
-    # re/animation settings
-    animation_enabled = os.getenv("ANIMATION_ENABLED", "True").lower() == "true"
-    fps           = int(os.getenv("FPS", 30))
-    reAnimation = os.getenv("REANIMATION", "False").lower() == "true"
-
-    
-    pv_script = OpenFOAMParaView(
-        casePath  = str(case_path),
-        caseType  = str(case_type),
-        timeSteps = time_array,
-        fields    = fields,
-        rescaleSettings = rescale_settings
-    )
-    
-    # if reAnimation is True, we will just do animation
-    if reAnimation:
-        pv_script.anima(fps=fps)
-    else:
-        pv_script.generate_screenshots()
-        if animation_enabled:
-            pv_script.anima(fps=fps)
-        else:
-            print("[INFO] Animation is disabled. Screenshots are generated without animation.")

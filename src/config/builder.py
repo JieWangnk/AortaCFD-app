@@ -19,7 +19,7 @@ class ConfigBuilder:
     Builds the final config dictionary by combining profiles and auto-discovery.
     This version will raise an error immediately if a file is missing or invalid.
     """
-    def build(self, case_name: str, sim_profile_name: str, openfoam_version: str = None) -> dict:
+    def build(self, case_name: str, sim_profile_name: str) -> dict:
         """
         Orchestrates the building of the final configuration.
         This version uses relative imports to be more robust.
@@ -42,8 +42,8 @@ class ConfigBuilder:
         final_config = deep_merge(final_config, sim_config)
         final_config = deep_merge(final_config, case_specific_config)
         
-        # Apply OpenFOAM version-specific configuration
-        final_config = self._apply_openfoam_version(final_config, openfoam_version)
+        # OpenFOAM 12 specific settings
+        final_config = self._apply_openfoam_12_settings(final_config)
         
         return final_config
 
@@ -93,53 +93,37 @@ class ConfigBuilder:
 
         return deep_merge(discovered_geom_config, bc_config)
 
-    def _apply_openfoam_version(self, config: dict, openfoam_version: str = None) -> dict:
+    def _apply_openfoam_12_settings(self, config: dict) -> dict:
         """
-        Apply OpenFOAM version-specific configuration settings.
+        Apply OpenFOAM 12 specific configuration settings.
         """
-        # Get the OpenFOAM configuration
-        of_config = config.get("openfoam", {})
+        # OpenFOAM 12 fixed settings
+        config["openfoam_version"] = "12"
+        config["openfoam_env_path"] = "/opt/openfoam12/etc/bashrc"
+        config["openfoam_major_version"] = 12
+        config["openfoam_foundation"] = True
         
-        # Determine which version to use
-        if openfoam_version is None:
-            version = of_config.get("default_version", "8")
-        else:
-            version = openfoam_version
-            
-        # Validate version is supported
-        supported_versions = of_config.get("supported_versions", ["8"])
-        if version not in supported_versions:
-            raise ValueError(f"OpenFOAM version '{version}' is not supported. Supported versions: {supported_versions}")
+        # OpenFOAM 12 solver settings
+        config["solver_application"] = "foamRun"
+        config["solver_module"] = "incompressibleFluid"
         
-        # Get version-specific configuration
-        version_config = of_config.get("version_configs", {}).get(version, {})
+        # Template variables for OpenFOAM 12
+        config["template_vars"] = {
+            "openfoam_version": "12",
+            "openfoam_major_version": 12
+        }
         
-        if not version_config:
-            raise ValueError(f"No configuration found for OpenFOAM version '{version}'")
-        
-        # Update the main config with version-specific settings
-        config["openfoam_version"] = version
-        config["openfoam_env_path"] = version_config.get("env_path")
-        config["openfoam_major_version"] = version_config.get("major_version")
-        config["openfoam_foundation"] = version_config.get("foundation", True)
-        
-        # Update solver names based on version
-        solver_names = version_config.get("solver_names", {})
-        solver_modules = version_config.get("solver_modules", {})
-        
-        if "solver" in config:
-            # Update application name based on simulation type
-            if config["solver"].get("application") == "pimpleFoam":
-                config["solver"]["application"] = solver_names.get("incompressible", "pimpleFoam")
-        
-        # Set solver module for OpenFOAM 12+
-        if version_config.get("major_version", 8) >= 12:
-            config["solver_module"] = solver_modules.get("incompressible", "incompressibleFluid")
-        
-        # Add version-specific template variables
-        if "template_vars" not in config:
-            config["template_vars"] = {}
-        config["template_vars"]["openfoam_version"] = version
-        config["template_vars"]["openfoam_major_version"] = version_config.get("major_version")
+        # Map physics properties for transportProperties
+        if 'physics' in config:
+            # Calculate kinematic viscosity nu = mu/rho
+            if 'default_viscosity' in config['physics'] and 'default_density' in config['physics']:
+                mu = config['physics']['default_viscosity']  # Dynamic viscosity in Pa·s
+                rho = config['physics']['default_density']   # Density in kg/m³
+                nu = mu / rho  # Kinematic viscosity in m²/s
+                config['physics']['nu'] = nu
+                config['physics']['rho'] = rho
+            # Also set mu for convenience
+            if 'default_viscosity' in config['physics']:
+                config['physics']['mu'] = config['physics']['default_viscosity']
         
         return config

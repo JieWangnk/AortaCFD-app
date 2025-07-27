@@ -1,126 +1,122 @@
-{{ header }}
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  12
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 solvers
 {
     p
     {
-        {% set of_version = template_vars.openfoam_major_version if template_vars else openfoam_major_version %}
-        {% if of_version >= 12 %}
         solver          GAMG;
-        smoother        DICGaussSeidel;
-        tolerance       1e-7;
-        relTol          0.01;
-        {% else %}
-        solver          {{ fvSolution.solvers.p.solver }};
-        {% if fvSolution.solvers.p.preconditioner %}preconditioner  {{ fvSolution.solvers.p.preconditioner }};{% endif %}
-        {% if fvSolution.solvers.p.smoother %}smoother        {{ fvSolution.solvers.p.smoother }};{% endif %}
-        tolerance       {{ fvSolution.solvers.p.tolerance }};
-        relTol          {{ fvSolution.solvers.p.relTol }};
-        {% endif %}
+        smoother        GaussSeidel;
+        tolerance       1e-06;
+        relTol          0.05;
     }
 
-    U
-    {
-        {% if of_version >= 12 %}
-        solver          PBiCGStab;
-        preconditioner  DILU;
-        tolerance       1e-8;
-        relTol          0.01;
-        {% else %}
-        solver          {{ fvSolution.solvers.U.solver }};
-        {% if fvSolution.solvers.U.preconditioner %}preconditioner  {{ fvSolution.solvers.U.preconditioner }};{% endif %}
-        {% if fvSolution.solvers.U.smoother %}smoother        {{ fvSolution.solvers.U.smoother }};{% endif %}
-        tolerance       {{ fvSolution.solvers.U.tolerance }};
-        relTol          {{ fvSolution.solvers.U.relTol }};
-        {% endif %}
-    }
-    
-    {# OpenFOAM 12+ incompressibleFluid solver requires pFinal and UFinal entries #}
-    {% set of_version = template_vars.openfoam_major_version if template_vars else openfoam_major_version %}
-    {% if of_version >= 12 or fvSolution.get('solvers_final') %}
     pFinal
     {
         $p;
         relTol          0;
     }
 
-    UFinal
+    "(U|k|epsilon|omega)"
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-05;
+        relTol          0.1;
+    }
+
+    "(U|k|epsilon|omega)Final"
     {
         $U;
         relTol          0;
     }
-    {% endif %}
 }
 
-{% set of_version = template_vars.openfoam_major_version if template_vars else openfoam_major_version %}
-{% if of_version >= 12 %}
-PIMPLE
+SIMPLE
 {
-    nOuterCorrectors     {{ fvSolution.PIMPLE.get('nOuterCorrectors', 50) }};
-    nCorrectors          {{ fvSolution.PIMPLE.get('nCorrectors', 3) }};
-    nNonOrthogonalCorrectors {{ fvSolution.PIMPLE.get('nNonOrthogonalCorrectors', 2) }};
+    nNonOrthogonalCorrectors {{ fvSolution.get('SIMPLE', {}).get('nNonOrthogonalCorrectors', 0) }};
 
-    pRefCell             {{ fvSolution.PIMPLE.get('pRefCell', 0) }};
-    pRefValue            {{ fvSolution.PIMPLE.get('pRefValue', 0) }};
-    
-    // Mass conservation control
-    adjustPhi           yes;
-    checkMeshCourantNo  off;
-
-    // Convergence criteria for robust simulation
     residualControl
     {
-        p               1e-4;
-        U               1e-5;
-    }
-    
-    // Inner corrector convergence criteria
-    correctorResidualControl
-    {
-        p               1e-3;
-        U               1e-4;
+        p               {{ fvSolution.get('SIMPLE', {}).get('residualControl', {}).get('p', '1e-2') }};
+        U               {{ fvSolution.get('SIMPLE', {}).get('residualControl', {}).get('U', '1e-3') }};
+        "(k|epsilon|omega)"   {{ fvSolution.get('SIMPLE', {}).get('residualControl', {}).get('k', '1e-3') }};
     }
 }
-{% else %}
+
 PIMPLE
 {
-    nOuterCorrectors     {{ fvSolution.PIMPLE.nOuterCorrectors }};
-    nCorrectors          {{ fvSolution.PIMPLE.nCorrectors }};
-    nNonOrthogonalCorrectors {{ fvSolution.PIMPLE.nNonOrthogonalCorrectors }};
+    nOuterCorrectors {{ fvSolution.get('PIMPLE', {}).get('nOuterCorrectors', 1) }};
+    nCorrectors     {{ fvSolution.get('PIMPLE', {}).get('nCorrectors', 2) }};
+    nNonOrthogonalCorrectors {{ fvSolution.get('PIMPLE', {}).get('nNonOrthogonalCorrectors', 0) }};
+    pRefPoint       (-0.013 -0.034 0.001);
+    pRefValue       0;
 
-    pRefCell             {{ fvSolution.PIMPLE.get('pRefCell', 0) }};
-    pRefValue            {{ fvSolution.PIMPLE.get('pRefValue', 0) }};
+    // Corrector convergence criteria for inner PIMPLE loop
+    correctorResidualControl
+    {
+        p
+        {
+            tolerance       1e-3;
+            relTol          0;
+        }
+        U
+        {
+            tolerance       1e-4;
+            relTol          0;
+        }
+    }
 
-    {% if fvSolution.PIMPLE.get('residualControl') %}
     outerCorrectorResidualControl
     {
         p
         {
-            tolerance   {{ fvSolution.PIMPLE.residualControl.p.tolerance }};
-            relTol      {{ fvSolution.PIMPLE.residualControl.p.relTol | default(0) }};
+            tolerance       {{ fvSolution.get('PIMPLE', {}).get('outerCorrectorResidualControl', {}).get('p', '1e-4') }};
+            relTol          0;
         }
         U
         {
-            tolerance   {{ fvSolution.PIMPLE.residualControl.U.tolerance }};
-            relTol      {{ fvSolution.PIMPLE.residualControl.U.relTol | default(0) }};
+            tolerance       {{ fvSolution.get('PIMPLE', {}).get('outerCorrectorResidualControl', {}).get('U', '1e-5') }};
+            relTol          0;
+        }
+        "(k|epsilon|omega)"
+        {
+            tolerance       {{ fvSolution.get('PIMPLE', {}).get('outerCorrectorResidualControl', {}).get('k', '1e-5') }};
+            relTol          0;
         }
     }
-    {% endif %}
 }
-{% endif %}
 
-{% if fvSolution.get('relaxationFactors') %}
 relaxationFactors
 {
     fields
     {
-        p               {{ fvSolution.relaxationFactors.fields.p }};
+        p               {{ fvSolution.get('relaxationFactors', {}).get('fields', {}).get('p', '0.3') }};
     }
+
     equations
     {
-        U               {{ fvSolution.relaxationFactors.equations.U }};
+        U               {{ fvSolution.get('relaxationFactors', {}).get('equations', {}).get('U', '0.7') }};
+        "(k|epsilon|omega).*"   {{ fvSolution.get('relaxationFactors', {}).get('equations', {}).get('k', '0.7') }};
     }
 }
-{% endif %}
+
+cache
+{
+    grad(U);
+}
 
 // ************************************************************************* //

@@ -131,6 +131,7 @@ meshQualityControls
     minDeterminant      {{ config.mesh.SNAPPY_SETTINGS.get('minDeterminant', 0.001) }};
     minFaceWeight       {{ config.mesh.SNAPPY_SETTINGS.get('minFaceWeight', 0.05) }};
     minVolRatio         {{ config.mesh.SNAPPY_SETTINGS.get('minVolRatio', 0.01) }};
+    maxAspectRatio      {{ config.mesh.SNAPPY_SETTINGS.get('maxAspectRatio', 10) }};
     nSmoothScale        {{ config.mesh.SNAPPY_SETTINGS.get('nSmoothScale', 4) }};
     errorReduction      {{ config.mesh.SNAPPY_SETTINGS.get('errorReduction', 0.75) }};
 };

@@ -96,45 +96,35 @@ AortaCFD-app/
 
 ## System Requirements
 
-- **OpenFOAM** (Foundation version 8 or 12 supported)
+- **OpenFOAM** (Foundation version 12 recommended)
 - **ParaView** (for post-processing, including `pvbatch`)
-- **pimpleFOAM_WK** solver for 3-element Windkessel boundary conditions (optional)
+- **modularWKPressure** boundary condition for 3-element Windkessel models (optional)
 
 ### OpenFOAM Version Support
 
-AortaCFD supports multiple OpenFOAM versions with automatic version detection and configuration:
+AortaCFD is optimized for OpenFOAM 12 with modern features:
 
-- **OpenFOAM 8** (Foundation) - Default version
-- **OpenFOAM 12** (Foundation) - Latest supported version
+- **OpenFOAM 12** (Foundation) - Recommended version with latest features
+- Uses `foamRun -solver incompressibleFluid` instead of deprecated `pimpleFoam`
+- Supports modern boundary conditions including `modularWKPressure`
 
-The system automatically adjusts templates and solver configurations based on the selected version.
+The system automatically configures templates and solver settings for OpenFOAM 12.
 
 [See Installation](#installation) for setup instructions.
 
 ### Installing OpenFOAM (Ubuntu Example)
 
-#### OpenFOAM 8 (Default)
+#### OpenFOAM 12 (Recommended)
 ```bash
 # Add the OpenFOAM repository and install
 sudo sh -c "wget -O - https://dl.openfoam.org/gpg.key | apt-key add -"
 sudo add-apt-repository http://dl.openfoam.org/ubuntu
 sudo apt-get update
-sudo apt-get install openfoam8
-
-# Add OpenFOAM to your environment (add this to your ~/.bashrc)
-source /opt/openfoam8/etc/bashrc
-```
-
-#### OpenFOAM 12 (Latest)
-```bash
-# Install OpenFOAM 12
 sudo apt-get install openfoam12
 
-# Add OpenFOAM 12 to your environment
+# Add OpenFOAM 12 to your environment (add this to your ~/.bashrc)
 source /opt/openfoam12/etc/bashrc
 ```
-
-**Note**: You can have multiple OpenFOAM versions installed. AortaCFD will automatically use the correct environment path based on your version selection.
 
 ### Installing ParaView (pvbatch)
 
@@ -142,18 +132,9 @@ You can install ParaView from your package manager or from the [official ParaVie
 
 ### Windkessel Model Support
 
-AortaCFD supports 3-element Windkessel (3EWK) boundary conditions for physiologically realistic outlet modeling. The implementation differs between OpenFOAM versions:
+AortaCFD supports 3-element Windkessel (3EWK) boundary conditions for physiologically realistic outlet modeling:
 
-#### OpenFOAM 8 Windkessel (Legacy)
-For OpenFOAM 8, compile the custom `pimpleFOAM_WK` solver:
-
-```bash
-git clone https://github.com/EManchester/OpenFOAM-v8-Windkessel-code.git
-cd OpenFOAM-v8-Windkessel-code
-wmake
-```
-
-#### OpenFOAM 12 Windkessel (Recommended)
+#### OpenFOAM 12 Windkessel
 For OpenFOAM 12, use the modern `modularWKPressure` boundary condition:
 
 ```bash
@@ -161,16 +142,17 @@ For OpenFOAM 12, use the modern `modularWKPressure` boundary condition:
 ./scripts/install_windkessel_of12.sh
 
 # Or install manually:
-git clone https://github.com/JieWangnk/OpenFOAM-WK.git
-cd OpenFOAM-WK/src/modularWKPressure
+git clone https://github.com/EManchester/OpenFOAM-v12-Windkessel-code.git
+cd OpenFOAM-v12-Windkessel-code
 wmake
 ```
 
 The OpenFOAM 12 implementation offers:
 - **Modular design**: No custom solver required
-- **Better integration**: Works with standard `pimpleFoam`
+- **Better integration**: Works with `foamRun -solver incompressibleFluid`
 - **Improved stability**: Enhanced numerical implementation
 - **Easier setup**: Parameters defined directly in boundary conditions
+- **Murray's Law Support**: Automatic flow distribution based on vessel geometry
 
 ---
 
@@ -297,26 +279,20 @@ If you prefer manual setup or encounter issues with the automated script:
 
 3. **Run a workflow command:**
    ```bash
-   # Using default OpenFOAM version (8)
+   # Full simulation workflow
    python app.py runAll --case PAT1_2024 --profile sim_laminar_fine
    
-   # Specify OpenFOAM version explicitly
-   python app.py runAll --case PAT1_2024 --profile sim_laminar_fine --openfoam-version 12
+   # Just run the solver on existing setup
+   python app.py run:solver --case PAT1_2024 --profile sim_laminar_fine
    ```
 
    - Use `--clean` to remove previous results and start fresh
-   - Use `--openfoam-version` or `--of-version` to specify OpenFOAM version (8 or 12)
 
 4. **For 3EWK (three-element Windkessel) boundary conditions:**
    
-   **OpenFOAM 8:**
-   - Compile `pimpleFOAM_WK` solver
-   - Use `boundary_conditions_3EWK.json` configuration
-   
-   **OpenFOAM 12 (Recommended):**
    - Install `modularWKPressure` boundary condition: `./scripts/install_windkessel_of12.sh`
-   - Use `boundary_conditions_OF12_windkessel.json` configuration
-   - Works with standard `pimpleFoam` solver
+   - Configure outlets in `boundary_conditions.json` with type "3EWINDKESSEL"
+   - The solver automatically uses `foamRun -solver incompressibleFluid`
 
 5. **Results and logs will be generated in the `output/OPENFOAM/` directory.**
 
@@ -334,9 +310,21 @@ If you prefer manual setup or encounter issues with the automated script:
 | setup:dict      | Generate all dictionary files (pre-mesh)         |
 | setup:bc        | Prepare and update boundary condition files       |
 | run:mesh        | Run OpenFOAM meshing utilities                   |
-| run:solver      | Run the OpenFOAM solver (or pimpleFOAM_WK)       |
+| run:solver      | Run the OpenFOAM solver only (no setup/mesh)     |
 | createCase      | Full setup (structure, mesh, properties, BCs)    |
 | runAll          | Complete end-to-end workflow                     |
+
+### Running Individual Steps
+
+To run only the simulation solver on an existing case setup:
+```bash
+python app.py run:solver --case CoA --profile sim_laminar_coarse
+```
+
+This is useful when:
+- You've modified solver settings and want to re-run without remeshing
+- You want to restart a stopped simulation
+- You're debugging solver convergence issues
 
 ### CLI Arguments
 
@@ -344,17 +332,18 @@ If you prefer manual setup or encounter issues with the automated script:
 |----------------------------|--------------------------------------------------|----------|
 | `--case`                   | Name of the case directory in data/CAD/         | Yes      |
 | `--profile`                | Name of the simulation profile                  | Yes      |
-| `--openfoam-version`       | OpenFOAM version to use (8, 12)                | No       |
-| `--of-version`             | Short alias for --openfoam-version             | No       |
 | `--clean`                  | Remove previous results and start fresh         | No       |
 
 **Examples:**
 ```bash
-# Basic usage with default OpenFOAM version
+# Full workflow with cleaning
 python app.py runAll --case PAT1_2024 --profile sim_laminar_fine --clean
 
-# Using OpenFOAM 12
-python app.py runAll --case PAT1_2024 --profile sim_laminar_fine --of-version 12
+# Just mesh generation
+python app.py run:mesh --case PAT1_2024 --profile sim_laminar_fine
+
+# Just solver execution
+python app.py run:solver --case PAT1_2024 --profile sim_laminar_fine
 
 # Help
 python app.py --help
@@ -387,23 +376,31 @@ data/CAD/PAT1_2024/
 
 ### Windkessel Configuration Examples
 
-**OpenFOAM 12 Windkessel (modularWKPressure):**
+**boundary_conditions.json with automatic Murray's Law:**
 ```json
 {
-    "boundary_conditions": {
-        "outlet1": {
-            "type": "3EWINDKESSEL",
-            "R": 8000000,     // Peripheral resistance (Pa⋅s/m³)
-            "C": 1.5e-10,     // Compliance (m³/Pa)
-            "Z": 400000,      // Characteristic impedance (Pa⋅s/m³)
-            "order": 2,       // Time discretization order
-            "p0": 12000       // Initial pressure (Pa)
-        }
-    },
-    "openfoam_version": "12",
-    "windkessel_enabled": true
+  "inlet": {
+    "type": "TIMEVARYING",
+    "csv_file": "BPM120.csv",
+    "data_type": "velocity",
+    "profile": "plug_flow",
+    "orientation": "out"
+  },
+  "outlets": {
+    "type": "3EWINDKESSEL",
+    "windkessel_settings": {
+      "systolic_pressure": 120,
+      "diastolic_pressure": 80,
+      "methodology": "murray_law_automatic"
+    }
+  }
 }
 ```
+
+This configuration automatically:
+- Calculates outlet flow ratios using Murray's Law
+- Computes Windkessel parameters (R, C, Z) based on pressure targets
+- Sets up proper boundary conditions for each outlet
 
 ---
 
@@ -460,6 +457,11 @@ gunicorn -w 4 -b 0.0.0.0:8000 app:app
   - Separated core application (`src/`) from web interface (`web/`)
   - Clean data organization (`data/` for inputs, `output/` for results)
   - Improved testing infrastructure
+- **v1.2:** OpenFOAM 12 optimization (completed)
+  - Full OpenFOAM 12 support with modern solver architecture
+  - Murray's Law automatic flow distribution
+  - Improved numerical stability for coarse meshes
+  - Enhanced boundary condition handling
 - **Planned Features:**
   - Multi-patient batch processing capabilities
   - Enhanced web interface with real-time monitoring

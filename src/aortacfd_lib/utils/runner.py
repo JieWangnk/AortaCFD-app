@@ -3,7 +3,7 @@ import subprocess
 import os
 from .logger import Logger
 
-logger = Logger("AortaCFD.log").get_logger()
+logger = Logger("runner").get_logger()
 
 class CommandExecutionError(Exception):
     """Custom exception for failed command execution."""

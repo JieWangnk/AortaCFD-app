@@ -2,7 +2,7 @@
   =========                 |
   \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
    \\    /   O peration     | Website:  https://openfoam.org
-    \\  /    A nd           | Version:  {{ template_vars.openfoam_version if template_vars else openfoam_version }}
+    \\  /    A nd           | Version:  12
      \\/     M anipulation  |
 \\*---------------------------------------------------------------------------*/
 FoamFile
@@ -14,14 +14,9 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-{% set of_version = template_vars.openfoam_major_version if template_vars else openfoam_major_version %}
-{% if of_version >= 12 %}
 application     foamRun;
 
-solver          {{ config.get('solver_module', 'incompressibleFluid') }};
-{% else %}
-application     {{ controlDict.get('application', 'pimpleFoam') }};
-{% endif %}
+solver          incompressibleFluid;
 
 startFrom       {{ controlDict.get('startFrom', 'startTime') }};
 
@@ -51,7 +46,6 @@ timePrecision   {{ controlDict.get('timePrecision', 6) }};
 
 runTimeModifiable {{ controlDict.get('runTimeModifiable', 'true') }};
 
-{% if of_version >= 12 %}
 // Adaptive time stepping for numerical robustness and efficiency
 adjustTimeStep  {{ controlDict.get('adjustTimeStep', 'yes') }};
 
@@ -62,9 +56,8 @@ maxAlphaCo      {{ controlDict.get('maxAlphaCo', 1.2) }};
 maxDeltaT       {{ controlDict.get('maxDeltaT', 1e-3) }};
 
 minDeltaT       {{ controlDict.get('minDeltaT', 1e-8) }};
-{% endif %}
 
-{% if of_version >= 12 and (config.get('windkessel_enabled', False) or config.get('outlets', {}).get('type') == '3EWINDKESSEL') %}
+{% if config.get('windkessel_enabled', False) or config.get('outlets', {}).get('type') == '3EWINDKESSEL' %}
 
 libs
 (

@@ -1,18 +1,18 @@
-import os
-
 class OFVersionAdapter:
-    def __init__(self, version):
-        self.version = version
-
+    """OpenFOAM 12 specific adapter - no version compatibility needed"""
+    
+    def __init__(self, version=12):
+        self.version = 12  # Fixed to OpenFOAM 12
+        
     def get_foam_file_header(self, object_class, object_name):
         """
-        Generate the FoamFile header dynamically based on the OpenFOAM version.
+        Generate the FoamFile header for OpenFOAM 12.
         """
         return f"""/*--------------------------------*- C++ -*----------------------------------*\\
   =========                 |
   \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
    \\    /   O peration     | Website:  https://openfoam.org
-    \\  /    A nd           | Version:  {self.version}
+    \\  /    A nd           | Version:  12
      \\/     M anipulation  |
 \\*---------------------------------------------------------------------------*/
 FoamFile
