@@ -46,6 +46,41 @@ class ConfigBuilder:
         final_config = self._apply_openfoam_12_settings(final_config)
         
         return final_config
+    
+    def build_with_case_config(self, case_name: str, sim_profile_name: str, case_config: dict) -> dict:
+        """
+        Build configuration with directly provided case configuration.
+        This method bypasses file system discovery and uses the provided config directly.
+        
+        Args:
+            case_name: Name of the case
+            sim_profile_name: Name of simulation profile
+            case_config: Case-specific configuration dictionary
+            
+        Returns:
+            Final merged configuration dictionary
+        """
+        try:
+            # Load base and simulation profiles
+            base_config = self._load_python_profile('.base', package='src.config')
+            sim_config = self._load_python_profile(f".profiles.{sim_profile_name}", package='src.config')
+            
+            # Convert case config to expected format
+            case_specific_config = self._convert_unified_config(case_name, case_config)
+            
+        except (FileNotFoundError, AttributeError, ImportError) as e:
+            raise RuntimeError(f"Failed to load configuration files. Please check paths and file contents. Original error: {e}")
+
+        # Merge them all together
+        final_config = {}
+        final_config = deep_merge(final_config, base_config)
+        final_config = deep_merge(final_config, sim_config)
+        final_config = deep_merge(final_config, case_specific_config)
+        
+        # OpenFOAM 12 specific settings
+        final_config = self._apply_openfoam_12_settings(final_config)
+        
+        return final_config
 
     def _load_python_profile(self, profile_path: str, package: str) -> dict:
         """
@@ -61,8 +96,11 @@ class ConfigBuilder:
         except AttributeError:
             raise AttributeError(f"File at '{profile_path}' was found, but it does not contain a 'config' dictionary variable.")
 
-    def _discover_case_config(self, case_name: str, cad_root_dir: str = "data/CAD") -> dict:
-        # ... (This method remains the same as before) ...
+    def _discover_case_config(self, case_name: str, cad_root_dir: str = "cases_input") -> dict:
+        """
+        Discover case configuration by examining the case directory.
+        Automatically detects STL files and boundary conditions.
+        """
         case_path = os.path.join(cad_root_dir, case_name)
         if not os.path.isdir(case_path):
             raise FileNotFoundError(f"Case directory for auto-discovery not found: {case_path}")
@@ -92,6 +130,56 @@ class ConfigBuilder:
             print(f"Warning: boundary_conditions.json not found in {case_path}. Using defaults.")
 
         return deep_merge(discovered_geom_config, bc_config)
+    
+    def _convert_unified_config(self, case_name: str, case_config: dict, cad_root_dir: str = "cases_input") -> dict:
+        """
+        Convert unified config.json format to the format expected by ConfigBuilder.
+        
+        Args:
+            case_name: Name of the case
+            case_config: Unified configuration dictionary
+            cad_root_dir: Root directory for case files
+            
+        Returns:
+            Configuration in the format expected by the workflow system
+        """
+        # First, do the STL file discovery (same as original method)
+        case_path = os.path.join(cad_root_dir, case_name)
+        if not os.path.isdir(case_path):
+            raise FileNotFoundError(f"Case directory not found: {case_path}")
+
+        stl_files = [f for f in os.listdir(case_path) if f.lower().endswith(".stl")]
+        
+        wall_patches = [f.split('.')[0] for f in stl_files if "wall" in f.lower()]
+        inlet_patches = [f.split('.')[0] for f in stl_files if "inlet" in f.lower()]
+        outlet_files = [f for f in stl_files if "outlet" in f.lower()]
+        outlet_files.sort(key=lambda f: int(re.findall(r'\d+', f)[-1]) if re.findall(r'\d+', f) else -1)
+        
+        # Build geometry config from STL discovery
+        discovered_geom_config = {
+            "geometry": {
+                "case_name": case_name,
+                "wall_keywords_ordered": wall_patches[0] if wall_patches else "",
+                "inlet_keywords_ordered": inlet_patches[0] if inlet_patches else "",
+                "outlet_keywords_ordered": [f.split('.')[0] for f in outlet_files]
+            }
+        }
+        
+        # Extract boundary conditions from unified config
+        boundary_conditions = case_config.get('boundary_conditions', {})
+        
+        # Extract geometry settings from unified config
+        geometry_settings = case_config.get('geometry', {})
+        
+        # Extract simulation control settings from unified config
+        simulation_control = case_config.get('simulation_control', {})
+        
+        # Merge all components: STL discovery + geometry settings + boundary conditions + simulation control
+        result = deep_merge(discovered_geom_config, {"geometry": geometry_settings})
+        result = deep_merge(result, boundary_conditions)
+        result = deep_merge(result, {"simulation_control": simulation_control})
+        
+        return result
 
     def _apply_openfoam_12_settings(self, config: dict) -> dict:
         """

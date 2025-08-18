@@ -1,6 +1,9 @@
 # workflow/base_task.py
 from abc import ABC, abstractmethod
-from ..aortacfd_lib.utils.logger import Logger
+try:
+    from ..aortacfd_lib.utils.logger import Logger
+except ImportError:
+    from aortacfd_lib.utils.logger import Logger
 
 # Initialize a global logger for all tasks to use
 log_file_path = "AortaCFD.log"

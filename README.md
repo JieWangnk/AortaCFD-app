@@ -64,6 +64,8 @@ AortaCFD-app/
 │   │   ├── physical_properties_setup.py # Physics configuration
 │   │   ├── solver_setup.py       # OpenFOAM solver configuration
 │   │   ├── post_processor.py     # ParaView post-processing
+│   │   ├── hemodynamic_analyzer.py # Hemodynamic analysis tools
+│   │   ├── quantitative_analysis.py # Quantitative flow analysis
 │   │   └── utils/               # Common utilities (logger, runner, etc.)
 │   ├── workflow/          # Task-based workflow orchestration
 │   │   ├── manager.py           # Main workflow coordinator
@@ -74,22 +76,22 @@ AortaCFD-app/
 │   │   ├── base.py             # Base configuration
 │   │   └── profiles/           # Simulation profiles
 │   └── templates/         # OpenFOAM template files
-├── web/                   # Web interface (optional)
-│   └── aortacfd-site/     # Flask documentation and upload interface
-├── data/                  # Input data and patient cases
-│   └── CAD/              # Patient geometry files (STL)
+├── cases_input/           # Input patient cases
+│   ├── patient1/         # Example patient case 1
+│   └── patient2/         # Example patient case 2
 ├── output/                # Generated simulation results
-│   └── OPENFOAM/         # OpenFOAM case directories
+│   └── patient*/         # Results organized by patient
 ├── tests/                 # Comprehensive test suite
-├── app.py                 # Main CLI entry point
-└── setup.py              # Package installation configuration
+├── run_patient.py         # Main patient-specific runner
+├── simple_run.py          # Simplified one-command runner
+└── requirements.txt       # Python dependencies
 ```
 
 ### Key Benefits of This Structure:
 - **Modular Design**: Each component has a clear, single responsibility
-- **Separation of Concerns**: Core logic, web interface, data, and output are clearly separated
+- **Separation of Concerns**: Core logic, patient data, and output are clearly separated
 - **Easy Development**: Source code organized logically for maintainability
-- **Flexible Deployment**: Web interface can be deployed independently
+- **User-Friendly**: Simple patient-based organization with templated configurations
 - **Clean Testing**: Test organization mirrors source structure
 
 ---
@@ -191,9 +193,6 @@ flowchart TD
     H --> E
     F --> E
     J --> K
-    
-    W["Web Interface (web/aortacfd-site/)"] --> B
-    W --> H
 ```
 
 ---
@@ -208,20 +207,16 @@ flowchart TD
    cd AortaCFD-app
    ```
 
-2. **Run the automated setup script:**
+2. **Create and activate virtual environment:**
    ```bash
-   ./setup_env.sh
-   ```
-   
-   This script will:
-   - Install required system packages (`python3-venv`, `python3-full`)
-   - Create a virtual environment
-   - Install all Python dependencies
-   - Provide activation instructions
-
-3. **Activate the environment:**
-   ```bash
+   python3 -m venv venv
    source venv/bin/activate
+   ```
+
+3. **Install Python dependencies:**
+   ```bash
+   pip install --upgrade pip
+   pip install -r requirements.txt
    ```
 
 ### Manual Installation
@@ -274,19 +269,21 @@ If you prefer manual setup or encounter issues with the automated script:
    ```
 
 2. **Prepare your case data:**
-   - Place STL geometry and inlet flow CSVs in a subfolder under `data/CAD/`.
-   - Prepare a simulation profile in `src/config/profiles/`.
+   - Place STL geometry files in a patient folder under `cases_input/` (e.g., `cases_input/patient1/`)
+   - Include inlet flow CSV file and boundary conditions JSON in the same folder
+   - Configure simulation settings in `cfd_template.json`
 
-3. **Run a workflow command:**
+3. **Run a simulation:**
    ```bash
-   # Full simulation workflow
-   python app.py runAll --case PAT1_2024 --profile sim_laminar_fine
+   # Run a specific patient case
+   python run_patient.py patient1
    
-   # Just run the solver on existing setup
-   python app.py run:solver --case PAT1_2024 --profile sim_laminar_fine
+   # Quick run with reduced iterations
+   python run_patient.py patient1 --quick
+   
+   # Simple one-command run from any folder
+   python simple_run.py /path/to/stl/files
    ```
-
-   - Use `--clean` to remove previous results and start fresh
 
 4. **For 3EWK (three-element Windkessel) boundary conditions:**
    
@@ -294,7 +291,7 @@ If you prefer manual setup or encounter issues with the automated script:
    - Configure outlets in `boundary_conditions.json` with type "3EWINDKESSEL"
    - The solver automatically uses `foamRun -solver incompressibleFluid`
 
-5. **Results and logs will be generated in the `output/OPENFOAM/` directory.**
+5. **Results and logs will be generated in the `output/patient*/` directory.**
 
 6. **When finished, deactivate the virtual environment:**
    ```bash
@@ -305,73 +302,70 @@ If you prefer manual setup or encounter issues with the automated script:
 
 ## Command Reference
 
-| Command         | Description                                      |
-|-----------------|--------------------------------------------------|
-| setup:dict      | Generate all dictionary files (pre-mesh)         |
-| setup:bc        | Prepare and update boundary condition files       |
-| run:mesh        | Run OpenFOAM meshing utilities                   |
-| run:solver      | Run the OpenFOAM solver only (no setup/mesh)     |
-| createCase      | Full setup (structure, mesh, properties, BCs)    |
-| runAll          | Complete end-to-end workflow                     |
+### Patient-Specific Runner (`run_patient.py`)
 
-### Running Individual Steps
+| Command                                    | Description                                      |
+|--------------------------------------------|--------------------------------------------------|
+| `python run_patient.py patient1`          | Run full CFD analysis for patient1             |
+| `python run_patient.py patient1 --quick`  | Quick run with reduced iterations              |
+| `python run_patient.py --list`            | List all available patient cases              |
 
-To run only the simulation solver on an existing case setup:
-```bash
-python app.py run:solver --case CoA --profile sim_laminar_coarse
-```
+### Simple Runner (`simple_run.py`)
 
-This is useful when:
-- You've modified solver settings and want to re-run without remeshing
-- You want to restart a stopped simulation
-- You're debugging solver convergence issues
+| Command                                    | Description                                      |
+|--------------------------------------------|--------------------------------------------------|
+| `python simple_run.py /path/to/files`     | Auto-detect and run CFD on STL files          |
 
 ### CLI Arguments
 
-| Argument                    | Description                                      | Required |
-|----------------------------|--------------------------------------------------|----------|
-| `--case`                   | Name of the case directory in data/CAD/         | Yes      |
-| `--profile`                | Name of the simulation profile                  | Yes      |
-| `--clean`                  | Remove previous results and start fresh         | No       |
+| Argument        | Description                                      | Required |
+|----------------|--------------------------------------------------|----------|
+| `patient_name` | Name of patient folder in cases_input/          | Yes      |
+| `--quick`      | Reduce iterations for faster testing            | No       |
+| `--list`       | Show available patient cases                     | No       |
 
 **Examples:**
 ```bash
-# Full workflow with cleaning
-python app.py runAll --case PAT1_2024 --profile sim_laminar_fine --clean
+# List available patients
+python run_patient.py --list
 
-# Just mesh generation
-python app.py run:mesh --case PAT1_2024 --profile sim_laminar_fine
+# Run full analysis
+python run_patient.py patient1
 
-# Just solver execution
-python app.py run:solver --case PAT1_2024 --profile sim_laminar_fine
+# Quick test run
+python run_patient.py patient1 --quick
+
+# Simple one-command run
+python simple_run.py ~/my_stl_files/
 
 # Help
-python app.py --help
+python run_patient.py --help
 ```
 
 ---
 
 ## Input Data Structure
 
-- `data/CAD/<case_name>/`
+- `cases_input/<patient_name>/`
   - `inlet.stl`, `outlet1.stl`, ..., `wall_aorta.stl`
-  - `inletFlowRate.csv`
-  - `boundary_conditions.json` (optional)
+  - `BPM*.csv` (inlet flow rate data)
+  - `boundary_conditions.json`
+  - `cfd_template.json` (simulation configuration)
 - `src/config/profiles/<profile_name>.py`
-  - Simulation profile (mesh, physics, solver settings)
+  - Pre-defined simulation profiles (mesh, physics, solver settings)
 
 ### Example Case Structure
 ```
-data/CAD/PAT1_2024/
+cases_input/patient1/
 ├── inlet.stl              # Inlet geometry
 ├── outlet1.stl            # Outlet 1 geometry
 ├── outlet2.stl            # Outlet 2 geometry  
 ├── outlet3.stl            # Outlet 3 geometry
+├── outlet4.stl            # Outlet 4 geometry
 ├── wall_aorta.stl         # Aortic wall geometry
-├── inletFlowRate.csv      # Time-varying flow rate data
-├── boundary_conditions.json           # Standard boundary conditions
-├── boundary_conditions_3EWK.json     # OpenFOAM 8 Windkessel
-└── boundary_conditions_OF12_windkessel.json  # OpenFOAM 12 Windkessel
+├── BPM75.csv              # Inlet flow rate at 75 BPM
+├── boundary_conditions.json        # Boundary condition settings
+└── cfd_template.json               # Simulation parameters
 ```
 
 ### Windkessel Configuration Examples
@@ -404,39 +398,24 @@ This configuration automatically:
 
 ---
 
-## Web Interface
+## Advanced Features
 
-AortaCFD includes an optional web interface for documentation, file uploads, and basic simulation management.
+### Hemodynamic Analysis
 
-### Starting the Web Interface
+AortaCFD includes advanced hemodynamic analysis capabilities:
 
-```bash
-cd web/aortacfd-site/
-python app.py
-```
+- **Quantitative Analysis**: Wall shear stress, pressure drop, and flow patterns
+- **Performance Optimization**: Automatic mesh and solver optimization
+- **Publication Reporting**: Generate research-ready reports and figures
 
-The web interface will be available at `http://localhost:5000` and provides:
-
-- **Documentation Browser**: Interactive documentation with search
-- **File Upload**: Upload STL and CSV files for new cases
-- **Physics Calculator**: Calculate Reynolds and Womersley numbers
-- **Simulation Runner**: Execute simulations through web interface
-
-### Web Interface Features
-
-- **Case File Management**: Upload geometry files directly to `data/CAD/`
-- **Interactive Documentation**: Browse all documentation with search functionality
-- **Simulation Execution**: Run simulations with web form interface
-- **Physics Tools**: Built-in calculators for hemodynamic parameters
-
-### Production Deployment
-
-For production use, deploy the Flask application using a WSGI server like Gunicorn:
+### Analysis Tools
 
 ```bash
-cd web/aortacfd-site/
-pip install gunicorn
-gunicorn -w 4 -b 0.0.0.0:8000 app:app
+# View analysis capabilities
+python -c "from src.aortacfd_lib.hemodynamic_analyzer import HemodynamicAnalyzer; help(HemodynamicAnalyzer)"
+
+# Generate publication-quality reports
+python -c "from src.aortacfd_lib.publication_reporter import PublicationReporter; help(PublicationReporter)"
 ```
 
 ---

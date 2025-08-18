@@ -45,18 +45,15 @@ class WindkesselCalculator:
         
     def calculate_outlet_areas(self, stl_files: List[str], case_directory: str) -> Dict[str, float]:
         """
-        Extract outlet areas from STL files or mesh data.
-        This is a placeholder - in practice you'd read from mesh data.
+        Extract outlet areas from STL files using the Murray calculator.
         """
-        # Placeholder values - in real implementation, read from mesh
-        outlet_areas = {
-            'outlet1': 1.2e-4,  # m² (larger outlet)
-            'outlet2': 0.8e-4,  # m²
-            'outlet3': 0.6e-4,  # m²
-            'outlet4': 0.4e-4   # m² (smallest outlet)
-        }
+        from .murray_calculator import MurrayCalculator
         
-        logger.info(f"Calculated outlet areas: {outlet_areas}")
+        # Use the MurrayCalculator for accurate area calculation
+        murray_calc = MurrayCalculator(case_directory, {'geometry': self.geometry_config})
+        outlet_areas = murray_calc.extract_outlet_areas_from_stl()
+        
+        logger.info(f"Calculated outlet areas from STL files: {outlet_areas}")
         return outlet_areas
     
     def calculate_equivalent_radii(self, outlet_areas: Dict[str, float]) -> Dict[str, float]:

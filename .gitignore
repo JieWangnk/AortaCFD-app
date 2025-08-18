@@ -61,3 +61,12 @@ data/CAD/test_case/
 *.egg-info/
 dist/
 build/
+
+# Claude Code traces and artifacts
+*claude*
+*Claude*
+CLAUDE*
+.claude/
+*claude_trace*
+*_claude_*
+*.claude

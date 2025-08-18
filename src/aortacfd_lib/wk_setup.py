@@ -42,7 +42,7 @@ class WkSetup:
         outlet_patches = self.geom_settings['outlet_keywords_ordered']
         outlet_areas = {name: PatchProcessing(tri_surface_dir, name).calculate_surface_area(scale_factor=scale_factor) for name in outlet_patches}
 
-        inlet_csv_path = os.path.join("data", "CAD", self.geom_settings['case_name'], self.inlet_settings['csv_file'])
+        inlet_csv_path = os.path.join("cases_input", self.geom_settings['case_name'], self.inlet_settings['csv_file'])
         times, flow_inlet = self._read_inlet_flow(inlet_csv_path, self.inlet_settings['data_type'], area_inlet)
 
         flow_split_ratios = self.wk_model_settings['flow_split']
