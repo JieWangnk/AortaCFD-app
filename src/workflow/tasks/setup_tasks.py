@@ -1,21 +1,38 @@
 import os
 import shutil
-from ..base_task import Task, logger
-from ...aortacfd_lib.utils.runner import run_command, CommandExecutionError
+try:
+    from ..base_task import Task, logger
+    from ...aortacfd_lib.utils.runner import run_command, CommandExecutionError
+    from ...aortacfd_lib.mesh_setup import GeometryAnalyzer
+    from ...aortacfd_lib.boundary_condition_setup import BoundaryConditionSetup
+    from ...aortacfd_lib.physical_properties_setup import PhysicalPropertiesWriter
+    from ...aortacfd_lib.numerical_setup import FvSchemesWriter
+except ImportError:
+    from workflow.base_task import Task, logger
+    from aortacfd_lib.utils.runner import run_command, CommandExecutionError
+    from aortacfd_lib.mesh_setup import GeometryAnalyzer
+    from aortacfd_lib.boundary_condition_setup import BoundaryConditionSetup
+    from aortacfd_lib.physical_properties_setup import PhysicalPropertiesWriter
+    from aortacfd_lib.numerical_setup import FvSchemesWriter
 
-# Import all the refactored library classes from your core library
-from ...aortacfd_lib.mesh_setup import GeometryAnalyzer
-from ...aortacfd_lib.boundary_condition_setup import BoundaryConditionSetup
-from ...aortacfd_lib.physical_properties_setup import PhysicalPropertiesWriter
-from ...aortacfd_lib.numerical_setup import FvSchemesWriter
-from ...aortacfd_lib.solver_setup import FvSolutionWriter
-from ...aortacfd_lib.simulation_control import SimulationSetup
-from ...aortacfd_lib.decompose_setup import SolnType
-from ...aortacfd_lib.inlet_mapping import InletMapping
-from ...aortacfd_lib.cycle_data_setup import CycleDataSetup
-from ...aortacfd_lib.utils.patch_utils import detect_world_patch_mode
-from ...aortacfd_lib.utils.format_points import EnhancedPointsFormatter
-from ...aortacfd_lib.wk_setup import WkSetup
+try:
+    from ...aortacfd_lib.solver_setup import FvSolutionWriter
+    from ...aortacfd_lib.simulation_control import SimulationSetup
+    from ...aortacfd_lib.decompose_setup import SolnType
+    from ...aortacfd_lib.inlet_mapping import InletMapping
+    from ...aortacfd_lib.cycle_data_setup import CycleDataSetup
+    from ...aortacfd_lib.utils.patch_utils import detect_world_patch_mode
+    from ...aortacfd_lib.utils.format_points import EnhancedPointsFormatter
+    from ...aortacfd_lib.wk_setup import WkSetup
+except ImportError:
+    from aortacfd_lib.solver_setup import FvSolutionWriter
+    from aortacfd_lib.simulation_control import SimulationSetup
+    from aortacfd_lib.decompose_setup import SolnType
+    from aortacfd_lib.inlet_mapping import InletMapping
+    from aortacfd_lib.cycle_data_setup import CycleDataSetup
+    from aortacfd_lib.utils.patch_utils import detect_world_patch_mode
+    from aortacfd_lib.utils.format_points import EnhancedPointsFormatter
+    from aortacfd_lib.wk_setup import WkSetup
 
 class CreateCaseStructureTask(Task):
     """
@@ -38,7 +55,7 @@ class CreateCaseStructureTask(Task):
         inlet_patch_name = self.config['geometry']['inlet_keywords_ordered']
         os.makedirs(os.path.join(case_dir, "constant", "boundaryData", inlet_patch_name), exist_ok=True)
 
-        cad_folder = os.path.join("data", "CAD", self.config["geometry"]["case_name"])
+        cad_folder = os.path.join("cases_input", self.config["geometry"]["case_name"])
         for f in os.listdir(cad_folder):
             if f.endswith('.stl'):
                 shutil.copy(os.path.join(cad_folder, f), os.path.join(case_dir, "constant", "triSurface"))

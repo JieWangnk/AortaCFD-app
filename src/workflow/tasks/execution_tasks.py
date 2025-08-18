@@ -1,6 +1,11 @@
 import os
-from ..base_task import Task, AortaCFDError, logger
-from ...aortacfd_lib.utils.runner import run_command, CommandExecutionError
+import shutil
+try:
+    from ..base_task import Task, AortaCFDError, logger
+    from ...aortacfd_lib.utils.runner import run_command, CommandExecutionError
+except ImportError:
+    from workflow.base_task import Task, AortaCFDError, logger
+    from aortacfd_lib.utils.runner import run_command, CommandExecutionError
 
 class ExecuteMeshingTask(Task):
     """Runs the external meshing commands and scales the final mesh."""
@@ -18,6 +23,7 @@ class ExecuteMeshingTask(Task):
             if snappy_settings.get("parallel"):
                 n_proc = snappy_settings.get("nProcessors", 1)
                 run_command(self.config, ["decomposePar", "-force"], case_dir, "log.decomposePar.preMesh")
+                
                 run_command(self.config, ["mpirun", "-np", str(n_proc), "snappyHexMesh", "-parallel", "-overwrite"], case_dir, "log.snappyHexMesh")
                 # OpenFOAM 12 uses reconstructPar instead of reconstructParMesh
                 of_version = self.config.get('openfoam_major_version', 8)
@@ -120,7 +126,7 @@ class ExecutePostProcessingTask(Task):
         
         # Setup environment variables for the script
         os.environ["CASE_PATH"] = case_dir
-        # ... You can add other os.environ calls here if needed ...
+        # Additional environment variables can be added here if needed
         
         pvbatch_exe = pp_config.get("pvbatch_exe")
         if not pvbatch_exe or not os.path.exists(pvbatch_exe):

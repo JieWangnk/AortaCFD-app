@@ -109,7 +109,7 @@ def sample_config() -> Dict[str, Any]:
 @pytest.fixture
 def sample_case_directory(temp_dir: Path) -> Path:
     """Create a sample case directory structure."""
-    case_dir = temp_dir / "data" / "CAD" / "test_case"
+    case_dir = temp_dir / "cases_input" / "test_case"
     case_dir.mkdir(parents=True)
     
     # Create sample STL files (empty for testing)

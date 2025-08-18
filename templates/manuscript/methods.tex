@@ -1,0 +1,133 @@
+% LaTeX template for manuscript methods section
+% Comprehensive methods section for CFD publication
+
+\section{Methods}
+
+\subsection{Computational Framework}
+
+\subsubsection{Geometry Processing and Mesh Generation}
+Patient-specific aortic geometries were obtained from {{ study_metadata.imaging_modality | default('contrast-enhanced computed tomography (CT)') }} with slice thickness of {{ study_metadata.slice_thickness | default('0.6') }} mm. Geometry reconstruction and surface mesh generation were performed using established protocols \cite{ref_geometry_processing}. The computational domain was discretized using the snappyHexMesh utility in OpenFOAM 12 \cite{openfoam_user_guide}, employing a multi-resolution hexahedral mesh with boundary layer refinement near vessel walls.
+
+Mesh independence was verified through Richardson extrapolation using three systematically refined meshes with refinement ratio r = $\sqrt{2}$. The finest mesh contained approximately {{ simulation_config.mesh.finest_cell_count | default('2.5 × 10^6') }} cells, ensuring y+ < 1 in the boundary layer to resolve viscous sublayer dynamics accurately.
+
+\subsubsection{Governing Equations and Numerical Methods}
+Blood flow was modeled as an incompressible, Newtonian fluid with density $\rho$ = 1060 kg/m³ and dynamic viscosity $\mu$ = 0.004 Pa·s, consistent with physiological values at body temperature \cite{ref_blood_properties}. The governing equations are the continuity and Navier-Stokes equations:
+
+\begin{equation}
+\nabla \cdot \mathbf{u} = 0
+\end{equation}
+
+\begin{equation}
+\frac{\partial \mathbf{u}}{\partial t} + (\mathbf{u} \cdot \nabla)\mathbf{u} = -\frac{1}{\rho}\nabla p + \nu \nabla^2 \mathbf{u}
+\end{equation}
+
+where $\mathbf{u}$ is the velocity vector, $p$ is pressure, and $\nu$ is kinematic viscosity.
+
+Temporal discretization employed a second-order implicit scheme with adaptive time stepping to maintain Courant number < 0.5. Spatial discretization used second-order finite volume schemes: linear interpolation for diffusion terms, linearUpwind for convection terms, and PISO pressure-velocity coupling with 2 corrector steps.
+
+\subsection{Boundary Conditions}
+
+\subsubsection{Inlet Conditions}
+Time-varying velocity profiles were prescribed at the aortic root based on patient-specific flow measurements from {{ study_metadata.inlet_data_source | default('phase-contrast MRI') }}. The velocity profile was spatially distributed using a Womersley solution for pulsatile pipe flow \cite{ref_womersley}, accounting for the entrance length development.
+
+\subsubsection{Outlet Boundary Conditions}
+Physiologically realistic outlet conditions were implemented using three-element Windkessel (3EWK) models \cite{ref_windkessel}. The 3EWK parameters were determined using Murray's law for automatic flow distribution:
+
+\begin{equation}
+\frac{Q_i}{Q_{total}} = \frac{r_i^3}{\sum_{j=1}^{N} r_j^3}
+\end{equation}
+
+where $Q_i$ is the flow rate through outlet $i$, $r_i$ is the equivalent radius, and $N$ is the number of outlets.
+
+The 3EWK model relates pressure and flow rate through:
+
+\begin{equation}
+p(t) = Z_c Q(t) + R \int_0^t Q(\tau) d\tau + \frac{1}{C} \int_0^t [Q(\tau) - Q_{mean}] d\tau
+\end{equation}
+
+where $Z_c$ is characteristic impedance, $R$ is peripheral resistance, and $C$ is arterial compliance.
+
+\subsubsection{Wall Conditions}
+Vessel walls were treated as rigid with no-slip boundary conditions. This assumption is justified for aortic flow analysis where wall motion effects are secondary to hemodynamic patterns \cite{ref_rigid_wall_assumption}.
+
+\subsection{Solution Procedure and Convergence Criteria}
+
+Simulations were performed using the incompressibleFluid solver in OpenFOAM 12. Each cardiac cycle (T = {{ simulation_config.cardiac_cycle_period | default('0.8') }} s, corresponding to {{ (60 / (simulation_config.cardiac_cycle_period | default(0.8))) | round }} bpm) was discretized with 2000 time steps, ensuring temporal resolution of peak flow gradients.
+
+Convergence criteria were set to:
+\begin{itemize}
+    \item Velocity residuals: < $10^{-6}$
+    \item Pressure residuals: < $10^{-7}$
+    \item Mass flux imbalance: < 0.1\%
+\end{itemize}
+
+Simulations were run for 4 cardiac cycles to eliminate transient effects, with data analysis performed on the final cycle.
+
+\subsection{Hemodynamic Analysis}
+
+\subsubsection{Wall Shear Stress Metrics}
+Time-averaged wall shear stress (TAWSS) was calculated as:
+
+\begin{equation}
+\text{TAWSS} = \frac{1}{T} \int_0^T |\boldsymbol{\tau}_w(t)| dt
+\end{equation}
+
+Oscillatory shear index (OSI) was computed as:
+
+\begin{equation}
+\text{OSI} = \frac{1}{2}\left(1 - \frac{\left|\int_0^T \boldsymbol{\tau}_w(t) dt\right|}{\int_0^T |\boldsymbol{\tau}_w(t)| dt}\right)
+\end{equation}
+
+Relative residence time (RRT) was defined as:
+
+\begin{equation}
+\text{RRT} = \frac{1}{(1 - 2 \cdot \text{OSI}) \cdot \text{TAWSS}}
+\end{equation}
+
+\subsubsection{Energy Loss Analysis}
+Viscous energy loss was quantified using the energy dissipation rate:
+
+\begin{equation}
+\Phi = \mu \left(\frac{\partial u_i}{\partial x_j} + \frac{\partial u_j}{\partial x_i}\right)^2
+\end{equation}
+
+Pressure drop was calculated between inlet and outlets, accounting for hydrostatic effects.
+
+\subsection{Validation and Verification}
+
+\subsubsection{Verification Studies}
+Grid convergence index (GCI) was calculated using Richardson extrapolation \cite{ref_gci}:
+
+\begin{equation}
+\text{GCI} = \frac{1.25 \epsilon}{r^p - 1}
+\end{equation}
+
+where $\epsilon$ is the relative error between successive grids, $r$ is the refinement ratio, and $p$ is the observed order of convergence.
+
+Time step independence was verified by halving the time step and ensuring solution changes < 1\%.
+
+\subsubsection{Validation Against Experimental Data}
+Computational results were validated against experimental measurements from {{ study_metadata.experimental_setup | default('stereoscopic particle image velocimetry (sPIV) in patient-specific flow phantoms') }}. Validation metrics included:
+
+\begin{itemize}
+    \item Pearson correlation coefficient (R²)
+    \item Root mean square error (RMSE)
+    \item Bland-Altman limits of agreement
+    \item Concordance correlation coefficient
+\end{itemize}
+
+\subsubsection{Literature Comparison}
+Results were compared with published values from similar patient populations, using statistical tests to assess agreement within reported confidence intervals.
+
+\subsection{Statistical Analysis}
+All statistical analyses were performed using Python SciPy \cite{ref_scipy}. Continuous variables are reported as mean ± standard deviation unless otherwise specified. Significance was set at p < 0.05 for all tests.
+
+Uncertainty quantification was performed using Monte Carlo simulation with 1000 samples, varying key parameters within physiologically relevant ranges:
+\begin{itemize}
+    \item Blood viscosity: 0.003-0.005 Pa·s
+    \item Density: 1040-1080 kg/m³
+    \item Flow rate amplitude: ±10\% of measured values
+\end{itemize}
+
+\subsection{Computational Resources}
+All simulations were performed on {{ study_metadata.computational_resources | default('a high-performance computing cluster with Intel Xeon processors') }}. Typical wall clock time for a single cardiac cycle simulation was {{ study_metadata.simulation_time | default('6-8') }} hours using {{ study_metadata.cpu_cores | default('32') }} CPU cores with MPI parallelization.

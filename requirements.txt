@@ -6,7 +6,8 @@ vtk>=9.0.0
 pyvista>=0.32.0
 jinja2>=3.0.0
 numpy-stl>=2.16.0
-scipy
+scipy>=1.7.0
+scikit-learn>=1.0.0
 
 # Web interface
 flask>=2.0.0

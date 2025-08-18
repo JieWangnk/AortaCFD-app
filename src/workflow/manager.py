@@ -1,6 +1,10 @@
 import os
-from .base_task import logger, AortaCFDError
-from .tasks import setup_tasks, execution_tasks
+try:
+    from .base_task import logger, AortaCFDError
+    from .tasks import setup_tasks, execution_tasks
+except ImportError:
+    from workflow.base_task import logger, AortaCFDError
+    from workflow.tasks import setup_tasks, execution_tasks
 
 class WorkflowManager:
     """
@@ -95,12 +99,13 @@ class WorkflowManager:
         if not task_sequence:
             raise AortaCFDError(f"Unknown command '{command}'")
 
-        # ... (the rest of the method remains the same) ...
-        geom_cfg = self.config["geometry"]
-        refinement = geom_cfg.get("refinement_level", "default")
-        self.context["case_directory"] = os.path.join(
-            os.getcwd(), "output", "OPENFOAM", f"{geom_cfg['case_name']}_{refinement}"
-        )
+        # Set up the execution context with case directory (only if not already set)
+        if "case_directory" not in self.context:
+            geom_cfg = self.config["geometry"]
+            refinement = geom_cfg.get("refinement_level", "default")
+            self.context["case_directory"] = os.path.join(
+                os.getcwd(), "output", "OPENFOAM", f"{geom_cfg['case_name']}_{refinement}"
+            )
         logger.info(f"Starting workflow for command: '{command}'")
         for task_name in task_sequence:
             task_class = self.available_tasks.get(task_name)

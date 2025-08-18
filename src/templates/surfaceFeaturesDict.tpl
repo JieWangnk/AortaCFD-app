@@ -1,5 +1,9 @@
 /*--------------------------------*- C++ -*----------------------------------*\\
-  ... (FoamFile Header) ...
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  12
+     \\/     M anipulation  |
 \\*---------------------------------------------------------------------------*/
 FoamFile
 {

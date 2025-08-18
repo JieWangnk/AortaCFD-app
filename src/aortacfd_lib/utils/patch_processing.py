@@ -118,7 +118,9 @@ class PatchProcessing:
         original, unscaled units.
         """
         unique_patch_points = np.unique(self.mesh_data.vectors.reshape(-1, 3), axis=0) #
-        # ... (error checking) ...
+        # Check for sufficient points for analysis
+        if len(unique_patch_points) < 3:
+            raise ValueError(f"Insufficient points ({len(unique_patch_points)}) for geometry analysis")
 
         avg_normal = self.compute_average_normal() #
         # centroid is now in raw units (mm)

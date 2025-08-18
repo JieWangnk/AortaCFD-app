@@ -192,8 +192,8 @@ class TestConfigBuilder:
         result = builder.build("test_case", "test_profile")
         
         # Check that all configs were loaded
-        mock_load_profile.assert_any_call('.base', package='config')
-        mock_load_profile.assert_any_call('.profiles.test_profile', package='config')
+        mock_load_profile.assert_any_call('.base', package='src.config')
+        mock_load_profile.assert_any_call('.profiles.test_profile', package='src.config')
         mock_discover.assert_called_once_with("test_case")
         
         # Check merging (later configs should override earlier ones)
