@@ -1,0 +1,14 @@
+{
+  "case_info": {
+    "patient_id": "test_patient_minimal",
+    "description": "Minimal test configuration"
+  },
+  "simulation_settings": {
+    "analysis_type": "coarse",
+    "solver_type": "laminar"
+  },
+  "physics": {
+    "blood_density": 1060,
+    "blood_viscosity": 0.004
+  }
+}

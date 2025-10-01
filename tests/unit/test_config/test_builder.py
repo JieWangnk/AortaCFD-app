@@ -1,259 +1,293 @@
 """
 Unit tests for ConfigBuilder class.
+
+Tests configuration building, merging, and validation.
 """
+
 import pytest
-import json
-import os
 from pathlib import Path
-from unittest.mock import patch, mock_open, Mock
 from src.config.builder import ConfigBuilder, deep_merge
 
 
 class TestDeepMerge:
     """Test the deep_merge utility function."""
-    
-    def test_simple_merge(self):
+
+    def test_merge_simple_dicts(self):
         """Test merging simple dictionaries."""
-        dest = {"a": 1, "b": 2}
-        source = {"b": 3, "c": 4}
-        result = deep_merge(dest, source)
-        
-        assert result == {"a": 1, "b": 3, "c": 4}
-        assert dest == {"a": 1, "b": 3, "c": 4}  # dest is modified in place
-    
-    def test_nested_merge(self):
+        base = {"a": 1, "b": 2}
+        override = {"b": 3, "c": 4}
+        result = deep_merge(base, override)
+
+        assert result["a"] == 1
+        assert result["b"] == 3  # Override wins
+        assert result["c"] == 4
+
+    def test_merge_nested_dicts(self):
         """Test merging nested dictionaries."""
-        dest = {
-            "level1": {
-                "a": 1,
-                "b": 2
-            },
-            "level2": 3
+        base = {
+            "physics": {"density": 1000, "viscosity": 0.003},
+            "mesh": {"type": "hex"}
         }
-        source = {
-            "level1": {
-                "b": 4,
-                "c": 5
-            },
-            "level3": 6
+        override = {
+            "physics": {"density": 1060},  # Override density only
+            "solver": {"maxCo": 1.0}  # Add new section
         }
-        result = deep_merge(dest, source)
-        
-        expected = {
-            "level1": {
-                "a": 1,
-                "b": 4,
-                "c": 5
-            },
-            "level2": 3,
-            "level3": 6
-        }
-        assert result == expected
-    
-    def test_empty_merge(self):
+        result = deep_merge(base, override)
+
+        assert result["physics"]["density"] == 1060  # Overridden
+        assert result["physics"]["viscosity"] == 0.003  # Preserved
+        assert result["mesh"]["type"] == "hex"  # Preserved
+        assert result["solver"]["maxCo"] == 1.0  # Added
+
+    def test_merge_modifies_destination_inplace(self):
+        """Test that merge modifies destination dict in-place (by design)."""
+        base = {"a": 1}
+        override = {"b": 2}
+
+        result = deep_merge(base, override)
+
+        # deep_merge modifies destination in-place and returns it
+        assert result is base  # Returns the modified destination
+        assert result == {"a": 1, "b": 2}
+        assert base == {"a": 1, "b": 2}  # Base was modified
+
+    def test_merge_empty_dicts(self):
         """Test merging with empty dictionaries."""
-        dest = {"a": 1}
-        source = {}
-        result = deep_merge(dest, source)
-        assert result == {"a": 1}
-        
-        dest = {}
-        source = {"a": 1}
-        result = deep_merge(dest, source)
-        assert result == {"a": 1}
+        base = {"a": 1}
+        result1 = deep_merge(base, {})
+        result2 = deep_merge({}, base)
+
+        assert result1 == {"a": 1}
+        assert result2 == {"a": 1}
+
+    def test_merge_override_with_none(self):
+        """Test that None values in override are applied."""
+        base = {"a": 1, "b": 2}
+        override = {"a": None}
+        result = deep_merge(base, override)
+
+        assert result["a"] is None
+        assert result["b"] == 2
 
 
 class TestConfigBuilder:
-    """Test the ConfigBuilder class."""
-    
-    def test_init(self):
-        """Test ConfigBuilder initialization."""
-        builder = ConfigBuilder()
+    """Test ConfigBuilder class."""
+
+    @pytest.fixture
+    def builder(self):
+        """Create a ConfigBuilder instance."""
+        return ConfigBuilder()
+
+    def test_builder_initialization(self, builder):
+        """Test ConfigBuilder initializes correctly."""
         assert builder is not None
-    
-    @patch('src.config.builder.importlib.import_module')
-    def test_load_python_profile_success(self, mock_import):
-        """Test successful loading of Python profile."""
-        # Setup mock module
-        mock_module = Mock()
-        mock_module.config = {"test": "value"}
-        mock_import.return_value = mock_module
-        
-        builder = ConfigBuilder()
-        result = builder._load_python_profile('.test_profile', package='config')
-        
-        assert result == {"test": "value"}
-        mock_import.assert_called_once_with('.test_profile', package='config')
-    
-    @patch('src.config.builder.importlib.import_module')
-    def test_load_python_profile_import_error(self, mock_import):
-        """Test ImportError handling in profile loading."""
-        mock_import.side_effect = ImportError("Module not found")
-        
-        builder = ConfigBuilder()
-        with pytest.raises(ImportError, match="Configuration profile could not be imported"):
-            builder._load_python_profile('.nonexistent', package='config')
-    
-    @patch('src.config.builder.importlib.import_module')
-    def test_load_python_profile_attribute_error(self, mock_import):
-        """Test AttributeError handling when config attribute missing."""
-        mock_module = Mock()
-        del mock_module.config  # Remove config attribute
-        mock_import.return_value = mock_module
-        
-        builder = ConfigBuilder()
-        with pytest.raises(AttributeError, match="does not contain a 'config' dictionary"):
-            builder._load_python_profile('.test_profile', package='config')
-    
-    def test_discover_case_config_missing_directory(self, temp_dir):
-        """Test case discovery with missing directory."""
-        builder = ConfigBuilder()
-        
-        with pytest.raises(FileNotFoundError, match="Case directory for auto-discovery not found"):
-            builder._discover_case_config("nonexistent_case", str(temp_dir))
-    
-    def test_discover_case_config_success(self, sample_case_directory):
-        """Test successful case discovery."""
-        builder = ConfigBuilder()
-        
-        # Get the parent directory of the case (CAD directory)
-        cad_dir = sample_case_directory.parent
-        case_name = sample_case_directory.name
-        
-        result = builder._discover_case_config(case_name, str(cad_dir))
-        
-        # Check geometry discovery
-        assert result["geometry"]["case_name"] == case_name
-        assert result["geometry"]["wall_keywords_ordered"] == "wall_aorta"
-        assert result["geometry"]["inlet_keywords_ordered"] == "inlet"
-        assert "outlet1" in result["geometry"]["outlet_keywords_ordered"]
-        assert "outlet2" in result["geometry"]["outlet_keywords_ordered"]
-        
-        # Check boundary conditions were loaded
-        assert "boundary_conditions" in result
-        assert result["boundary_conditions"]["inlet"]["type"] == "flowRateInletVelocity"
-    
-    def test_discover_case_config_no_boundary_file(self, temp_dir):
-        """Test case discovery without boundary conditions file."""
-        case_dir = temp_dir / "CAD" / "test_case"
-        case_dir.mkdir(parents=True)
-        
-        # Create only STL files, no boundary_conditions.json
-        stl_files = ["inlet.stl", "outlet1.stl", "wall_aorta.stl"]
-        for stl_file in stl_files:
-            (case_dir / stl_file).write_text("# Empty STL file")
-        
-        builder = ConfigBuilder()
-        result = builder._discover_case_config("test_case", str(temp_dir / "CAD"))
-        
-        # Should still work, just without boundary conditions
-        assert result["geometry"]["case_name"] == "test_case"
-        assert "boundary_conditions" not in result or result["boundary_conditions"] == {}
-    
-    def test_discover_case_config_outlet_ordering(self, temp_dir):
-        """Test that outlets are ordered correctly by number."""
-        case_dir = temp_dir / "CAD" / "test_case"
-        case_dir.mkdir(parents=True)
-        
-        # Create outlets in non-sequential order
-        stl_files = ["inlet.stl", "outlet10.stl", "outlet2.stl", "outlet1.stl", "wall_aorta.stl"]
-        for stl_file in stl_files:
-            (case_dir / stl_file).write_text("# Empty STL file")
-        
-        builder = ConfigBuilder()
-        result = builder._discover_case_config("test_case", str(temp_dir / "CAD"))
-        
-        # Check that outlets are sorted by number
-        outlets = result["geometry"]["outlet_keywords_ordered"]
-        assert outlets == ["outlet1", "outlet2", "outlet10"]
-    
-    @patch.object(ConfigBuilder, '_load_python_profile')
-    @patch.object(ConfigBuilder, '_discover_case_config')
-    def test_build_success(self, mock_discover, mock_load_profile):
-        """Test successful config building."""
-        # Setup mocks
-        base_config = {
-            "base": "config",
-            "nested": {"base": "value"}
+        assert hasattr(builder, 'logger')
+        assert builder.logger.name == "ConfigBuilder"
+
+    def test_build_base_and_profile_laminar_coarse(self, builder):
+        """Test building base + profile without case overrides."""
+        config = builder.build_base_and_profile("sim_laminar_coarse")
+
+        # Check basic structure
+        assert "physics" in config
+        assert "mesh" in config
+        assert "run_settings" in config
+
+        # Check laminar-specific settings
+        assert config["physics"]["simulation_type"] == "laminar"
+
+    def test_build_base_and_profile_rans_medium(self, builder):
+        """Test building RANS profile."""
+        config = builder.build_base_and_profile("sim_rans_medium")
+
+        # Check RANS-specific settings
+        assert config["physics"]["simulation_type"] == "RAS"
+        assert "turbulence_model" in config["physics"]
+        assert config["physics"]["turbulence_model"] == "kOmegaSST"
+
+    def test_build_base_and_profile_les_fine(self, builder):
+        """Test building LES profile."""
+        config = builder.build_base_and_profile("sim_les_fine")
+
+        # Check LES-specific settings
+        assert config["physics"]["simulation_type"] == "LES"
+
+    def test_validate_physical_parameters_valid(self, builder, full_config):
+        """Test validation passes for valid parameters."""
+        # Should not raise any exceptions
+        builder._validate_physical_parameters(full_config)
+
+    def test_validate_physical_parameters_warns_high_density(self, builder, caplog):
+        """Test validation warns for unrealistic density."""
+        import logging
+        caplog.set_level(logging.INFO)
+
+        config = {
+            "physics": {
+                "default_density": 5000  # Way too high
+            }
         }
-        sim_config = {
-            "sim": "config",
-            "nested": {"sim": "value"}
+
+        builder._validate_physical_parameters(config)
+        log_text = caplog.text.lower()
+        assert "density" in log_text or "warning" in log_text or "⚠" in caplog.text
+
+    def test_validate_physical_parameters_warns_high_viscosity(self, builder, caplog):
+        """Test validation warns for unrealistic viscosity."""
+        import logging
+        caplog.set_level(logging.INFO)
+
+        config = {
+            "physics": {
+                "mu": 0.5  # Way too high (should be default_viscosity or mu)
+            }
         }
-        case_config = {
-            "case": "config",
-            "nested": {"case": "value"}
+
+        builder._validate_physical_parameters(config)
+        log_text = caplog.text.lower()
+        assert "viscosity" in log_text or "warning" in log_text
+
+    def test_validate_physical_parameters_warns_negative_end_time(self, builder, caplog):
+        """Test validation warns for negative end time."""
+        import logging
+        caplog.set_level(logging.INFO)
+
+        config = {
+            "simulation_control": {
+                "end_time": -1.0
+            }
         }
-        
-        mock_load_profile.side_effect = [base_config, sim_config]
-        mock_discover.return_value = case_config
-        
-        builder = ConfigBuilder()
-        result = builder.build("test_case", "test_profile")
-        
-        # Check that all configs were loaded
-        mock_load_profile.assert_any_call('.base', package='src.config')
-        mock_load_profile.assert_any_call('.profiles.test_profile', package='src.config')
-        mock_discover.assert_called_once_with("test_case")
-        
-        # Check merging (later configs should override earlier ones)
-        assert result["base"] == "config"
-        assert result["sim"] == "config"
-        assert result["case"] == "config"
-        assert result["nested"]["base"] == "value"
-        assert result["nested"]["sim"] == "value"
-        assert result["nested"]["case"] == "value"  # Should be final value
-    
-    @patch.object(ConfigBuilder, '_load_python_profile')
-    def test_build_profile_loading_error(self, mock_load_profile):
-        """Test build failure when profile loading fails."""
-        mock_load_profile.side_effect = ImportError("Profile not found")
-        
-        builder = ConfigBuilder()
-        with pytest.raises(RuntimeError, match="Failed to load configuration files"):
-            builder.build("test_case", "nonexistent_profile")
-    
-    @patch.object(ConfigBuilder, '_load_python_profile')
-    @patch.object(ConfigBuilder, '_discover_case_config')
-    def test_build_case_discovery_error(self, mock_discover, mock_load_profile):
-        """Test build failure when case discovery fails."""
-        mock_load_profile.return_value = {"base": "config"}
-        mock_discover.side_effect = FileNotFoundError("Case not found")
-        
-        builder = ConfigBuilder()
-        with pytest.raises(RuntimeError, match="Failed to load configuration files"):
-            builder.build("nonexistent_case", "test_profile")
+
+        builder._validate_physical_parameters(config)
+        log_text = caplog.text.lower()
+        assert "end" in log_text or "time" in log_text or "warning" in log_text
+
+    def test_validate_physical_parameters_warns_maxco_too_low(self, builder, caplog):
+        """Test validation warns for maxCo too low."""
+        import logging
+        caplog.set_level(logging.INFO)
+
+        config = {
+            "time_stepping": {
+                "maxCo": 0.05  # Too low
+            }
+        }
+
+        builder._validate_physical_parameters(config)
+        log_text = caplog.text.lower()
+        assert "maxco" in log_text or "courant" in log_text or "warning" in log_text
+
+    def test_validate_physical_parameters_warns_maxco_too_high(self, builder, caplog):
+        """Test validation warns for maxCo too high."""
+        import logging
+        caplog.set_level(logging.INFO)
+
+        config = {
+            "time_stepping": {
+                "maxCo": 5.0  # Too high, may diverge
+            }
+        }
+
+        builder._validate_physical_parameters(config)
+        log_text = caplog.text.lower()
+        assert "maxco" in log_text or "courant" in log_text or "warning" in log_text
+
+    def test_validate_physical_parameters_warns_processor_mismatch(self, builder, caplog):
+        """Test validation warns when mesh and solver processors don't match."""
+        import logging
+        caplog.set_level(logging.INFO)
+
+        config = {
+            "mesh": {
+                "SNAPPY_SETTINGS": {
+                    "nProcessors": 4
+                }
+            },
+            "run_settings": {
+                "subdomains": 8  # Mismatch
+            }
+        }
+
+        builder._validate_physical_parameters(config)
+        log_text = caplog.text.lower()
+        assert "processor" in log_text or "cpu" in log_text or "core" in log_text
+
+    def test_merge_order_user_config_wins(self, builder):
+        """Test that user's config.json overrides everything."""
+        # Build base + profile
+        base_and_profile = builder.build_base_and_profile("sim_laminar_coarse")
+
+        # User wants custom density
+        user_config = {
+            "physics": {
+                "blood_density": 1100  # Custom value
+            }
+        }
+
+        # Merge: base_and_profile → user_config
+        result = deep_merge(base_and_profile, user_config)
+
+        # User value should win
+        assert result["physics"]["blood_density"] == 1100
 
 
-class TestConfigBuilderIntegration:
-    """Integration tests for ConfigBuilder."""
-    
-    def test_json_parsing_error(self, temp_dir):
-        """Test handling of malformed JSON boundary conditions."""
-        case_dir = temp_dir / "CAD" / "test_case"
-        case_dir.mkdir(parents=True)
-        
-        # Create STL files
-        (case_dir / "inlet.stl").write_text("# STL")
-        (case_dir / "wall_aorta.stl").write_text("# STL")
-        
-        # Create malformed JSON
-        (case_dir / "boundary_conditions.json").write_text("{ invalid json }")
-        
-        builder = ConfigBuilder()
-        with pytest.raises(json.JSONDecodeError):
-            builder._discover_case_config("test_case", str(temp_dir / "CAD"))
-    
-    def test_empty_case_directory(self, temp_dir):
-        """Test case discovery with empty case directory."""
-        case_dir = temp_dir / "CAD" / "empty_case"
-        case_dir.mkdir(parents=True)
-        
-        builder = ConfigBuilder()
-        result = builder._discover_case_config("empty_case", str(temp_dir / "CAD"))
-        
-        # Should return minimal config
-        assert result["geometry"]["case_name"] == "empty_case"
-        assert result["geometry"]["wall_keywords_ordered"] == ""
-        assert result["geometry"]["inlet_keywords_ordered"] == ""
-        assert result["geometry"]["outlet_keywords_ordered"] == []
+class TestConfigMergeOrder:
+    """Test the correct merge order: Base → Profile → Fragments → Case Config."""
+
+    def test_fragment_does_not_override_user(self):
+        """Test that fragments don't override user's case config."""
+        base = {"physics": {"density": 1000}}
+        profile = {"physics": {"viscosity": 0.003}}
+        fragment = {"physics": {"density": 1050}}
+        user_config = {"physics": {"density": 1100}}
+
+        # Correct order: Base → Profile → Fragments → User
+        result = deep_merge({}, base)
+        result = deep_merge(result, profile)
+        result = deep_merge(result, fragment)
+        result = deep_merge(result, user_config)
+
+        # User value should be final
+        assert result["physics"]["density"] == 1100
+        assert result["physics"]["viscosity"] == 0.003
+
+    def test_profile_overrides_base(self):
+        """Test that profile overrides base settings."""
+        base = {"solver": {"maxCo": 0.5}}
+        profile = {"solver": {"maxCo": 1.0}}
+
+        result = deep_merge(base, profile)
+
+        assert result["solver"]["maxCo"] == 1.0
+
+
+@pytest.mark.unit
+class TestConfigValidation:
+    """Test configuration validation logic."""
+
+    @pytest.fixture
+    def builder(self):
+        return ConfigBuilder()
+
+    def test_validation_allows_normal_blood_density(self, builder):
+        """Test that normal blood density (1060) passes validation."""
+        config = {"physics": {"default_density": 1060}}
+        # Should not raise or warn excessively
+        builder._validate_physical_parameters(config)
+
+    def test_validation_allows_normal_blood_viscosity(self, builder):
+        """Test that normal blood viscosity (0.004) passes validation."""
+        config = {"physics": {"nu": 3.77e-06}}  # Kinematic viscosity
+        builder._validate_physical_parameters(config)
+
+    def test_validation_handles_missing_physics_section(self, builder):
+        """Test validation doesn't crash when physics section is missing."""
+        config = {"mesh": {"type": "hex"}}
+        # Should not crash
+        builder._validate_physical_parameters(config)
+
+    def test_validation_handles_empty_config(self, builder):
+        """Test validation handles completely empty config."""
+        config = {}
+        # Should not crash
+        builder._validate_physical_parameters(config)

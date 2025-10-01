@@ -41,7 +41,7 @@ Thumbs.db
 htmlcov/
 .tox/
 .hypothesis/
-tests/
+# Note: tests/ directory should be in version control
 
 # Logs
 *.log
