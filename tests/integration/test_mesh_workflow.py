@@ -41,7 +41,11 @@ class TestMeshWorkflow:
                     "snap": True,
                     "addLayers": True
                 }
-            }
+            },
+            "template_vars": {
+                "openfoam_version": "12"
+            },
+            "openfoam_version": "12"
         }
 
     def test_case_structure_creation_with_validation(self, temp_case_dir, minimal_config):
@@ -52,7 +56,7 @@ class TestMeshWorkflow:
         case_input_dir.mkdir(parents=True, exist_ok=True)
 
         # Create minimal STL files
-        tri_surface = Path(temp_case_dir) / "constant" / "triSurface"
+        tri_surface = Path(case_dir_with_geometry) / "constant" / "triSurface"
         for stl_file in ["inlet.stl", "outlet1.stl", "wall.stl"]:
             (case_input_dir / stl_file).write_text("solid mesh\nendsolid mesh\n")
 
@@ -63,7 +67,7 @@ class TestMeshWorkflow:
 
         # Execute task
         task = CreateCaseStructureTask(minimal_config)
-        context = {"case_directory": str(temp_case_dir)}
+        context = {"case_directory": str(case_dir_with_geometry)}
 
         result = task.execute(context)
 
@@ -71,9 +75,9 @@ class TestMeshWorkflow:
         assert result is True
 
         # Verify directory structure
-        assert (Path(temp_case_dir) / "system").exists()
-        assert (Path(temp_case_dir) / "constant" / "triSurface").exists()
-        assert (Path(temp_case_dir) / "0").exists()
+        assert (Path(case_dir_with_geometry) / "system").exists()
+        assert (Path(case_dir_with_geometry) / "constant" / "triSurface").exists()
+        assert (Path(case_dir_with_geometry) / "0").exists()
 
         # Verify files copied
         assert (tri_surface / "inlet.stl").exists()
@@ -91,7 +95,7 @@ class TestMeshWorkflow:
         case_input_dir = Path("cases_input") / case_name
         case_input_dir.mkdir(parents=True, exist_ok=True)
 
-        tri_surface = Path(temp_case_dir) / "constant" / "triSurface"
+        tri_surface = Path(case_dir_with_geometry) / "constant" / "triSurface"
         tri_surface.mkdir(parents=True, exist_ok=True)
 
         # Create realistic STL files
@@ -105,7 +109,7 @@ class TestMeshWorkflow:
 
         # Execute: Create structure first
         create_task = CreateCaseStructureTask(minimal_config)
-        context = {"case_directory": str(temp_case_dir)}
+        context = {"case_directory": str(case_dir_with_geometry)}
         assert create_task.execute(context) is True
 
         # Execute: Generate mesh files
@@ -116,7 +120,7 @@ class TestMeshWorkflow:
         assert result is True
 
         # Verify mesh files created
-        system_dir = Path(temp_case_dir) / "system"
+        system_dir = Path(case_dir_with_geometry) / "system"
         assert (system_dir / "blockMeshDict").exists()
         assert (system_dir / "snappyHexMeshDict").exists()
         assert (system_dir / "surfaceFeaturesDict").exists()
@@ -125,34 +129,27 @@ class TestMeshWorkflow:
         import shutil
         shutil.rmtree(case_input_dir)
 
-    def test_geometry_analyzer_integration(self, temp_case_dir, minimal_config):
+    def test_geometry_analyzer_integration(self, case_dir_with_geometry, minimal_config):
         """Test GeometryAnalyzer integration with real geometry."""
-        # Setup geometry
-        tri_surface = Path(temp_case_dir) / "constant" / "triSurface"
-        tri_surface.mkdir(parents=True, exist_ok=True)
-
-        # Create STL files
-        for stl in ["inlet.stl", "outlet1.stl", "wall.stl"]:
-            (tri_surface / stl).write_text("solid mesh\nendsolid mesh\n")
-
-        # Create analyzer
+        # Use case_dir_with_geometry which has realistic STL files
+        # Create analyzer - this should succeed with realistic geometry
         analyzer = GeometryAnalyzer(
             config=minimal_config,
-            case_directory=str(temp_case_dir)
+            case_directory=str(case_dir_with_geometry)
         )
 
-        # Test patch property calculation
-        patches = analyzer._extract_patches()
-        assert "inlet" in patches
-        assert "outlet1" in patches
+        # Verify analyzer initialized with patch properties
+        assert analyzer.inlet_centroid is not None
+        assert analyzer.inlet_radius > 0
 
         # Test mesh file writing
         analyzer.write_all_mesh_files()
 
         # Verify files created
-        system_dir = Path(temp_case_dir) / "system"
+        system_dir = Path(case_dir_with_geometry) / "system"
         assert (system_dir / "blockMeshDict").exists()
         assert (system_dir / "snappyHexMeshDict").exists()
+        assert (system_dir / "surfaceFeaturesDict").exists()
 
 
 @pytest.mark.integration
@@ -179,13 +176,17 @@ class TestMeshParameterCalculation:
                     "parallel": False,
                     "nProcessors": 1
                 }
-            }
+            },
+            "template_vars": {
+                "openfoam_version": "12"
+            },
+            "openfoam_version": "12"
         }
 
-    def test_cell_size_calculation_workflow(self, temp_case_dir, minimal_config):
+    def test_cell_size_calculation_workflow(self, case_dir_with_geometry, minimal_config):
         """Test cell size calculations from geometry."""
         # Setup
-        tri_surface = Path(temp_case_dir) / "constant" / "triSurface"
+        tri_surface = Path(case_dir_with_geometry) / "constant" / "triSurface"
         tri_surface.mkdir(parents=True, exist_ok=True)
 
         for stl in ["inlet.stl", "outlet1.stl"]:
@@ -193,7 +194,7 @@ class TestMeshParameterCalculation:
 
         analyzer = GeometryAnalyzer(
             config=minimal_config,
-            case_directory=str(temp_case_dir)
+            case_directory=str(case_dir_with_geometry)
         )
 
         # Test reference radius calculation
@@ -203,16 +204,16 @@ class TestMeshParameterCalculation:
         assert ref_radius > 0
         assert ref_radius < 0.1  # Less than 100mm in meters
 
-    def test_blockMesh_bounds_calculation(self, temp_case_dir, minimal_config):
+    def test_blockMesh_bounds_calculation(self, case_dir_with_geometry, minimal_config):
         """Test blockMesh domain bounds calculation."""
-        tri_surface = Path(temp_case_dir) / "constant" / "triSurface"
+        tri_surface = Path(case_dir_with_geometry) / "constant" / "triSurface"
         tri_surface.mkdir(parents=True, exist_ok=True)
 
         (tri_surface / "inlet.stl").write_text("solid mesh\nendsolid mesh\n")
 
         analyzer = GeometryAnalyzer(
             config=minimal_config,
-            case_directory=str(temp_case_dir)
+            case_directory=str(case_dir_with_geometry)
         )
 
         # Calculate bounds
@@ -256,7 +257,11 @@ class TestMeshWorkflowErrorHandling:
                     "parallel": False,
                     "nProcessors": 1
                 }
-            }
+            },
+            "template_vars": {
+                "openfoam_version": "12"
+            },
+            "openfoam_version": "12"
         }
 
     def test_invalid_geometry_blocks_workflow(self, temp_case_dir, minimal_config):
@@ -269,7 +274,7 @@ class TestMeshWorkflowErrorHandling:
         # NO STL files created - should fail validation
 
         task = CreateCaseStructureTask(minimal_config)
-        context = {"case_directory": str(temp_case_dir)}
+        context = {"case_directory": str(case_dir_with_geometry)}
 
         # Should fail due to missing geometry
         result = task.execute(context)
@@ -293,7 +298,7 @@ class TestMeshWorkflowErrorHandling:
         # NO CSV file - should be caught
 
         task = CreateCaseStructureTask(minimal_config)
-        context = {"case_directory": str(temp_case_dir)}
+        context = {"case_directory": str(case_dir_with_geometry)}
 
         # May fail or succeed depending on validation strictness
         # At minimum, should not crash
@@ -335,15 +340,19 @@ class TestMeshWorkflowPerformance:
                     "parallel": False,
                     "nProcessors": 1
                 }
-            }
+            },
+            "template_vars": {
+                "openfoam_version": "12"
+            },
+            "openfoam_version": "12"
         }
 
-    def test_geometry_analysis_performance(self, temp_case_dir, minimal_config):
+    def test_geometry_analysis_performance(self, case_dir_with_geometry, minimal_config):
         """Test that geometry analysis is reasonably fast."""
         import time
 
         # Setup
-        tri_surface = Path(temp_case_dir) / "constant" / "triSurface"
+        tri_surface = Path(case_dir_with_geometry) / "constant" / "triSurface"
         tri_surface.mkdir(parents=True, exist_ok=True)
 
         for stl in ["inlet.stl", "outlet1.stl", "wall.stl"]:
@@ -354,7 +363,7 @@ class TestMeshWorkflowPerformance:
 
         analyzer = GeometryAnalyzer(
             config=minimal_config,
-            case_directory=str(temp_case_dir)
+            case_directory=str(case_dir_with_geometry)
         )
         analyzer.write_all_mesh_files()
 
@@ -363,10 +372,10 @@ class TestMeshWorkflowPerformance:
         # Should complete in under 5 seconds
         assert elapsed < 5.0
 
-    def test_multiple_mesh_file_generation(self, temp_case_dir, minimal_config):
+    def test_multiple_mesh_file_generation(self, case_dir_with_geometry, minimal_config):
         """Test repeated mesh file generation (idempotency)."""
         # Setup
-        tri_surface = Path(temp_case_dir) / "constant" / "triSurface"
+        tri_surface = Path(case_dir_with_geometry) / "constant" / "triSurface"
         tri_surface.mkdir(parents=True, exist_ok=True)
 
         for stl in ["inlet.stl", "outlet1.stl"]:
@@ -374,7 +383,7 @@ class TestMeshWorkflowPerformance:
 
         analyzer = GeometryAnalyzer(
             config=minimal_config,
-            case_directory=str(temp_case_dir)
+            case_directory=str(case_dir_with_geometry)
         )
 
         # Generate files twice
@@ -382,6 +391,6 @@ class TestMeshWorkflowPerformance:
         analyzer.write_all_mesh_files()
 
         # Should succeed both times (idempotent)
-        system_dir = Path(temp_case_dir) / "system"
+        system_dir = Path(case_dir_with_geometry) / "system"
         assert (system_dir / "blockMeshDict").exists()
         assert (system_dir / "snappyHexMeshDict").exists()

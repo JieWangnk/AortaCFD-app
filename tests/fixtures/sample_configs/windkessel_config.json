@@ -1,0 +1,59 @@
+{
+  "case_info": {
+    "patient_id": "test_windkessel",
+    "description": "Windkessel test configuration"
+  },
+  "simulation_settings": {
+    "analysis_type": "medium",
+    "solver_type": "laminar"
+  },
+  "geometry": {
+    "case_name": "test_wk",
+    "scale_factor": 0.001,
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": ["outlet1", "outlet2"],
+    "wall_keywords_ordered": "wall"
+  },
+  "inlet": {
+    "type": "TIMEVARYING",
+    "csv_file": "flow.csv",
+    "data_type": "velocity",
+    "profile": "plug_flow"
+  },
+  "physics": {
+    "blood_density": 1060,
+    "blood_viscosity": 0.004,
+    "default_density": 1060,
+    "rho": 1060,
+    "nu": 3.77e-06,
+    "simulation_type": "laminar",
+    "murray_exponent": 2.7
+  },
+  "mesh": {
+    "SNAPPY_SETTINGS": {
+      "parallel": false,
+      "nProcessors": 1
+    }
+  },
+  "boundary_conditions": {
+    "inlet_velocity": 0.5,
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80,
+        "methodology": "murray_law_automatic",
+        "cardiac_cycle_period": 0.8
+      }
+    },
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+  "time_settings": {
+    "end_time": 1.0,
+    "delta_t": 0.001
+  },
+  "openfoam_version": "12",
+  "openfoam_major_version": 12
+}
