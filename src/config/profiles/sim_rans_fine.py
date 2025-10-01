@@ -1,7 +1,8 @@
-"""Fragment-driven coarse RANS profile using solver recipes and turbulence fragments.
+"""Fragment-driven fine RANS profile for high-fidelity turbulence studies.
 
-This profile composes the coarse spatial-resolution fragment with the robust
-solver recipe and k-omega SST turbulence fragment for quick stability checks.
+This profile assembles the fine spatial-resolution fragment with the balanced
+solver recipe and k-omega SST turbulence fragment suitable for research and
+publication-grade studies.
 """
 
 from __future__ import annotations
@@ -10,10 +11,10 @@ from .profile_builder import ProfileComposer
 
 composer = ProfileComposer()
 
-RANS_COARSE_EXTRAS = {
+RANS_FINE_EXTRAS = {
     "run_settings": {
-        "solution_type": "serial",
-        "subdomains": 1,
+        "solution_type": "parallel",
+        "subdomains": 6,
         "decomposition_method": "scotch",
     },
     "mesh": {
@@ -22,9 +23,9 @@ RANS_COARSE_EXTRAS = {
             "methodology": "murray_law_based",
         },
         "cells_per_patch_diameter": {
-            "coarse": 8,
-            "medium": 12,
-            "fine": 16,
+            "coarse": 14,
+            "medium": 20,
+            "fine": 28,
         },
     },
     "simulation_control": {
@@ -34,29 +35,35 @@ RANS_COARSE_EXTRAS = {
             "startTime": 0.0,
             "stopAt": "endTime",
             "endTime": "auto",
-            "deltaT": 1e-4,
+            "deltaT": 2e-05,
             "writeControl": "adjustableRunTime",
-            "writeInterval": 0.01,
+            "writeInterval": 0.005,
             "runTimeModifiable": "true",
             "adjustTimeStep": "yes",
             "maxCo": 1.0,
-            "maxDeltaT": 1e-3,
-            "minDeltaT": 1e-7,
-            "functions": ["wallShearStress"],
+            "maxDeltaT": 2e-04,
+            "minDeltaT": 1e-08,
+            "functions": ["wallShearStress", "pressureDrop"],
         }
     },
     "boundary": {
         "BC_INLET": "TIMEVARYING",
-        "BC_OUTLET": "ZEROGRADIENT",
+        "BC_OUTLET": "3EWINDKESSEL",
         "INLET_DATA_TYPE": "velocity",
         "INLET_PROFILE": "womersley",
         "INLET_ORIENTATION": "out",
+        "WK_SETTING": {
+            "percentage": 30,
+            "systolic_pressure": 120,
+            "diastolic_pressure": 80,
+            "use_murray_law": True,
+        },
     },
 }
 
 config = composer.compose(
-    spatial_resolution="coarse",
-    solver_recipe="robust",
+    spatial_resolution="fine",
+    solver_recipe="balanced",
     turbulence_model="rans_komega_sst",
-    extras=RANS_COARSE_EXTRAS,
+    extras=RANS_FINE_EXTRAS,
 )

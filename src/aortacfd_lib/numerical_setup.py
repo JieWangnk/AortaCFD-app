@@ -30,6 +30,7 @@ class FvSchemesWriter:
         context = {
             "header": self.version_adapter.get_foam_file_header("dictionary", "fvSchemes"),
             "physics": self.config['physics'],
+            "schemes": self.config.get('schemes', {}),
             "template_vars": self.config.get('template_vars', {}),
             "openfoam_version": self.config.get('openfoam_version', '8'),
             "openfoam_major_version": self.config.get('openfoam_major_version', 8)

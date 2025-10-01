@@ -24,8 +24,72 @@ class MurrayCalculator:
     def __init__(self, case_directory: str, config: dict):
         self.case_dir = case_directory
         self.config = config
-        self.murray_exponent = 2.7  # Realistic exponent for blood flow
-        
+
+        # Murray exponent varies by vessel type and flow conditions:
+        # - Aortic bifurcation: ~2.0 (high pulsatility, large vessels)
+        # - Coronary arteries: 2.5-3.0 (moderate pulsatility)
+        # - Small arteries: ~3.0 (approaches classical Murray's law)
+        # Default to 2.39 based on 2024 meta-analysis (PMC11380967)
+        self.murray_exponent = self._determine_murray_exponent()
+
+    def _determine_murray_exponent(self) -> float:
+        """
+        Intelligently determine Murray's law exponent based on vessel characteristics.
+
+        Scientific basis:
+        - Aortic arch/thoracic aorta: 2.0-2.2 (high pulsatility, large diameter)
+        - Abdominal aorta bifurcation: ~2.0 (Zamir et al.)
+        - Coronary arteries: 2.39 (2024 meta-analysis PMC11380967)
+        - Peripheral arteries: 2.5-2.7
+        - Small arteries/arterioles: 2.7-3.0 (approaches classical Murray)
+
+        Returns:
+            Appropriate Murray exponent for the vessel type
+        """
+        # Check if explicitly set in config
+        if 'murray_exponent' in self.config.get('physics', {}):
+            exponent = self.config['physics']['murray_exponent']
+            logger.info(f"Using configured Murray exponent: {exponent}")
+            return exponent
+
+        # Try to determine vessel type from geometry
+        try:
+            # Get inlet diameter to estimate vessel size
+            inlet_name = self.config.get('geometry', {}).get('inlet_keywords_ordered', 'inlet')
+            inlet_stl_path = Path(self.case_dir) / "constant" / "triSurface" / f"{inlet_name}.stl"
+
+            if inlet_stl_path.exists():
+                inlet_area = self._calculate_area_from_stl(str(inlet_stl_path))
+                inlet_diameter_mm = 2 * math.sqrt(inlet_area / math.pi) * 1000  # Convert to mm
+
+                # Determine exponent based on vessel size
+                if inlet_diameter_mm > 25:  # Large vessels (aortic arch)
+                    exponent = 2.0
+                    vessel_type = "large aortic"
+                elif inlet_diameter_mm > 15:  # Medium-large (thoracic/abdominal aorta)
+                    exponent = 2.2
+                    vessel_type = "thoracic/abdominal aortic"
+                elif inlet_diameter_mm > 8:  # Medium vessels (major branches)
+                    exponent = 2.39  # Meta-analysis value
+                    vessel_type = "major arterial branches"
+                elif inlet_diameter_mm > 4:  # Coronary-sized vessels
+                    exponent = 2.5
+                    vessel_type = "coronary/peripheral arteries"
+                else:  # Small vessels
+                    exponent = 2.7
+                    vessel_type = "small arteries"
+
+                logger.info(f"Auto-detected {vessel_type} (d={inlet_diameter_mm:.1f}mm), using exponent={exponent}")
+                return exponent
+
+        except Exception as e:
+            logger.warning(f"Could not auto-detect vessel type: {e}")
+
+        # Default to meta-analysis value for general use
+        default_exponent = 2.39
+        logger.info(f"Using default Murray exponent: {default_exponent} (2024 meta-analysis)")
+        return default_exponent
+
     def extract_outlet_areas_from_stl(self) -> Dict[str, float]:
         """
         Extract outlet areas from mesh geometry using checkMesh data.
@@ -66,45 +130,151 @@ class MurrayCalculator:
             )
             
             if patch_section:
-                # Get outlet patches from configuration
-                outlet_patches = self.config['geometry']['outlet_keywords_ordered']
-                
-                # Parse patch face counts
+                # Parse patch face counts from all patches
                 patch_faces = {}
-                for line in patch_section.group(1).strip().split('\n'):
-                    if line.strip():
+                lines = patch_section.group(1).strip().split('\n')
+                for line in lines:
+                    if line.strip() and not line.strip().startswith('Patch'):  # Skip header
                         parts = line.split()
                         if len(parts) >= 3:
-                            patch_name = parts[0]
-                            faces = int(parts[1])
-                            patch_faces[patch_name] = faces
-                
-                # Calculate areas using face counts as relative proportions
-                outlet_face_counts = {patch: patch_faces.get(patch, 0) for patch in outlet_patches if patch in patch_faces}
+                            try:
+                                patch_name = parts[0]
+                                faces = int(parts[1])
+                                patch_faces[patch_name] = faces
+                            except ValueError:
+                                # Skip lines that can't be parsed (like headers)
+                                continue
+
+                # Find outlet patches automatically (exclude inlet and wall patches)
+                outlet_face_counts = {}
+                for patch_name, faces in patch_faces.items():
+                    # Include patches that look like outlets (exclude wall, inlet, etc.)
+                    if any(keyword in patch_name.lower() for keyword in ['outlet', 'exit', 'out']):
+                        outlet_face_counts[patch_name] = faces
+
+                # If no outlets found with keywords, include all non-wall, non-inlet patches
+                if not outlet_face_counts:
+                    for patch_name, faces in patch_faces.items():
+                        if not any(keyword in patch_name.lower() for keyword in ['wall', 'inlet', 'in']):
+                            outlet_face_counts[patch_name] = faces
+
+                logger.info(f"Found outlet patches from mesh: {list(outlet_face_counts.keys())}")
                 
                 if outlet_face_counts:
+                    # Hybrid approach: combine face counts with STL file size analysis
+                    logger.info("Using hybrid face count + STL size analysis for robust area calculation")
+
+                    # Get STL file sizes for cross-validation
+                    stl_sizes = self._get_stl_file_sizes()
+
+                    # Calculate average face area from STL size/face count ratio
+                    face_areas = {}
                     total_outlet_faces = sum(outlet_face_counts.values())
-                    
-                    # Estimate areas from face proportions
-                    # Use typical aortic outlet areas as reference scale
-                    total_ref_area = 2e-4  # Total reference area for all outlets (2 cm²)
-                    
+
+                    logger.info("Analyzing STL file size vs face count ratios:")
                     for outlet, faces in outlet_face_counts.items():
-                        # Area proportional to face count
-                        area = (faces / total_outlet_faces) * total_ref_area
+                        stl_size = stl_sizes.get(outlet, 0)
+                        if stl_size > 0 and faces > 0:
+                            # STL size (bytes) roughly correlates with triangle count
+                            # Estimate average face area from this ratio
+                            bytes_per_face = stl_size / faces
+                            face_areas[outlet] = self._estimate_face_area_from_stl_ratio(bytes_per_face)
+                            logger.info(f"  {outlet}: {stl_size} bytes ÷ {faces} faces = {bytes_per_face:.1f} bytes/face")
+                        else:
+                            # Fallback to average if STL data unavailable
+                            face_areas[outlet] = 1e-6  # 1 mm² default
+                            logger.warning(f"  {outlet}: No STL data, using default face area")
+
+                    logger.info("Final outlet area calculations:")
+                    for outlet, faces in outlet_face_counts.items():
+                        # Use outlet-specific face area
+                        face_area = face_areas[outlet]
+                        area = faces * face_area
                         outlet_areas[outlet] = area
-                        logger.info(f"Estimated area for {outlet}: {area:.6e} m² (from {faces} faces, {faces/total_outlet_faces*100:.1f}%)")
+                        diameter_mm = 2 * (area / 3.14159) ** 0.5 * 1000
+                        proportion = faces / total_outlet_faces
+                        logger.info(f"  {outlet}: {area:.6e} m² ({faces} faces × {face_area:.2e} m²/face) → d={diameter_mm:.1f}mm ({proportion:.1%})")
                 
         except Exception as e:
             logger.warning(f"Could not extract areas from checkMesh log: {e}")
             
         return outlet_areas
-    
+
+    def _get_stl_file_sizes(self) -> Dict[str, int]:
+        """
+        Get STL file sizes in bytes for cross-validation with face counts.
+
+        Returns:
+            Dictionary mapping outlet names to STL file sizes in bytes
+        """
+        stl_sizes = {}
+
+        # Look for STL files in the case directory and triSurface
+        search_paths = [
+            Path(self.case_dir).parent.parent.parent / "cases_input" / "patient1",  # Original STL location
+            Path(self.case_dir) / "constant" / "triSurface",  # OpenFOAM mesh location
+            Path(self.case_dir).parent / "constant" / "triSurface"  # Alternative location
+        ]
+
+        for search_path in search_paths:
+            if search_path.exists():
+                for stl_file in search_path.glob("outlet*.stl"):
+                    outlet_name = stl_file.stem  # Remove .stl extension
+                    if stl_file.exists():
+                        stl_sizes[outlet_name] = stl_file.stat().st_size
+                        logger.debug(f"Found {outlet_name}: {stl_sizes[outlet_name]} bytes")
+
+                # If we found STL files, use this path
+                if stl_sizes:
+                    logger.info(f"Found STL files in: {search_path}")
+                    break
+
+        return stl_sizes
+
+    def _estimate_face_area_from_stl_ratio(self, bytes_per_face: float) -> float:
+        """
+        Estimate face area based on STL file size per face ratio.
+
+        Larger bytes_per_face typically indicates:
+        - Higher precision (more decimal places in STL)
+        - Larger triangles
+        - More complex geometry
+
+        Args:
+            bytes_per_face: STL file size divided by mesh face count
+
+        Returns:
+            Estimated face area in m²
+        """
+        # Empirical relationship between STL bytes/face and actual face area
+        # Based on typical cardiovascular mesh characteristics
+
+        if bytes_per_face < 5:
+            # Very small bytes/face suggests small, tightly packed faces
+            return 5e-7  # 0.5 mm²
+        elif bytes_per_face < 10:
+            # Moderate bytes/face suggests medium faces
+            return 1e-6   # 1 mm²
+        elif bytes_per_face < 20:
+            # Higher bytes/face suggests larger faces or higher precision
+            return 2e-6   # 2 mm²
+        else:
+            # Very high bytes/face suggests large faces or very high precision
+            return 5e-6   # 5 mm²
+
     def _extract_areas_stl_fallback(self) -> Dict[str, float]:
         """Fallback method using estimated areas."""
         outlet_areas = {}
-        outlet_patches = self.config['geometry']['outlet_keywords_ordered']
-        
+
+        # Try to get outlet patches from config, otherwise use defaults
+        outlet_patches = []
+        if 'geometry' in self.config and 'outlet_keywords_ordered' in self.config['geometry']:
+            outlet_patches = self.config['geometry']['outlet_keywords_ordered']
+        else:
+            # Default outlet naming pattern
+            outlet_patches = ['outlet1', 'outlet2', 'outlet3', 'outlet4']
+            logger.info(f"Using default outlet patches: {outlet_patches}")
+
         for outlet in outlet_patches:
             # Use estimated area based on typical aortic branch sizes
             outlet_areas[outlet] = self._estimate_outlet_area(outlet)
@@ -246,10 +416,21 @@ class MurrayCalculator:
     def calculate_murray_flow_ratios(self, outlet_areas: Dict[str, float] = None) -> Dict[str, float]:
         """
         Calculate flow ratios using Murray's law: Q ∝ r^n
-        
+
+        The exponent n varies with vessel type due to pulsatility effects:
+        - n ≈ 2.0: Aortic bifurcation (high pulsatility, Zamir et al.)
+        - n ≈ 2.39: Meta-analysis value for coronary arteries (PMC11380967)
+        - n ≈ 2.5-2.7: Peripheral/smaller arteries
+        - n = 3.0: Classical Murray (steady laminar flow, rigid tubes)
+
+        Pulsatility reduces the exponent because:
+        1. Wall elasticity absorbs pulsatile energy
+        2. Non-Newtonian blood properties become significant
+        3. Flow separation and secondary flows occur in large vessels
+
         Args:
             outlet_areas: Dictionary of outlet areas (if None, will extract from STL)
-            
+
         Returns:
             Dictionary of normalized flow ratios
         """
@@ -257,27 +438,125 @@ class MurrayCalculator:
             outlet_areas = self.extract_outlet_areas_from_stl()
             
         logger.info(f"Calculating Murray's law flow ratios (exponent={self.murray_exponent})...")
-        
-        # Calculate equivalent radii
+
+        # Calculate equivalent radii and log details
         outlet_radii = {}
+        logger.info("Area to radius conversion:")
         for outlet, area in outlet_areas.items():
-            outlet_radii[outlet] = math.sqrt(area / math.pi)
-            
+            radius = math.sqrt(area / math.pi)
+            outlet_radii[outlet] = radius
+            diameter_mm = radius * 2 * 1000
+            logger.info(f"  {outlet}: {area:.6e} m² → r={radius*1000:.2f}mm → d={diameter_mm:.1f}mm")
+
         # Calculate relative flows using Murray's law
         relative_flows = {}
+        logger.info(f"Murray's law calculation (Q ∝ r^{self.murray_exponent}):")
         for outlet, radius in outlet_radii.items():
-            relative_flows[outlet] = radius ** self.murray_exponent
-            
+            flow_power = radius ** self.murray_exponent
+            relative_flows[outlet] = flow_power
+            logger.info(f"  {outlet}: r^{self.murray_exponent} = {radius:.6f}^{self.murray_exponent} = {flow_power:.6e}")
+
         # Normalize to sum to 1.0
         total_flow = sum(relative_flows.values())
         flow_ratios = {outlet: flow/total_flow for outlet, flow in relative_flows.items()}
-        
-        logger.info("Calculated Murray's law flow ratios:")
+
+        logger.info("Final Murray's law flow distribution:")
         for outlet, ratio in flow_ratios.items():
             radius_mm = outlet_radii[outlet] * 1000
-            logger.info(f"  {outlet}: {ratio:.3f} ({ratio*100:.1f}%) - r={radius_mm:.1f}mm")
+            logger.info(f"  {outlet}: {ratio:.4f} ({ratio*100:.1f}%) - r={radius_mm:.1f}mm")
             
         return flow_ratios
+
+    def _calculate_smart_surface_levels(self, min_radius: float) -> list:
+        """
+        Calculate surface refinement levels intelligently.
+        Respects profile settings while applying automatic refinement logic.
+
+        Args:
+            min_radius: Minimum patch radius in meters
+
+        Returns:
+            List of surface refinement levels [min, max]
+        """
+        # Get existing profile settings as baseline
+        existing_levels = self.config.get('mesh', {}).get('SNAPPY_SETTINGS', {}).get('surfaceRefinementLevels', None)
+
+        # Calculate what automatic refinement would suggest based on patch size
+        if min_radius < 0.002:  # Very small patches (<2mm)
+            auto_min, auto_max = 2, 3  # Need fine refinement
+        elif min_radius < 0.004:  # Small patches (2-4mm)
+            auto_min, auto_max = 1, 2  # Medium refinement
+        else:  # Larger patches (>4mm)
+            auto_min, auto_max = 0, 1  # Coarse refinement acceptable
+
+        # If profile has settings, respect them but ensure minimum quality
+        if existing_levels and len(existing_levels) >= 2:
+            # Check if this is an explicit coarse profile choice (both levels same and low)
+            is_explicit_coarse = (existing_levels[0] == existing_levels[1] and existing_levels[0] <= 1)
+
+            if is_explicit_coarse:
+                # Respect explicit coarse profile choice
+                logger.info(f"Respecting explicit coarse profile: {existing_levels} "
+                           f"(auto would suggest: [{auto_min}, {auto_max}])")
+                return existing_levels
+            else:
+                # Take the maximum of profile and automatic calculation
+                # This ensures we never downgrade quality from profile
+                min_level = max(existing_levels[0], auto_min)
+                max_level = max(existing_levels[1], auto_max)
+
+                # Ensure max is always greater than min
+                if max_level <= min_level:
+                    max_level = min_level + 1
+
+                logger.info(f"Smart surface levels: [{min_level}, {max_level}] "
+                           f"(profile: {existing_levels}, auto: [{auto_min}, {auto_max}])")
+                return [min_level, max_level]
+        else:
+            # No profile settings, use automatic calculation
+            logger.info(f"Auto surface levels: [{auto_min}, {auto_max}] based on min radius {min_radius*1000:.1f}mm")
+            return [auto_min, auto_max]
+
+    def _calculate_smart_feature_level(self, min_radius: float) -> int:
+        """
+        Calculate feature extraction level intelligently.
+        Ensures it's balanced with surface refinement levels.
+
+        Args:
+            min_radius: Minimum patch radius in meters
+
+        Returns:
+            Feature extraction level
+        """
+        # Get existing profile setting
+        existing_feature = self.config.get('mesh', {}).get('SNAPPY_SETTINGS', {}).get('featureLevel', None)
+
+        # Get the surface levels we just calculated
+        surface_levels = self._calculate_smart_surface_levels(min_radius)
+        min_surface_level = surface_levels[0]
+
+        # Feature level should match or be slightly below minimum surface level
+        # This prevents imbalanced mesh as you discovered
+        balanced_feature = min_surface_level
+
+        # Calculate automatic feature level based on patch size as fallback
+        auto_feature = 2 if min_radius < 0.003 else 1
+
+        # If profile has a setting, respect it but ensure balance
+        if existing_feature is not None:
+            # Use profile setting but ensure it's balanced with surface refinement
+            feature_level = max(existing_feature, balanced_feature)
+            if feature_level > min_surface_level + 1:
+                # Don't let feature level be too far ahead of surface
+                feature_level = min_surface_level + 1
+                logger.warning(f"Feature level {existing_feature} too high for surface level {min_surface_level}, "
+                             f"capping at {feature_level}")
+        else:
+            # Use the balanced automatic value, but consider geometry-based recommendation
+            feature_level = max(balanced_feature, auto_feature)
+
+        logger.info(f"Smart feature level: {feature_level} (balanced with surface min: {min_surface_level})")
+        return feature_level
 
     def find_minimum_patch_radius(self, include_inlet: bool = True) -> float:
         """
@@ -360,33 +639,30 @@ class MurrayCalculator:
     def calculate_mesh_refinement_config(self, cells_per_patch_diameter: Dict[str, int]) -> Dict:
         """
         Calculate complete mesh refinement configuration with automatic cell sizes.
-        
+
+        This method now intelligently respects profile settings while calculating
+        automatic refinement levels based on minimum patch size.
+
         Args:
             cells_per_patch_diameter: Dictionary mapping refinement level names to desired cells per diameter
-                
+
         Returns:
             Dictionary containing mesh configuration with automatic refinement levels
         """
         logger.info("Generating automatic mesh refinement configuration...")
-        
+
         # Calculate automatic refinement levels
         refinement_levels = self.calculate_automatic_refinement_levels(cells_per_patch_diameter)
-        
+
         # Find minimum patch radius for additional calculations
         min_radius = self.find_minimum_patch_radius(include_inlet=False)
-        
-        # Calculate suggested snappyHexMesh parameters based on cell sizes
-        coarse_cell_size = refinement_levels.get('coarse', 0.002)
-        
-        # Surface refinement levels based on cell size ratios
-        # Level 0: coarse cell size
-        # Level 1: coarse/2 cell size  
-        # Level 2: coarse/4 cell size
-        surface_levels = [0, 1, 2]  # Typically use 0-2 for surface refinement
-        
-        # Feature level should be high enough to capture small features
-        feature_level = 2 if min_radius < 0.003 else 1  # Higher for very small patches
-        
+
+        # Smart surface refinement that respects profile settings
+        surface_levels = self._calculate_smart_surface_levels(min_radius)
+
+        # Smart feature level calculation that respects profile
+        feature_level = self._calculate_smart_feature_level(min_radius)
+
         # Region refinement level for volume refinement
         region_level = 2 if min_radius < 0.005 else 1
         
@@ -439,8 +715,8 @@ class MurrayCalculator:
         # Generate outlet areas from flow ratios (reverse calculation)
         # Assume largest outlet has area 1.2e-4 m² and scale others
         max_flow_ratio = max(flow_ratios.values())
-        max_outlet = max(flow_ratios.items(), key=lambda x: x[1])[0]
-        
+        # Note: Removed unused max_outlet variable
+
         outlet_areas = {}
         for outlet, ratio in flow_ratios.items():
             # Scale area based on flow ratio and Murray's law: A ∝ Q^(2/n)

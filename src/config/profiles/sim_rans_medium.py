@@ -1,7 +1,8 @@
-"""Fragment-driven coarse RANS profile using solver recipes and turbulence fragments.
+"""Fragment-driven medium RANS profile composed from reusable fragments.
 
-This profile composes the coarse spatial-resolution fragment with the robust
-solver recipe and k-omega SST turbulence fragment for quick stability checks.
+This profile combines the medium spatial-resolution fragment with the balanced
+solver recipe and high-intensity RANS turbulence fragment for clinical-grade
+turbulent simulations.
 """
 
 from __future__ import annotations
@@ -10,10 +11,10 @@ from .profile_builder import ProfileComposer
 
 composer = ProfileComposer()
 
-RANS_COARSE_EXTRAS = {
+RANS_MEDIUM_EXTRAS = {
     "run_settings": {
-        "solution_type": "serial",
-        "subdomains": 1,
+        "solution_type": "parallel",
+        "subdomains": 4,
         "decomposition_method": "scotch",
     },
     "mesh": {
@@ -22,9 +23,9 @@ RANS_COARSE_EXTRAS = {
             "methodology": "murray_law_based",
         },
         "cells_per_patch_diameter": {
-            "coarse": 8,
-            "medium": 12,
-            "fine": 16,
+            "coarse": 12,
+            "medium": 16,
+            "fine": 22,
         },
     },
     "simulation_control": {
@@ -34,15 +35,15 @@ RANS_COARSE_EXTRAS = {
             "startTime": 0.0,
             "stopAt": "endTime",
             "endTime": "auto",
-            "deltaT": 1e-4,
+            "deltaT": 5e-05,
             "writeControl": "adjustableRunTime",
             "writeInterval": 0.01,
             "runTimeModifiable": "true",
             "adjustTimeStep": "yes",
             "maxCo": 1.0,
-            "maxDeltaT": 1e-3,
-            "minDeltaT": 1e-7,
-            "functions": ["wallShearStress"],
+            "maxDeltaT": 5e-04,
+            "minDeltaT": 1e-07,
+            "functions": ["wallShearStress", "QCriterion"],
         }
     },
     "boundary": {
@@ -55,8 +56,8 @@ RANS_COARSE_EXTRAS = {
 }
 
 config = composer.compose(
-    spatial_resolution="coarse",
-    solver_recipe="robust",
-    turbulence_model="rans_komega_sst",
-    extras=RANS_COARSE_EXTRAS,
+    spatial_resolution="medium",
+    solver_recipe="balanced",
+    turbulence_model="rans_high_intensity",
+    extras=RANS_MEDIUM_EXTRAS,
 )

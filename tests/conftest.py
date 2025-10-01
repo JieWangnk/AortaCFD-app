@@ -102,7 +102,9 @@ def full_config():
             "end_time": 1.0,
             "delta_t": 0.001,
             "write_interval": 0.1
-        }
+        },
+        "openfoam_version": "12",
+        "openfoam_major_version": 12
     }
 
 

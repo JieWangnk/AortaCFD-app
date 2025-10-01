@@ -3,6 +3,7 @@ import shutil
 try:
     from ..base_task import Task, logger
     from ...aortacfd_lib.utils.runner import run_command, CommandExecutionError
+    from ...aortacfd_lib.utils.validation import GeometryValidator, BoundaryConditionValidator
     from ...aortacfd_lib.mesh_setup import GeometryAnalyzer
     from ...aortacfd_lib.boundary_condition_setup import BoundaryConditionSetup
     from ...aortacfd_lib.physical_properties_setup import PhysicalPropertiesWriter
@@ -10,6 +11,7 @@ try:
 except ImportError:
     from workflow.base_task import Task, logger
     from aortacfd_lib.utils.runner import run_command, CommandExecutionError
+    from aortacfd_lib.utils.validation import GeometryValidator, BoundaryConditionValidator
     from aortacfd_lib.mesh_setup import GeometryAnalyzer
     from aortacfd_lib.boundary_condition_setup import BoundaryConditionSetup
     from aortacfd_lib.physical_properties_setup import PhysicalPropertiesWriter
@@ -41,7 +43,7 @@ class CreateCaseStructureTask(Task):
     """
     def execute(self, context: dict) -> bool:
         case_dir = context["case_directory"]
-        
+
         # This check is now controlled by a command-line flag
         if self.config.get('clean_run', False) and os.path.exists(case_dir):
             self.log.warning(f"--- CLEAN RUN ENABLED: Deleting existing case directory: {case_dir} ---")
@@ -51,11 +53,32 @@ class CreateCaseStructureTask(Task):
         os.makedirs(os.path.join(case_dir, "system"), exist_ok=True)
         os.makedirs(os.path.join(case_dir, "constant", "triSurface"), exist_ok=True)
         os.makedirs(os.path.join(case_dir, "0"), exist_ok=True)
-        
+
         inlet_patch_name = self.config['geometry']['inlet_keywords_ordered']
         os.makedirs(os.path.join(case_dir, "constant", "boundaryData", inlet_patch_name), exist_ok=True)
 
         cad_folder = os.path.join("cases_input", self.config["geometry"]["case_name"])
+
+        # Validate geometry before copying
+        self.log.info("Validating geometry files...")
+        scale_factor = self.config.get('geometry', {}).get('scale_factor', 1.0)
+        validator = GeometryValidator(cad_folder, scale_factor=scale_factor)
+        validation_result = validator.validate_all()
+
+        # Log warnings
+        for warning in validation_result.warnings:
+            self.log.warning(f"Geometry validation warning: {warning}")
+
+        # Check for errors
+        if not validation_result.is_valid:
+            for error in validation_result.errors:
+                self.log.error(f"Geometry validation error: {error}")
+            self.log.error("Geometry validation failed. Please fix the errors above and try again.")
+            return False
+
+        self.log.info("Geometry validation passed.")
+
+        # Copy files
         for f in os.listdir(cad_folder):
             if f.endswith('.stl'):
                 shutil.copy(os.path.join(cad_folder, f), os.path.join(case_dir, "constant", "triSurface"))
@@ -134,7 +157,7 @@ class PrepareBoundaryDataTask(Task):
             cycle_setup.execute()
 
             # Set up Windkessel if needed
-            if self.config.get("outlets", {}).get("type") == "3ElementWindkessel":
+            if self.config.get("outlets", {}).get("type") == "3EWINDKESSEL":
                 self.log.info("Calculating and writing Windkessel properties...")
                 tri_surface_dir = os.path.join(case_dir, "constant", "triSurface")
                 stl_files = os.listdir(tri_surface_dir)
@@ -176,6 +199,26 @@ class GenerateBCFilesTask(Task):
     """Generates the 0/U, 0/p, and other initial condition field files."""
     def execute(self, context: dict) -> bool:
         logger.info("Generating boundary condition field files...")
+
+        # Validate boundary conditions before generating files
+        logger.info("Validating boundary condition configuration...")
+        bc_validator = BoundaryConditionValidator(self.config, context["case_directory"])
+        validation_result = bc_validator.validate_all()
+
+        # Log warnings
+        for warning in validation_result.warnings:
+            logger.warning(f"BC validation warning: {warning}")
+
+        # Check for errors
+        if not validation_result.is_valid:
+            for error in validation_result.errors:
+                logger.error(f"BC validation error: {error}")
+            logger.error("Boundary condition validation failed. Please fix the errors above and try again.")
+            return False
+
+        logger.info("Boundary condition validation passed.")
+
+        # Generate BC files
         bc_generator = BoundaryConditionSetup(config=self.config, case_directory=context["case_directory"])
         bc_generator.write_all_bc_files()
         return True

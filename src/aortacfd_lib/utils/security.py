@@ -205,15 +205,22 @@ class ConfigurationValidator:
         # Validate mesh settings
         if 'mesh' in config:
             mesh = config['mesh']
-            if 'BLOCKMESH_SETTINGS' in mesh:
+            resolution_value = None
+            mesh_resolution = mesh.get('mesh_resolution')
+            if isinstance(mesh_resolution, dict):
+                resolution_value = mesh_resolution.get('blockmesh_resolution') or mesh_resolution.get('blockMesh_resolution')
+
+            if resolution_value is None and 'BLOCKMESH_SETTINGS' in mesh:
                 blockmesh = mesh['BLOCKMESH_SETTINGS']
-                if 'resolution' in blockmesh:
-                    try:
-                        res = int(blockmesh['resolution'])
-                        if res < 10 or res > 200:
-                            warnings.append(f"Unusual mesh resolution: {res}")
-                    except (ValueError, TypeError):
-                        errors.append("Invalid mesh resolution value")
+                resolution_value = blockmesh.get('resolution')
+
+            if resolution_value is not None:
+                try:
+                    res = int(resolution_value)
+                    if res < 10 or res > 200:
+                        warnings.append(f"Unusual mesh resolution: {res}")
+                except (ValueError, TypeError):
+                    errors.append("Invalid mesh resolution value")
         
         return {
             'valid': len(errors) == 0,

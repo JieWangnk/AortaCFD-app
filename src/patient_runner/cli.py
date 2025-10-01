@@ -4,7 +4,6 @@ CLI interface for patient runner - handles command-line argument parsing
 
 import sys
 import argparse
-from pathlib import Path
 from .core import PatientCaseRunner
 
 
@@ -64,9 +63,12 @@ CASE STRUCTURE:
                        help='Quick test run (coarse settings)')
     parser.add_argument('--overwrite', action='store_true',
                        help='Overwrite existing results')
+    profile_choices = list(PatientCaseRunner().get_available_profiles().keys())
     parser.add_argument('--profile',
-                       choices=['sim_laminar_coarse', 'sim_laminar_fine'],
-                       help='Override simulation profile')
+                       choices=profile_choices,
+                       help='Override simulation profile using sim_* profile keys')
+    parser.add_argument('--config',
+                       help='Path to a custom patient configuration JSON (defaults to cases_input/<patient_id>/config.json)')
 
     return parser
 
@@ -135,6 +137,8 @@ def main():
     if args.overwrite:
         options['overwrite'] = True
 
+    config_override = args.config
+
     # Handle workflow steps
     steps = args.step if args.step else ['all']
     
@@ -156,8 +160,11 @@ def main():
 
     try:
         # Load patient case first
-        case_info = runner.load_patient_case(args.patient_id)
-        print(f"✅ Patient case loaded: {case_info['config']['case_info']['description']}")
+        case_info = runner.load_patient_case(args.patient_id, config_path=config_override)
+        print(f"✅ Patient case loaded from: {case_info['config_file']}")
+        description = case_info['config'].get('case_info', {}).get('description')
+        if description:
+            print(f"   📄 Description: {description}")
 
         # Prepare simulation
         sim_config = runner.prepare_simulation(case_info, options)

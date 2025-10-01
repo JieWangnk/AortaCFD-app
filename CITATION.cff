@@ -1,0 +1,58 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "AortaCFD: Automated Patient-Specific Aortic Blood Flow Simulation Pipeline"
+version: 1.2.0
+date-released: 2024-12-01
+url: "https://github.com/yourusername/AortaCFD-app"
+repository-code: "https://github.com/yourusername/AortaCFD-app"
+license: MIT
+type: software
+authors:
+  - family-names: "Wang"
+    given-names: "Jie"
+    email: "jie.wang-2@manchester.ac.uk"
+    affiliation: "University of Manchester"
+    orcid: "https://orcid.org/0000-0000-0000-0000"
+keywords:
+  - computational fluid dynamics
+  - aortic blood flow
+  - patient-specific modeling
+  - OpenFOAM
+  - hemodynamics
+  - Windkessel model
+  - automated pipeline
+  - mesh optimization
+  - biomedical engineering
+abstract: |
+  AortaCFD is an open-source, automated pipeline for patient-specific aortic blood flow
+  simulation. It streamlines the entire computational fluid dynamics (CFD) workflow from
+  geometry preparation to post-processing, making advanced hemodynamic analysis accessible
+  and reproducible. The software features two-stage physics-aware mesh optimization,
+  automated three-element Windkessel boundary conditions with Murray's Law flow distribution,
+  and comprehensive hemodynamic analysis tools. Built on OpenFOAM 12, AortaCFD reduces
+  simulation setup time from hours to minutes while maintaining high accuracy validated
+  against literature data. The modular Python architecture enables easy customization and
+  extension for research applications.
+references:
+  - type: article
+    authors:
+      - family-names: "Stalder"
+        given-names: "A.F."
+    title: "Quantitative 2D and 3D phase contrast MRI"
+    journal: "Journal of Magnetic Resonance Imaging"
+    year: 2011
+    volume: 33
+    doi: "10.1002/jmri.22412"
+  - type: article
+    authors:
+      - family-names: "Morbiducci"
+        given-names: "U."
+    title: "In vivo quantification of helical blood flow in human aorta"
+    journal: "Journal of Biomechanics"
+    year: 2013
+    volume: 46
+    doi: "10.1016/j.jbiomech.2012.10.029"
+  - type: software
+    title: "OpenFOAM"
+    version: "12"
+    url: "https://openfoam.org/"

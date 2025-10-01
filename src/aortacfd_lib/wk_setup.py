@@ -45,7 +45,32 @@ class WkSetup:
         inlet_csv_path = os.path.join("cases_input", self.geom_settings['case_name'], self.inlet_settings['csv_file'])
         times, flow_inlet = self._read_inlet_flow(inlet_csv_path, self.inlet_settings['data_type'], area_inlet)
 
-        flow_split_ratios = self.wk_model_settings['flow_split']
+        flow_split_ratios = self.wk_model_settings.get('flow_split')
+        if not flow_split_ratios:
+            self.log.info("Flow split not provided; computing automatically using Murray's law...")
+            try:
+                from .murray_calculator import MurrayCalculator
+
+                calculator = MurrayCalculator(self.case_dir, self.config)
+                flow_ratios = calculator.calculate_murray_flow_ratios()
+                murray_config = calculator.update_windkessel_coefficients(flow_ratios)
+
+                # Persist computed parameters back into configuration
+                self.wk_model_settings.update(murray_config)
+                flow_split_ratios = self.wk_model_settings.get('flow_split', {})
+            except Exception as e:
+                self.log.warning(f"Automatic Murray flow split failed: {e}")
+                flow_split_ratios = {}
+
+            if not flow_split_ratios:
+                self.log.info("Falling back to equal flow distribution among outlets.")
+                num_outlets_fallback = len(outlet_patches)
+                if num_outlets_fallback == 0:
+                    raise ValueError("No outlet patches found for Windkessel flow split calculation.")
+                equal_ratio = 1.0 / num_outlets_fallback
+                flow_split_ratios = {name: equal_ratio for name in outlet_patches}
+                self.wk_model_settings['flow_split'] = flow_split_ratios
+
         num_outlets = len(outlet_patches)
         Q_out = np.zeros((len(flow_inlet), num_outlets))
         
@@ -84,7 +109,10 @@ class WkSetup:
             })
         
         context = {
-            "version": self.config['openfoam_version'],
+            "version": self.config.get('openfoam_version', '12'),
+            "openfoam_version": self.config.get('openfoam_version', '12'),
+            "openfoam_major_version": self.config.get('openfoam_major_version', 12),
+            "template_vars": self.config.get('template_vars', {}),
             "outlets": outlets_context
         }
 

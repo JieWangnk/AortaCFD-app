@@ -90,10 +90,55 @@ class TestCreateCaseStructureTask:
         assert task.config == workflow_config
         assert hasattr(task, 'log')
 
-    def test_creates_required_directories(self, workflow_config, tmp_path):
+    def test_creates_required_directories(self, workflow_config, tmp_path, monkeypatch):
         """Test creates all required case directories."""
+        # Change to tmp_path so relative paths work
+        monkeypatch.chdir(tmp_path)
+
         case_dir = tmp_path / "test_case"
         context = {"case_directory": str(case_dir)}
+
+        # Create mock geometry files for validation
+        import struct
+        cad_folder = tmp_path / "cases_input" / "test_case"
+        cad_folder.mkdir(parents=True)
+
+        # Create mock inlet.stl (binary format)
+        inlet_stl = cad_folder / "inlet.stl"
+        with open(inlet_stl, 'wb') as f:
+            f.write(b' ' * 80)  # Header
+            f.write(struct.pack('<I', 1))  # 1 triangle
+            f.write(struct.pack('<fff', 0.0, 0.0, 1.0))  # Normal
+            f.write(struct.pack('<fff', 0.0, 0.0, 0.0))  # Vertex 1
+            f.write(struct.pack('<fff', 1.0, 0.0, 0.0))  # Vertex 2
+            f.write(struct.pack('<fff', 0.0, 1.0, 0.0))  # Vertex 3
+            f.write(struct.pack('<H', 0))  # Attribute
+
+        # Create mock outlet.stl
+        outlet_stl = cad_folder / "outlet1.stl"
+        with open(outlet_stl, 'wb') as f:
+            f.write(b' ' * 80)
+            f.write(struct.pack('<I', 1))
+            f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
+            f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
+            f.write(struct.pack('<fff', 1.0, 0.0, 0.0))
+            f.write(struct.pack('<fff', 0.0, 1.0, 0.0))
+            f.write(struct.pack('<H', 0))
+
+        # Create mock wall.stl
+        wall_stl = cad_folder / "wall.stl"
+        with open(wall_stl, 'wb') as f:
+            f.write(b' ' * 80)
+            f.write(struct.pack('<I', 1))
+            f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
+            f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
+            f.write(struct.pack('<fff', 2.0, 0.0, 0.0))
+            f.write(struct.pack('<fff', 0.0, 2.0, 0.0))
+            f.write(struct.pack('<H', 0))
+
+        # Create mock flow CSV file
+        flow_csv = cad_folder / workflow_config['inlet']['csv_file']
+        flow_csv.write_text("Time,Flow\n0.0,0.5\n0.1,0.6\n")
 
         task = CreateCaseStructureTask(workflow_config)
         result = task.execute(context)
@@ -103,13 +148,37 @@ class TestCreateCaseStructureTask:
         assert (case_dir / "constant" / "triSurface").exists()
         assert (case_dir / "0").exists()
 
-    def test_creates_boundary_data_dir(self, workflow_config, tmp_path):
+    def test_creates_boundary_data_dir(self, workflow_config, tmp_path, monkeypatch):
         """Test creates boundaryData directory for inlet."""
+        # Change to tmp_path so relative paths work
+        monkeypatch.chdir(tmp_path)
+
         case_dir = tmp_path / "test_case"
         context = {"case_directory": str(case_dir)}
 
         # Setup mock inlet keywords
         workflow_config['geometry']['inlet_keywords_ordered'] = 'inlet'
+
+        # Create mock geometry files for validation
+        import struct
+        cad_folder = tmp_path / "cases_input" / "test_case"
+        cad_folder.mkdir(parents=True)
+
+        # Create mock STL files
+        for name in ['inlet', 'outlet1', 'wall']:
+            stl_file = cad_folder / f"{name}.stl"
+            with open(stl_file, 'wb') as f:
+                f.write(b' ' * 80)
+                f.write(struct.pack('<I', 1))
+                f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
+                f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
+                f.write(struct.pack('<fff', 1.0, 0.0, 0.0))
+                f.write(struct.pack('<fff', 0.0, 1.0, 0.0))
+                f.write(struct.pack('<H', 0))
+
+        # Create mock flow CSV file
+        flow_csv = cad_folder / workflow_config['inlet']['csv_file']
+        flow_csv.write_text("Time,Flow\n0.0,0.5\n0.1,0.6\n")
 
         task = CreateCaseStructureTask(workflow_config)
         result = task.execute(context)
@@ -337,6 +406,9 @@ class TestGenerateControlDictTask:
     def test_calculates_endtime_from_cycles(self, workflow_config, tmp_path):
         """Test calculates endTime from cardiac cycles."""
         case_dir = tmp_path / "test_case"
+        case_dir.mkdir()
+        (case_dir / "system").mkdir()
+
         context = {
             "case_directory": str(case_dir),
             "cardiac_cycle": 0.8  # 0.8 second cycle

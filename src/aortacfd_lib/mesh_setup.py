@@ -4,7 +4,6 @@ from stl import mesh as np_stl_mesh
 from jinja2 import Environment, FileSystemLoader
 from .utils.logger import Logger
 from .utils.patch_processing import PatchProcessing
-from .murray_calculator import update_config_with_automatic_refinement
 
 class GeometryAnalyzer:
     """
@@ -19,9 +18,9 @@ class GeometryAnalyzer:
         template_path = os.path.join(os.path.dirname(__file__), '..', 'templates')
         self.jinja_env = Environment(loader=FileSystemLoader(template_path), trim_blocks=True, lstrip_blocks=True)
 
-        # Apply automatic refinement if enabled
-        if enable_automatic_refinement:
-            self.config = self._apply_automatic_refinement()
+        # Record user preference but avoid modifying mesh settings automatically
+        if enable_automatic_refinement and self.config.get('mesh', {}).get('automatic_refinement', {}).get('enabled', True):
+            self.log.info("Automatic refinement request detected but Murray-based updates are disabled; proceeding with profile-defined mesh settings only.")
 
         self.geom_settings = self.config['geometry']
         self.mesh_settings = self.config['mesh']
@@ -38,53 +37,9 @@ class GeometryAnalyzer:
         self.inlet_radius = None
         self.inlet_normal = None
         self.outlet_centroids = []
+        self.outlet_radii = []
+        self.reference_radius_mm = None
         self._calculate_patch_properties()
-
-    def _apply_automatic_refinement(self) -> dict:
-        """
-        Apply automatic refinement level calculation if enabled and STL files exist.
-        
-        Returns:
-            Updated configuration with automatic refinement levels
-        """
-        try:
-            # Check if automatic refinement is explicitly disabled
-            if not self.config.get('mesh', {}).get('automatic_refinement', {}).get('enabled', True):
-                self.log.info("Automatic refinement is disabled in configuration.")
-                return self.config
-            
-            # Check if STL files exist
-            tri_surface_path = os.path.join(self.case_dir, "constant", "triSurface")
-            if not os.path.exists(tri_surface_path):
-                self.log.warning(f"STL directory not found: {tri_surface_path}. Using manual refinement levels.")
-                return self.config
-            
-            # Get cells per patch diameter targets from configuration or use defaults
-            cells_per_patch_diameter = self.config.get('mesh', {}).get('cells_per_patch_diameter')
-            if cells_per_patch_diameter is None:
-                # Use defaults based on profile type if available
-                profile_type = self.config.get('geometry', {}).get('refinement_level', 'medium')
-                if profile_type == 'coarse':
-                    cells_per_patch_diameter = {"coarse": 10, "medium": 15, "fine": 20}
-                elif profile_type == 'fine':
-                    cells_per_patch_diameter = {"coarse": 15, "medium": 20, "fine": 25}
-                else:  # medium or default
-                    cells_per_patch_diameter = {"coarse": 10, "medium": 15, "fine": 20}
-            
-            self.log.info(f"Applying automatic refinement with targets: {cells_per_patch_diameter}")
-            
-            # Apply automatic refinement
-            updated_config = update_config_with_automatic_refinement(
-                self.config, self.case_dir, cells_per_patch_diameter
-            )
-            
-            self.log.info("Automatic refinement levels applied successfully.")
-            return updated_config
-            
-        except Exception as e:
-            self.log.warning(f"Could not apply automatic refinement: {e}")
-            self.log.info("Falling back to manual refinement levels.")
-            return self.config
 
     def _calculate_patch_properties(self):
         """Uses PatchProcessing to find the centroids of all inlet/outlet patches."""
@@ -99,8 +54,32 @@ class GeometryAnalyzer:
         # Process all Outlets in a loop
         for outlet_name in self.outlet_patches:
             outlet_processor = PatchProcessing(self.tri_surface_path, outlet_name)
-            centroid, _, _ = outlet_processor.calculate_inlet_center_radius()
+            centroid, radius, _ = outlet_processor.calculate_inlet_center_radius()
             self.outlet_centroids.append(centroid)
+            self.outlet_radii.append(radius)
+
+        self.reference_radius_mm = self._determine_reference_radius()
+        if self.reference_radius_mm is not None:
+            self.log.info(f"Reference branch radius for meshing: {self.reference_radius_mm:.3f} mm")
+        else:
+            self.log.warning("Could not determine reference radius from geometry; falling back to default cell sizing.")
+
+    def _determine_reference_radius(self):
+        radii = []
+        if self.inlet_radius and self.inlet_radius > 0:
+            radii.append(self.inlet_radius)
+        radii.extend([r for r in self.outlet_radii if r and r > 0])
+        if not radii:
+            return None
+
+        strategy = self.geom_settings.get('reference_radius_strategy', 'min').lower()
+        if strategy == 'inlet':
+            return self.inlet_radius
+        if strategy == 'mean':
+            return float(np.mean(radii))
+        if strategy == 'max':
+            return max(radii)
+        return min(radii)
 
     def write_all_mesh_files(self):
         """A single public method to generate all necessary mesh files."""
@@ -157,10 +136,89 @@ class GeometryAnalyzer:
 
     def _calculate_blockmesh_cells(self, bounds: dict) -> dict:
         """Calculates number of cells for blockMesh based on target cell size."""
-        ref_level_key = self.geom_settings['refinement_level']
-        # Cell size is in meters, but bounds are in mm, so convert
-        cell_size_meters = self.mesh_settings['refinement_levels'][ref_level_key]
-        cell_size_mm = cell_size_meters * 1000  # Convert m to mm
+        raw_mesh_resolution = self.mesh_settings.get('mesh_resolution', {})
+        mesh_resolution = raw_mesh_resolution if isinstance(raw_mesh_resolution, dict) else {}
+
+        def _coerce_positive(value, label: str):
+            if value is None:
+                return None
+            if isinstance(value, bool):
+                self.log.warning(f"Ignoring boolean {label}: {value}")
+                return None
+            try:
+                coerced = float(value)
+            except (TypeError, ValueError):
+                self.log.warning(f"Ignoring non-numeric {label}: {value}")
+                return None
+            if coerced <= 0:
+                self.log.warning(f"Ignoring non-positive {label}: {value}")
+                return None
+            return coerced
+
+        target_mm_raw = mesh_resolution.get('target_cell_size_mm')
+        target_mm = _coerce_positive(target_mm_raw, "mesh.mesh_resolution.target_cell_size_mm")
+
+        block_res_raw = mesh_resolution.get('blockmesh_resolution')
+        if block_res_raw is None:
+            block_res_raw = mesh_resolution.get('blockMesh_resolution')
+        block_res_val = _coerce_positive(block_res_raw, "mesh.mesh_resolution.blockmesh_resolution")
+
+        if block_res_val is None:
+            alt_block_res = self.mesh_settings.get('BLOCKMESH_SETTINGS', {}).get('resolution')
+            block_res_val = _coerce_positive(alt_block_res, "mesh.BLOCKMESH_SETTINGS.resolution")
+
+        cell_size_mm = None
+        cell_size_source = None
+
+        if target_mm is not None:
+            cell_size_mm = target_mm
+            cell_size_source = "target_cell_size_mm"
+            if block_res_val is not None:
+                self.log.info("Both target_cell_size_mm and blockmesh_resolution provided; using target_cell_size_mm for blockMesh cell sizing.")
+
+        if cell_size_mm is None and block_res_val is not None:
+            reference_radius = self.reference_radius_mm
+            if reference_radius is not None and reference_radius > 0:
+                cell_size_mm = (2.0 * reference_radius) / block_res_val
+                cell_size_source = f"blockMesh resolution={block_res_val:g}"
+            else:
+                self.log.warning("blockmesh_resolution provided but reference radius could not be determined; skipping blockMesh-derived sizing.")
+
+        if cell_size_mm is None:
+            reference_radius = self.reference_radius_mm
+            cells_per_diameter_cfg = mesh_resolution.get('cells_per_diameter')
+            branch_cells_val = None
+            if isinstance(cells_per_diameter_cfg, dict):
+                for key in ('branch', 'inlet'):
+                    branch_cells_val = _coerce_positive(cells_per_diameter_cfg.get(key), f"mesh.mesh_resolution.cells_per_diameter.{key}")
+                    if branch_cells_val is not None:
+                        break
+            else:
+                branch_cells_val = _coerce_positive(cells_per_diameter_cfg, "mesh.mesh_resolution.cells_per_diameter")
+
+            if reference_radius is not None and reference_radius > 0 and branch_cells_val is not None:
+                cell_size_mm = (2.0 * reference_radius) / branch_cells_val
+                cell_size_source = f"cells_per_diameter={branch_cells_val:g}"
+
+        if cell_size_mm is None:
+            ref_level_key = self.geom_settings.get('refinement_level')
+            refinement_levels = self.mesh_settings.get('refinement_levels', {}) if isinstance(self.mesh_settings.get('refinement_levels', {}), dict) else {}
+            level_meters = refinement_levels.get(ref_level_key) if ref_level_key else None
+            level_meters = _coerce_positive(level_meters, f"mesh.refinement_levels[{ref_level_key}]") if level_meters is not None else None
+            if level_meters is not None:
+                cell_size_mm = level_meters * 1000.0
+                cell_size_source = f"refinement_levels[{ref_level_key}]"
+            else:
+                cell_size_mm = 1.5
+                cell_size_source = "default 1.5mm"
+
+        if cell_size_mm <= 0:
+            raise ValueError(f"Computed cell size must be positive, got {cell_size_mm}")
+
+        if cell_size_source:
+            self.log.info(f"Target cell size: {cell_size_mm:.3f} mm (source: {cell_size_source})")
+        else:
+            self.log.info(f"Target cell size: {cell_size_mm:.3f} mm")
         
         ranges = bounds['max'] - bounds['min']
         num_cells = np.maximum(1, np.round(ranges / cell_size_mm)).astype(int)

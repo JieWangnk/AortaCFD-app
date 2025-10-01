@@ -1,7 +1,7 @@
-"""Fragment-driven coarse RANS profile using solver recipes and turbulence fragments.
+"""Composable medium laminar profile built from fragments.
 
-This profile composes the coarse spatial-resolution fragment with the robust
-solver recipe and k-omega SST turbulence fragment for quick stability checks.
+This profile pairs the medium spatial-resolution fragment with the balanced
+solver recipe and laminar turbulence fragment for routine clinical runs.
 """
 
 from __future__ import annotations
@@ -10,10 +10,10 @@ from .profile_builder import ProfileComposer
 
 composer = ProfileComposer()
 
-RANS_COARSE_EXTRAS = {
+LAMINAR_MEDIUM_EXTRAS = {
     "run_settings": {
-        "solution_type": "serial",
-        "subdomains": 1,
+        "solution_type": "parallel",
+        "subdomains": 4,
         "decomposition_method": "scotch",
     },
     "mesh": {
@@ -22,9 +22,9 @@ RANS_COARSE_EXTRAS = {
             "methodology": "murray_law_based",
         },
         "cells_per_patch_diameter": {
-            "coarse": 8,
-            "medium": 12,
-            "fine": 16,
+            "coarse": 10,
+            "medium": 14,
+            "fine": 18,
         },
     },
     "simulation_control": {
@@ -34,13 +34,13 @@ RANS_COARSE_EXTRAS = {
             "startTime": 0.0,
             "stopAt": "endTime",
             "endTime": "auto",
-            "deltaT": 1e-4,
+            "deltaT": 1e-5,
             "writeControl": "adjustableRunTime",
             "writeInterval": 0.01,
             "runTimeModifiable": "true",
             "adjustTimeStep": "yes",
             "maxCo": 1.0,
-            "maxDeltaT": 1e-3,
+            "maxDeltaT": 2e-4,
             "minDeltaT": 1e-7,
             "functions": ["wallShearStress"],
         }
@@ -55,8 +55,8 @@ RANS_COARSE_EXTRAS = {
 }
 
 config = composer.compose(
-    spatial_resolution="coarse",
-    solver_recipe="robust",
-    turbulence_model="rans_komega_sst",
-    extras=RANS_COARSE_EXTRAS,
+    spatial_resolution="medium",
+    solver_recipe="balanced",
+    turbulence_model="laminar",
+    extras=LAMINAR_MEDIUM_EXTRAS,
 )
