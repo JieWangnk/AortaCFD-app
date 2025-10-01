@@ -1,72 +1,103 @@
-*.gz
-log.*
-*.log
-coarc_refine*
-postProcessing
-processor*
-0.orig
-extendedFeatureEdgeMesh
-polyMesh
-*.foam
-*.png
-__pycache__
-*ipynb
-*.??csv
-*.pth
-*.pvsm
-U*
-*.??stl
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Python virtual environments
+# Virtual Environment
 venv/
 env/
 ENV/
 .venv/
-.env/
 
-# Testing
-.coverage
-.pytest_cache/
-htmlcov/
-.tox/
-coverage.xml
-*.cover
-.hypothesis/
-tests/reports/
-
-# Output directories
-output/
-OPENFOAM/
-
-# Generated documentation
-web/aortacfd-site/site/
-
-# IDEs
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# OS files
+*~
 .DS_Store
 Thumbs.db
 
-# Testing data (updated paths)
-data/CAD/test_case/
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+tests/
 
-# MyPy
-.mypy_cache/
+# Logs
+*.log
+log.*
 
-# Python eggs
-*.egg-info/
-dist/
-build/
+# OpenFOAM specific
+processor*/
+postProcessing/
+constant/polyMesh/
+extendedFeatureEdgeMesh/
+*.foam
+0/
+[0-9]*/
+!0.orig/
+system/snappyHexMeshDict
+system/surfaceFeaturesDict
+system/meshQualityDict
+PyFoam*
+*.gz
 
-# Claude Code traces and artifacts
-*claude*
-*Claude*
-CLAUDE*
-.claude/
-*claude_trace*
-*_claude_*
-*.claude
+# Output files
+output/
+results/
+OPENFOAM/
+*.vtk
+*.vtu
+*.pvsm
+*.csv
+*.??csv
+
+# STL/CAD files (generated)
+*.??stl
+coarc_refine*
+
+# Images (generated)
+*.png
+*.jpg
+*.jpeg
+
+# Jupyter notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Machine learning
+*.pth
+*.pkl
+
+# Temporary files
+*.tmp
+*.bak
+.cache/
+
+# Environment variables
+*.env
+.env
+
+# Documentation build
+docs/_build/
+site/
