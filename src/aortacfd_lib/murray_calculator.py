@@ -59,7 +59,7 @@ class MurrayCalculator:
             inlet_stl_path = Path(self.case_dir) / "constant" / "triSurface" / f"{inlet_name}.stl"
 
             if inlet_stl_path.exists():
-                inlet_area = self._calculate_area_from_stl(str(inlet_stl_path))
+                inlet_area = self._calculate_stl_area(str(inlet_stl_path))
                 inlet_diameter_mm = 2 * math.sqrt(inlet_area / math.pi) * 1000  # Convert to mm
 
                 # Determine exponent based on vessel size

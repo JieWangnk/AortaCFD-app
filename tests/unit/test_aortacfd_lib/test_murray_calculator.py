@@ -307,3 +307,294 @@ class TestMurrayLawPhysics:
 
         # Iliacs should be approximately equal
         assert abs(ratios["left_iliac"] - ratios["right_iliac"]) < 0.05
+
+
+class TestVesselTypeDetection:
+    """Test automatic vessel type detection and exponent selection."""
+
+    def test_large_vessel_detection(self, temp_case_dir):
+        """Test detection of large vessels (>25mm) → exponent 2.0."""
+        # Mock config without explicit exponent
+        config = {
+            "geometry": {
+                "inlet_keywords_ordered": "inlet"
+            }
+        }
+
+        # Create mock STL file and patch area calculation
+        from unittest.mock import patch
+        from pathlib import Path
+        tri_surface = Path(temp_case_dir) / "constant" / "triSurface"
+        tri_surface.mkdir(parents=True, exist_ok=True)
+        (tri_surface / "inlet.stl").write_text("dummy")
+        
+        with patch.object(MurrayCalculator, '_calculate_stl_area', return_value=math.pi * (0.015)**2):
+            calculator = MurrayCalculator(str(temp_case_dir), config)
+            # Inlet diameter = 30mm → large vessel
+            assert calculator.murray_exponent == 2.0
+
+    def test_medium_large_vessel_detection(self, temp_case_dir):
+        """Test detection of medium-large vessels (15-25mm) → exponent 2.2."""
+        config = {
+            "geometry": {
+                "inlet_keywords_ordered": "inlet"
+            }
+        }
+
+        from unittest.mock import patch
+        from pathlib import Path
+        tri_surface = Path(temp_case_dir) / "constant" / "triSurface"
+        tri_surface.mkdir(parents=True, exist_ok=True)
+        (tri_surface / "inlet.stl").write_text("dummy")
+        
+        with patch.object(MurrayCalculator, '_calculate_stl_area', return_value=math.pi * (0.010)**2):
+            calculator = MurrayCalculator(str(temp_case_dir), config)
+            # Inlet diameter = 20mm → medium-large vessel
+            assert calculator.murray_exponent == 2.2
+
+    def test_medium_vessel_detection(self, temp_case_dir):
+        """Test detection of medium vessels (8-15mm) → exponent 2.39."""
+        config = {
+            "geometry": {
+                "inlet_keywords_ordered": "inlet"
+            }
+        }
+
+        from unittest.mock import patch
+        with patch.object(MurrayCalculator, '_calculate_stl_area', return_value=math.pi * (0.005)**2):
+            calculator = MurrayCalculator(str(temp_case_dir), config)
+            # Inlet diameter = 10mm → medium vessel
+            assert calculator.murray_exponent == 2.39
+
+    def test_coronary_vessel_detection(self, temp_case_dir):
+        """Test detection of coronary-sized vessels (4-8mm) → exponent 2.5."""
+        config = {
+            "geometry": {
+                "inlet_keywords_ordered": "inlet"
+            }
+        }
+
+        from unittest.mock import patch
+        from pathlib import Path
+        tri_surface = Path(temp_case_dir) / "constant" / "triSurface"
+        tri_surface.mkdir(parents=True, exist_ok=True)
+        (tri_surface / "inlet.stl").write_text("dummy")
+        
+        with patch.object(MurrayCalculator, '_calculate_stl_area', return_value=math.pi * (0.003)**2):
+            calculator = MurrayCalculator(str(temp_case_dir), config)
+            # Inlet diameter = 6mm → coronary vessel
+            assert calculator.murray_exponent == 2.5
+
+    def test_small_vessel_detection(self, temp_case_dir):
+        """Test detection of small vessels (<4mm) → exponent 2.7."""
+        config = {
+            "geometry": {
+                "inlet_keywords_ordered": "inlet"
+            }
+        }
+
+        from unittest.mock import patch
+        from pathlib import Path
+        tri_surface = Path(temp_case_dir) / "constant" / "triSurface"
+        tri_surface.mkdir(parents=True, exist_ok=True)
+        (tri_surface / "inlet.stl").write_text("dummy")
+        
+        with patch.object(MurrayCalculator, '_calculate_stl_area', return_value=math.pi * (0.0015)**2):
+            calculator = MurrayCalculator(str(temp_case_dir), config)
+            # Inlet diameter = 3mm → small vessel
+            assert calculator.murray_exponent == 2.7
+
+
+class TestAreaExtraction:
+    """Test outlet area extraction methods."""
+
+    def test_extract_areas_from_config(self, temp_case_dir):
+        """Test extracting outlet patches from config."""
+        config = {
+            "geometry": {
+                "outlet_keywords_ordered": ["outlet1", "outlet2", "outlet3"]
+            }
+        }
+
+        calculator = MurrayCalculator(str(temp_case_dir), config)
+
+        # Patch the extraction methods to return known values
+        from unittest.mock import patch
+        with patch.object(calculator, '_extract_areas_from_checkmesh', return_value={}):
+            with patch.object(calculator, '_estimate_outlet_area', side_effect=lambda x: 1e-4):
+                areas = calculator.extract_outlet_areas_from_stl()
+
+        # Should have 3 outlets from config
+        assert len(areas) == 3
+        assert "outlet1" in areas
+        assert "outlet2" in areas
+        assert "outlet3" in areas
+
+    def test_fallback_to_default_outlets(self, temp_case_dir):
+        """Test fallback to default outlet naming when config missing."""
+        config = {}  # No geometry config
+
+        calculator = MurrayCalculator(str(temp_case_dir), config)
+
+        from unittest.mock import patch
+        with patch.object(calculator, '_extract_areas_from_checkmesh', return_value={}):
+            with patch.object(calculator, '_estimate_outlet_area', side_effect=lambda x: 1e-4):
+                areas = calculator.extract_outlet_areas_from_stl()
+
+        # Should use default outlet1, outlet2, outlet3, outlet4
+        assert len(areas) == 4
+
+
+class TestSTLFaceAreaEstimation:
+    """Test STL bytes-per-face to area estimation."""
+
+    def test_very_small_bytes_per_face(self, temp_case_dir):
+        """Test estimation for very small bytes/face (<5)."""
+        calculator = MurrayCalculator(str(temp_case_dir), {})
+
+        area = calculator._estimate_face_area_from_stl_ratio(3.0)
+
+        assert area == 5e-7  # 0.5 mm²
+
+    def test_moderate_bytes_per_face(self, temp_case_dir):
+        """Test estimation for moderate bytes/face (5-10)."""
+        calculator = MurrayCalculator(str(temp_case_dir), {})
+
+        area = calculator._estimate_face_area_from_stl_ratio(7.0)
+
+        assert area == 1e-6  # 1 mm²
+
+    def test_higher_bytes_per_face(self, temp_case_dir):
+        """Test estimation for higher bytes/face (10-20)."""
+        calculator = MurrayCalculator(str(temp_case_dir), {})
+
+        area = calculator._estimate_face_area_from_stl_ratio(15.0)
+
+        assert area == 2e-6  # 2 mm²
+
+    def test_very_high_bytes_per_face(self, temp_case_dir):
+        """Test estimation for very high bytes/face (>20)."""
+        calculator = MurrayCalculator(str(temp_case_dir), {})
+
+        area = calculator._estimate_face_area_from_stl_ratio(25.0)
+
+        assert area == 5e-6  # 5 mm²
+
+
+class TestFlowRatioCalculations:
+    """Test detailed flow ratio calculations."""
+
+    def test_area_to_radius_conversion(self, temp_case_dir):
+        """Test correct conversion from area to radius."""
+        config = {"physics": {"murray_exponent": 3.0}}
+        calculator = MurrayCalculator(str(temp_case_dir), config)
+
+        # Area = π*r², so for A=π, r should be 1
+        outlet_areas = {
+            "outlet1": math.pi * (1.0**2),  # r=1
+            "outlet2": math.pi * (0.5**2)   # r=0.5
+        }
+
+        ratios = calculator.calculate_murray_flow_ratios(outlet_areas)
+
+        # With exponent 3: Q1/Q2 = (r1/r2)^3 = (1/0.5)^3 = 8
+        # Normalized: 8/9 and 1/9
+        assert abs(ratios["outlet1"] - 8/9) < 0.01
+        assert abs(ratios["outlet2"] - 1/9) < 0.01
+
+    def test_extreme_area_ratios(self, temp_case_dir):
+        """Test handling of extreme area ratios."""
+        config = {"physics": {"murray_exponent": 3.0}}
+        calculator = MurrayCalculator(str(temp_case_dir), config)
+
+        outlet_areas = {
+            "large": 100.0,  # Very large
+            "tiny": 0.01     # Very small
+        }
+
+        ratios = calculator.calculate_murray_flow_ratios(outlet_areas)
+
+        # Should still sum to 1
+        assert abs(sum(ratios.values()) - 1.0) < 1e-6
+
+        # Large outlet should get almost all flow
+        assert ratios["large"] > 0.99
+
+    def test_many_equal_outlets(self, temp_case_dir):
+        """Test distribution among many equal outlets."""
+        config = {"physics": {"murray_exponent": 3.0}}
+        calculator = MurrayCalculator(str(temp_case_dir), config)
+
+        # 10 equal outlets
+        outlet_areas = {f"outlet{i}": 1.0 for i in range(10)}
+
+        ratios = calculator.calculate_murray_flow_ratios(outlet_areas)
+
+        # Each should get 10%
+        for ratio in ratios.values():
+            assert abs(ratio - 0.1) < 0.01
+
+
+class TestExponentConfiguration:
+    """Test Murray exponent configuration and defaults."""
+
+    def test_explicit_config_overrides_auto_detection(self, temp_case_dir):
+        """Test explicit exponent config takes precedence."""
+        config = {
+            "physics": {"murray_exponent": 2.8},
+            "geometry": {"inlet_keywords_ordered": "inlet"}
+        }
+
+        # Even with STL that would suggest different exponent
+        from unittest.mock import patch
+        with patch.object(MurrayCalculator, '_calculate_stl_area', return_value=math.pi * (0.015)**2):
+            calculator = MurrayCalculator(str(temp_case_dir), config)
+
+            # Should use config value, not auto-detected
+            assert calculator.murray_exponent == 2.8
+
+    def test_auto_detection_fallback_on_error(self, temp_case_dir):
+        """Test fallback to default when auto-detection fails."""
+        config = {
+            "geometry": {"inlet_keywords_ordered": "inlet"}
+        }
+
+        # Mock STL calculation to raise an error
+        from unittest.mock import patch
+        with patch.object(MurrayCalculator, '_calculate_stl_area', side_effect=Exception("STL error")):
+            calculator = MurrayCalculator(str(temp_case_dir), config)
+
+            # Should fallback to default 2.39
+            assert calculator.murray_exponent == 2.39
+
+
+class TestAreaCalculationHelpers:
+    """Test helper methods for area calculation."""
+
+    def test_get_stl_file_sizes(self, temp_case_dir):
+        """Test STL file size retrieval."""
+        # Create mock STL files
+        from pathlib import Path
+        tri_surface = Path(temp_case_dir) / "constant" / "triSurface"
+        tri_surface.mkdir(parents=True, exist_ok=True)
+
+        # Create dummy STL files
+        (tri_surface / "outlet1.stl").write_text("dummy content 1")
+        (tri_surface / "outlet2.stl").write_text("dummy content 2 longer")
+
+        calculator = MurrayCalculator(str(temp_case_dir), {})
+        sizes = calculator._get_stl_file_sizes()
+
+        # Should find the STL files
+        assert isinstance(sizes, dict)
+
+    def test_estimate_outlet_area_fallback(self, temp_case_dir):
+        """Test fallback outlet area estimation."""
+        calculator = MurrayCalculator(str(temp_case_dir), {})
+
+        # Should return reasonable area estimate
+        area = calculator._estimate_outlet_area("outlet1")
+
+        # Should be a positive number in reasonable range (mm² to cm²)
+        assert area > 0
+        assert area < 1.0  # Less than 1 m² (unrealistic for vessels)
