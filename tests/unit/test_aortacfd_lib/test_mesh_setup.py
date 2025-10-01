@@ -318,3 +318,308 @@ class TestMeshConfiguration:
 
         assert mm_to_m == 0.001
         assert cm_to_m == 0.01
+
+
+# Additional comprehensive tests for GeometryAnalyzer class
+import numpy as np
+from unittest.mock import Mock, patch
+from stl import mesh as np_stl_mesh
+
+
+class TestGeometryAnalyzerMethods:
+    """Test GeometryAnalyzer class methods with real functionality."""
+
+    @pytest.fixture
+    def full_mesh_config(self):
+        """Full mesh configuration for testing."""
+        return {
+            'geometry': {
+                'case_name': 'test_case',
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1', 'outlet2'],
+                'wall_keywords_ordered': 'wall',
+                'scale_factor': 1e-3,
+                'reference_radius_strategy': 'min'
+            },
+            'mesh': {
+                'mesh_resolution': {
+                    'target_cell_size_mm': 2.0
+                },
+                'SNAPPY_SETTINGS': {
+                    'expansionFactor': 0.02
+                },
+                'refinement_levels': {},
+                'BLOCKMESH_SETTINGS': {}
+            }
+        }
+
+    @pytest.fixture
+    def case_dir_with_geometry(self, tmp_path):
+        """Create case directory with mock STL geometry files."""
+        case_dir = tmp_path / "test_case"
+        tri_surface_path = case_dir / "constant" / "triSurface"
+        tri_surface_path.mkdir(parents=True)
+
+        # Create mock STL files
+        for patch_name in ['inlet', 'outlet1', 'outlet2', 'wall']:
+            stl_file = tri_surface_path / f"{patch_name}.stl"
+            _create_circular_stl(str(stl_file), radius=5.0, center=[0, 0, 0])
+
+        return case_dir
+
+    def test_analyzer_initialization_with_geometry(self, full_mesh_config, case_dir_with_geometry):
+        """Test GeometryAnalyzer initializes with real geometry."""
+        from src.aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        analyzer = GeometryAnalyzer(full_mesh_config, str(case_dir_with_geometry))
+
+        assert analyzer.inlet_centroid is not None
+        assert analyzer.inlet_radius is not None
+        assert len(analyzer.outlet_centroids) == 2
+        assert len(analyzer.outlet_radii) == 2
+
+    def test_reference_radius_min(self, full_mesh_config, case_dir_with_geometry):
+        """Test reference radius calculation with 'min' strategy."""
+        from src.aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        full_mesh_config['geometry']['reference_radius_strategy'] = 'min'
+        analyzer = GeometryAnalyzer(full_mesh_config, str(case_dir_with_geometry))
+
+        assert analyzer.reference_radius_mm is not None
+        assert analyzer.reference_radius_mm > 0
+
+    def test_get_all_vertices(self, full_mesh_config, case_dir_with_geometry):
+        """Test extracting all vertices from STL files."""
+        from src.aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        analyzer = GeometryAnalyzer(full_mesh_config, str(case_dir_with_geometry))
+        vertices = analyzer._get_all_vertices()
+
+        assert isinstance(vertices, np.ndarray)
+        assert vertices.shape[1] == 3  # x, y, z
+        assert len(vertices) > 0
+
+    def test_blockmesh_bounds(self, full_mesh_config, case_dir_with_geometry):
+        """Test blockMesh bounds calculation."""
+        from src.aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        analyzer = GeometryAnalyzer(full_mesh_config, str(case_dir_with_geometry))
+        vertices = analyzer._get_all_vertices()
+        bounds = analyzer._get_blockmesh_bounds(vertices)
+
+        assert 'min' in bounds
+        assert 'max' in bounds
+        assert len(bounds['min']) == 3
+        assert len(bounds['max']) == 3
+
+        # Bounds should be expanded beyond vertex extents (or equal within tolerance)
+        vertex_min = np.min(vertices, axis=0)
+        vertex_max = np.max(vertices, axis=0)
+        # Use <= instead of < to allow for small floating point differences
+        assert all(bounds['min'] <= vertex_min + 1e-6)
+        assert all(bounds['max'] >= vertex_max - 1e-6)
+
+    def test_blockmesh_cells_calculation(self, full_mesh_config, case_dir_with_geometry):
+        """Test blockMesh cell count calculation."""
+        from src.aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        analyzer = GeometryAnalyzer(full_mesh_config, str(case_dir_with_geometry))
+        bounds = {
+            'min': np.array([0.0, 0.0, 0.0]),
+            'max': np.array([20.0, 10.0, 30.0])
+        }
+
+        cells = analyzer._calculate_blockmesh_cells(bounds)
+
+        assert 'x' in cells
+        assert 'y' in cells
+        assert 'z' in cells
+        assert cells['x'] == 10  # 20.0 / 2.0 (target_cell_size_mm)
+        assert cells['y'] == 5   # 10.0 / 2.0
+        assert cells['z'] == 15  # 30.0 / 2.0
+
+    def test_internal_point_calculation(self, full_mesh_config, case_dir_with_geometry):
+        """Test locationInMesh internal point calculation."""
+        from src.aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        analyzer = GeometryAnalyzer(full_mesh_config, str(case_dir_with_geometry))
+        internal_point = analyzer._get_internal_point_for_snappy()
+
+        assert isinstance(internal_point, np.ndarray)
+        assert len(internal_point) == 3
+
+    def test_write_mesh_files(self, full_mesh_config, case_dir_with_geometry):
+        """Test writing all mesh dictionary files."""
+        from src.aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        system_dir = case_dir_with_geometry / "system"
+        system_dir.mkdir(parents=True, exist_ok=True)
+
+        # Add required template_vars for Jinja2 templates
+        full_mesh_config['template_vars'] = {
+            'openfoam_version': '12'
+        }
+
+        analyzer = GeometryAnalyzer(full_mesh_config, str(case_dir_with_geometry))
+        analyzer.write_all_mesh_files()
+
+        # Verify files were created
+        assert (system_dir / "blockMeshDict").exists()
+        assert (system_dir / "snappyHexMeshDict").exists()
+        assert (system_dir / "surfaceFeaturesDict").exists()
+
+
+class TestGeometryAnalyzerEdgeCases:
+    """Test edge cases and error handling."""
+
+    def test_missing_inlet_centroid_error(self):
+        """Test error when inlet centroid is missing."""
+        from src.aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        with patch.object(GeometryAnalyzer, '_calculate_patch_properties'):
+            analyzer = Mock(spec=GeometryAnalyzer)
+            analyzer.inlet_centroid = None
+            analyzer.outlet_centroids = [np.array([0, 0, 100])]
+
+            with pytest.raises(ValueError, match="Inlet or outlet centroids"):
+                GeometryAnalyzer._get_internal_point_for_snappy(analyzer)
+
+    def test_missing_outlet_centroids_error(self):
+        """Test error when outlet centroids are missing."""
+        from src.aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        with patch.object(GeometryAnalyzer, '_calculate_patch_properties'):
+            analyzer = Mock(spec=GeometryAnalyzer)
+            analyzer.inlet_centroid = np.array([0, 0, 0])
+            analyzer.outlet_centroids = []
+
+            with pytest.raises(ValueError, match="Inlet or outlet centroids"):
+                GeometryAnalyzer._get_internal_point_for_snappy(analyzer)
+
+    def test_no_vertices_error(self, tmp_path):
+        """Test error when no STL files found."""
+        from src.aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        config = {
+            'geometry': {
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1'],
+                'wall_keywords_ordered': 'wall',
+                'scale_factor': 1e-3,
+                'reference_radius_strategy': 'min'
+            },
+            'mesh': {
+                'SNAPPY_SETTINGS': {'expansionFactor': 0.02},
+                'mesh_resolution': {},
+                'BLOCKMESH_SETTINGS': {}
+            }
+        }
+
+        case_dir = tmp_path / "test_case"
+        tri_surface_path = case_dir / "constant" / "triSurface"
+        tri_surface_path.mkdir(parents=True)
+
+        # Don't create any STL files - should raise error when trying to process patches
+        with pytest.raises((RuntimeError, FileNotFoundError)):
+            analyzer = GeometryAnalyzer(config, str(case_dir))
+
+
+class TestCellSizingFallbacks:
+    """Test cell sizing priority and fallback logic."""
+
+    @pytest.fixture
+    def basic_config(self):
+        """Basic config for cell sizing tests."""
+        return {
+            'geometry': {
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1'],
+                'wall_keywords_ordered': 'wall',
+                'scale_factor': 1e-3,
+                'reference_radius_strategy': 'min'
+            },
+            'mesh': {
+                'SNAPPY_SETTINGS': {'expansionFactor': 0.02},
+                'mesh_resolution': {},
+                'BLOCKMESH_SETTINGS': {}
+            }
+        }
+
+    @pytest.fixture
+    def case_dir_with_geometry(self, tmp_path):
+        """Create case directory with mock STL geometry files."""
+        case_dir = tmp_path / "test_case"
+        tri_surface_path = case_dir / "constant" / "triSurface"
+        tri_surface_path.mkdir(parents=True)
+
+        # Create mock STL files
+        for patch_name in ['inlet', 'outlet1', 'wall']:
+            stl_file = tri_surface_path / f"{patch_name}.stl"
+            _create_circular_stl(str(stl_file), radius=5.0, center=[0, 0, 0])
+
+        return case_dir
+
+    def test_target_cell_size_priority(self, basic_config, case_dir_with_geometry):
+        """Test target_cell_size_mm takes priority."""
+        from src.aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        basic_config['mesh']['mesh_resolution'] = {
+            'target_cell_size_mm': 3.0,
+            'blockmesh_resolution': 10,
+            'cells_per_diameter': 8
+        }
+
+        analyzer = GeometryAnalyzer(basic_config, str(case_dir_with_geometry))
+        bounds = {'min': np.array([0, 0, 0]), 'max': np.array([30, 30, 30])}
+        cells = analyzer._calculate_blockmesh_cells(bounds)
+
+        # Should use 3.0mm
+        assert cells['x'] == 10  # 30.0 / 3.0
+
+    def test_fallback_to_default(self, basic_config, case_dir_with_geometry):
+        """Test fallback to default 1.5mm when no settings provided."""
+        from src.aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        # Empty mesh_resolution
+        basic_config['mesh']['mesh_resolution'] = {}
+
+        analyzer = GeometryAnalyzer(basic_config, str(case_dir_with_geometry))
+        bounds = {'min': np.array([0, 0, 0]), 'max': np.array([15, 15, 15])}
+        cells = analyzer._calculate_blockmesh_cells(bounds)
+
+        # Should use default 1.5mm
+        expected = int(np.round(15.0 / 1.5))
+        assert cells['x'] == expected
+
+
+def _create_circular_stl(filepath: str, radius: float = 5.0, center: list = None, num_segments: int = 8):
+    """Create a circular STL file for testing (represents a patch cross-section)."""
+    if center is None:
+        center = [0.0, 0.0, 0.0]
+
+    # Create vertices for a circular mesh
+    vertices = []
+    angles = np.linspace(0, 2 * np.pi, num_segments, endpoint=False)
+
+    for i in range(num_segments):
+        x1 = center[0] + radius * np.cos(angles[i])
+        y1 = center[1] + radius * np.sin(angles[i])
+        x2 = center[0] + radius * np.cos(angles[(i + 1) % num_segments])
+        y2 = center[1] + radius * np.sin(angles[(i + 1) % num_segments])
+
+        # Create triangle from center to edge
+        triangle = [
+            center,
+            [x1, y1, center[2]],
+            [x2, y2, center[2]]
+        ]
+        vertices.append(triangle)
+
+    # Create mesh
+    mesh_data = np_stl_mesh.Mesh(np.zeros(len(vertices), dtype=np_stl_mesh.Mesh.dtype))
+    for i, tri in enumerate(vertices):
+        mesh_data.vectors[i] = np.array(tri)
+
+    # Save to file
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    mesh_data.save(filepath)
