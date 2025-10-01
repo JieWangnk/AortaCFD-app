@@ -41,8 +41,9 @@ See [Features](#features) for a detailed breakdown.
 
 ## Features
 
+- **Two-Stage Mesh Optimization**: Physics-aware mesh generation for accurate CFD results
 - Automated case directory and file structure creation
-- Mesh generation from STL geometry
+- Advanced mesh generation with QoI-driven adaptation
 - Automated boundary condition setup (including Windkessel models)
 - Physical and numerical property file generation
 - Parallel and serial solver execution
@@ -76,11 +77,19 @@ AortaCFD-app/
 │   │   ├── base.py             # Base configuration
 │   │   └── profiles/           # Simulation profiles
 │   └── templates/         # OpenFOAM template files
+├── mesh_optim/            # Advanced mesh optimization package
+│   ├── stage1_mesh.py     # Geometry-driven mesh generation (inner loop)
+│   ├── stage2_qoi.py      # QoI-driven mesh adaptation (outer loop)
+│   ├── utils.py           # Mesh optimization utilities
+│   ├── __main__.py        # CLI interface
+│   └── configs/           # Physics-aware configurations
+│       ├── stage1_default.json    # Baseline geometry-driven settings
+│       ├── stage2_laminar.json    # Laminar flow QoI criteria
+│       ├── stage2_rans.json       # RANS flow QoI criteria
+│       └── stage2_les.json        # LES flow QoI criteria
 ├── cases_input/           # Input patient cases
 │   ├── patient1/         # Example patient case 1
 │   └── patient2/         # Example patient case 2
-├── output/                # Generated simulation results
-│   └── patient*/         # Results organized by patient
 ├── tests/                 # Comprehensive test suite
 ├── run_patient.py         # Main patient-specific runner
 ├── simple_run.py          # Simplified one-command runner
@@ -280,6 +289,9 @@ If you prefer manual setup or encounter issues with the automated script:
    
    # Quick run with reduced iterations
    python run_patient.py patient1 --quick
+
+   # Run with a custom configuration JSON
+    python run_patient.py patient1 --config /path/to/config_override.json
    
    # Simple one-command run from any folder
    python simple_run.py /path/to/stl/files
@@ -289,7 +301,8 @@ If you prefer manual setup or encounter issues with the automated script:
    
    - Install `modularWKPressure` boundary condition: `./scripts/install_windkessel_of12.sh`
    - Configure outlets in `boundary_conditions.json` with type "3EWINDKESSEL"
-   - The solver automatically uses `foamRun -solver incompressibleFluid`
+   - Velocity outlets are emitted as `stabilizedWindkesselVelocity` with stabilization enabled by default
+   - Pressure outlets use `modularWKPressure` and the solver automatically runs `foamRun -solver incompressibleFluid`
 
 5. **Results and logs will be generated in the `output/patient*/` directory.**
 
@@ -308,7 +321,17 @@ If you prefer manual setup or encounter issues with the automated script:
 |--------------------------------------------|--------------------------------------------------|
 | `python run_patient.py patient1`          | Run full CFD analysis for patient1             |
 | `python run_patient.py patient1 --quick`  | Quick run with reduced iterations              |
+| `python run_patient.py patient1 --config custom.json` | Use an alternate configuration file             |
 | `python run_patient.py --list`            | List all available patient cases              |
+
+### Advanced Mesh Optimization (`mesh_optim`)
+
+| Command                                    | Description                                      |
+|--------------------------------------------|--------------------------------------------------|
+| `python -m mesh_optim stage1 --geometry cases_input/patient1` | Geometry-driven mesh optimization (novice-friendly) |
+| `python -m mesh_optim stage2 --geometry cases_input/patient1 --model RANS` | Physics-aware RANS mesh with y+ ≈ 1 targeting |
+| `python -m mesh_optim stage2 --geometry cases_input/patient1 --model LES`  | Wall-resolved LES mesh optimization |
+| `python -m mesh_optim stage2 --geometry cases_input/patient1 --model LAMINAR` | Laminar flow mesh optimization |
 
 ### Simple Runner (`simple_run.py`)
 
@@ -323,6 +346,7 @@ If you prefer manual setup or encounter issues with the automated script:
 | `patient_name` | Name of patient folder in cases_input/          | Yes      |
 | `--quick`      | Reduce iterations for faster testing            | No       |
 | `--list`       | Show available patient cases                     | No       |
+| `--config PATH`| Override default cases_input/<patient>/config.json | No    |
 
 **Examples:**
 ```bash
@@ -338,9 +362,78 @@ python run_patient.py patient1 --quick
 # Simple one-command run
 python simple_run.py ~/my_stl_files/
 
+# Advanced mesh optimization for RANS
+python -m mesh_optim stage2 --geometry cases_input/patient1 --model RANS
+
 # Help
 python run_patient.py --help
+python -m mesh_optim stage1 --help
 ```
+
+---
+
+## Advanced Mesh Optimization
+
+AortaCFD includes a sophisticated two-stage mesh optimization system designed for physics-aware mesh generation with QoI (Quantities of Interest) targeting.
+
+### Two-Stage Workflow
+
+#### Stage 1: Geometry-Driven Mesh Generation (Inner Loop)
+- **Purpose**: Generate quality mesh based purely on geometry
+- **Target Users**: Novice users who need a reliable mesh quickly
+- **Process**: Iterates on surface refinement and boundary layer settings until quality criteria are met
+- **Output**: Mesh with good orthogonality, skewness, and boundary layer coverage
+
+```bash
+# Basic geometry-driven mesh
+python -m mesh_optim stage1 --geometry cases_input/patient1
+
+# With custom settings
+python -m mesh_optim stage1 --geometry cases_input/patient1 --config mesh_optim/configs/stage1_default.json --max-iterations 5
+```
+
+#### Stage 2: QoI-Driven Mesh Adaptation (Outer Loop)  
+- **Purpose**: Physics-aware mesh optimization with CFD validation
+- **Target Users**: Advanced users requiring production-quality meshes
+- **Process**: Runs Stage 1, then iteratively solves CFD and adapts mesh based on y+, WSS, and flow metrics
+- **Output**: Mesh optimized for specific flow regime (Laminar/RANS/LES)
+
+```bash
+# Physics-aware RANS mesh with y+ ≈ 1 targeting
+python -m mesh_optim stage2 --geometry cases_input/patient1 --model RANS
+
+# Wall-resolved LES mesh
+python -m mesh_optim stage2 --geometry cases_input/patient1 --model LES
+
+# Custom configuration
+python -m mesh_optim stage2 --geometry cases_input/patient1 --model RANS --config mesh_optim/configs/stage2_rans.json
+```
+
+### Physics-Aware Features
+
+- **Actual y+ Targeting**: Uses patient-specific peak velocity (from BPM75.csv) and geometry to calculate proper first layer thickness for y+ ≈ 1
+- **Flow Regime Optimization**: Different settings for Laminar (Re < 2300), RANS, and wall-resolved LES
+- **Distance Refinement**: Physics-based refinement distances (1.5mm/3.0mm from wall) rather than arbitrary cell multiples  
+- **QoI Convergence**: Monitors velocity stability, pressure drop accuracy, and WSS reliability
+
+### Configuration Files
+
+| File | Description | Target y+ | Layers | Use Case |
+|------|-------------|-----------|---------|----------|
+| `stage1_default.json` | Baseline geometry-driven | N/A | 10 | Quick prototyping |
+| `stage2_laminar.json` | Laminar flow (Re < 2300) | < 1 | 8-10 | Steady laminar flow |
+| `stage2_rans.json` | SST-RANS turbulence | 0.5-2.0 | 12-15 | Most clinical cases |  
+| `stage2_les.json` | Wall-resolved LES | 0.3-1.5 | 20-25 | Research/high fidelity |
+
+### Benefits Over Traditional Meshing
+
+| Aspect | Traditional | AortaCFD Mesh Optimization |
+|--------|-------------|----------------------------|
+| **Layer Targeting** | Trial and error | Physics-based y+ = 1 calculation |
+| **Distance Refinement** | Cell size multiples | Boundary layer physics (1.5/3.0mm) |
+| **Quality Validation** | checkMesh only | CFD + QoI convergence |
+| **Flow Regime** | One-size-fits-all | Regime-specific (Laminar/RANS/LES) |
+| **Ease of Use** | Complex config files | Simple CLI commands |
 
 ---
 
@@ -395,6 +488,69 @@ This configuration automatically:
 - Calculates outlet flow ratios using Murray's Law
 - Computes Windkessel parameters (R, C, Z) based on pressure targets
 - Sets up proper boundary conditions for each outlet
+
+### Boundary condition field reference
+
+Example snippet from `cases_input/patient1/config.json`:
+
+```json
+"boundary_conditions": {
+   "inlet": {
+      "type": "TIMEVARYING",
+      "csv_file": "test_cardio_profile.csv",
+      "data_type": "velocity",
+      "profile": "womersley",
+      "orientation": "out"
+   },
+   "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+         "systolic_pressure": 120,
+         "diastolic_pressure": 80,
+         "methodology": "murray_law_automatic"
+      }
+   },
+   "walls": {
+      "type": "no_slip",
+      "roughness": 0.0
+   }
+}
+```
+
+| Field | Purpose | Consumed by |
+| --- | --- | --- |
+| `inlet.type` | Selects inlet handling mode (`TIMEVARYING`, `STEADY`, etc.) | `PrepareBoundaryDataTask` (see `src/workflow/tasks/setup_tasks.py`) |
+| `inlet.csv_file` | CSV waveform stored in the patient folder | Copied into `constant/boundaryData/<inlet>` during case setup |
+| `inlet.data_type` | `velocity` vs `flow` determines scaling | `CycleDataSetup` for inlet waveform normalization |
+| `inlet.profile` | Radial profile (`womersley`, `plug_flow`, …) | `InletMapping` when mapping the CSV onto the inlet patch |
+| `inlet.orientation` | Normal direction (`out`/`in`) | `EnhancedPointsFormatter` + inlet mapping ensures sign convention |
+| `outlets.type` | Outlet BC family (`3EWINDKESSEL`, `pressure`, …) | `WkSetup` / outlet writers generate `windkesselProperties` or pressure BCs |
+| `outlets.windkessel_settings` | Patient pressures, methodology, optional velocity BC tuning (`beta`, `enable_stabilization`) | Converted into Windkessel parameters in `constant/windkesselProperties` and velocity BC options |
+| `walls.type` | Wall boundary condition type (`no_slip`, `slip`, etc.) | Initial condition writers for `0/U`, `0/p` |
+| `walls.roughness` | Optional roughness scalar | Injected into wall-function entries of velocity BCs |
+
+These mappings are implemented across the setup tasks. The main entry point is `PrepareBoundaryDataTask` in `src/workflow/tasks/setup_tasks.py`, which copies inlet data, formats patch sample points, and triggers the Windkessel setup helpers.
+
+When `outlets.type` is `3EWINDKESSEL`, AortaCFD writes:
+
+- Velocity BC: `stabilizedWindkesselVelocity` with defaults `beta = 1.0` and `enableStabilization = true`
+- Pressure BC: `modularWKPressure` with the computed R/C/Z values
+
+You can override the stabilization parameters globally or per outlet:
+
+```json
+"windkessel_settings": {
+   "systolic_pressure": 120,
+   "diastolic_pressure": 80,
+   "beta": 0.8,
+   "enable_stabilization": true,
+   "velocity_bc": {
+      "outlet3": { "beta": 0.6, "enable_stabilization": false }
+   }
+}
+```
+
+Global `beta` / `enable_stabilization` act as defaults, while entries under `velocity_bc` target individual outlets.
 
 ---
 

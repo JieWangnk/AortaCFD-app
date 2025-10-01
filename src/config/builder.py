@@ -3,6 +3,7 @@ import re
 import json
 import collections.abc
 import importlib
+import logging
 
 def deep_merge(destination: dict, source: dict) -> dict:
     """Recursively merges the source dictionary into the destination dictionary."""
@@ -19,6 +20,9 @@ class ConfigBuilder:
     Builds the final config dictionary by combining profiles and auto-discovery.
     This version will raise an error immediately if a file is missing or invalid.
     """
+    def __init__(self):
+        self.logger = logging.getLogger("ConfigBuilder")
+
     def build(self, case_name: str, sim_profile_name: str) -> dict:
         """
         Orchestrates the building of the final configuration.
@@ -41,22 +45,50 @@ class ConfigBuilder:
         final_config = deep_merge(final_config, base_config)
         final_config = deep_merge(final_config, sim_config)
         final_config = deep_merge(final_config, case_specific_config)
-        
+
         # OpenFOAM 12 specific settings
         final_config = self._apply_openfoam_12_settings(final_config)
-        
+
+        # Validate physical parameters
+        self._validate_physical_parameters(final_config)
+
         return final_config
-    
+
+    def build_base_and_profile(self, sim_profile_name: str) -> dict:
+        """
+        Build configuration from base and simulation profile only.
+        This creates the foundation config without case-specific overrides.
+
+        Args:
+            sim_profile_name: Name of simulation profile
+
+        Returns:
+            Base + profile configuration dictionary (without case overrides)
+        """
+        try:
+            # Load base and simulation profiles
+            base_config = self._load_python_profile('.base', package='src.config')
+            sim_config = self._load_python_profile(f".profiles.{sim_profile_name}", package='src.config')
+        except (FileNotFoundError, AttributeError, ImportError) as e:
+            raise RuntimeError(f"Failed to load configuration files. Please check paths and file contents. Original error: {e}")
+
+        # Merge base + profile
+        config = {}
+        config = deep_merge(config, base_config)
+        config = deep_merge(config, sim_config)
+
+        return config
+
     def build_with_case_config(self, case_name: str, sim_profile_name: str, case_config: dict) -> dict:
         """
         Build configuration with directly provided case configuration.
         This method bypasses file system discovery and uses the provided config directly.
-        
+
         Args:
             case_name: Name of the case
             sim_profile_name: Name of simulation profile
             case_config: Case-specific configuration dictionary
-            
+
         Returns:
             Final merged configuration dictionary
         """
@@ -64,10 +96,10 @@ class ConfigBuilder:
             # Load base and simulation profiles
             base_config = self._load_python_profile('.base', package='src.config')
             sim_config = self._load_python_profile(f".profiles.{sim_profile_name}", package='src.config')
-            
+
             # Convert case config to expected format
             case_specific_config = self._convert_unified_config(case_name, case_config)
-            
+
         except (FileNotFoundError, AttributeError, ImportError) as e:
             raise RuntimeError(f"Failed to load configuration files. Please check paths and file contents. Original error: {e}")
 
@@ -76,10 +108,13 @@ class ConfigBuilder:
         final_config = deep_merge(final_config, base_config)
         final_config = deep_merge(final_config, sim_config)
         final_config = deep_merge(final_config, case_specific_config)
-        
+
         # OpenFOAM 12 specific settings
         final_config = self._apply_openfoam_12_settings(final_config)
-        
+
+        # Validate physical parameters
+        self._validate_physical_parameters(final_config)
+
         return final_config
 
     def _load_python_profile(self, profile_path: str, package: str) -> dict:
@@ -174,10 +209,15 @@ class ConfigBuilder:
         # Extract simulation control settings from unified config
         simulation_control = case_config.get('simulation_control', {})
         
-        # Merge all components: STL discovery + geometry settings + boundary conditions + simulation control
+        # Extract mesh settings from unified config
+        mesh_settings = case_config.get('mesh', {})
+
+        # Merge all components: STL discovery + geometry settings + boundary conditions + simulation control + mesh
         result = deep_merge(discovered_geom_config, {"geometry": geometry_settings})
         result = deep_merge(result, boundary_conditions)
         result = deep_merge(result, {"simulation_control": simulation_control})
+        if mesh_settings:
+            result = deep_merge(result, {"mesh": mesh_settings})
         
         return result
 
@@ -213,5 +253,86 @@ class ConfigBuilder:
             # Also set mu for convenience
             if 'default_viscosity' in config['physics']:
                 config['physics']['mu'] = config['physics']['default_viscosity']
-        
+
         return config
+
+    def _validate_physical_parameters(self, config: dict) -> None:
+        """
+        Validate physical parameters are within reasonable CFD ranges.
+        Issues warnings for suspicious values but does not block execution.
+        """
+        # Validate physics
+        physics = config.get('physics', {})
+
+        # Blood density validation
+        density = physics.get('default_density', physics.get('rho', 1060))
+        if not 1000 <= density <= 1200:
+            self.logger.warning(
+                f"⚠️  Blood density {density} kg/m³ is outside typical range [1000, 1200]. "
+                f"Normal blood density is ~1060 kg/m³. Simulation will continue but results may be unrealistic."
+            )
+
+        # Blood viscosity validation
+        viscosity = physics.get('default_viscosity', physics.get('mu', 0.004))
+        if not 0.001 <= viscosity <= 0.01:
+            self.logger.warning(
+                f"⚠️  Blood viscosity {viscosity} Pa·s is outside typical range [0.001, 0.01]. "
+                f"Normal blood viscosity is ~0.004 Pa·s. Simulation will continue but results may be unrealistic."
+            )
+
+        # Time stepping validation
+        time_stepping = config.get('time_stepping', {})
+        max_co = time_stepping.get('maxCo')
+        if max_co:
+            if max_co < 0.1:
+                self.logger.warning(
+                    f"⚠️  maxCo {max_co} is very small (< 0.1). "
+                    f"This will result in very slow simulation progress."
+                )
+            elif max_co > 2.0:
+                self.logger.warning(
+                    f"⚠️  maxCo {max_co} is high (> 2.0). "
+                    f"Values above 2.0 may cause numerical instability."
+                )
+
+        # Processor count validation
+        mesh_settings = config.get('mesh', {}).get('SNAPPY_SETTINGS', {})
+        mesh_procs = mesh_settings.get('nProcessors')
+        if mesh_procs:
+            if not isinstance(mesh_procs, int) or mesh_procs < 1:
+                self.logger.warning(
+                    f"⚠️  mesh.SNAPPY_SETTINGS.nProcessors must be a positive integer, got: {mesh_procs}"
+                )
+            elif mesh_procs > 128:
+                self.logger.warning(
+                    f"⚠️  nProcessors={mesh_procs} seems very high. Ensure your system has sufficient cores."
+                )
+
+        run_settings = config.get('run_settings', {})
+        solver_procs = run_settings.get('subdomains')
+        if solver_procs:
+            if not isinstance(solver_procs, int) or solver_procs < 1:
+                self.logger.warning(
+                    f"⚠️  run_settings.subdomains must be a positive integer, got: {solver_procs}"
+                )
+            elif solver_procs > 128:
+                self.logger.warning(
+                    f"⚠️  subdomains={solver_procs} seems very high. Ensure your system has sufficient cores."
+                )
+
+        # Check processor count consistency
+        if mesh_procs and solver_procs and mesh_procs != solver_procs:
+            self.logger.info(
+                f"ℹ️  Mesh generation uses {mesh_procs} processors, "
+                f"but solver uses {solver_procs} processors. "
+                f"This is valid but may not be optimal for resource usage."
+            )
+
+        # Time validation
+        sim_control = config.get('simulation_control', {})
+        end_time = sim_control.get('end_time')
+        if end_time and not isinstance(end_time, str):  # Allow "auto" as string
+            if end_time <= 0:
+                self.logger.warning(
+                    f"⚠️  simulation_control.end_time must be positive, got: {end_time}"
+                )

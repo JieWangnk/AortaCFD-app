@@ -1,7 +1,8 @@
-"""Composable coarse laminar profile built from fragments.
+"""Fragment-driven fine LES profile assembling high-resolution fragments.
 
-This profile composes the coarse spatial resolution fragment with the
-robust solver recipe and laminar turbulence fragment for draft-quality runs.
+This profile composes the fine spatial-resolution fragment with the aggressive
+solver recipe and WALE turbulence fragment to deliver publication-grade LES
+settings for arterial flow simulations.
 """
 
 from __future__ import annotations
@@ -10,10 +11,10 @@ from .profile_builder import ProfileComposer
 
 composer = ProfileComposer()
 
-LAMINAR_COARSE_EXTRAS = {
+LES_FINE_EXTRAS = {
     "run_settings": {
         "solution_type": "parallel",
-        "subdomains": 4,
+        "subdomains": 10,
         "decomposition_method": "scotch",
     },
     "mesh": {
@@ -22,9 +23,9 @@ LAMINAR_COARSE_EXTRAS = {
             "methodology": "murray_law_based",
         },
         "cells_per_patch_diameter": {
-            "coarse": 6,
-            "medium": 8,
-            "fine": 10,
+            "coarse": 16,
+            "medium": 22,
+            "fine": 30,
         },
     },
     "simulation_control": {
@@ -34,29 +35,35 @@ LAMINAR_COARSE_EXTRAS = {
             "startTime": 0.0,
             "stopAt": "endTime",
             "endTime": "auto",
-            "deltaT": 1e-5,
+            "deltaT": 2e-06,
             "writeControl": "adjustableRunTime",
-            "writeInterval": 0.01,
+            "writeInterval": 0.0025,
             "runTimeModifiable": "true",
             "adjustTimeStep": "yes",
             "maxCo": 0.5,
-            "maxDeltaT": 1e-3,
-            "minDeltaT": 1e-7,
-            "functions": ["wallShearStress"],
+            "maxDeltaT": 5e-05,
+            "minDeltaT": 5e-09,
+            "functions": ["wallShearStress", "QCriterion", "lambda2"],
         }
     },
     "boundary": {
         "BC_INLET": "TIMEVARYING",
-        "BC_OUTLET": "ZEROGRADIENT",
+        "BC_OUTLET": "3EWINDKESSEL",
         "INLET_DATA_TYPE": "velocity",
         "INLET_PROFILE": "womersley",
         "INLET_ORIENTATION": "out",
+        "WK_SETTING": {
+            "percentage": 25,
+            "systolic_pressure": 120,
+            "diastolic_pressure": 80,
+            "use_murray_law": True,
+        },
     },
 }
 
 config = composer.compose(
-    spatial_resolution="coarse",
-    solver_recipe="robust",
-    turbulence_model="laminar",
-    extras=LAMINAR_COARSE_EXTRAS,
+    spatial_resolution="fine",
+    solver_recipe="aggressive",
+    turbulence_model="les_wale",
+    extras=LES_FINE_EXTRAS,
 )

@@ -13,6 +13,16 @@ from src.workflow.tasks.execution_tasks import (
     ExecuteSolverTask,
     ExecutePostProcessingTask
 )
+from src.workflow.tasks.setup_tasks import (
+    CreateCaseStructureTask,
+    GenerateMeshFilesTask,
+    GenerateBCFilesTask,
+    GeneratePhysicalPropertiesTask,
+    GenerateNumericalSchemesTask,
+    GenerateSolverSettingsTask,
+    GenerateDecomposeParDictTask,
+    GenerateControlDictTask
+)
 
 
 @pytest.fixture
@@ -229,17 +239,6 @@ class TestTaskIntegration:
 
     def test_all_tasks_accept_config(self, workflow_config):
         """Test all tasks can be initialized with same config."""
-        from src.workflow.tasks.setup_tasks import (
-            CreateCaseStructureTask,
-            GenerateMeshFilesTask,
-            GenerateBCFilesTask,
-            GeneratePhysicalPropertiesTask,
-            GenerateNumericalSchemesTask,
-            GenerateSolverSettingsTask,
-            GenerateDecomposeParDictTask,
-            GenerateControlDictTask
-        )
-
         tasks = [
             CreateCaseStructureTask(workflow_config),
             GenerateMeshFilesTask(workflow_config),
@@ -272,10 +271,34 @@ class TestTaskIntegration:
         assert context["case_directory"] == "/tmp/test_case"
         assert context["cardiac_cycle"] == 0.8
 
-    def test_task_return_boolean(self, workflow_config, tmp_path):
+    def test_task_return_boolean(self, workflow_config, tmp_path, monkeypatch):
         """Test all tasks return boolean success/failure."""
+        # Change to tmp_path so relative paths work
+        monkeypatch.chdir(tmp_path)
+
         case_dir = tmp_path / "test_case"
         context = {"case_directory": str(case_dir)}
+
+        # Create mock geometry files for validation
+        import struct
+        cad_folder = tmp_path / "cases_input" / "test_case"
+        cad_folder.mkdir(parents=True)
+
+        # Create mock STL files
+        for name in ['inlet', 'outlet1', 'wall']:
+            stl_file = cad_folder / f"{name}.stl"
+            with open(stl_file, 'wb') as f:
+                f.write(b' ' * 80)
+                f.write(struct.pack('<I', 1))
+                f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
+                f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
+                f.write(struct.pack('<fff', 1.0, 0.0, 0.0))
+                f.write(struct.pack('<fff', 0.0, 1.0, 0.0))
+                f.write(struct.pack('<H', 0))
+
+        # Create mock flow CSV file
+        flow_csv = cad_folder / workflow_config['inlet']['csv_file']
+        flow_csv.write_text("Time,Flow\n0.0,0.5\n0.1,0.6\n")
 
         task = CreateCaseStructureTask(workflow_config)
         result = task.execute(context)

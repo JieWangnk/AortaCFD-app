@@ -1,11 +1,9 @@
 import os
 import shutil
-try:
-    from ..base_task import Task, AortaCFDError, logger
-    from ...aortacfd_lib.utils.runner import run_command, CommandExecutionError
-except ImportError:
-    from workflow.base_task import Task, AortaCFDError, logger
-    from aortacfd_lib.utils.runner import run_command, CommandExecutionError
+
+from ..base_task import Task, AortaCFDError, logger
+from aortacfd_lib.utils.runner import run_command, CommandExecutionError
+from ...aortacfd_lib.utils.validation import MeshQualityChecker
 
 class ExecuteMeshingTask(Task):
     """Runs the external meshing commands and scales the final mesh."""
@@ -23,32 +21,27 @@ class ExecuteMeshingTask(Task):
             if snappy_settings.get("parallel"):
                 n_proc = snappy_settings.get("nProcessors", 1)
                 run_command(self.config, ["decomposePar", "-force"], case_dir, "log.decomposePar.preMesh")
-                
-                run_command(self.config, ["mpirun", "-np", str(n_proc), "snappyHexMesh", "-parallel", "-overwrite"], case_dir, "log.snappyHexMesh")
-                # OpenFOAM 12 uses reconstructPar instead of reconstructParMesh
-                of_version = self.config.get('openfoam_major_version', 8)
-                if of_version >= 12:
-                    run_command(self.config, ["reconstructPar", "-constant"], case_dir, "log.reconstructPar")
-                else:
-                    run_command(self.config, ["reconstructParMesh", "-constant"], case_dir, "log.reconstructParMesh")
+
+                run_command(
+                    self.config,
+                    ["mpirun", "-np", str(n_proc), "snappyHexMesh", "-parallel", "-overwrite"],
+                    case_dir,
+                    "log.snappyHexMesh",
+                )
+                run_command(self.config, ["reconstructPar", "-constant"], case_dir, "log.reconstructPar")
             else:
                 run_command(self.config, ["snappyHexMesh", "-overwrite"], case_dir, "log.snappyHexMesh")
 
             run_command(self.config, ["checkMesh"], case_dir, "log.checkMesh")
-            
+
+            # Analyze mesh quality and provide alerts
+            self._check_mesh_quality(case_dir)
+
             logger.info("Scaling final mesh with transformPoints...")
             scale = self.config['geometry']['scale_factor']
-            
-            # Use version-specific syntax for transformPoints
-            of_version = self.config.get('openfoam_major_version', 8)
-            if of_version >= 12:
-                # OpenFOAM 12+ uses: transformPoints "scale=(0.001 0.001 0.001)"
-                scale_arg = f"scale=({scale} {scale} {scale})"
-                run_command(self.config, ["transformPoints", f'"{scale_arg}"'], case_dir, "log.transformPoints")
-            else:
-                # OpenFOAM 8 uses: transformPoints -scale '(0.001 0.001 0.001)'
-                scale_arg = f"'({scale} {scale} {scale})'"
-                run_command(self.config, ["transformPoints", "-scale", scale_arg], case_dir, "log.transformPoints")
+
+            scale_arg = f"scale=({scale} {scale} {scale})"
+            run_command(self.config, ["transformPoints", f'"{scale_arg}"'], case_dir, "log.transformPoints")
 
         except CommandExecutionError as e:
             logger.error(f"Meshing failed: {e}")
@@ -73,6 +66,40 @@ class ExecuteMeshingTask(Task):
             logger.info(f"Created .foam file: {foam_file_path}")
         except OSError as e:
             logger.warning(f"Could not create .foam file: {e}")
+
+    def _check_mesh_quality(self, case_dir: str):
+        """
+        Analyze mesh quality and provide alerts/recommendations.
+        This helps identify potential simulation stability issues early.
+        """
+        try:
+            # Use new validation-based quality checker
+            quality_checker = MeshQualityChecker(case_dir)
+            result = quality_checker.validate_mesh_quality()
+
+            # Log warnings
+            for warning in result.warnings:
+                logger.warning(f"Mesh quality warning: {warning}")
+
+            # Log errors
+            if not result.is_valid:
+                for error in result.errors:
+                    logger.error(f"Mesh quality error: {error}")
+                logger.error("Mesh quality issues detected. Simulation may be unstable.")
+                logger.warning("Consider:")
+                logger.warning("  - Refining mesh settings")
+                logger.warning("  - Using 'draft' profile with 1st order numerics")
+                logger.warning("  - Reviewing geometry for sharp features")
+                # Don't abort - let user decide whether to proceed
+            else:
+                if len(result.warnings) == 0:
+                    logger.info("Mesh quality validation passed - no issues detected")
+                else:
+                    logger.info("Mesh quality acceptable with minor warnings")
+
+        except Exception as e:
+            logger.warning(f"Could not analyze mesh quality: {e}")
+            logger.warning("Proceeding without mesh quality check")
     
 class ExecuteSolverTask(Task):
     """Runs the OpenFOAM solver (e.g., pimpleFoam)."""
@@ -83,28 +110,20 @@ class ExecuteSolverTask(Task):
         case_dir = context["case_directory"]
         run_settings = self.config.get("run_settings", {})
         
-        solver_cmd = self.config["simulation_control"]["controlDict"].get("application", "pimpleFoam")
-        
-        # Handle version-specific solver selection
-        of_version = self.config.get('openfoam_major_version', 8)
+        solver_cmd = self.config["simulation_control"]["controlDict"].get("application", "foamRun")
+
         if self.config.get("outlets", {}).get("type") == "3ElementWindkessel":
-            if of_version >= 12:
-                # OpenFOAM 12+ uses foamRun with modularWKPressure boundary condition
-                solver_cmd = "foamRun"
-                logger.info(f"Using OpenFOAM 12 foamRun solver with Windkessel boundary conditions")
-            else:
-                # OpenFOAM 8 uses custom pimpleFoam_WK solver
-                solver_cmd = "pimpleFoam_WK_2.0"
-                logger.info(f"Using OpenFOAM 8 custom Windkessel solver: {solver_cmd}")
+            solver_cmd = "foamRun"
+            logger.info("Using OpenFOAM 12 foamRun solver with Windkessel boundary conditions")
         else:
-            logger.info(f"Using standard solver: {solver_cmd}")
+            logger.info(f"Using solver: {solver_cmd}")
 
         try:
             if run_settings.get("solution_type") == "parallel":
                 n_proc = run_settings.get("subdomains", 1)
                 run_command(self.config, ["decomposePar", "-force"], case_dir, "log.decomposePar")
                 run_command(self.config, ["mpirun", "-np", str(n_proc), solver_cmd, "-parallel"], case_dir, "log.solver")
-                run_command(self.config, ["reconstructPar", "-latestTime"], case_dir, "log.reconstructPar")
+                run_command(self.config, ["reconstructPar"], case_dir, "log.reconstructPar")
             else:
                 run_command(self.config, [solver_cmd], case_dir, "log.solver")
         
