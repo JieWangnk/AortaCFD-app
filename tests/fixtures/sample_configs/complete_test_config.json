@@ -1,0 +1,69 @@
+{
+  "case_info": {
+    "patient_id": "test_patient",
+    "description": "Complete test configuration"
+  },
+  "simulation_settings": {
+    "analysis_type": "coarse",
+    "solver_type": "laminar"
+  },
+  "geometry": {
+    "case_name": "test_case",
+    "scale_factor": 0.001,
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": ["outlet1", "outlet2"],
+    "wall_keywords_ordered": "wall",
+    "reference_radius_strategy": "min"
+  },
+  "inlet": {
+    "type": "TIMEVARYING",
+    "csv_file": "flow.csv",
+    "data_type": "velocity",
+    "profile": "plug_flow",
+    "orientation": "out"
+  },
+  "physics": {
+    "blood_density": 1060,
+    "blood_viscosity": 0.004,
+    "default_density": 1060,
+    "rho": 1060,
+    "nu": 3.77e-06,
+    "simulation_type": "laminar",
+    "murray_exponent": 2.7
+  },
+  "mesh": {
+    "SNAPPY_SETTINGS": {
+      "parallel": false,
+      "nProcessors": 1,
+      "maxLocalCells": 1800000,
+      "maxGlobalCells": 2000000,
+      "minRefinementCells": 0,
+      "nCellsBetweenLevels": 1,
+      "castellatedMesh": true,
+      "snap": true,
+      "addLayers": true
+    },
+    "target_cell_size_mm": 1.5
+  },
+  "boundary_conditions": {
+    "inlet_velocity": 0.5,
+    "outlets": {
+      "type": "zeroGradient"
+    },
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+  "run_settings": {
+    "solution_type": "serial",
+    "subdomains": 1,
+    "decomposition_method": "scotch"
+  },
+  "time_settings": {
+    "end_time": 1.0,
+    "delta_t": 0.001,
+    "write_interval": 0.1
+  },
+  "openfoam_version": "12",
+  "openfoam_major_version": 12
+}

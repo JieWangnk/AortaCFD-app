@@ -348,3 +348,37 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "requires_openfoam: mark test as requiring OpenFOAM installation"
     )
+
+
+# ============================================================================
+# Helper Functions for Integration Tests
+# ============================================================================
+
+def copy_sample_stl_files(dest_dir: Path):
+    """Copy sample STL files to destination directory."""
+    sample_stl_dir = PROJECT_ROOT / "tests" / "fixtures" / "sample_stl_files"
+    tri_surface = dest_dir / "constant" / "triSurface"
+    tri_surface.mkdir(parents=True, exist_ok=True)
+
+    for stl_file in ["inlet.stl", "outlet1.stl", "outlet2.stl", "wall.stl"]:
+        src = sample_stl_dir / stl_file
+        if src.exists():
+            shutil.copy(src, tri_surface / stl_file)
+
+
+def copy_sample_flow_csv(dest_dir: Path, csv_name: str = "flow.csv"):
+    """Copy sample flow CSV to destination directory."""
+    sample_csv = PROJECT_ROOT / "tests" / "fixtures" / "sample_bc_data" / "flow.csv"
+    dest_file = dest_dir / csv_name
+    dest_file.parent.mkdir(parents=True, exist_ok=True)
+
+    if sample_csv.exists():
+        shutil.copy(sample_csv, dest_file)
+
+
+@pytest.fixture
+def case_dir_with_geometry(temp_case_dir):
+    """Temporary case directory with realistic geometry files."""
+    copy_sample_stl_files(temp_case_dir)
+    copy_sample_flow_csv(temp_case_dir)
+    return temp_case_dir
