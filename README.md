@@ -13,7 +13,8 @@
 - [Getting Started](#getting-started)
 - [Command Reference](#command-reference)
 - [Input Data Structure](#input-data-structure)
-- [Web Interface](#web-interface)
+- [Testing](#testing)
+- [Advanced Features](#advanced-features)
 - [Known Issues](#known-issues)
 - [Updates & Roadmap](#updates--roadmap)
 - [Contributing](#contributing)
@@ -551,6 +552,53 @@ You can override the stabilization parameters globally or per outlet:
 ```
 
 Global `beta` / `enable_stabilization` act as defaults, while entries under `velocity_bc` target individual outlets.
+
+---
+
+## Testing
+
+AortaCFD includes a comprehensive test suite with 289 tests covering unit, integration, and performance testing.
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run with coverage report
+pytest tests/ --cov=src --cov-report=html
+
+# Run unit tests only
+pytest tests/unit/
+
+# Run integration tests only
+pytest tests/integration/
+
+# Run specific test file
+pytest tests/unit/test_aortacfd_lib/test_mesh_setup.py -v
+```
+
+### Test Coverage
+
+| Module | Coverage | Status |
+|--------|----------|--------|
+| mesh_setup.py | 78% | ✅ Excellent |
+| murray_calculator.py | 34% | 🟡 Good |
+| validation.py | 35% | 🟡 Good |
+| workflow/setup_tasks.py | 42% | 🟡 Good |
+| **Overall** | 22% | 🟡 Improving |
+
+### Test Organization
+
+- **Unit Tests (262 tests):** Test individual components in isolation
+- **Integration Tests (27 tests):** Test complete workflows end-to-end
+- **Performance Tests:** Benchmark critical operations
+
+See [TESTING.md](TESTING.md) for comprehensive testing documentation including:
+- Test writing guidelines
+- Fixture management
+- Best practices
+- Coverage analysis
 
 ---
 
