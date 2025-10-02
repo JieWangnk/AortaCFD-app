@@ -50,24 +50,25 @@ class TestMeshWorkflow:
 
     def test_case_structure_creation_with_validation(self, temp_case_dir, minimal_config):
         """Test case structure creation includes geometry validation."""
-        # Setup: Create minimal geometry files
+        # Setup: Create geometry files in cases_input
         case_name = minimal_config["geometry"]["case_name"]
         case_input_dir = Path("cases_input") / case_name
         case_input_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create minimal STL files
-        tri_surface = Path(case_dir_with_geometry) / "constant" / "triSurface"
+        # Copy realistic STL files from fixtures
+        import shutil
+        fixtures_dir = Path(__file__).parent.parent / "fixtures" / "sample_stl_files"
         for stl_file in ["inlet.stl", "outlet1.stl", "wall.stl"]:
-            (case_input_dir / stl_file).write_text("solid mesh\nendsolid mesh\n")
+            shutil.copy(fixtures_dir / stl_file, case_input_dir / stl_file)
 
-        # Create inlet CSV
+        # Copy inlet CSV from fixtures
+        csv_fixtures_dir = Path(__file__).parent.parent / "fixtures" / "sample_bc_data"
         inlet_csv = minimal_config["inlet"]["csv_file"]
-        csv_content = "time,velocity\n0.0,0.5\n0.1,0.6\n"
-        (case_input_dir / inlet_csv).write_text(csv_content)
+        shutil.copy(csv_fixtures_dir / "flow.csv", case_input_dir / inlet_csv)
 
         # Execute task
         task = CreateCaseStructureTask(minimal_config)
-        context = {"case_directory": str(case_dir_with_geometry)}
+        context = {"case_directory": str(temp_case_dir)}
 
         result = task.execute(context)
 
@@ -75,41 +76,40 @@ class TestMeshWorkflow:
         assert result is True
 
         # Verify directory structure
-        assert (Path(case_dir_with_geometry) / "system").exists()
-        assert (Path(case_dir_with_geometry) / "constant" / "triSurface").exists()
-        assert (Path(case_dir_with_geometry) / "0").exists()
+        assert (Path(temp_case_dir) / "system").exists()
+        assert (Path(temp_case_dir) / "constant" / "triSurface").exists()
+        assert (Path(temp_case_dir) / "0").exists()
 
         # Verify files copied
+        tri_surface = Path(temp_case_dir) / "constant" / "triSurface"
         assert (tri_surface / "inlet.stl").exists()
         assert (tri_surface / "outlet1.stl").exists()
         assert (tri_surface / "wall.stl").exists()
 
         # Cleanup
-        import shutil
         shutil.rmtree(case_input_dir)
 
     def test_mesh_file_generation_workflow(self, temp_case_dir, minimal_config):
         """Test mesh file generation produces all required files."""
-        # Setup: Create geometry files
+        # Setup: Create geometry files in cases_input
+        import shutil
         case_name = minimal_config["geometry"]["case_name"]
         case_input_dir = Path("cases_input") / case_name
         case_input_dir.mkdir(parents=True, exist_ok=True)
 
-        tri_surface = Path(case_dir_with_geometry) / "constant" / "triSurface"
-        tri_surface.mkdir(parents=True, exist_ok=True)
-
-        # Create realistic STL files
+        # Copy realistic STL files from fixtures
+        fixtures_dir = Path(__file__).parent.parent / "fixtures" / "sample_stl_files"
         for stl_file in ["inlet.stl", "outlet1.stl", "wall.stl"]:
-            (tri_surface / stl_file).write_text("solid mesh\nendsolid mesh\n")
-            (case_input_dir / stl_file).write_text("solid mesh\nendsolid mesh\n")
+            shutil.copy(fixtures_dir / stl_file, case_input_dir / stl_file)
 
-        # Create inlet CSV
+        # Copy inlet CSV from fixtures
+        csv_fixtures_dir = Path(__file__).parent.parent / "fixtures" / "sample_bc_data"
         inlet_csv = minimal_config["inlet"]["csv_file"]
-        (case_input_dir / inlet_csv).write_text("time,velocity\n0.0,0.5\n")
+        shutil.copy(csv_fixtures_dir / "flow.csv", case_input_dir / inlet_csv)
 
         # Execute: Create structure first
         create_task = CreateCaseStructureTask(minimal_config)
-        context = {"case_directory": str(case_dir_with_geometry)}
+        context = {"case_directory": str(temp_case_dir)}
         assert create_task.execute(context) is True
 
         # Execute: Generate mesh files
@@ -120,13 +120,12 @@ class TestMeshWorkflow:
         assert result is True
 
         # Verify mesh files created
-        system_dir = Path(case_dir_with_geometry) / "system"
+        system_dir = Path(temp_case_dir) / "system"
         assert (system_dir / "blockMeshDict").exists()
         assert (system_dir / "snappyHexMeshDict").exists()
         assert (system_dir / "surfaceFeaturesDict").exists()
 
         # Cleanup
-        import shutil
         shutil.rmtree(case_input_dir)
 
     def test_geometry_analyzer_integration(self, case_dir_with_geometry, minimal_config):
@@ -185,52 +184,41 @@ class TestMeshParameterCalculation:
 
     def test_cell_size_calculation_workflow(self, case_dir_with_geometry, minimal_config):
         """Test cell size calculations from geometry."""
-        # Setup
-        tri_surface = Path(case_dir_with_geometry) / "constant" / "triSurface"
-        tri_surface.mkdir(parents=True, exist_ok=True)
-
-        for stl in ["inlet.stl", "outlet1.stl"]:
-            (tri_surface / stl).write_text("solid mesh\nendsolid mesh\n")
-
+        # case_dir_with_geometry already has realistic STL files
         analyzer = GeometryAnalyzer(
             config=minimal_config,
             case_directory=str(case_dir_with_geometry)
         )
 
-        # Test reference radius calculation
-        ref_radius = analyzer._calculate_reference_radius()
-
-        # Should be positive and realistic
-        assert ref_radius > 0
-        assert ref_radius < 0.1  # Less than 100mm in meters
+        # Test that analyzer initialized successfully
+        # The reference radius was calculated during init
+        assert hasattr(analyzer, 'reference_radius_mm')
+        assert analyzer.reference_radius_mm is not None
+        assert analyzer.reference_radius_mm > 0
+        assert analyzer.reference_radius_mm < 100  # Less than 100mm
 
     def test_blockMesh_bounds_calculation(self, case_dir_with_geometry, minimal_config):
         """Test blockMesh domain bounds calculation."""
-        tri_surface = Path(case_dir_with_geometry) / "constant" / "triSurface"
-        tri_surface.mkdir(parents=True, exist_ok=True)
-
-        (tri_surface / "inlet.stl").write_text("solid mesh\nendsolid mesh\n")
-
+        # case_dir_with_geometry already has realistic STL files
         analyzer = GeometryAnalyzer(
             config=minimal_config,
             case_directory=str(case_dir_with_geometry)
         )
 
-        # Calculate bounds
-        from unittest.mock import patch
-        import math
+        # Calculate bounds with known vertices
+        import numpy as np
+        test_vertices = np.array([
+            [0.0, 0.0, 0.0],
+            [10.0, 10.0, 10.0]
+        ])
 
-        # Mock STL vertex extraction to return known bounds
-        with patch.object(analyzer, '_extract_stl_vertices', return_value=[
-            (0.0, 0.0, 0.0),
-            (10.0, 10.0, 10.0)
-        ]):
-            bounds = analyzer._calculate_blockmesh_bounds()
+        bounds = analyzer._get_blockmesh_bounds(test_vertices)
 
         # Verify bounds are expanded beyond geometry
-        assert len(bounds) == 6  # xmin, ymin, zmin, xmax, ymax, zmax
-        assert bounds[0] < 0.0  # xmin expanded
-        assert bounds[3] > 10.0  # xmax expanded
+        # Returns dict with 'min' and 'max' keys containing 3D arrays
+        assert 'min' in bounds and 'max' in bounds
+        assert bounds['min'][0] < 0.0  # xmin expanded
+        assert bounds['max'][0] > 10.0  # xmax expanded
 
 
 @pytest.mark.integration
@@ -274,7 +262,7 @@ class TestMeshWorkflowErrorHandling:
         # NO STL files created - should fail validation
 
         task = CreateCaseStructureTask(minimal_config)
-        context = {"case_directory": str(case_dir_with_geometry)}
+        context = {"case_directory": str(temp_case_dir)}
 
         # Should fail due to missing geometry
         result = task.execute(context)
@@ -298,7 +286,7 @@ class TestMeshWorkflowErrorHandling:
         # NO CSV file - should be caught
 
         task = CreateCaseStructureTask(minimal_config)
-        context = {"case_directory": str(case_dir_with_geometry)}
+        context = {"case_directory": str(temp_case_dir)}
 
         # May fail or succeed depending on validation strictness
         # At minimum, should not crash
@@ -351,13 +339,7 @@ class TestMeshWorkflowPerformance:
         """Test that geometry analysis is reasonably fast."""
         import time
 
-        # Setup
-        tri_surface = Path(case_dir_with_geometry) / "constant" / "triSurface"
-        tri_surface.mkdir(parents=True, exist_ok=True)
-
-        for stl in ["inlet.stl", "outlet1.stl", "wall.stl"]:
-            (tri_surface / stl).write_text("solid mesh\nendsolid mesh\n")
-
+        # case_dir_with_geometry already has realistic STL files
         # Time geometry analysis
         start = time.time()
 
@@ -374,13 +356,7 @@ class TestMeshWorkflowPerformance:
 
     def test_multiple_mesh_file_generation(self, case_dir_with_geometry, minimal_config):
         """Test repeated mesh file generation (idempotency)."""
-        # Setup
-        tri_surface = Path(case_dir_with_geometry) / "constant" / "triSurface"
-        tri_surface.mkdir(parents=True, exist_ok=True)
-
-        for stl in ["inlet.stl", "outlet1.stl"]:
-            (tri_surface / stl).write_text("solid mesh\nendsolid mesh\n")
-
+        # case_dir_with_geometry already has realistic STL files
         analyzer = GeometryAnalyzer(
             config=minimal_config,
             case_directory=str(case_dir_with_geometry)
