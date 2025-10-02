@@ -523,7 +523,8 @@ class QuantitativeAnalyzer:
         ax2.legend()
         
         # Add uncertainty bands
-        for i, (var_name, uncertainty) in enumerate(convergence_study.uncertainties.items()):\n            if uncertainty > 0:
+        for i, (var_name, uncertainty) in enumerate(convergence_study.uncertainties.items()):
+            if uncertainty > 0:
                 ax2.errorbar(i, conv_rates[i], yerr=uncertainty, 
                            fmt='none', color='black', capsize=5)
         

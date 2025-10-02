@@ -156,7 +156,8 @@ class PublicationReporter:
         output_path.mkdir(parents=True, exist_ok=True)
         
         # Set journal style
-        style_config = JOURNAL_STYLES.get(journal_style, JOURNAL_STYLES['nature'])\n        self._configure_matplotlib_style(style_config)
+        style_config = JOURNAL_STYLES.get(journal_style, JOURNAL_STYLES['nature'])
+        self._configure_matplotlib_style(style_config)
         
         logger.info(f"Generating manuscript in {journal_style} style...")
         
