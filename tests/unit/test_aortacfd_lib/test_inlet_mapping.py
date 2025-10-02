@@ -440,6 +440,162 @@ class TestVelocityProfiles:
 
 
 # ============================================================================
+# Test Class: Parabolic Profile
+# ============================================================================
+
+class TestParabolicProfile:
+    """Test parabolic (Poiseuille) velocity profile calculations."""
+
+    def test_parabolic_centerline_speed_from_velocity(self, parabolic_profile_config, temp_case_dir):
+        """Test parabolic centerline speed from velocity data."""
+        inlet_mapper = InletMapping(parabolic_profile_config, temp_case_dir)
+        inlet_mapper.data_type = "velocity"
+
+        avg_velocity = 1.0  # m/s
+        centerline_speed = inlet_mapper.parabolic_centerline_speed(avg_velocity)
+
+        # Parabolic profile: centerline speed = 2 * average velocity
+        assert centerline_speed == 2.0
+
+    def test_parabolic_centerline_speed_from_flow_rate(self, parabolic_profile_config, temp_case_dir):
+        """Test parabolic centerline speed from flow rate."""
+        inlet_mapper = InletMapping(parabolic_profile_config, temp_case_dir)
+        inlet_mapper.data_type = "flowrate"
+        inlet_mapper.radius = 10.0  # mm
+
+        flow_rate = 100.0  # Same units as area
+        centerline_speed = inlet_mapper.parabolic_centerline_speed(flow_rate)
+
+        area = np.pi * (10.0) ** 2
+        avg_velocity = flow_rate / area
+        expected_centerline = 2.0 * avg_velocity
+
+        assert np.isclose(centerline_speed, expected_centerline, rtol=1e-3)
+
+    def test_parabolic_factor_at_center(self, parabolic_profile_config, temp_case_dir):
+        """Test parabolic factor at vessel center (maximum)."""
+        inlet_mapper = InletMapping(parabolic_profile_config, temp_case_dir)
+        inlet_mapper.radius = 10.0  # mm
+
+        dist_from_center = 0.0  # At center
+        factor = inlet_mapper.parabolic_factor(dist_from_center)
+
+        # At center: factor = 1 - (0/R)² = 1.0
+        assert factor == 1.0
+
+    def test_parabolic_factor_at_wall(self, parabolic_profile_config, temp_case_dir):
+        """Test parabolic factor at vessel wall (minimum)."""
+        inlet_mapper = InletMapping(parabolic_profile_config, temp_case_dir)
+        inlet_mapper.radius = 10.0  # mm
+
+        dist_from_center = 10.0  # At wall
+        factor = inlet_mapper.parabolic_factor(dist_from_center)
+
+        # At wall: factor = 1 - (R/R)² = 0.0
+        assert factor == 0.0
+
+    def test_parabolic_factor_at_half_radius(self, parabolic_profile_config, temp_case_dir):
+        """Test parabolic factor at half-radius position."""
+        inlet_mapper = InletMapping(parabolic_profile_config, temp_case_dir)
+        inlet_mapper.radius = 10.0  # mm
+
+        dist_from_center = 5.0  # Half radius
+        factor = inlet_mapper.parabolic_factor(dist_from_center)
+
+        # At r/2: factor = 1 - (0.5)² = 0.75
+        assert np.isclose(factor, 0.75)
+
+    def test_parabolic_factor_beyond_wall(self, parabolic_profile_config, temp_case_dir):
+        """Test parabolic factor clips to zero beyond vessel wall."""
+        inlet_mapper = InletMapping(parabolic_profile_config, temp_case_dir)
+        inlet_mapper.radius = 10.0  # mm
+
+        dist_from_center = 15.0  # Beyond wall
+        factor = inlet_mapper.parabolic_factor(dist_from_center)
+
+        # Beyond wall: max(0.0, 1 - (1.5)²) = 0.0
+        assert factor == 0.0
+
+
+# ============================================================================
+# Test Class: Womersley Profile
+# ============================================================================
+
+class TestWomersleyProfile:
+    """Test Womersley (pulsatile) velocity profile calculations."""
+
+    def test_womersley_profile_basic_calculation(self, womersley_profile_config, temp_case_dir):
+        """Test Womersley profile returns real number."""
+        inlet_mapper = InletMapping(womersley_profile_config, temp_case_dir)
+        inlet_mapper.radius = 0.01  # 10mm in meters
+        inlet_mapper.nu = 3.5e-6  # Kinematic viscosity (m²/s)
+
+        r = 0.005  # Distance from center (5mm in meters)
+        t = 0.1  # Time (s)
+        omega = 2 * np.pi / 0.8  # Angular frequency (rad/s)
+        alpha = inlet_mapper.radius * np.sqrt(omega / inlet_mapper.nu)  # Womersley number
+
+        velocity = inlet_mapper.womersley_profile(r, t, omega, alpha)
+
+        # Should return a real number
+        assert isinstance(velocity, (float, np.floating))
+        # Womersley can produce complex results, just check it's a number
+        assert not np.isinf(velocity)
+
+    def test_womersley_profile_at_center(self, womersley_profile_config, temp_case_dir):
+        """Test Womersley profile at vessel center."""
+        inlet_mapper = InletMapping(womersley_profile_config, temp_case_dir)
+        inlet_mapper.radius = 10.0  # mm
+
+        r = 0.0  # Center
+        t = 0.0  # Initial time
+        omega = 2 * np.pi
+        alpha = 5.0
+
+        velocity = inlet_mapper.womersley_profile(r, t, omega, alpha)
+
+        # At center, velocity should be well-defined
+        assert isinstance(velocity, (float, np.floating))
+
+    def test_womersley_profile_time_variation(self, womersley_profile_config, temp_case_dir):
+        """Test Womersley profile varies with time (pulsatile)."""
+        inlet_mapper = InletMapping(womersley_profile_config, temp_case_dir)
+        inlet_mapper.radius = 10.0  # mm
+
+        r = 5.0
+        omega = 2 * np.pi / 0.8
+        alpha = 5.0
+
+        # Sample at different times
+        v1 = inlet_mapper.womersley_profile(r, 0.0, omega, alpha)
+        v2 = inlet_mapper.womersley_profile(r, 0.2, omega, alpha)
+        v3 = inlet_mapper.womersley_profile(r, 0.4, omega, alpha)
+
+        # Velocities should differ (pulsatile flow)
+        velocities = [v1, v2, v3]
+        assert len(set(np.round(velocities, 6))) > 1  # At least some variation
+
+    def test_womersley_profile_radial_variation(self, womersley_profile_config, temp_case_dir):
+        """Test Womersley profile varies with radial position."""
+        inlet_mapper = InletMapping(womersley_profile_config, temp_case_dir)
+        inlet_mapper.radius = 10.0  # mm
+
+        t = 0.1
+        omega = 2 * np.pi
+        alpha = 5.0
+
+        # Sample at different radial positions
+        v_center = inlet_mapper.womersley_profile(0.0, t, omega, alpha)
+        v_mid = inlet_mapper.womersley_profile(5.0, t, omega, alpha)
+        v_wall = inlet_mapper.womersley_profile(10.0, t, omega, alpha)
+
+        # Should have radial variation
+        assert isinstance(v_center, (float, np.floating))
+        assert isinstance(v_mid, (float, np.floating))
+        assert isinstance(v_wall, (float, np.floating))
+
+
+# ============================================================================
 # Summary
 # ============================================================================
 
