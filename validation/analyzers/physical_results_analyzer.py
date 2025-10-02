@@ -186,9 +186,13 @@ class PhysicalResultsAnalyzer:
                 metrics.convergence_issues.append("Fatal error in solver")
                 metrics.converged = False
 
-            if "floating point exception" in content.lower():
-                metrics.convergence_issues.append("Floating point exception (numerical instability)")
-                metrics.converged = False
+            # Check for actual floating point errors (not just trapping enabled)
+            # Look for FPE signals like SIGFPE or actual exceptions, not just the enabling message
+            if re.search(r"(?:caught|signal|exception).*floating\s*point", content, re.IGNORECASE):
+                # Make sure it's not just the trapping enabled message
+                if not re.search(r"Enabling floating point exception trapping", content):
+                    metrics.convergence_issues.append("Floating point exception (numerical instability)")
+                    metrics.converged = False
 
             if metrics.max_courant_number > 10.0:
                 metrics.convergence_issues.append(f"Very high Courant number: {metrics.max_courant_number:.2f}")
