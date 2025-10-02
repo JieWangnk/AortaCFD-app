@@ -4,8 +4,8 @@
     "description": "Complex aortic geometry with multiple branches"
   },
   "simulation_settings": {
-    "analysis_type": "coarse",
-    "solver_type": "laminar"
+    "analysis_type": "medium",
+    "solver_type": "LES"
   },
   "physics": {
     "blood_density": 1060,

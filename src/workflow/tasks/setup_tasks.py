@@ -82,7 +82,10 @@ class CreateCaseStructureTask(Task):
         for f in os.listdir(cad_folder):
             if f.endswith('.stl'):
                 shutil.copy(os.path.join(cad_folder, f), os.path.join(case_dir, "constant", "triSurface"))
-            elif f == self.config['inlet']['csv_file']:
+            # Check for inlet CSV file (support both flattened and nested config structures)
+            inlet_config = self.config.get('boundary_conditions', {}).get('inlet') or self.config.get('inlet', {})
+            csv_file = inlet_config.get('csv_file') if isinstance(inlet_config, dict) else None
+            if csv_file and f == csv_file:
                  shutil.copy(os.path.join(cad_folder, f), os.path.join(case_dir, "constant", "boundaryData", inlet_patch_name))
         return True
 
