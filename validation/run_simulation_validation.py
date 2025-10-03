@@ -26,6 +26,7 @@ from datetime import datetime
 import json
 import subprocess
 import time
+import re
 
 # Add paths for imports
 script_dir = Path(__file__).parent.parent
@@ -147,10 +148,12 @@ runTimeModifiable true;
 """
             control_dict.write_text(content)
         else:
-            # Update existing controlDict
+            # Update existing controlDict using regex for robustness
             content = control_dict.read_text()
-            content = content.replace("endTime         1;", f"endTime         {end_time};")
-            content = content.replace("writeInterval   0.01;", f"writeInterval   {write_interval};")
+            # Update endTime (handles both "1" and "1.0" formats)
+            content = re.sub(r'endTime\s+[\d.]+;', f'endTime         {end_time};', content)
+            # Update writeInterval
+            content = re.sub(r'writeInterval\s+[\d.]+;', f'writeInterval   {write_interval};', content)
             control_dict.write_text(content)
 
     def _setup_solver_files(self, case_dir: Path, sim_profile: str):
