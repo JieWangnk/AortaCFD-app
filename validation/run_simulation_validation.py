@@ -195,7 +195,7 @@ runTimeModifiable true;
             ctrl_task.execute(context)
 
             # Create minimal boundary condition files for validation
-            self._create_minimal_bc_files(case_dir)
+            self._create_minimal_bc_files(case_dir, sim_profile)
 
             print(f"  ✅ Solver files configured")
         except Exception as e:
@@ -203,10 +203,18 @@ runTimeModifiable true;
             import traceback
             traceback.print_exc()
 
-    def _create_minimal_bc_files(self, case_dir: Path):
-        """Create minimal boundary condition files for validation."""
+    def _create_minimal_bc_files(self, case_dir: Path, sim_profile: str = ""):
+        """Create minimal boundary condition files for validation.
+
+        Args:
+            case_dir: Case directory path
+            sim_profile: Profile name to detect turbulence model needs
+        """
         zero_dir = case_dir / "0"
         zero_dir.mkdir(exist_ok=True)
+
+        # Detect if turbulence model is needed
+        is_turbulent = "rans" in sim_profile.lower() or "les" in sim_profile.lower()
 
         # Minimal U file
         u_file = zero_dir / "U"
@@ -289,6 +297,135 @@ boundaryField
 // ************************************************************************* //
 """
         p_file.write_text(p_content)
+
+        # Add turbulence BC files if needed
+        if is_turbulent:
+            # nut file (turbulent viscosity)
+            nut_file = zero_dir / "nut"
+            nut_content = r"""/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  12
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       volScalarField;
+    object      nut;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 2 -1 0 0 0 0];
+internalField   uniform 0;
+
+boundaryField
+{
+    inlet
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    "outlet.*"
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    wall_aorta
+    {
+        type            nutkWallFunction;
+        value           uniform 0;
+    }
+}
+
+// ************************************************************************* //
+"""
+            nut_file.write_text(nut_content)
+
+            # k file (turbulent kinetic energy)
+            k_file = zero_dir / "k"
+            k_content = r"""/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  12
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       volScalarField;
+    object      k;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 2 -2 0 0 0 0];
+internalField   uniform 0.001;
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform 0.001;
+    }
+    "outlet.*"
+    {
+        type            zeroGradient;
+    }
+    wall_aorta
+    {
+        type            kqRWallFunction;
+        value           uniform 0.001;
+    }
+}
+
+// ************************************************************************* //
+"""
+            k_file.write_text(k_content)
+
+            # omega file (specific dissipation rate)
+            omega_file = zero_dir / "omega"
+            omega_content = r"""/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  12
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       volScalarField;
+    object      omega;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 0 -1 0 0 0 0];
+internalField   uniform 1;
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform 1;
+    }
+    "outlet.*"
+    {
+        type            zeroGradient;
+    }
+    wall_aorta
+    {
+        type            omegaWallFunction;
+        value           uniform 1;
+    }
+}
+
+// ************************************************************************* //
+"""
+            omega_file.write_text(omega_content)
 
     def validate_profile(self, sim_profile: str, end_time: float = 0.1) -> dict:
         """
