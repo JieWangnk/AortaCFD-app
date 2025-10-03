@@ -230,7 +230,7 @@ boundaryField
     inlet
     {
         type            fixedValue;
-        value           uniform (0.1 0 0);
+        value           uniform (0 0 0.1);  // Z-direction (upward flow)
     }
     "outlet.*"
     {
