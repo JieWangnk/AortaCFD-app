@@ -149,9 +149,10 @@ class PhysicalResultsAnalyzer:
         try:
             content = log_file.read_text()
 
-            # Extract final time
-            if match := re.search(r"Time = ([\d.]+)", content):
-                times = re.findall(r"Time = ([\d.]+)", content)
+            # Extract final time (handle both "Time = 0.1" and "Time = 0.1s" formats)
+            # Use word boundary to avoid matching "ExecutionTime"
+            if match := re.search(r"^Time = ([\d.]+)s?$", content, re.MULTILINE):
+                times = re.findall(r"^Time = ([\d.]+)s?$", content, re.MULTILINE)
                 metrics.final_time = float(times[-1]) if times else 0.0
                 metrics.total_iterations = len(times)
 
