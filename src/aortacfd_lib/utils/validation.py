@@ -787,17 +787,23 @@ class BoundaryConditionValidator:
         """
         Run all boundary condition validation checks.
 
+        Supports both nested (boundary_conditions.inlet) and flattened (inlet) formats.
+
         Returns:
             ValidationResult with overall BC validation status
         """
         result = ValidationResult()
 
-        # Check if boundary_conditions section exists
-        if 'boundary_conditions' not in self.config:
-            result.add_error("No boundary_conditions section found in configuration")
+        # Support both nested and flattened config structures
+        # After ConfigBuilder merge, BCs may be at root level
+        if 'boundary_conditions' in self.config:
+            bc_config = self.config['boundary_conditions']
+        elif 'inlet' in self.config or 'outlets' in self.config:
+            # Flattened structure - BCs at root level
+            bc_config = self.config
+        else:
+            result.add_error("No boundary condition configuration found (expected 'boundary_conditions' or 'inlet'/'outlets' at root)")
             return result
-
-        bc_config = self.config['boundary_conditions']
 
         # Validate inlet configuration
         if 'inlet' in bc_config:
