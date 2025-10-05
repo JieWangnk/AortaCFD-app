@@ -95,8 +95,14 @@ class PatientCaseRunner:
         # Load configuration
         if config_path:
             config_file = Path(config_path).expanduser()
+            # If not absolute and doesn't exist, try relative to patient directory
+            if not config_file.is_absolute() and not config_file.is_file():
+                config_file = patient_dir / config_path
             if not config_file.is_file():
-                raise PatientValidationError(f"Custom configuration file not found: {config_file}")
+                raise PatientValidationError(f"Custom configuration file not found: {config_path}\n"
+                                            f"Searched in:\n"
+                                            f"  - {Path(config_path).expanduser().absolute()}\n"
+                                            f"  - {patient_dir / config_path}")
         else:
             config_file = patient_dir / 'config.json'
             if not config_file.exists():
