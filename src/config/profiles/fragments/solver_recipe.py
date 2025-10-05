@@ -113,7 +113,7 @@ SOLVER_RECIPE_BALANCED: Dict[str, Any] = {
 SOLVER_RECIPE_AGGRESSIVE: Dict[str, Any] = {
     "schemes": {
         "ddtSchemes": {"default": "CrankNicolson 0.7"},
-        "gradSchemes": {"default": "Gauss leastSquares"},
+        "gradSchemes": {"default": "cellLimited Gauss linear 1"},
         "divSchemes": {
             "default": "none",
             "div(phi,U)": "Gauss linear",

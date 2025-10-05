@@ -36,7 +36,7 @@ RESOLUTION_COARSE: Dict[str, Any] = {
             "surfaceRefinementLevels": [1, 1],
             "resolveFeatureAngle": 60,
             "nSmoothPatch": 3,
-            "tolerance": 1.0,
+            "tolerance": 2.0,
             "nSolveIter": 300,
             "nRelaxIter": 5,
             "nFeatureSnapIter": 10,
@@ -89,26 +89,21 @@ RESOLUTION_MEDIUM: Dict[str, Any] = {
             "maxLocalCells": 3_800_000,
             "maxGlobalCells": 4_000_000,
             "minRefinementCells": 0,
-            "nCellsBetweenLevels": 1,
-            "featureLevel": 1,
-            "surfaceRefinementLevels": [2, 2],
-            "resolveFeatureAngle": 30,
-            "nSmoothPatch": 4,
-            "tolerance": 0.7,
-            "nSolveIter": 600,
-            "nRelaxIter": 8,
-            "nFeatureSnapIter": 15,
+            "nCellsBetweenLevels": 2,  # Smoother transitions for medium mesh
+            "featureLevel": 0,  # Same as coarse - no feature refinement
+            "surfaceRefinementLevels": [1, 1],  # Same as coarse - uniform level 1
+            "resolveFeatureAngle": 60,  # Same as coarse
+            "nSmoothPatch": 5,  # Increased for better quality
+            "tolerance": 3.0,  # More relaxed for robustness
+            "nSolveIter": 500,  # Significantly increased iterations for medium mesh quality
+            "nRelaxIter": 8,  # Increased relaxation
+            "nFeatureSnapIter": 10,  # Same as coarse
             "explicitFeatureSnap": True,
             "multiRegionFeatureSnap": True,
-            "addLayer": 1,
-            "layer_settings": {
-                "nSurfaceLayers": 2,
-                "expansionRatio": 1.2,
-                "finalLayerThickness": 0.5,
-            },
+            "addLayer": 0,  # Same as coarse - no boundary layers
             "useOpenFOAMDefaults": True,
             "relaxed": {
-                "maxNonOrtho": 65,
+                "maxNonOrtho": 75,  # Same as coarse
             },
         },
         "refinement_levels": {
@@ -152,26 +147,21 @@ RESOLUTION_FINE: Dict[str, Any] = {
             "maxLocalCells": 7_200_000,
             "maxGlobalCells": 7_500_000,
             "minRefinementCells": 0,
-            "nCellsBetweenLevels": 2,
-            "featureLevel": 2,
-            "surfaceRefinementLevels": [2, 3],
-            "resolveFeatureAngle": 30,
-            "nSmoothPatch": 5,
-            "tolerance": 0.5,
-            "nSolveIter": 800,
-            "nRelaxIter": 10,
-            "nFeatureSnapIter": 20,
+            "nCellsBetweenLevels": 3,  # Smoother transitions for fine mesh
+            "featureLevel": 0,  # Same as coarse/medium - no feature refinement
+            "surfaceRefinementLevels": [1, 1],  # Same as coarse/medium - proven quality
+            "resolveFeatureAngle": 60,  # Same as coarse/medium
+            "nSmoothPatch": 5,  # Increased for better quality
+            "tolerance": 3.0,  # More relaxed for robustness
+            "nSolveIter": 600,  # Significantly increased iterations for fine mesh quality
+            "nRelaxIter": 8,  # Increased relaxation
+            "nFeatureSnapIter": 10,  # Same as coarse/medium
             "explicitFeatureSnap": True,
             "multiRegionFeatureSnap": True,
-            "addLayer": 1,
-            "layer_settings": {
-                "nSurfaceLayers": 3,
-                "expansionRatio": 1.1,
-                "finalLayerThickness": 0.3,
-            },
+            "addLayer": 0,  # Same as coarse/medium - no boundary layers
             "useOpenFOAMDefaults": True,
             "relaxed": {
-                "maxNonOrtho": 55,
+                "maxNonOrtho": 75,  # Same as coarse/medium
             },
         },
         "refinement_levels": {

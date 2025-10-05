@@ -1,0 +1,72 @@
+{
+  "case_info": {
+    "patient_id": "patient1_custom_split",
+    "description": "Custom flow split: 30% to outlets 1-3, 70% to outlet 4"
+  },
+  "simulation_settings": {
+    "analysis_type": "medium",
+    "solver_type": "laminar"
+  },
+  "physics": {
+    "blood_density": 1060,
+    "blood_viscosity": 0.004,
+    "murray_exponent": 2.39
+  },
+  "geometry": {
+    "rotation": true,
+    "target_normal": [0, 0, 1],
+    "scale_factor": 0.001
+  },
+  "mesh": {
+    "mesh_resolution": {
+      "target_cell_size_mm": 1.5,
+      "blockmesh_resolution": 50
+    }
+  },
+  "boundary_conditions": {
+    "inlet": {
+      "type": "PLUG",
+      "velocity": 1.0,
+      "profile": "plug",
+      "orientation": "out"
+    },
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80,
+        "methodology": "custom_flow_split",
+        "flow_split": {
+          "outlet1": 0.10,
+          "outlet2": 0.10,
+          "outlet3": 0.10,
+          "outlet4": 0.70
+        }
+      }
+    },
+    "walls": {
+      "type": "no_slip",
+      "roughness": 0.0
+    }
+  },
+  "simulation_control": {
+    "number_of_cycles": 1,
+    "end_time": 0.1,
+    "writeInterval": 0.1
+  },
+  "numerical_settings": {
+    "time_stepping": "adaptive",
+    "initial_deltaT": 1e-4,
+    "maxCo": 0.5,
+    "maxDeltaT": 1e-3
+  },
+  "output_settings": {
+    "save_frequency": 1,
+    "variables": ["velocity", "pressure"],
+    "post_processing": {
+      "generate_report": true,
+      "create_animations": false,
+      "export_vtk": false
+    }
+  }
+}

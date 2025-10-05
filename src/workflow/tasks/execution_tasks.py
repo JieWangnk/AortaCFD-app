@@ -3,7 +3,7 @@ import shutil
 
 from ..base_task import Task, AortaCFDError, logger
 from aortacfd_lib.utils.runner import run_command, CommandExecutionError
-from ...aortacfd_lib.utils.validation import MeshQualityChecker
+from aortacfd_lib.utils.validation import MeshQualityChecker
 
 class ExecuteMeshingTask(Task):
     """Runs the external meshing commands and scales the final mesh."""

@@ -161,8 +161,6 @@ class ConfigBuilder:
         if os.path.exists(bc_file_path):
             with open(bc_file_path, 'r') as f:
                 bc_config = json.load(f)
-        else:
-            print(f"Warning: boundary_conditions.json not found in {case_path}. Using defaults.")
 
         return deep_merge(discovered_geom_config, bc_config)
     

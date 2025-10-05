@@ -937,9 +937,18 @@ class BoundaryConditionValidator:
         """
         result = ValidationResult()
 
-        # Resolve file path
+        # Resolve file path - check multiple possible locations
         if self.case_directory:
+            # Try case root first
             csv_path = self.case_directory / csv_file
+
+            # If not found, try constant/boundaryData/inlet/
+            if not csv_path.exists():
+                # Get inlet patch name from config
+                inlet_patch = self.config.get('geometry', {}).get('inlet_keywords_ordered', 'inlet')
+                csv_path_boundary = self.case_directory / "constant" / "boundaryData" / inlet_patch / csv_file
+                if csv_path_boundary.exists():
+                    csv_path = csv_path_boundary
         else:
             csv_path = Path(csv_file)
 
