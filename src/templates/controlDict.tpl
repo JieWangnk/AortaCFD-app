@@ -57,7 +57,7 @@ maxDeltaT       {{ controlDict.get('maxDeltaT', 1e-3) }};
 
 minDeltaT       {{ controlDict.get('minDeltaT', 1e-8) }};
 
-{% if config.get('windkessel_enabled', False) or config.get('outlets', {}).get('type') == '3EWINDKESSEL' %}
+{% if config.get('windkessel_enabled', False) or config.get('outlets', {}).get('type') == '3EWINDKESSEL' or config.get('boundary_conditions', {}).get('outlets', {}).get('type') == '3EWINDKESSEL' %}
 
 libs
 (

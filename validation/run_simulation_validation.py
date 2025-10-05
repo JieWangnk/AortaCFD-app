@@ -154,6 +154,11 @@ runTimeModifiable true;
             content = re.sub(r'endTime\s+[\d.]+;', f'endTime         {end_time};', content)
             # Update writeInterval
             content = re.sub(r'writeInterval\s+[\d.]+;', f'writeInterval   {write_interval};', content)
+
+            # Comment out problematic #includeFunc directives for validation
+            # These function objects can cause parsing errors in some OpenFOAM versions
+            content = re.sub(r'(\s*)#includeFunc\s+(\w+)', r'\1//#includeFunc \2  // Disabled for validation', content)
+
             control_dict.write_text(content)
 
     def _setup_solver_files(self, case_dir: Path, sim_profile: str):

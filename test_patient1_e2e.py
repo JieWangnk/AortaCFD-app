@@ -21,6 +21,8 @@ from workflow.tasks.setup_tasks import (
 )
 from aortacfd_lib.mesh_setup import GeometryAnalyzer
 from aortacfd_lib.wk_setup import WkSetup
+from aortacfd_lib.murray_calculator import MurrayCalculator
+from aortacfd_lib.inlet_mapping import InletMapping
 
 
 class TestPatient1EndToEnd:
@@ -214,6 +216,166 @@ class TestPatient1EndToEnd:
                     pytest.skip("OpenFOAM not available - skipping boundary setup test")
                 else:
                     raise
+
+    def test_patient1_murray_flow_distribution(self):
+        """Test Murray's Law flow distribution with real patient1 geometry."""
+        # Build full config
+        builder = ConfigBuilder()
+        full_config = builder.build(case_name=self.patient_name, sim_profile_name="sim_les_medium")
+
+        # Create case structure and copy geometry
+        case_dir = self.test_output_dir / "murray_test"
+        tri_surface = case_dir / "constant" / "triSurface"
+        tri_surface.mkdir(parents=True, exist_ok=True)
+
+        # Copy all STL files
+        for stl_file in self.patient_dir.glob("*.stl"):
+            shutil.copy(stl_file, tri_surface / stl_file.name)
+
+        # Create Murray calculator
+        calculator = MurrayCalculator(str(case_dir), full_config)
+
+        # Test automatic exponent detection
+        assert calculator.murray_exponent > 0, "Murray exponent should be determined"
+        print(f"✅ Murray exponent auto-detected: {calculator.murray_exponent}")
+
+        # Test outlet area extraction (mocked since we don't have checkMesh log)
+        # This will use STL fallback method
+        outlet_areas = calculator._extract_areas_stl_fallback()
+
+        assert len(outlet_areas) > 0, "Should find outlet areas"
+        print(f"✅ Found {len(outlet_areas)} outlets")
+
+        # Test flow ratio calculation
+        flow_ratios = calculator.calculate_murray_flow_ratios(outlet_areas)
+
+        # Validate flow conservation
+        total_flow = sum(flow_ratios.values())
+        assert abs(total_flow - 1.0) < 1e-6, f"Flow conservation violated: {total_flow}"
+        print(f"✅ Flow conservation validated: ∑Q_i = {total_flow:.10f}")
+
+        # Validate all outlets have positive flow
+        for outlet, ratio in flow_ratios.items():
+            assert ratio > 0, f"Outlet {outlet} has non-positive flow: {ratio}"
+            assert ratio < 1.0, f"Outlet {outlet} has flow > 100%: {ratio}"
+
+        # Print flow distribution
+        print(f"✅ Patient1 Murray flow distribution:")
+        for outlet, ratio in sorted(flow_ratios.items(), key=lambda x: -x[1]):
+            print(f"   {outlet}: {ratio:.4f} ({ratio*100:.1f}%)")
+
+    def test_patient1_windkessel_parameters(self):
+        """Test Windkessel parameter calculation with real patient1 geometry."""
+        # Build full config
+        builder = ConfigBuilder()
+        full_config = builder.build(case_name=self.patient_name, sim_profile_name="sim_les_medium")
+
+        # Create case structure and copy geometry
+        case_dir = self.test_output_dir / "windkessel_test"
+        tri_surface = case_dir / "constant" / "triSurface"
+        tri_surface.mkdir(parents=True, exist_ok=True)
+
+        # Copy all STL files
+        for stl_file in self.patient_dir.glob("*.stl"):
+            shutil.copy(stl_file, tri_surface / stl_file.name)
+
+        # Create Murray calculator
+        calculator = MurrayCalculator(str(case_dir), full_config)
+
+        # Get flow ratios
+        outlet_areas = calculator._extract_areas_stl_fallback()
+        flow_ratios = calculator.calculate_murray_flow_ratios(outlet_areas)
+
+        # Calculate Windkessel coefficients
+        wk_config = calculator.update_windkessel_coefficients(flow_ratios)
+
+        # Validate Windkessel configuration structure
+        assert "flow_split" in wk_config, "Should have flow_split"
+        assert "outlet_parameters" in wk_config, "Should have outlet_parameters"
+        assert "murray_exponent" in wk_config, "Should have murray_exponent"
+
+        # Validate outlet parameters
+        for outlet, params in wk_config["outlet_parameters"].items():
+            assert "R" in params, f"{outlet} missing resistance R"
+            assert "C" in params, f"{outlet} missing capacitance C"
+            assert "Z" in params, f"{outlet} missing peripheral resistance Z"
+            assert "radius" in params, f"{outlet} missing radius"
+            assert "area" in params, f"{outlet} missing area"
+            assert "flow_ratio" in params, f"{outlet} missing flow_ratio"
+
+            # Validate parameter values are physical
+            assert params["R"] > 0, f"{outlet} resistance R must be positive"
+            assert params["C"] > 0, f"{outlet} capacitance C must be positive"
+            assert params["Z"] > 0, f"{outlet} peripheral resistance Z must be positive"
+            assert params["radius"] > 0, f"{outlet} radius must be positive"
+            assert params["area"] > 0, f"{outlet} area must be positive"
+
+        print(f"✅ Patient1 Windkessel parameters calculated for {len(wk_config['outlet_parameters'])} outlets:")
+        for outlet, params in wk_config["outlet_parameters"].items():
+            print(f"   {outlet}:")
+            print(f"      R={params['R']:.1f} Pa·s/m³, C={params['C']:.2e} m³/Pa, Z={params['Z']:.1f} Pa·s/m³")
+            print(f"      radius={params['radius']*1000:.2f}mm, flow={params['flow_ratio']*100:.1f}%")
+
+    def test_patient1_complete_preprocessing(self):
+        """Test complete preprocessing workflow from STL to ready-to-run."""
+        # Build full config
+        builder = ConfigBuilder()
+        full_config = builder.build(case_name=self.patient_name, sim_profile_name="sim_les_medium")
+
+        # Create case structure
+        case_dir = self.test_output_dir / "complete_test"
+        case_dir.mkdir(parents=True, exist_ok=True)
+
+        # Step 1: Create case structure
+        task1 = CreateCaseStructureTask(full_config)
+        context = {"case_directory": str(case_dir)}
+        result1 = task1.execute(context)
+        assert result1 == True, "Case structure creation should succeed"
+        print("✅ Step 1: Case structure created")
+
+        # Step 2: Copy geometry files
+        tri_surface = case_dir / "constant" / "triSurface"
+        for stl_file in self.patient_dir.glob("*.stl"):
+            shutil.copy(stl_file, tri_surface / stl_file.name)
+        print("✅ Step 2: Geometry files copied")
+
+        # Step 3: Analyze geometry
+        analyzer = GeometryAnalyzer(
+            config=full_config,
+            case_directory=str(case_dir)
+        )
+        assert analyzer.inlet_radius > 0, "Geometry analysis should succeed"
+        print(f"✅ Step 3: Geometry analyzed (inlet radius: {analyzer.inlet_radius*1000:.2f}mm)")
+
+        # Step 4: Generate mesh files
+        task2 = GenerateMeshFilesTask(full_config)
+        result2 = task2.execute(context)
+        assert result2 == True, "Mesh file generation should succeed"
+        assert (case_dir / "system" / "blockMeshDict").exists()
+        assert (case_dir / "system" / "snappyHexMeshDict").exists()
+        assert (case_dir / "system" / "surfaceFeaturesDict").exists()
+        print("✅ Step 4: Mesh files generated")
+
+        # Step 5: Calculate Murray flow distribution
+        calculator = MurrayCalculator(str(case_dir), full_config)
+        outlet_areas = calculator._extract_areas_stl_fallback()
+        flow_ratios = calculator.calculate_murray_flow_ratios(outlet_areas)
+        total_flow = sum(flow_ratios.values())
+        assert abs(total_flow - 1.0) < 1e-6, "Flow conservation check"
+        print(f"✅ Step 5: Murray flow distribution calculated ({len(flow_ratios)} outlets)")
+
+        # Step 6: Calculate Windkessel parameters
+        wk_config = calculator.update_windkessel_coefficients(flow_ratios)
+        assert len(wk_config["outlet_parameters"]) == len(flow_ratios)
+        print(f"✅ Step 6: Windkessel parameters calculated")
+
+        # Verify complete preprocessing succeeded
+        print(f"\n✅ Patient1 complete preprocessing workflow validated:")
+        print(f"   Case directory: {case_dir}")
+        print(f"   Geometry: {len(list(tri_surface.glob('*.stl')))} STL files")
+        print(f"   Mesh files: 3 dictionary files")
+        print(f"   Flow distribution: {len(flow_ratios)} outlets")
+        print(f"   Windkessel: {len(wk_config['outlet_parameters'])} 3EWK models")
 
 
 if __name__ == "__main__":

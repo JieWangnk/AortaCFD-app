@@ -1,0 +1,131 @@
+name: PR Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  pr-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch all history for proper diff
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov
+
+    - name: Run quick test suite
+      id: tests
+      run: |
+        pytest tests/ test_patient1_e2e.py test_multi_patient_e2e.py \
+          --tb=short \
+          --maxfail=10 \
+          -v \
+          --cov=src \
+          --cov-report=term-missing \
+          | tee test_output.txt
+
+        # Extract test count and coverage
+        TESTS_PASSED=$(grep -oP '\d+(?= passed)' test_output.txt || echo "0")
+        COVERAGE=$(grep -oP 'TOTAL.*\K\d+(?=%)' test_output.txt || echo "0")
+
+        echo "tests_passed=$TESTS_PASSED" >> $GITHUB_OUTPUT
+        echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+
+    - name: Comment PR with test results
+      uses: actions/github-script@v7
+      if: always()
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const testsPassed = '${{ steps.tests.outputs.tests_passed }}';
+          const coverage = '${{ steps.tests.outputs.coverage }}';
+          const status = '${{ steps.tests.outcome }}';
+
+          const emoji = status === 'success' ? '✅' : '❌';
+          const statusText = status === 'success' ? 'PASSED' : 'FAILED';
+
+          const body = `## ${emoji} Test Results - ${statusText}
+
+          **Tests Passed**: ${testsPassed} / 362
+          **Coverage**: ${coverage}%
+
+          ${status === 'success' ? '✨ All tests passed! Ready for review.' : '⚠️ Some tests failed. Please check the logs above.'}
+
+          <details>
+          <summary>View full test output</summary>
+
+          Check the **Actions** tab for detailed test results.
+
+          </details>
+          `;
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: body
+          });
+
+    - name: Check if tests passed
+      if: steps.tests.outcome != 'success'
+      run: |
+        echo "❌ Tests failed. Please fix failing tests before merging."
+        exit 1
+
+  security-check:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install security tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit safety
+
+    - name: Run Bandit security scan
+      run: |
+        bandit -r src/ -f json -o bandit-report.json || true
+        bandit -r src/ -ll || echo "::warning::Security issues found. Review bandit-report.json"
+      continue-on-error: true
+
+    - name: Check dependencies for vulnerabilities
+      run: |
+        safety check --json || echo "::warning::Dependency vulnerabilities found."
+      continue-on-error: true
+
+  file-size-check:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check for large files
+      run: |
+        echo "Checking for files larger than 10MB..."
+        find . -type f -size +10M -not -path "./.git/*" -not -path "./venv/*" -not -path "./.pytest_cache/*" | tee large_files.txt
+        if [ -s large_files.txt ]; then
+          echo "::warning::Large files detected. Consider using Git LFS for binary files."
+          cat large_files.txt
+        else
+          echo "✅ No large files detected"
+        fi

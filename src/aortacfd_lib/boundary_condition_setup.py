@@ -20,8 +20,9 @@ class BoundaryConditionSetup:
         
         # Get all the necessary settings from the config
         self.geom_settings = self.config['geometry']
-        self.inlet_settings = self.config['inlet']
-        self.outlet_settings = self.config['outlets']
+        # Support both flattened and nested config structures
+        self.inlet_settings = self.config.get('boundary_conditions', {}).get('inlet') or self.config.get('inlet', {})
+        self.outlet_settings = self.config.get('boundary_conditions', {}).get('outlets') or self.config.get('outlets', {})
         self.physics_settings = self.config['physics']
         
         # Get the patch names that were auto-discovered by the ConfigBuilder
