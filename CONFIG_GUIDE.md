@@ -422,11 +422,33 @@ Both formats are validated and work correctly.
 
 ### Basic Usage
 ```bash
-# Use default config.json
-./venv/bin/python3 run_patient.py patient1
+# Use default config.json in patient directory
+python run_patient.py patient1
 
-# Use custom config
-./venv/bin/python3 run_patient.py patient1 --config path/to/config.json
+# Use custom config - multiple formats supported:
+
+# 1. Config name only (searches in patient directory)
+python run_patient.py patient1 --config config_simple_rans_coarse.json
+
+# 2. Relative path from project root
+python run_patient.py patient1 --config cases_input/patient1/config_simple_rans_coarse.json
+
+# 3. Absolute path
+python run_patient.py patient1 --config /full/path/to/config.json
+
+# 4. Home directory with ~
+python run_patient.py patient1 --config ~/my_configs/patient1_config.json
+```
+
+**Config File Resolution:**
+The system searches for config files in this order:
+1. Exact path provided (if absolute or exists relative to current directory)
+2. In patient directory: `cases_input/{patient_id}/{config_name}`
+
+**Tip:** For convenience, place config files in the patient directory and use just the filename:
+```bash
+# This works if config_simple_rans_coarse.json is in cases_input/patient1/
+python run_patient.py patient1 --config config_simple_rans_coarse.json
 ```
 
 ### Step-by-Step Execution
