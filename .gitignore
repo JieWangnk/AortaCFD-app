@@ -35,9 +35,15 @@ ENV/
 .DS_Store
 Thumbs.db
 
+# AI/Claude Code
+.claude/
+.cursor/
+.aider*
+
 # Testing
 .pytest_cache/
 .coverage
+coverage.xml
 htmlcov/
 .tox/
 .hypothesis/
@@ -101,3 +107,38 @@ coarc_refine*
 # Documentation build
 docs/_build/
 site/
+
+# Development progress documentation
+*_SUMMARY.md
+*_COMPLETE.md
+*_PROGRESS.md
+SESSION_*.md
+WEEK*.md
+OPTION*.md
+PATH_*.md
+LEVEL3_*.md
+MULTI_OPTION_*.md
+SOLVER_DEBUG_*.md
+E2E_TEST_*.md
+CICD_SETUP.md
+TESTING_ROADMAP.md
+TESTING_STATUS_UPDATE.md
+PATIENT1_E2E_VALIDATION.md
+QUICK_START_OPENFOAM_TESTS.md
+OPENFOAM_E2E_TESTS.md
+CLEANUP_COMPLETE.md
+NEXT_PHASE_SUMMARY.md
+CFD_VALIDATION_SUMMARY.md
+ALL_OPTIONS_*.md
+
+# Validation output and progress docs
+validation/output/
+validation/*_SUMMARY.md
+validation/*_COMPLETE.md
+validation/*_README.md
+validation/FLOW_*.md
+validation/PHASE*.md
+validation/QUICK_START_*.md
+validation/REALISTIC_*.md
+validation/VALIDATION_*.md
+validation/analyzers/*_README.md
