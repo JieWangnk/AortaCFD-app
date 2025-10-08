@@ -46,14 +46,10 @@ boundaryField
     {{ outlet }}
     {
         {% if outlet_settings.type == "3EWINDKESSEL" %}
-        {% set wk_settings = outlet_settings.get('windkessel_settings', {}) %}
-        {% set outlet_velocity = wk_settings.get('velocity_bc', {}).get(outlet, {}) %}
-        {% set beta_value = outlet_velocity.get('beta', wk_settings.get('beta', 1.0)) %}
-        {% set enable_stab = outlet_velocity.get('enable_stabilization', wk_settings.get('enable_stabilization', True)) %}
-        type            stabilizedWindkesselVelocity;
-        beta            {{ beta_value }};
-        enableStabilization {{ 'true' if enable_stab else 'false' }};
-        value           uniform (0 0 0);
+        // Stabilized Windkessel velocity BC (prevents backflow divergence)
+        type                stabilizedWindkesselVelocity;
+        beta                {{ outlet_settings.get('windkessel_settings', {}).get('beta', 1.0) }};
+        enableStabilization {{ 'true' if outlet_settings.get('windkessel_settings', {}).get('enable_stabilization', True) else 'false' }};
         {% else %}
         type            zeroGradient;
         {% endif %}

@@ -200,23 +200,28 @@ class ConfigBuilder:
         
         # Extract boundary conditions from unified config
         boundary_conditions = case_config.get('boundary_conditions', {})
-        
+
         # Extract geometry settings from unified config
         geometry_settings = case_config.get('geometry', {})
-        
+
         # Extract simulation control settings from unified config
         simulation_control = case_config.get('simulation_control', {})
-        
+
         # Extract mesh settings from unified config
         mesh_settings = case_config.get('mesh', {})
 
-        # Merge all components: STL discovery + geometry settings + boundary conditions + simulation control + mesh
+        # Extract run settings from unified config
+        run_settings = case_config.get('run_settings', {})
+
+        # Merge all components: STL discovery + geometry settings + boundary conditions + simulation control + mesh + run_settings
         result = deep_merge(discovered_geom_config, {"geometry": geometry_settings})
         result = deep_merge(result, boundary_conditions)
         result = deep_merge(result, {"simulation_control": simulation_control})
         if mesh_settings:
             result = deep_merge(result, {"mesh": mesh_settings})
-        
+        if run_settings:
+            result = deep_merge(result, {"run_settings": run_settings})
+
         return result
 
     def _apply_openfoam_12_settings(self, config: dict) -> dict:

@@ -45,18 +45,18 @@ boundaryField
         {% set outlet_params = wk_settings.get('outlet_parameters', {}).get(outlet, {}) %}
         type            modularWKPressure;
         phi             phi;
-        order           {{ outlet_settings.get('order', 2) }};
+        order           {{ outlet_settings.get('order', 3) }};  // Higher order for stability with large R values
         R               {{ outlet_params.get('R', outlet_settings.get('R', 1000)) }};
         C               {{ outlet_params.get('C', outlet_settings.get('C', 1e-6)) }};
         Z               {{ outlet_params.get('Z', outlet_settings.get('Z', 100)) }};
         
-        // Initial historical values for a stable start
-        p0              {{ outlet_settings.get('initial_pressure', 10666) }};  // Initial pressure at the outlet [Pa]
-        p_1             {{ outlet_settings.get('initial_pressure', 10666) }};  // Pressure at t=-dt [Pa]
+        // Initial historical values for a stable start (using relative/gauge pressure)
+        p0              0;      // Initial pressure at the outlet [Pa] (relative to internalField)
+        p_1             0;      // Pressure at t=-dt [Pa]
         q_1             0;      // Flow at t=-dt [m3/s]
         q_2             0;      // Flow at t=-2*dt [m3/s]
         q_3             0;      // Flow at t=-3*dt [m3/s]
-        
+
         value           uniform 0;
             {% else %}
         // OpenFOAM 8 WKBC boundary condition

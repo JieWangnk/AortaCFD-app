@@ -43,7 +43,7 @@ LES_MEDIUM_EXTRAS = {
             "maxCo": 0.5,
             "maxDeltaT": 1e-04,
             "minDeltaT": 1e-08,
-            "functions": ["wallShearStress", "QCriterion"],
+            "functions": ["wallShearStress", "Q"],
         }
     },
     "boundary": {
