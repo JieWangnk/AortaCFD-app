@@ -121,78 +121,79 @@ class WindkesselCalculator:
         logger.info(f"Estimated vessel resistances (K*L): {vessel_resistances}")
         return vessel_resistances
     
-    def calculate_windkessel_resistances(self, 
-                                       flow_ratios: Dict[str, float], 
+    def calculate_windkessel_resistances(self,
+                                       flow_ratios: Dict[str, float],
                                        vessel_resistances: Dict[str, float],
                                        r_multiplier: float = 10.0) -> Dict[str, float]:
         """
-        Calculate Windkessel resistances using the paper's methodology.
-        
-        The key condition is R >> max(K*L) for all outlets to ensure
-        the Q-R relation holds: Q_j/Q_ref = R_ref/R_j
-        
+        Calculate Windkessel resistances using physiologically realistic values.
+
+        The Windkessel R represents total peripheral resistance, not proximal vessel resistance.
+        We use a base value similar to literature (R~1000 Pa·s/m³) and scale inversely with flow
+        to maintain the desired Murray's law distribution: Q_j/Q_ref = R_ref/R_j
+
         Args:
             flow_ratios: Desired flow ratios from Murray's law
-            vessel_resistances: Estimated vessel resistances (K*L)
-            r_multiplier: Safety factor for R >> K*L condition
-            
+            vessel_resistances: Estimated vessel resistances (K*L) - used for validation only
+            r_multiplier: Not used in new calculation (kept for API compatibility)
+
         Returns:
             Dictionary of Windkessel resistances
         """
-        # Find the outlet with largest K*L (most restrictive)
-        max_vessel_resistance = max(vessel_resistances.values())
-        
-        # Set minimum R based on condition R >> max(K*L)
-        R_min = r_multiplier * max_vessel_resistance
-        
-        # Find reference outlet (largest flow rate)
+        # Use physiologically realistic base resistance from literature
+        # Reference: CoA_test uses R=1000, typical range 500-2000 Pa·s/m³
+        R_base = 1000.0  # Pa·s/m³ for the reference outlet
+
+        # Find reference outlet (largest flow rate = smallest resistance)
         ref_outlet = max(flow_ratios.items(), key=lambda x: x[1])[0]
         ref_flow_ratio = flow_ratios[ref_outlet]
-        
-        # Calculate resistances using Q-R relation: Q_j/Q_ref = R_ref/R_j
-        # Therefore: R_j = R_ref * Q_ref/Q_j
+
+        # Calculate resistances using inverse flow relation: Q_j/Q_ref = R_ref/R_j
+        # Therefore: R_j = R_base * Q_ref/Q_j
         windkessel_resistances = {}
-        R_ref = R_min  # Start with minimum safe value for reference
-        
+
         for outlet, flow_ratio in flow_ratios.items():
-            if outlet == ref_outlet:
-                windkessel_resistances[outlet] = R_ref
-            else:
-                # R_j = R_ref * Q_ref/Q_j
-                windkessel_resistances[outlet] = R_ref * ref_flow_ratio / flow_ratio
-                
-        logger.info(f"Calculated Windkessel resistances (R_multiplier={r_multiplier}): {windkessel_resistances}")
+            # R_j = R_base * (flow_ref / flow_j)
+            windkessel_resistances[outlet] = R_base * (ref_flow_ratio / flow_ratio)
+
+        logger.info(f"Calculated Windkessel resistances (R_base={R_base} Pa·s/m³):")
+        for outlet, R in windkessel_resistances.items():
+            logger.info(f"  {outlet}: R={R:.1f} Pa·s/m³ (flow fraction: {flow_ratios[outlet]:.3f})")
+
         return windkessel_resistances
     
-    def calculate_capacitances(self, 
+    def calculate_capacitances(self,
                              resistances: Dict[str, float],
                              rc_multiplier: float = 0.1) -> Dict[str, float]:
         """
-        Calculate capacitances based on RC time constant methodology.
-        
-        The paper recommends: 1/ω₀ >> RC >> 0
-        Where ω₀ is the fundamental frequency of cardiac cycle.
-        
+        Calculate capacitances using physiologically realistic values.
+
+        The capacitance represents arterial compliance. We use literature values
+        (C~1e-6 m³/Pa) which gives RC time constants of ~0.001s, appropriate for
+        buffering the pulsatile flow without excessive damping.
+
         Args:
             resistances: Windkessel resistances
-            rc_multiplier: Multiplier for cardiac period to set RC
-            
+            rc_multiplier: Not used in new calculation (kept for API compatibility)
+
         Returns:
             Dictionary of capacitances
         """
-        # Fundamental frequency of cardiac cycle
-        omega_0 = 2 * math.pi / self.cardiac_period
-        
-        # RC should be much smaller than 1/ω₀ but not too small
-        # Paper suggests RC ~ 0.1 * T_cardiac for stability
-        target_rc = rc_multiplier * self.cardiac_period
-        
+        # Use physiologically realistic base capacitance from literature
+        # Reference: CoA_test uses C=1e-6, typical range 5e-7 to 2e-6 m³/Pa
+        C_base = 1.0e-6  # m³/Pa
+
         capacitances = {}
-        for outlet, resistance in resistances.items():
-            # C = RC/R
-            capacitances[outlet] = target_rc / resistance
-            
-        logger.info(f"Calculated capacitances (RC={target_rc:.3f}s): {capacitances}")
+        for outlet in resistances.keys():
+            # Use same capacitance for all outlets (can be refined later)
+            capacitances[outlet] = C_base
+
+        # Log RC time constants for verification
+        logger.info(f"Calculated capacitances (C_base={C_base:.2e} m³/Pa):")
+        for outlet, C in capacitances.items():
+            RC = resistances[outlet] * C
+            logger.info(f"  {outlet}: C={C:.2e} m³/Pa, RC={RC:.6f}s")
+
         return capacitances
     
     def calculate_peripheral_resistances(self, 

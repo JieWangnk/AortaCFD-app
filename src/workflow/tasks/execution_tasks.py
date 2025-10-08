@@ -102,21 +102,16 @@ class ExecuteMeshingTask(Task):
             logger.warning("Proceeding without mesh quality check")
     
 class ExecuteSolverTask(Task):
-    """Runs the OpenFOAM solver (e.g., pimpleFoam)."""
+    """Runs the OpenFOAM 12 solver (foamRun with incompressibleFluid)."""
 
     def execute(self, context: dict) -> bool:
         """This task contains the execution logic from your original run_simulation method."""
-        logger.info("Executing OpenFOAM solver...")
+        logger.info("Executing OpenFOAM 12 solver...")
         case_dir = context["case_directory"]
         run_settings = self.config.get("run_settings", {})
-        
-        solver_cmd = self.config["simulation_control"]["controlDict"].get("application", "foamRun")
 
-        if self.config.get("outlets", {}).get("type") == "3ElementWindkessel":
-            solver_cmd = "foamRun"
-            logger.info("Using OpenFOAM 12 foamRun solver with Windkessel boundary conditions")
-        else:
-            logger.info(f"Using solver: {solver_cmd}")
+        solver_cmd = self.config["simulation_control"]["controlDict"].get("application", "foamRun")
+        logger.info(f"Using OpenFOAM 12 solver: {solver_cmd} (incompressibleFluid)")
 
         try:
             if run_settings.get("solution_type") == "parallel":

@@ -43,7 +43,7 @@ LES_FINE_EXTRAS = {
             "maxCo": 0.5,
             "maxDeltaT": 5e-05,
             "minDeltaT": 5e-09,
-            "functions": ["wallShearStress", "QCriterion", "lambda2"],
+            "functions": ["wallShearStress", "Q", "Lambda2"],
         }
     },
     "boundary": {

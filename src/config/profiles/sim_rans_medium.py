@@ -43,7 +43,7 @@ RANS_MEDIUM_EXTRAS = {
             "maxCo": 1.0,
             "maxDeltaT": 5e-04,
             "minDeltaT": 1e-07,
-            "functions": ["wallShearStress", "QCriterion"],
+            "functions": ["wallShearStress", "Q"],
         }
     },
     "boundary": {

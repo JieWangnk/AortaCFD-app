@@ -277,12 +277,16 @@ class GenerateControlDictTask(Task):
         if final_end_time is None or final_end_time == "auto":
             cardiac_cycle = context.get("cardiac_cycle")
             if not cardiac_cycle:
-                logger.error("Cardiac cycle not found in context. Cannot calculate endTime.")
-                return False
-            
-            number_of_cycles = sim_controls.get("number_of_cycles", 1)
-            final_end_time = float(cardiac_cycle) * int(number_of_cycles)
-            logger.info(f"Calculated endTime: {final_end_time}s ({number_of_cycles} cycles of {cardiac_cycle}s)")
+                # Cardiac cycle not yet calculated - use temporary value
+                # Will be updated later by update_control_dict task
+                number_of_cycles = sim_controls.get("number_of_cycles", 1)
+                final_end_time = 1.0 * number_of_cycles  # Temporary: assume 1s per cycle
+                logger.warning(f"Cardiac cycle not yet determined. Using temporary endTime: {final_end_time}s")
+                logger.info("This will be updated after boundary data preparation.")
+            else:
+                number_of_cycles = sim_controls.get("number_of_cycles", 1)
+                final_end_time = float(cardiac_cycle) * int(number_of_cycles)
+                logger.info(f"Calculated endTime: {final_end_time}s ({number_of_cycles} cycles of {cardiac_cycle}s)")
         else:
             logger.info(f"Using fixed endTime from configuration: {final_end_time}s")
         # ---------------------------

@@ -242,11 +242,15 @@ class BCValidator:
 
                 print(f"    ✓ Flow conservation error: {metrics.flow_conservation_error_percent:.2f}%")
 
-            # Check for Murray's Law usage
-            windkessel_file = case_dir / "constant" / "windkesselProperties"
-            if windkessel_file.exists():
-                metrics.murray_law_applied = True
-                print(f"    ✓ 3-Element Windkessel BCs detected")
+            # Check for Murray's Law usage (Windkessel coefficients stored in config, no file)
+            # Note: windkesselProperties file no longer generated (coefficients in config only)
+            p_file = case_dir / "0" / "p"
+            if p_file.exists():
+                with open(p_file, 'r') as f:
+                    p_content = f.read()
+                    if "modularWKPressure" in p_content or "windkessel" in p_content.lower():
+                        metrics.murray_law_applied = True
+                        print(f"    ✓ 3-Element Windkessel BCs detected")
 
             # Analyze flow split (custom vs Murray's Law)
             config_file = case_dir / "config.json"
@@ -321,9 +325,12 @@ class BCValidator:
     def _detect_outlet_bc_type(self, case_dir: Path) -> str:
         """Detect outlet boundary condition type"""
         try:
-            # Check for windkessel
-            if (case_dir / "constant" / "windkesselProperties").exists():
-                return "3-Element Windkessel (3EWK)"
+            # Check for windkessel in p file (coefficients now in config, no separate file)
+            p_file = case_dir / "0" / "p"
+            if p_file.exists():
+                with open(p_file, 'r') as f:
+                    if "modularWKPressure" in f.read():
+                        return "3-Element Windkessel (3EWK)"
 
             # Check U file for outlet BC
             u_file = case_dir / "0" / "U"

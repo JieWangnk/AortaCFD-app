@@ -169,22 +169,18 @@ class TestBoundaryConditionWorkflow:
             # Cleanup
             shutil.rmtree(case_input_dir)
 
-        # Read generated parameters from file
-        wk_props_file = Path(temp_case_dir) / "constant" / "windkesselProperties"
-        assert wk_props_file.exists(), "Windkessel properties file should be generated"
+        # Verify parameters stored in config (no longer writes to file)
+        outlet_params = test_config["outlets"]["windkessel_settings"].get("outlet_parameters", {})
+        assert outlet_params, "Outlet parameters should be stored in config"
 
-        # For testing, we'll just verify the file was created
-        params = {"outlet1": {"R_proximal": 1.0, "R_distal": 1.0, "C": 1.0}}
+        # Verify parameters calculated for outlets
+        assert len(outlet_params) > 0, "Should have calculated parameters for at least one outlet"
 
-        # Verify parameters calculated
-        assert params is not None
-        assert "outlet1" in params or len(params) > 0
-
-        # Verify parameters have required fields
-        for outlet, values in params.items():
-            assert "R_proximal" in values
-            assert "R_distal" in values
-            assert "C" in values
+        # Verify parameters have required fields (R, C, Z)
+        for outlet, values in outlet_params.items():
+            assert "R" in values, f"Outlet {outlet} should have R coefficient"
+            assert "C" in values, f"Outlet {outlet} should have C coefficient"
+            assert "Z" in values, f"Outlet {outlet} should have Z coefficient"
 
     def test_boundary_condition_file_generation(self, temp_case_dir, minimal_config):
         """Test boundary condition file generation."""
@@ -348,12 +344,12 @@ class TestBoundaryWorkflowValidation:
             cardiac_cycle=cardiac_cycle
         )
 
-        # Should not crash - execute() writes to file
+        # Should not crash - execute() stores coefficients in config
         try:
             wk_setup.execute()
-            # Verify file was created
-            wk_props_file = Path(temp_case_dir) / "constant" / "windkesselProperties"
-            assert wk_props_file.exists()
+            # Verify coefficients were stored in config
+            outlet_params = test_config["outlets"]["windkessel_settings"].get("outlet_parameters", {})
+            assert len(outlet_params) > 0, "Should have stored outlet parameters"
         except Exception as e:
             # Should be controlled error
             assert "outlet" in str(e).lower() or "area" in str(e).lower() or "inlet" in str(e).lower()
