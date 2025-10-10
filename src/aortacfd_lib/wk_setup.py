@@ -1,5 +1,6 @@
 import os
 import sys
+import math
 import numpy as np
 
 from .utils.patch_processing import PatchProcessing
@@ -7,9 +8,26 @@ from .utils.logger import Logger
 
 class WkSetup:
     """
-    Computes 3-element Windkessel coefficients (R, C, Z) for all outlets
-    and stores them in config for boundary condition templates to use.
+    Computes 3-element Windkessel coefficients (R1, R2, C) for all outlets
+    using clinical MAP-based methodology.
+
+    Method: Clinical Windkessel (Westerhof et al. 2009)
+    1. MAP = DP + (SP-DP)/3
+    2. Flow distribution: Murray's law (r³) or Area-based
+    3. R_total = (MAP - P_venous) / mean_flow
+    4. R1 (proximal) = ρ·c/A (characteristic impedance from PWV)
+    5. R2 (distal) = R_total - R1
+    6. C (compliance) = tau / R2 (from diastolic decay time constant)
+
+    References:
+    - Westerhof et al., Med Biol Eng Comput 2009 (DC allocation)
+    - Nichols & O'Rourke, McDonald's Blood Flow in Arteries (MAP formula)
+    - Stergiopulos et al., J Biomech 1992 (tau=R2·C)
     """
+
+    # Unit conversions
+    MMHG_TO_PA = 133.322  # 1 mmHg = 133.322 Pa
+    ML_TO_M3 = 1e-6       # 1 mL = 1e-6 m³
 
     def __init__(self, config: dict, stl_files: list, case_directory: str, cardiac_cycle: float):
         """Initialize with config and case context."""
@@ -26,137 +44,245 @@ class WkSetup:
 
     def execute(self):
         """Main method to compute Windkessel coefficients and store them in config."""
-        self.log.info("Calculating Windkessel coefficients for all outlets...")
-        
+        self.log.info("=" * 80)
+        self.log.info("Calculating 3-Element Windkessel Coefficients (Clinical Method)")
+        self.log.info("=" * 80)
+
         tri_surface_dir = os.path.join(self.case_dir, "constant", "triSurface")
         scale_factor = self.geom_settings.get('scale_factor', 1e-3)
-        
+
+        # Step 0: Extract geometry
         inlet_patch_name = self.geom_settings['inlet_keywords_ordered']
         area_inlet = PatchProcessing(tri_surface_dir, inlet_patch_name).calculate_surface_area(scale_factor=scale_factor)
 
         outlet_patches = self.geom_settings['outlet_keywords_ordered']
-        outlet_areas = {name: PatchProcessing(tri_surface_dir, name).calculate_surface_area(scale_factor=scale_factor) for name in outlet_patches}
+        outlet_areas = {name: PatchProcessing(tri_surface_dir, name).calculate_surface_area(scale_factor=scale_factor)
+                       for name in outlet_patches}
 
+        # Calculate outlet radii for Murray's law
+        outlet_radii = {name: math.sqrt(area / math.pi) for name, area in outlet_areas.items()}
+
+        # Read inlet flow
         inlet_csv_path = os.path.join("cases_input", self.geom_settings['case_name'], self.inlet_settings['csv_file'])
         times, flow_inlet = self._read_inlet_flow(inlet_csv_path, self.inlet_settings['data_type'], area_inlet)
+        mean_Q_inlet = np.mean(flow_inlet)
 
-        methodology = self.wk_model_settings.get('methodology', 'murray_law_automatic')
+        # Step 1: Calculate MAP from cuff pressures
+        SP = self.wk_model_settings.get("systolic_pressure", 120)  # mmHg
+        DP = self.wk_model_settings.get("diastolic_pressure", 80)  # mmHg
+        P_venous = self.wk_model_settings.get("venous_pressure", 0)  # mmHg (0-5 typical)
+
+        MAP = DP + (SP - DP) / 3.0  # Mean arterial pressure (mmHg)
+        MAP_Pa = MAP * self.MMHG_TO_PA  # Convert to Pa
+        P_venous_Pa = P_venous * self.MMHG_TO_PA
+
+        self.log.info(f"Step 1: Pressure targets")
+        self.log.info(f"  Systolic pressure (SP): {SP} mmHg")
+        self.log.info(f"  Diastolic pressure (DP): {DP} mmHg")
+        self.log.info(f"  Mean arterial pressure (MAP): {MAP:.1f} mmHg ({MAP_Pa:.0f} Pa)")
+        self.log.info(f"  Venous pressure (P_v): {P_venous} mmHg")
+        self.log.info(f"  Driving pressure (MAP - P_v): {MAP - P_venous:.1f} mmHg")
+
+        # Step 2: Flow distribution
+        flow_split_method = self.wk_model_settings.get('flow_split_method', 'murray')
         flow_split_ratios = self.wk_model_settings.get('flow_split')
 
-        # Parse flow_split - can be dict or percentage value
-        if flow_split_ratios is not None and not isinstance(flow_split_ratios, dict):
-            # User provided a percentage (e.g., 30) - interpret as percentage for first N-1 outlets
-            # with remainder going to last outlet
-            flow_split_ratios = self._parse_flow_split_percentage(flow_split_ratios, outlet_patches)
-            self.wk_model_settings['flow_split'] = flow_split_ratios
-
-        if not flow_split_ratios:
-            if methodology == 'murray_law_automatic':
-                self.log.info("Flow split not provided; computing automatically using Murray's law...")
-                try:
-                    from .murray_calculator import MurrayCalculator
-
-                    calculator = MurrayCalculator(self.case_dir, self.config)
-                    flow_ratios = calculator.calculate_murray_flow_ratios()
-                    murray_config = calculator.update_windkessel_coefficients(flow_ratios)
-
-                    # Persist computed parameters back into configuration
-                    self.wk_model_settings.update(murray_config)
-                    flow_split_ratios = self.wk_model_settings.get('flow_split', {})
-                except Exception as e:
-                    self.log.warning(f"Automatic Murray flow split failed: {e}")
-                    flow_split_ratios = {}
+        if flow_split_ratios is None:
+            # Auto-calculate using specified method
+            if flow_split_method == 'murray':
+                self.log.info(f"\nStep 2: Flow distribution (Murray's law: f_i = r³/Σr³)")
+                flow_split_ratios = self._calculate_murray_flow_split(outlet_radii)
+            elif flow_split_method == 'area':
+                self.log.info(f"\nStep 2: Flow distribution (Area-based: f_i = A_i/ΣA_i)")
+                flow_split_ratios = self._calculate_area_flow_split(outlet_areas)
             else:
-                flow_split_ratios = {}
+                self.log.info(f"\nStep 2: Flow distribution (Equal split)")
+                flow_split_ratios = self._calculate_equal_flow_split(outlet_patches)
 
-            if not flow_split_ratios:
-                self.log.info("Falling back to equal flow distribution among outlets.")
-                num_outlets_fallback = len(outlet_patches)
-                if num_outlets_fallback == 0:
-                    raise ValueError("No outlet patches found for Windkessel flow split calculation.")
-                equal_ratio = 1.0 / num_outlets_fallback
-                flow_split_ratios = {name: equal_ratio for name in outlet_patches}
+            self.wk_model_settings['flow_split'] = flow_split_ratios
+        else:
+            self.log.info(f"\nStep 2: Flow distribution (User-specified)")
+            if not isinstance(flow_split_ratios, dict):
+                flow_split_ratios = self._parse_flow_split_percentage(flow_split_ratios, outlet_patches)
                 self.wk_model_settings['flow_split'] = flow_split_ratios
 
+        # Calculate outlet flows
         num_outlets = len(outlet_patches)
         Q_out = np.zeros((len(flow_inlet), num_outlets))
-        
+        mean_Q_outlets = np.zeros(num_outlets)
+
         for i, name in enumerate(outlet_patches):
-            if name not in flow_split_ratios:
-                raise ValueError(f"Flow split for outlet '{name}' not defined in boundary_conditions.json")
             Q_out[:, i] = flow_inlet * flow_split_ratios[name]
+            mean_Q_outlets[i] = np.mean(Q_out[:, i])
+            self.log.info(f"  {name}: {flow_split_ratios[name]*100:.1f}% → mean Q = {mean_Q_outlets[i]*1e6:.2f} mL/s")
 
-        # Calculate Windkessel coefficients based on methodology
-        if methodology == 'murray_law_automatic':
-            # Murray's law already populated outlet_parameters in config
-            if 'outlet_parameters' in self.wk_model_settings:
-                self.log.info("Using Murray's law Windkessel coefficients from outlet_parameters")
-                R_wk, C_wk, Z_wk = self._extract_wk_from_outlet_params(outlet_patches)
+        # Step 3: Total (DC) resistance per outlet
+        self.log.info(f"\nStep 3: Total resistance R_total = (MAP - P_v) / Q_mean")
+        R_total = np.zeros(num_outlets)
+
+        for i, outlet in enumerate(outlet_patches):
+            if mean_Q_outlets[i] > 1e-15:
+                R_total[i] = (MAP_Pa - P_venous_Pa) / mean_Q_outlets[i]
             else:
-                self.log.warning("Murray's law selected but outlet_parameters not found, using empirical fallback")
-                methodology = 'WKEmpirical'  # Fall through to empirical calculation
+                R_total[i] = 1e15  # Very high for zero flow
 
-        if methodology == 'WKEmpirical' or methodology not in ['murray_law_automatic']:
-            # Pure empirical calculation: R = P/Q (no base scaling)
-            self.log.info("Using WKEmpirical methodology with pure R=P/Q calculation")
+            # Convert to mmHg·s/mL for logging
+            R_total_mmHg = R_total[i] / (self.MMHG_TO_PA * 1e6)
+            self.log.info(f"  {outlet}: R_total = {R_total[i]:.2e} Pa·s/m³ ({R_total_mmHg:.1f} mmHg·s/mL)")
 
-            # Get pressure from config
-            SP = self.wk_model_settings["systolic_pressure"]
-            DP = self.wk_model_settings["diastolic_pressure"]
-            rho = self.config['physics']['rho']
-            mP = ((SP + DP) / 2.0) * 133.33  # Mean pressure in Pa
+        # Step 4: Proximal resistance R1 (characteristic impedance)
+        self.log.info(f"\nStep 4: Proximal resistance R1 = ρ·c/A (characteristic impedance)")
 
-            # Empirical constants
-            a = 13.3; b = 0.3; tau = 1.92
+        rho = self.config['physics']['rho']  # kg/m³
+        pwv_method = self.wk_model_settings.get('pwv_method', 'empirical')
+        pwv_value = self.wk_model_settings.get('pwv', None)  # m/s, if specified
 
-            # Calculate mean flows
-            mean_flows = np.mean(Q_out, axis=0)
-            areas_np = np.array([outlet_areas[name] for name in outlet_patches])
+        R1 = np.zeros(num_outlets)
 
-            # Pure empirical formulas (from literature)
-            num_outlets = len(outlet_patches)
-            R_wk = np.zeros(num_outlets)
-            C_wk = np.zeros(num_outlets)
-            Z_wk = np.zeros(num_outlets)
+        for i, outlet in enumerate(outlet_patches):
+            A_i = outlet_areas[outlet]
 
-            for i, outlet in enumerate(outlet_patches):
-                # R_total = mean_pressure / mean_flow (Ohm's law)
-                if mean_flows[i] > 1e-15:
-                    R_total = mP / mean_flows[i]
+            # Determine pulse wave velocity (PWV)
+            if pwv_value is not None:
+                # User-specified PWV
+                c_i = pwv_value
+                method = "user-specified"
+            elif pwv_method == 'empirical':
+                # Empirical PWV from diameter (typical aortic values)
+                # Arch: 4-6 m/s, Thoracic: 5-7 m/s, Abdominal: 6-8 m/s
+                # Use simple formula based on area
+                diameter_mm = 2 * outlet_radii[outlet] * 1000
+                if diameter_mm > 15:
+                    c_i = 5.0  # Large vessels (arch/thoracic)
+                elif diameter_mm > 8:
+                    c_i = 6.0  # Medium vessels (abdominal)
                 else:
-                    R_total = 1e15  # Very high for no flow
+                    c_i = 7.0  # Smaller vessels (branches)
+                method = "empirical"
+            else:
+                # Fallback: use fraction of R_total
+                R1[i] = 0.15 * R_total[i]
+                self.log.info(f"  {outlet}: R1 = {R1[i]:.2e} Pa·s/m³ (15% of R_total)")
+                continue
 
-                # Wave speed: c = a / (2*sqrt(A/π))^b
-                c = a / (2.0 * np.sqrt((areas_np[i] * 1e6) / np.pi))**b
+            # Calculate characteristic impedance
+            R1[i] = rho * c_i / A_i
 
-                # Proximal resistance: Z = ρ*c/A
-                Z_wk[i] = rho * c / areas_np[i]
+            R1_mmHg = R1[i] / (self.MMHG_TO_PA * 1e6)
+            self.log.info(f"  {outlet}: PWV = {c_i:.1f} m/s ({method}) → R1 = {R1[i]:.2e} Pa·s/m³ ({R1_mmHg:.1f} mmHg·s/mL)")
 
-                # Peripheral resistance: R = R_total - Z
-                R_wk[i] = R_total - Z_wk[i]
-                if R_wk[i] < 0:
-                    R_wk[i] = 0.0
+        # Step 5: Distal resistance R2
+        self.log.info(f"\nStep 5: Distal resistance R2 = R_total - R1")
+        R2 = np.zeros(num_outlets)
 
-                # Compliance: C = τ/R_total
-                C_wk[i] = tau / R_total
+        for i, outlet in enumerate(outlet_patches):
+            R2[i] = R_total[i] - R1[i]
+            if R2[i] < 0:
+                self.log.warning(f"  {outlet}: R2 < 0, setting R1 = 0.1*R_total")
+                R1[i] = 0.1 * R_total[i]
+                R2[i] = 0.9 * R_total[i]
 
-            self.log.info("Calculated PURE WKEmpirical coefficients (R=P/Q, no scaling):")
+            R2_mmHg = R2[i] / (self.MMHG_TO_PA * 1e6)
+            self.log.info(f"  {outlet}: R2 = {R2[i]:.2e} Pa·s/m³ ({R2_mmHg:.1f} mmHg·s/mL)")
+
+        # Step 6: Compliance C
+        self.log.info(f"\nStep 6: Compliance C = tau / R2 (from diastolic decay)")
+
+        tau_systemic = self.wk_model_settings.get('tau', 1.8)  # seconds (typical: 1.5-2.0)
+        C_distribution = self.wk_model_settings.get('compliance_distribution', 'proportional')
+
+        C = np.zeros(num_outlets)
+
+        if C_distribution == 'proportional':
+            # Distribute compliance proportional to flow split
+            # C_i = f_i * C_total, where C_total = tau / R_parallel
+            R2_parallel_inv = np.sum(1.0 / R2)
+            R2_parallel = 1.0 / R2_parallel_inv
+            C_total = tau_systemic / R2_parallel
+
+            self.log.info(f"  Systemic tau: {tau_systemic:.2f} s")
+            self.log.info(f"  R2 parallel: {R2_parallel:.2e} Pa·s/m³")
+            self.log.info(f"  C_total: {C_total:.2e} m³/Pa")
+
             for i, outlet in enumerate(outlet_patches):
-                self.log.info(f"  {outlet}: R={R_wk[i]:.2e}, C={C_wk[i]:.2e}, Z={Z_wk[i]:.2e} "
-                             f"(flow={flow_split_ratios[outlet]*100:.1f}%, mean_Q={mean_flows[i]:.6e} m³/s, "
-                             f"area={areas_np[i]:.6e} m²)")
+                C[i] = flow_split_ratios[outlet] * C_total
+                RC_i = R2[i] * C[i]
+                C_mmHg = C[i] / (self.ML_TO_M3 / self.MMHG_TO_PA)
+                self.log.info(f"  {outlet}: C = {C[i]:.2e} m³/Pa ({C_mmHg:.2e} mL/mmHg), RC = {RC_i:.2f} s")
+        else:
+            # Uniform tau for all outlets
+            for i, outlet in enumerate(outlet_patches):
+                C[i] = tau_systemic / R2[i]
+                RC_i = R2[i] * C[i]
+                C_mmHg = C[i] / (self.ML_TO_M3 / self.MMHG_TO_PA)
+                self.log.info(f"  {outlet}: C = {C[i]:.2e} m³/Pa ({C_mmHg:.2e} mL/mmHg), RC = {RC_i:.2f} s")
 
-        # Store calculated WK coefficients back into config for use by p.tpl and U.tpl templates
+        # Store calculated WK coefficients
+        self.log.info(f"\n" + "=" * 80)
+        self.log.info("SUMMARY: Windkessel Parameters (OpenFOAM units: Pa·s/m³, m³/Pa)")
+        self.log.info("=" * 80)
+
         outlet_parameters = {}
         for i, name in enumerate(outlet_patches):
             outlet_parameters[name] = {
-                "R": float(R_wk[i]),
-                "C": float(C_wk[i]),
-                "Z": float(Z_wk[i])
+                "R": float(R2[i]),  # OpenFOAM uses R2 as "R"
+                "C": float(C[i]),
+                "Z": float(R1[i])   # OpenFOAM uses R1 as "Z"
             }
+            self.log.info(f"{name:15s}: R(R2)={R2[i]:12.2e}  C={C[i]:12.2e}  Z(R1)={R1[i]:12.2e}")
+
         self.wk_model_settings['outlet_parameters'] = outlet_parameters
-        self.log.info(f"Stored outlet_parameters in config for template rendering")
-        self.log.info(f"Windkessel calculation complete - coefficients stored in config")
+        self.log.info("=" * 80)
+        self.log.info("Windkessel calculation complete - coefficients stored in config")
+        self.log.info("=" * 80)
+
+    def _calculate_murray_flow_split(self, outlet_radii: dict) -> dict:
+        """
+        Calculate flow split using Murray's law: f_i = r³ / Σr³
+
+        Args:
+            outlet_radii: Dictionary of outlet names to radii (m)
+
+        Returns:
+            Dictionary of flow split ratios (sum to 1.0)
+        """
+        r_cubed = {name: r**3 for name, r in outlet_radii.items()}
+        total_r_cubed = sum(r_cubed.values())
+
+        flow_split = {name: r3 / total_r_cubed for name, r3 in r_cubed.items()}
+
+        self.log.info(f"  Murray's law (r³) distribution:")
+        for name, ratio in flow_split.items():
+            r_mm = outlet_radii[name] * 1000
+            self.log.info(f"    {name}: r={r_mm:.2f} mm → {ratio*100:.1f}%")
+
+        return flow_split
+
+    def _calculate_area_flow_split(self, outlet_areas: dict) -> dict:
+        """
+        Calculate flow split based on areas: f_i = A_i / ΣA_i
+
+        Args:
+            outlet_areas: Dictionary of outlet names to areas (m²)
+
+        Returns:
+            Dictionary of flow split ratios (sum to 1.0)
+        """
+        total_area = sum(outlet_areas.values())
+        flow_split = {name: area / total_area for name, area in outlet_areas.items()}
+
+        self.log.info(f"  Area-based distribution:")
+        for name, ratio in flow_split.items():
+            A_mm2 = outlet_areas[name] * 1e6
+            self.log.info(f"    {name}: A={A_mm2:.1f} mm² → {ratio*100:.1f}%")
+
+        return flow_split
+
+    def _calculate_equal_flow_split(self, outlet_patches: list) -> dict:
+        """Equal flow distribution among outlets."""
+        num_outlets = len(outlet_patches)
+        equal_ratio = 1.0 / num_outlets
+        return {name: equal_ratio for name in outlet_patches}
 
     def _parse_flow_split_percentage(self, flow_split_value, outlet_patches):
         """
@@ -177,14 +303,11 @@ class WkSetup:
         first_outlets_fraction = float(flow_split_value) / 100.0
 
         if num_outlets == 1:
-            # Only one outlet gets 100%
             return {outlet_patches[0]: 1.0}
 
-        # Split the first_outlets_fraction equally among first N-1 outlets
+        # Split equally among first N-1 outlets
         num_first_outlets = num_outlets - 1
         each_first_outlet = first_outlets_fraction / num_first_outlets
-
-        # Last outlet gets the remainder
         last_outlet_fraction = 1.0 - first_outlets_fraction
 
         flow_split_ratios = {}
@@ -194,74 +317,8 @@ class WkSetup:
             else:
                 flow_split_ratios[outlet] = last_outlet_fraction
 
-        self.log.info(f"Parsed flow_split={flow_split_value}% as:")
-        for outlet, ratio in flow_split_ratios.items():
-            self.log.info(f"  {outlet}: {ratio:.4f} ({ratio*100:.1f}%)")
-
         return flow_split_ratios
 
-    def _calculate_wk_empirical(self, flow_split_ratios, outlet_patches):
-        """
-        Calculate Windkessel coefficients using empirical formulas from flow data.
-
-        Uses the classical empirical approach:
-        - R_total = mean_pressure / mean_flow
-        - Z (proximal resistance) from wave speed formula
-        - R (peripheral resistance) = R_total - Z
-        - C (compliance) from time constant
-
-        Args:
-            flow_split_ratios: Dictionary of flow ratios for each outlet
-            outlet_patches: List of outlet patch names
-
-        Returns:
-            Tuple of (R_array, C_array, Z_array) as numpy arrays
-        """
-        # This method needs access to flow data and areas, so we need to pass them
-        # For now, return default values and let the main execute() handle the calculation
-        # This is called when methodology='WKEmpirical' is set
-
-        self.log.info("WKEmpirical methodology requires flow data - will be calculated in main execute()")
-        # Return None to signal that main execute() should handle it
-        return None, None, None
-
-    def _extract_wk_from_outlet_params(self, outlet_patches):
-        """
-        Extract R, C, Z values from outlet_parameters (populated by Murray's law).
-
-        Args:
-            outlet_patches: List of outlet patch names
-
-        Returns:
-            Tuple of (R_array, C_array, Z_array) as numpy arrays
-        """
-        num_outlets = len(outlet_patches)
-        outlet_params = self.wk_model_settings.get('outlet_parameters', {})
-
-        R_wk = np.zeros(num_outlets)
-        C_wk = np.zeros(num_outlets)
-        Z_wk = np.zeros(num_outlets)
-
-        for i, outlet in enumerate(outlet_patches):
-            if outlet in outlet_params:
-                params = outlet_params[outlet]
-                R_wk[i] = params.get('R', 1000.0)
-                C_wk[i] = params.get('C', 1.0e-6)
-                Z_wk[i] = params.get('Z', 100.0)
-            else:
-                # Fallback to default values
-                self.log.warning(f"Outlet {outlet} not found in outlet_parameters, using defaults")
-                R_wk[i] = 1000.0
-                C_wk[i] = 1.0e-6
-                Z_wk[i] = 100.0
-
-        self.log.info("Extracted Windkessel coefficients from outlet_parameters:")
-        for i, outlet in enumerate(outlet_patches):
-            self.log.info(f"  {outlet}: R={R_wk[i]:.1f}, C={C_wk[i]:.2e}, Z={Z_wk[i]:.1f}")
-
-        return R_wk, C_wk, Z_wk
-
-    # --- FILLED IN HELPER FUNCTION ---
     def _read_inlet_flow(self, file_path, data_type, inlet_area):
         """Reads the inlet flow CSV and converts to flow rate if necessary."""
         if not os.path.isfile(file_path):

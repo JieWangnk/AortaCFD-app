@@ -161,8 +161,8 @@ For OpenFOAM 12, use the modern `modularWKPressure` boundary condition:
 ./scripts/install_windkessel_of12.sh
 
 # Or install manually:
-git clone https://github.com/EManchester/OpenFOAM-v12-Windkessel-code.git
-cd OpenFOAM-v12-Windkessel-code
+git clone https://github.com/JieWangnk/OpenFOAM-WK.git
+cd OpenFOAM-WK
 wmake
 ```
 
