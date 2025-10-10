@@ -144,20 +144,29 @@ class PrepareBoundaryDataTask(Task):
             shutil.move(os.path.join(case_dir, "points"), os.path.join(boundary_data_inlet_dir, "points"))
             os.remove(temp_points_file)
 
-            # Process Inlet CSV and generate velocity files
-            inlet_mapper = InletMapping(config=self.config, case_directory=case_dir)
-            inlet_mapper.run()
+            # Check inlet type - only process CSV for time-varying inlets
+            inlet_type = self.config.get('inlet', {}).get('type', 'TIMEVARYING').upper()
 
-            # Save the calculated cardiac cycle to the shared context
-            cardiac_cycle = float(inlet_mapper.cardiac_cycle)
-            context['cardiac_cycle'] = cardiac_cycle
-            self.log.info(f"Cardiac cycle determined to be {cardiac_cycle}s and saved to context.")
+            if inlet_type in ['TIMEVARYING', 'WOMERSLEY']:
+                # Process Inlet CSV and generate velocity files
+                self.log.info(f"Processing time-varying inlet boundary condition ({inlet_type})...")
+                inlet_mapper = InletMapping(config=self.config, case_directory=case_dir)
+                inlet_mapper.run()
 
-            # Set up data for multiple cycles
-            self.log.info("Setting up data for multiple cardiac cycles...")
-            # THIS CALL IS NOW CORRECT
-            cycle_setup = CycleDataSetup(config=self.config, cardiac_cycle=cardiac_cycle, case_directory=case_dir)
-            cycle_setup.execute()
+                # Save the calculated cardiac cycle to the shared context
+                cardiac_cycle = float(inlet_mapper.cardiac_cycle)
+                context['cardiac_cycle'] = cardiac_cycle
+                self.log.info(f"Cardiac cycle determined to be {cardiac_cycle}s and saved to context.")
+
+                # Set up data for multiple cycles
+                self.log.info("Setting up data for multiple cardiac cycles...")
+                cycle_setup = CycleDataSetup(config=self.config, cardiac_cycle=cardiac_cycle, case_directory=case_dir)
+                cycle_setup.execute()
+            else:
+                # For CONSTANT/PARABOLIC inlets, use a default cardiac cycle for context
+                cardiac_cycle = 1.0  # Default 1.0s (not used for steady inlet)
+                context['cardiac_cycle'] = cardiac_cycle
+                self.log.info(f"Inlet type is {inlet_type} (steady-state). No CSV processing needed. Using default cardiac_cycle={cardiac_cycle}s for context.")
 
             # Set up Windkessel if needed
             if self.config.get("outlets", {}).get("type") == "3EWINDKESSEL":

@@ -62,10 +62,44 @@ class WkSetup:
         # Calculate outlet radii for Murray's law
         outlet_radii = {name: math.sqrt(area / math.pi) for name, area in outlet_areas.items()}
 
-        # Read inlet flow
-        inlet_csv_path = os.path.join("cases_input", self.geom_settings['case_name'], self.inlet_settings['csv_file'])
-        times, flow_inlet = self._read_inlet_flow(inlet_csv_path, self.inlet_settings['data_type'], area_inlet)
-        mean_Q_inlet = np.mean(flow_inlet)
+        # Determine mean inlet flow
+        inlet_type = self.inlet_settings.get('type', 'TIMEVARYING').upper()
+
+        if inlet_type in ['TIMEVARYING', 'WOMERSLEY']:
+            # Read inlet flow from CSV
+            inlet_csv_path = os.path.join("cases_input", self.geom_settings['case_name'], self.inlet_settings['csv_file'])
+            times, flow_inlet = self._read_inlet_flow(inlet_csv_path, self.inlet_settings['data_type'], area_inlet)
+            mean_Q_inlet = np.mean(flow_inlet)
+        elif inlet_type in ['CONSTANT', 'PARABOLIC']:
+            # Calculate flow from either velocity or cardiac_output
+            if 'cardiac_output' in self.inlet_settings:
+                # Cardiac output specified directly (L/min)
+                cardiac_output_Lmin = self.inlet_settings['cardiac_output']
+                mean_Q_inlet = cardiac_output_Lmin / 60.0 / 1000.0  # Convert L/min to m³/s
+                mean_velocity = mean_Q_inlet / area_inlet
+
+                self.log.info(f"Constant inlet: cardiac_output = {cardiac_output_Lmin:.2f} L/min → "
+                             f"velocity = {mean_velocity:.3f} m/s, mean flow Q = {mean_Q_inlet*1e6:.2f} mL/s")
+
+                if 'velocity' in self.inlet_settings:
+                    self.log.warning(f"Both 'velocity' and 'cardiac_output' specified. Using cardiac_output.")
+
+            elif 'velocity' in self.inlet_settings:
+                # Velocity specified
+                velocity = self.inlet_settings['velocity']
+
+                # For parabolic profile, velocity is centerline, mean is v_centerline/2
+                if inlet_type == 'PARABOLIC':
+                    mean_velocity = velocity / 2.0
+                else:
+                    mean_velocity = velocity
+
+                mean_Q_inlet = mean_velocity * area_inlet
+                self.log.info(f"Constant inlet: velocity = {velocity:.3f} m/s, mean flow Q = {mean_Q_inlet*1e6:.2f} mL/s")
+            else:
+                raise ValueError(f"CONSTANT/PARABOLIC inlet requires either 'velocity' or 'cardiac_output' parameter")
+        else:
+            raise ValueError(f"Unknown inlet type: {inlet_type}")
 
         # Step 1: Calculate MAP from cuff pressures
         SP = self.wk_model_settings.get("systolic_pressure", 120)  # mmHg
@@ -101,19 +135,23 @@ class WkSetup:
 
             self.wk_model_settings['flow_split'] = flow_split_ratios
         else:
-            self.log.info(f"\nStep 2: Flow distribution (User-specified)")
+            self.log.info(f"\nStep 2: Flow distribution (User-specified percentage with {flow_split_method} method)")
             if not isinstance(flow_split_ratios, dict):
-                flow_split_ratios = self._parse_flow_split_percentage(flow_split_ratios, outlet_patches)
+                # Flow split is a percentage - use the specified method to distribute
+                flow_split_ratios = self._parse_flow_split_percentage(
+                    flow_split_ratios,
+                    outlet_patches,
+                    flow_split_method,
+                    outlet_radii if flow_split_method == 'murray' else outlet_areas
+                )
                 self.wk_model_settings['flow_split'] = flow_split_ratios
 
         # Calculate outlet flows
         num_outlets = len(outlet_patches)
-        Q_out = np.zeros((len(flow_inlet), num_outlets))
         mean_Q_outlets = np.zeros(num_outlets)
 
         for i, name in enumerate(outlet_patches):
-            Q_out[:, i] = flow_inlet * flow_split_ratios[name]
-            mean_Q_outlets[i] = np.mean(Q_out[:, i])
+            mean_Q_outlets[i] = mean_Q_inlet * flow_split_ratios[name]
             self.log.info(f"  {name}: {flow_split_ratios[name]*100:.1f}% → mean Q = {mean_Q_outlets[i]*1e6:.2f} mL/s")
 
         # Step 3: Total (DC) resistance per outlet
@@ -284,38 +322,79 @@ class WkSetup:
         equal_ratio = 1.0 / num_outlets
         return {name: equal_ratio for name in outlet_patches}
 
-    def _parse_flow_split_percentage(self, flow_split_value, outlet_patches):
+    def _parse_flow_split_percentage(self, flow_split_value, outlet_patches, method='murray', geometry_data=None):
         """
-        Parse flow_split percentage value into flow ratios.
+        Parse flow_split percentage value into flow ratios using specified distribution method.
+
+        The percentage defines how to group outlets:
+        - First N-1 outlets share the specified percentage
+        - Last outlet gets the remainder
+        - Within each group, distribution follows the specified method (Murray, area, or equal)
 
         Args:
-            flow_split_value: Percentage (e.g., 30 means 30% for first N-1 outlets, 70% for last)
+            flow_split_value: Percentage (e.g., 40 means 40% for first N-1 outlets, 60% for last)
             outlet_patches: List of outlet patch names
+            method: Distribution method - 'murray', 'area', or 'equal'
+            geometry_data: Dictionary of outlet radii (for Murray) or areas (for area-based)
 
         Returns:
             Dictionary of flow ratios summing to 1.0
+
+        Example:
+            flow_split = 40, method = 'murray', 4 outlets:
+            - First 3 outlets: share 40% by Murray's law (r³)
+            - Outlet 4: gets remaining 60%
         """
         num_outlets = len(outlet_patches)
         if num_outlets == 0:
             raise ValueError("No outlet patches provided")
 
         # Convert percentage to fraction
-        first_outlets_fraction = float(flow_split_value) / 100.0
+        first_group_fraction = float(flow_split_value) / 100.0
+        last_group_fraction = 1.0 - first_group_fraction
 
         if num_outlets == 1:
             return {outlet_patches[0]: 1.0}
 
-        # Split equally among first N-1 outlets
+        # Split outlets into groups
         num_first_outlets = num_outlets - 1
-        each_first_outlet = first_outlets_fraction / num_first_outlets
-        last_outlet_fraction = 1.0 - first_outlets_fraction
+        first_outlets = outlet_patches[:num_first_outlets]
+        last_outlet = outlet_patches[-1]
 
         flow_split_ratios = {}
-        for i, outlet in enumerate(outlet_patches):
-            if i < num_first_outlets:
-                flow_split_ratios[outlet] = each_first_outlet
-            else:
-                flow_split_ratios[outlet] = last_outlet_fraction
+
+        # Distribute within first group using specified method
+        if method == 'murray' and geometry_data:
+            # Murray's law distribution among first N-1 outlets
+            first_group_data = {name: geometry_data[name] for name in first_outlets}
+            r_cubed = {name: r**3 for name, r in first_group_data.items()}
+            total_r_cubed = sum(r_cubed.values())
+
+            for name in first_outlets:
+                # Fraction within first group
+                group_fraction = r_cubed[name] / total_r_cubed
+                # Scale to overall first group allocation
+                flow_split_ratios[name] = group_fraction * first_group_fraction
+
+        elif method == 'area' and geometry_data:
+            # Area-based distribution among first N-1 outlets
+            first_group_data = {name: geometry_data[name] for name in first_outlets}
+            total_area = sum(first_group_data.values())
+
+            for name in first_outlets:
+                # Fraction within first group
+                group_fraction = first_group_data[name] / total_area
+                # Scale to overall first group allocation
+                flow_split_ratios[name] = group_fraction * first_group_fraction
+
+        else:
+            # Equal distribution among first N-1 outlets
+            each_first_outlet = first_group_fraction / num_first_outlets
+            for name in first_outlets:
+                flow_split_ratios[name] = each_first_outlet
+
+        # Last outlet gets the remainder
+        flow_split_ratios[last_outlet] = last_group_fraction
 
         return flow_split_ratios
 

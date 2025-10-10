@@ -13,6 +13,7 @@
 - [What Problem Does This App Solve?](#what-problem-does-this-app-solve)
 - [Core Benefits](#core-benefits)
 - [Features](#features)
+- [Documentation](#documentation)
 - [Project Structure](#project-structure)
 - [System Requirements](#system-requirements)
 - [Pipeline & Architecture Overview](#pipeline--architecture-overview)
@@ -44,6 +45,45 @@
 - **Reproducible Science:** Ensures all steps are logged and repeatable, supporting robust scientific research.
 
 See [Features](#features) for a detailed breakdown.
+
+---
+
+## Documentation
+
+Comprehensive clinical and technical documentation:
+
+### Boundary Condition Configuration
+
+* **[Inlet BC Clinical Strategy](INLET_BC_CLINICAL_STRATEGY.md)** — Production-ready specification for inlet boundary conditions with physiological validation
+  * Four inlet types (TIMEVARYING, CONSTANT, PARABOLIC, WOMERSLEY)
+  * **NEW: Cardiac output specification** for CONSTANT inlet (clinically intuitive)
+  * Womersley number-based profile recommendations
+  * CSV format requirements and data validation
+  * Automated QC audit trail
+  * LES-ready configuration for CoA studies
+
+* **[CONSTANT Inlet with Cardiac Output](CONSTANT_INLET_CARDIAC_OUTPUT.md)** — Specify cardiac output (L/min) instead of velocity
+  * Clinically intuitive CO-based inlet specification
+  * Automatic velocity calculation from CO and inlet area
+  * Typical values: resting (5 L/min), exercise (10-15 L/min)
+  * Example configurations for various physiological conditions
+
+* **[Inlet BC Configuration Guide](INLET_BC_CONFIGURATION.md)** — Detailed mapping from JSON to OpenFOAM
+  * Code flow: JSON → ConfigBuilder → InletMapping → OpenFOAM
+  * Parameter reference and examples
+  * Troubleshooting guide
+
+* **[Windkessel BC Reference](WINDKESSEL_BC_REFERENCE.md)** — Clinical MAP-based 3-element Windkessel outlet BC
+  * 6-step clinical protocol (Westerhof et al.)
+  * PWV-based characteristic impedance
+  * Murray's law and area-based flow distribution
+  * Scientific references and validation
+
+### Setup & Quick Start
+
+* **[Setup Environment](SETUP_ENVIRONMENT.md)** — Comprehensive installation guide
+* **[Quick Start](QUICKSTART.md)** — Fast reference for daily usage
+* **[Test Configuration](TEST_3EWK_40PCT.md)** — Example test case with 40% flow split
 
 ---
 
