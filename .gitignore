@@ -75,7 +75,7 @@ OPENFOAM/
 *.vtk
 *.vtu
 *.pvsm
-*.csv
+
 *.??csv
 
 # STL/CAD files (generated)
