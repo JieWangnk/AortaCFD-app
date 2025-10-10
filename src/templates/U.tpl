@@ -31,10 +31,13 @@ boundaryField
     // The inlet velocity boundary condition
     {{ inlet_patch }}
     {
-        {% if inlet_settings.type == "TIMEVARYING" or (inlet_settings.data_type == "velocity" and inlet_settings.profile == "womersley") %}
+        {% if inlet_settings.type == "TIMEVARYING" or inlet_settings.type == "WOMERSLEY" %}
         type            timeVaryingMappedFixedValue;
         offset          (0 0 0);
         setAverage      false;
+        {% elif inlet_settings.type == "CONSTANT" or inlet_settings.type == "PARABOLIC" %}
+        type            fixedValue;
+        value           uniform {{ inlet_velocity_vector }};
         {% else %}
         type            fixedValue;
         value           uniform (0 0 0);

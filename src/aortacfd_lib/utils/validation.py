@@ -757,10 +757,30 @@ class BoundaryConditionValidator:
     # Valid profiles
     VALID_PROFILES = ['plug', 'parabolic', 'womersley']
 
+    # Type-profile compatibility rules (strict enforcement)
+    TYPE_PROFILE_RULES = {
+        'TIMEVARYING': ['plug', 'parabolic', 'womersley'],  # Any profile with time-varying data
+        'CONSTANT': ['plug', 'parabolic'],                  # Steady-state profiles only
+        'PARABOLIC': ['parabolic'],                         # Must use parabolic profile
+        'WOMERSLEY': ['womersley']                          # Must use womersley profile
+    }
+
+    # Required parameters per type
+    REQUIRED_PARAMS = {
+        'TIMEVARYING': ['csv_file', 'data_type', 'profile'],
+        'CONSTANT': ['velocity', 'profile'],
+        'PARABOLIC': ['velocity', 'profile'],
+        'WOMERSLEY': ['csv_file', 'data_type', 'profile']
+    }
+
     # Minimum requirements
     MIN_TIME_POINTS = 10  # Minimum data points in CSV
     MIN_CARDIAC_CYCLE_TIME = 0.3  # Minimum cycle time (s) - very fast heart rate ~200 bpm
     MAX_CARDIAC_CYCLE_TIME = 2.0  # Maximum cycle time (s) - slow heart rate ~30 bpm
+
+    # Womersley number thresholds for profile recommendations
+    WOMERSLEY_ALPHA_LOW = 1.0   # Below this: parabolic acceptable
+    WOMERSLEY_ALPHA_MID = 10.0  # Above this: near-plug (typical proximal aorta)
 
     # Windkessel parameter ranges (physiological)
     WINDKESSEL_RANGES = {
@@ -837,7 +857,7 @@ class BoundaryConditionValidator:
 
     def validate_inlet_configuration(self, inlet_config: dict) -> ValidationResult:
         """
-        Validate inlet boundary condition configuration.
+        Validate inlet boundary condition configuration with strict type-profile rules.
 
         Args:
             inlet_config: Inlet configuration dictionary
@@ -859,41 +879,100 @@ class BoundaryConditionValidator:
             )
             return result
 
-        # For time-varying inlet, validate CSV file
-        if inlet_type == 'TIMEVARYING':
-            csv_file = inlet_config.get('csv_file')
-            if not csv_file:
-                result.add_error("Time-varying inlet requires 'csv_file' parameter")
+        # Check required parameters for this type
+        required = self.REQUIRED_PARAMS.get(inlet_type, [])
+        for param in required:
+            if param not in inlet_config:
+                result.add_error(f"Inlet type '{inlet_type}' requires parameter '{param}'")
+
+        # Validate profile compatibility with type
+        profile = inlet_config.get('profile', '').lower()
+        if profile:
+            if profile not in self.VALID_PROFILES:
+                result.add_error(
+                    f"Invalid profile '{profile}'. Valid profiles: {', '.join(self.VALID_PROFILES)}"
+                )
             else:
-                # Validate the CSV file
+                # Strict type-profile compatibility check
+                allowed_profiles = self.TYPE_PROFILE_RULES.get(inlet_type, [])
+                if profile not in allowed_profiles:
+                    result.add_error(
+                        f"Profile '{profile}' incompatible with inlet type '{inlet_type}'. "
+                        f"Allowed profiles for {inlet_type}: {', '.join(allowed_profiles)}"
+                    )
+
+        # Validate data_type
+        data_type = inlet_config.get('data_type', '').lower()
+        if data_type and data_type not in self.VALID_DATA_TYPES:
+            result.add_error(
+                f"Invalid data_type '{data_type}'. Valid types: {', '.join(self.VALID_DATA_TYPES)}"
+            )
+
+        # Type-specific validation
+        if inlet_type in ['TIMEVARYING', 'WOMERSLEY']:
+            csv_file = inlet_config.get('csv_file')
+            if csv_file:
                 csv_result = self.validate_flow_data_csv(csv_file)
                 result.errors.extend(csv_result.errors)
                 result.warnings.extend(csv_result.warnings)
                 if not csv_result.is_valid:
                     result.is_valid = False
 
-            # Validate data_type
-            data_type = inlet_config.get('data_type', '').lower()
-            if data_type and data_type not in self.VALID_DATA_TYPES:
-                result.add_warning(
-                    f"Unusual data_type '{data_type}'. Expected: {', '.join(self.VALID_DATA_TYPES)}"
-                )
+        if inlet_type in ['CONSTANT', 'PARABOLIC']:
+            # Check for either velocity or cardiac_output parameter
+            has_velocity = 'velocity' in inlet_config
+            has_cardiac_output = 'cardiac_output' in inlet_config
 
-            # Validate profile
-            profile = inlet_config.get('profile', '').lower()
-            if profile and profile not in self.VALID_PROFILES:
-                result.add_warning(
-                    f"Unusual profile '{profile}'. Expected: {', '.join(self.VALID_PROFILES)}"
+            if not has_velocity and not has_cardiac_output:
+                result.add_error(
+                    f"Inlet type '{inlet_type}' requires either 'velocity' (m/s) or 'cardiac_output' (L/min) parameter"
                 )
+            elif has_velocity and has_cardiac_output:
+                result.add_warning(
+                    "Both 'velocity' and 'cardiac_output' specified. Using 'cardiac_output' and ignoring 'velocity'."
+                )
+                cardiac_output = inlet_config['cardiac_output']
+                if not isinstance(cardiac_output, (int, float)) or cardiac_output <= 0:
+                    result.add_error(f"Cardiac output must be a positive number, got: {cardiac_output}")
+                elif cardiac_output < 2.0 or cardiac_output > 30.0:
+                    result.add_warning(
+                        f"Cardiac output {cardiac_output:.1f} L/min is outside typical range (3-25 L/min). "
+                        "Typical resting: 4.5-5.5 L/min, exercise: 10-25 L/min."
+                    )
+            elif has_velocity:
+                velocity = inlet_config['velocity']
+                if not isinstance(velocity, (int, float)) or velocity <= 0:
+                    result.add_error(f"Velocity must be a positive number, got: {velocity}")
+            elif has_cardiac_output:
+                cardiac_output = inlet_config['cardiac_output']
+                if not isinstance(cardiac_output, (int, float)) or cardiac_output <= 0:
+                    result.add_error(f"Cardiac output must be a positive number, got: {cardiac_output}")
+                elif cardiac_output < 2.0 or cardiac_output > 30.0:
+                    result.add_warning(
+                        f"Cardiac output {cardiac_output:.1f} L/min is outside typical range (3-25 L/min). "
+                        "Typical resting: 4.5-5.5 L/min, exercise: 10-25 L/min."
+                    )
 
-        # For constant inlet, check value is provided
-        elif inlet_type == 'CONSTANT':
-            if 'value' not in inlet_config:
-                result.add_error("Constant inlet requires 'value' parameter")
-            else:
-                value = inlet_config['value']
-                if not isinstance(value, (int, float)) or value < 0:
-                    result.add_error(f"Invalid constant inlet value: {value} (must be positive number)")
+        # Check for physics.nu if womersley profile is used
+        if profile == 'womersley' or inlet_type == 'WOMERSLEY':
+            physics = self.config.get('physics', {})
+            if 'nu' not in physics:
+                result.add_error(
+                    "Womersley profile requires 'physics.nu' (kinematic viscosity) in configuration"
+                )
+            elif physics['nu'] <= 0:
+                result.add_error(f"physics.nu must be positive, got: {physics['nu']}")
+
+        # Validate optional period parameter
+        if 'period' in inlet_config:
+            period = inlet_config['period']
+            if not isinstance(period, (int, float)) or period <= 0:
+                result.add_error(f"Period must be a positive number, got: {period}")
+            elif period < self.MIN_CARDIAC_CYCLE_TIME or period > self.MAX_CARDIAC_CYCLE_TIME:
+                result.add_warning(
+                    f"Period {period:.3f}s outside typical cardiac range "
+                    f"({self.MIN_CARDIAC_CYCLE_TIME}-{self.MAX_CARDIAC_CYCLE_TIME}s)"
+                )
 
         return result
 
@@ -1217,8 +1296,12 @@ class BoundaryConditionValidator:
             )
         elif inlet_type == 'CONSTANT' and 'WINDKESSEL' in outlet_type:
             result.add_warning(
-                "Constant inlet with Windkessel outlets is unusual. "
-                "Windkessel is typically used with pulsatile flow."
+                "Constant inlet with 3-Element Windkessel outlets: at steady state (DC), "
+                "the capacitor C is open-circuit and the model collapses to pure resistance R_total = R1 + R2. "
+                "R1 (characteristic impedance) only matters for transients/waves. "
+                "Consider: (1) simple resistance outlets for mean hemodynamics, "
+                "(2) fixed pressure outlets near MAP, or "
+                "(3) synthesize mild inlet pulsation (sinusoid at 60-70 bpm) to properly utilize 3-WK dynamics."
             )
 
         return result

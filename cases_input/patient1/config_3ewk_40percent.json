@@ -28,7 +28,7 @@
   },
   "boundary_conditions": {
     "inlet": {
-      "type": "PLUG",
+      "type": "CONSTANT",
       "velocity": 1.0,
       "profile": "plug",
       "orientation": "out"

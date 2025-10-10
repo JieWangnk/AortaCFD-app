@@ -36,10 +36,13 @@ class BoundaryConditionSetup:
     def write_all_bc_files(self):
         """A single method to generate all necessary boundary condition files."""
         self.log.info("Generating all boundary condition files...")
-        
+
         # Check if we need to calculate Murray's law flow distribution
         outlet_settings = self._prepare_outlet_settings()
-        
+
+        # Calculate inlet velocity vector for CONSTANT/PARABOLIC types
+        inlet_velocity_vector = self._calculate_inlet_velocity_vector()
+
         # This context dictionary is now simpler, as it doesn't need initial_conditions
         context = {
             "inlet_patch": "world" if self.world_patch_mode else self.inlet_patch,
@@ -51,7 +54,8 @@ class BoundaryConditionSetup:
             "template_vars": self.config.get('template_vars', {}),
             "openfoam_version": self.config.get('openfoam_version', '8'),
             "openfoam_major_version": self.config.get('openfoam_major_version', 8),
-            "world_patch_mode": self.world_patch_mode
+            "world_patch_mode": self.world_patch_mode,
+            "inlet_velocity_vector": inlet_velocity_vector
         }
 
         zero_dir = os.path.join(self.case_dir, "0")
@@ -142,6 +146,121 @@ class BoundaryConditionSetup:
                     }
         
         return outlet_settings
+
+    def _calculate_inlet_velocity_vector(self):
+        """
+        Calculate inlet velocity vector for CONSTANT/PARABOLIC inlet types.
+        For TIMEVARYING/WOMERSLEY, returns None (use boundaryData).
+
+        Returns:
+            str: OpenFOAM vector format "(vx vy vz)" or None
+        """
+        import numpy as np
+        from .utils.patch_processing import PatchProcessing
+
+        inlet_type = self.inlet_settings.get('type', 'TIMEVARYING').upper()
+
+        # Only calculate for CONSTANT/PARABOLIC types
+        if inlet_type not in ['CONSTANT', 'PARABOLIC']:
+            return None
+
+        # Get inlet geometry first (needed for cardiac_output calculation)
+        tri_surface_dir = os.path.join(self.case_dir, "constant", "triSurface")
+        inlet_patch_name = self.geom_settings['inlet_keywords_ordered']
+        scale_factor = self.geom_settings.get('scale_factor', 1e-3)
+
+        patch_processor = PatchProcessing(tri_surface_dir, inlet_patch_name)
+
+        # Determine velocity magnitude from either velocity or cardiac_output
+        if 'cardiac_output' in self.inlet_settings:
+            # Calculate velocity from cardiac output (L/min) and inlet area
+            cardiac_output_Lmin = self.inlet_settings['cardiac_output']
+            cardiac_output_m3s = cardiac_output_Lmin / 60.0 / 1000.0  # Convert L/min to m³/s
+
+            # Get inlet area
+            inlet_area = patch_processor.calculate_surface_area(scale_factor=scale_factor)
+
+            # Calculate velocity
+            velocity_magnitude = cardiac_output_m3s / inlet_area
+
+            self.log.info(f"Cardiac output: {cardiac_output_Lmin:.2f} L/min → velocity: {velocity_magnitude:.4f} m/s "
+                         f"(inlet area: {inlet_area*1e6:.2f} mm²)")
+
+            # Warn if both velocity and cardiac_output are specified
+            if 'velocity' in self.inlet_settings:
+                self.log.warning(f"Both 'velocity' and 'cardiac_output' specified. Using cardiac_output ({cardiac_output_Lmin} L/min).")
+
+        elif 'velocity' in self.inlet_settings:
+            # Use directly specified velocity
+            velocity_magnitude = self.inlet_settings['velocity']
+            self.log.info(f"Using specified velocity: {velocity_magnitude:.4f} m/s")
+        else:
+            self.log.error("Neither 'velocity' nor 'cardiac_output' specified for CONSTANT/PARABOLIC inlet!")
+            return "(0 0 0)"
+
+        # For parabolic profile at the boundary, we use centerline velocity
+        # (the actual parabolic distribution would need non-uniform BC)
+        if inlet_type == 'PARABOLIC':
+            # For uniform BC with parabolic intent, use mean velocity
+            velocity_magnitude = velocity_magnitude / 2.0
+            self.log.warning("PARABOLIC inlet type with fixedValue BC uses mean velocity. "
+                           "For true parabolic profile, consider using groovyBC or codedFixedValue.")
+
+        # Get inlet normal direction from geometry
+        try:
+            _, _, inlet_normal = patch_processor.calculate_inlet_center_radius(scale_factor=scale_factor)
+
+            # Check orientation setting
+            orientation = self.inlet_settings.get('orientation', 'auto').lower()
+
+            if orientation == 'out':
+                direction = inlet_normal
+            elif orientation == 'in':
+                direction = -inlet_normal
+            elif orientation == 'auto':
+                # Auto-detect using outlet positions (same logic as inlet_mapping.py)
+                outlet_patches = self.geom_settings['outlet_keywords_ordered']
+                outlet_centers = []
+
+                for outlet_name in outlet_patches:
+                    outlet_processor = PatchProcessing(tri_surface_dir, outlet_name)
+                    outlet_center, _, _ = outlet_processor.calculate_inlet_center_radius(scale_factor=scale_factor)
+                    outlet_centers.append(outlet_center)
+
+                if outlet_centers:
+                    inlet_center = patch_processor.calculate_inlet_center_radius(scale_factor=scale_factor)[0]
+                    avg_outlet_center = np.mean(outlet_centers, axis=0)
+                    flow_direction = avg_outlet_center - inlet_center
+                    flow_direction = flow_direction / np.linalg.norm(flow_direction)
+
+                    # Check alignment
+                    dot_product = np.dot(inlet_normal, flow_direction)
+                    if dot_product < 0:
+                        direction = -inlet_normal  # Flip
+                        self.log.info(f"Auto-orientation: flipping inlet normal (dot={dot_product:.3f})")
+                    else:
+                        direction = inlet_normal
+                        self.log.info(f"Auto-orientation: keeping inlet normal (dot={dot_product:.3f})")
+                else:
+                    direction = inlet_normal
+                    self.log.warning("Auto-orientation: no outlets found, using normal as-is")
+            else:
+                direction = inlet_normal
+
+            # Calculate velocity vector
+            velocity_vector = velocity_magnitude * direction
+
+            # Format as OpenFOAM vector
+            vector_str = f"({velocity_vector[0]:.6e} {velocity_vector[1]:.6e} {velocity_vector[2]:.6e})"
+
+            self.log.info(f"Inlet velocity vector calculated: {vector_str} (magnitude={velocity_magnitude:.3f} m/s)")
+
+            return vector_str
+
+        except Exception as e:
+            self.log.error(f"Failed to calculate inlet velocity vector: {e}")
+            self.log.warning("Falling back to zero velocity (0 0 0)")
+            return "(0 0 0)"
 
     def _write_file_from_template(self, template_name: str, output_path: str, context: dict):
         template = self.jinja_env.get_template(template_name)
