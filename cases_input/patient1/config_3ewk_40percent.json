@@ -1,0 +1,79 @@
+{
+  "case_info": {
+    "patient_id": "patient1_3ewk_40pct",
+    "description": "3-Element Windkessel with 40% flow split (clinical MAP method)"
+  },
+  "simulation_settings": {
+    "analysis_type": "medium",
+    "solver_type": "laminar"
+  },
+  "physics": {
+    "blood_density": 1060,
+    "blood_viscosity": 0.004
+  },
+  "geometry": {
+    "rotation": true,
+    "target_normal": [0, 0, 1],
+    "scale_factor": 0.001
+  },
+  "mesh": {
+    "mesh_resolution": {
+      "target_cell_size_mm": 1.5,
+      "blockmesh_resolution": 50
+    },
+    "SNAPPY_SETTINGS": {
+      "parallel": true,
+      "nProcessors": 4
+    }
+  },
+  "boundary_conditions": {
+    "inlet": {
+      "type": "PLUG",
+      "velocity": 1.0,
+      "profile": "plug",
+      "orientation": "out"
+    },
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80,
+        "venous_pressure": 0,
+        "flow_split": 40,
+        "flow_split_method": "murray",
+        "pwv_method": "empirical",
+        "tau": 1.8,
+        "compliance_distribution": "proportional"
+      }
+    },
+    "walls": {
+      "type": "no_slip",
+      "roughness": 0.0
+    }
+  },
+  "simulation_control": {
+    "number_of_cycles": 1,
+    "end_time": 0.5,
+    "writeInterval": 0.05
+  },
+  "numerical_settings": {
+    "time_stepping": "adaptive",
+    "initial_deltaT": 1e-4,
+    "maxCo": 0.5,
+    "maxDeltaT": 1e-3
+  },
+  "output_settings": {
+    "save_frequency": 5,
+    "variables": ["velocity", "pressure"],
+    "post_processing": {
+      "generate_report": true,
+      "create_animations": false,
+      "export_vtk": false
+    }
+  },
+  "run_settings": {
+    "solution_type": "parallel",
+    "subdomains": 4,
+    "decomposition_method": "scotch"
+  }
+}
