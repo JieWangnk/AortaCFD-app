@@ -13,11 +13,16 @@ class WkSetup:
 
     Method: Clinical Windkessel (Westerhof et al. 2009)
     1. MAP = DP + (SP-DP)/3
-    2. Flow distribution: Murray's law (r³) or Area-based
+    2. Flow distribution: Murray's law (r³) with optional main outlet percentage
     3. R_total = (MAP - P_venous) / mean_flow
     4. R1 (proximal) = ρ·c/A (characteristic impedance from PWV)
     5. R2 (distal) = R_total - R1
     6. C (compliance) = tau / R2 (from diastolic decay time constant)
+
+    Flow Split Options:
+    - None: Auto Murray's law for all outlets
+    - Percentage (e.g., 60): Main outlet (last) gets 60%, branches share 40% by Murray
+    - Dict: User-specified ratios for each outlet
 
     References:
     - Westerhof et al., Med Biol Eng Comput 2009 (DC allocation)
@@ -118,33 +123,27 @@ class WkSetup:
         self.log.info(f"  Driving pressure (MAP - P_v): {MAP - P_venous:.1f} mmHg")
 
         # Step 2: Flow distribution
-        flow_split_method = self.wk_model_settings.get('flow_split_method', 'murray')
         flow_split_ratios = self.wk_model_settings.get('flow_split')
 
         if flow_split_ratios is None:
-            # Auto-calculate using specified method
-            if flow_split_method == 'murray':
-                self.log.info(f"\nStep 2: Flow distribution (Murray's law: f_i = r³/Σr³)")
-                flow_split_ratios = self._calculate_murray_flow_split(outlet_radii)
-            elif flow_split_method == 'area':
-                self.log.info(f"\nStep 2: Flow distribution (Area-based: f_i = A_i/ΣA_i)")
-                flow_split_ratios = self._calculate_area_flow_split(outlet_areas)
-            else:
-                self.log.info(f"\nStep 2: Flow distribution (Equal split)")
-                flow_split_ratios = self._calculate_equal_flow_split(outlet_patches)
-
+            # Auto-calculate using Murray's law (default)
+            self.log.info(f"\nStep 2: Flow distribution (Murray's law: f_i = r³/Σr³)")
+            flow_split_ratios = self._calculate_murray_flow_split(outlet_radii)
             self.wk_model_settings['flow_split'] = flow_split_ratios
         else:
-            self.log.info(f"\nStep 2: Flow distribution (User-specified percentage with {flow_split_method} method)")
             if not isinstance(flow_split_ratios, dict):
-                # Flow split is a percentage - use the specified method to distribute
+                # Flow split is a percentage for main outlet
+                self.log.info(f"\nStep 2: Flow distribution (Main outlet percentage + Murray's law for branches)")
                 flow_split_ratios = self._parse_flow_split_percentage(
                     flow_split_ratios,
                     outlet_patches,
-                    flow_split_method,
-                    outlet_radii if flow_split_method == 'murray' else outlet_areas
+                    'murray',
+                    outlet_radii
                 )
                 self.wk_model_settings['flow_split'] = flow_split_ratios
+            else:
+                # User provided complete dictionary of ratios
+                self.log.info(f"\nStep 2: Flow distribution (User-specified ratios)")
 
         # Calculate outlet flows
         num_outlets = len(outlet_patches)
@@ -296,105 +295,69 @@ class WkSetup:
 
         return flow_split
 
-    def _calculate_area_flow_split(self, outlet_areas: dict) -> dict:
-        """
-        Calculate flow split based on areas: f_i = A_i / ΣA_i
-
-        Args:
-            outlet_areas: Dictionary of outlet names to areas (m²)
-
-        Returns:
-            Dictionary of flow split ratios (sum to 1.0)
-        """
-        total_area = sum(outlet_areas.values())
-        flow_split = {name: area / total_area for name, area in outlet_areas.items()}
-
-        self.log.info(f"  Area-based distribution:")
-        for name, ratio in flow_split.items():
-            A_mm2 = outlet_areas[name] * 1e6
-            self.log.info(f"    {name}: A={A_mm2:.1f} mm² → {ratio*100:.1f}%")
-
-        return flow_split
-
-    def _calculate_equal_flow_split(self, outlet_patches: list) -> dict:
-        """Equal flow distribution among outlets."""
-        num_outlets = len(outlet_patches)
-        equal_ratio = 1.0 / num_outlets
-        return {name: equal_ratio for name in outlet_patches}
-
     def _parse_flow_split_percentage(self, flow_split_value, outlet_patches, method='murray', geometry_data=None):
         """
-        Parse flow_split percentage value into flow ratios using specified distribution method.
+        Simplified flow split: specify main outlet percentage, rest split by Murray's law.
 
-        The percentage defines how to group outlets:
-        - First N-1 outlets share the specified percentage
-        - Last outlet gets the remainder
-        - Within each group, distribution follows the specified method (Murray, area, or equal)
+        Logic:
+        - Last outlet (typically descending aorta/abdominal) gets specified percentage
+        - First N-1 outlets (branches) share remainder using Murray's law (r³)
 
         Args:
-            flow_split_value: Percentage (e.g., 40 means 40% for first N-1 outlets, 60% for last)
-            outlet_patches: List of outlet patch names
-            method: Distribution method - 'murray', 'area', or 'equal'
-            geometry_data: Dictionary of outlet radii (for Murray) or areas (for area-based)
+            flow_split_value: Percentage for LAST outlet (e.g., 60 means 60% to main outlet)
+            outlet_patches: List of outlet patch names (LAST is main outlet)
+            method: Must be 'murray' (only method supported)
+            geometry_data: Dictionary of outlet radii (meters)
 
         Returns:
             Dictionary of flow ratios summing to 1.0
 
         Example:
-            flow_split = 40, method = 'murray', 4 outlets:
-            - First 3 outlets: share 40% by Murray's law (r³)
-            - Outlet 4: gets remaining 60%
+            flow_split = 60, 4 outlets [BRACH, LCCA, RCCA, DESC_AORTA]:
+            - DESC_AORTA (last): 60%
+            - BRACH, LCCA, RCCA: share 40% by Murray's law (r³)
         """
         num_outlets = len(outlet_patches)
         if num_outlets == 0:
             raise ValueError("No outlet patches provided")
 
         # Convert percentage to fraction
-        first_group_fraction = float(flow_split_value) / 100.0
-        last_group_fraction = 1.0 - first_group_fraction
+        main_outlet_fraction = float(flow_split_value) / 100.0
+        branches_fraction = 1.0 - main_outlet_fraction
 
         if num_outlets == 1:
             return {outlet_patches[0]: 1.0}
 
-        # Split outlets into groups
-        num_first_outlets = num_outlets - 1
-        first_outlets = outlet_patches[:num_first_outlets]
-        last_outlet = outlet_patches[-1]
+        # Last outlet is main (descending aorta/abdominal)
+        # First N-1 are branches (split by Murray)
+        num_branches = num_outlets - 1
+        branch_outlets = outlet_patches[:num_branches]
+        main_outlet = outlet_patches[-1]
 
         flow_split_ratios = {}
 
-        # Distribute within first group using specified method
-        if method == 'murray' and geometry_data:
-            # Murray's law distribution among first N-1 outlets
-            first_group_data = {name: geometry_data[name] for name in first_outlets}
-            r_cubed = {name: r**3 for name, r in first_group_data.items()}
-            total_r_cubed = sum(r_cubed.values())
+        self.log.info(f"  Main outlet '{main_outlet}': {main_outlet_fraction*100:.1f}%")
+        self.log.info(f"  Branches share {branches_fraction*100:.1f}% by Murray's law:")
 
-            for name in first_outlets:
-                # Fraction within first group
-                group_fraction = r_cubed[name] / total_r_cubed
-                # Scale to overall first group allocation
-                flow_split_ratios[name] = group_fraction * first_group_fraction
+        # Distribute branches using Murray's law ONLY
+        if not geometry_data:
+            raise ValueError("Geometry data (outlet radii) required for Murray's law flow split")
 
-        elif method == 'area' and geometry_data:
-            # Area-based distribution among first N-1 outlets
-            first_group_data = {name: geometry_data[name] for name in first_outlets}
-            total_area = sum(first_group_data.values())
+        # Murray's law distribution among branches
+        branch_data = {name: geometry_data[name] for name in branch_outlets}
+        r_cubed = {name: r**3 for name, r in branch_data.items()}
+        total_r_cubed = sum(r_cubed.values())
 
-            for name in first_outlets:
-                # Fraction within first group
-                group_fraction = first_group_data[name] / total_area
-                # Scale to overall first group allocation
-                flow_split_ratios[name] = group_fraction * first_group_fraction
+        for name in branch_outlets:
+            # Fraction within branches group
+            branch_fraction = r_cubed[name] / total_r_cubed
+            # Scale to overall branches allocation
+            flow_split_ratios[name] = branch_fraction * branches_fraction
+            r_mm = geometry_data[name] * 1000
+            self.log.info(f"    {name}: r={r_mm:.2f}mm → {flow_split_ratios[name]*100:.1f}%")
 
-        else:
-            # Equal distribution among first N-1 outlets
-            each_first_outlet = first_group_fraction / num_first_outlets
-            for name in first_outlets:
-                flow_split_ratios[name] = each_first_outlet
-
-        # Last outlet gets the remainder
-        flow_split_ratios[last_outlet] = last_group_fraction
+        # Main outlet (last) gets specified percentage
+        flow_split_ratios[main_outlet] = main_outlet_fraction
 
         return flow_split_ratios
 
