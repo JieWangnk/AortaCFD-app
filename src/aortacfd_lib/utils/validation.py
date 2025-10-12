@@ -1198,11 +1198,11 @@ class BoundaryConditionValidator:
 
         wk_settings = outlet_config['windkessel_settings']
 
-        # Check methodology
+        # Check methodology (optional - defaults are used if not specified)
         methodology = wk_settings.get('methodology', '').lower()
         valid_methodologies = ['murray_law_automatic', 'manual', 'literature_based']
 
-        if methodology not in valid_methodologies:
+        if methodology and methodology not in valid_methodologies:
             result.add_warning(
                 f"Unknown methodology '{methodology}'. Expected: {', '.join(valid_methodologies)}"
             )
@@ -1299,9 +1299,15 @@ class BoundaryConditionValidator:
                 "Constant inlet with 3-Element Windkessel outlets: at steady state (DC), "
                 "the capacitor C is open-circuit and the model collapses to pure resistance R_total = R1 + R2. "
                 "R1 (characteristic impedance) only matters for transients/waves. "
-                "Consider: (1) simple resistance outlets for mean hemodynamics, "
-                "(2) fixed pressure outlets near MAP, or "
-                "(3) synthesize mild inlet pulsation (sinusoid at 60-70 bpm) to properly utilize 3-WK dynamics."
+                "\n\n"
+                "RECOMMENDED: Use simple resistance outlets for mean hemodynamics:\n"
+                "  R_i = (MAP - P_v) / Q̄_i\n"
+                "where MAP = DP + (SP-DP)/3, P_v ≈ 0-5 mmHg, Q̄_i from Murray's law (r³) or area split.\n"
+                "This is exactly what RCR reduces to at steady state.\n"
+                "\n"
+                "Manual workarounds (not implemented): "
+                "(1) implement fixed pressure BC at outlets near MAP, or "
+                "(2) create synthetic sinusoidal CSV (60-70 bpm) to add mild pulsation."
             )
 
         return result

@@ -498,11 +498,12 @@ SCALING:
 |------------|-------------|--------|-------------------|
 | `TIMEVARYING` | `3EWINDKESSEL` | ✅ **Recommended** | Full RCR dynamics: pulsatile compliance, realistic diastolic decay |
 | `TIMEVARYING` | `ZEROGRADIENT` | ✅ OK | Simpler, but may have stability issues |
-| `CONSTANT` | `3EWINDKESSEL` | ⚠️ **Warning** | Valid but collapses to R1+R2 at steady state; C inactive |
+| `CONSTANT` | Simple Resistance | ✅ **Recommended** | Mean hemodynamics: R_i = (MAP - P_v) / Q̄_i (what RCR reduces to at DC) |
 | `CONSTANT` | `FIXEDVALUE` (pressure) | ✅ OK | Clean steady-state solution; geometry determines flow split |
+| `CONSTANT` | `3EWINDKESSEL` | ⚠️ **Warning** | Valid but collapses to R1+R2 at steady state; C inactive, use simple R instead |
 | `CONSTANT` | `ZEROGRADIENT` | ⚠️ **Warning** | May cause stability issues; consider pressure outlets |
 
-**Key insight:** CONSTANT inlet + 3-WK is allowed but the capacitor is open-circuit at DC, reducing to pure resistance R_total = R1 + R2.
+**Key insight for steady-state:** CONSTANT inlet + 3-WK is allowed but the capacitor is open-circuit at DC, reducing to pure resistance R_total = R1 + R2. **Preferred approach:** Use simple resistance outlets R_i = (MAP - P_v) / Q̄_i, which is exactly what RCR reduces to at steady state.
 
 ---
 
