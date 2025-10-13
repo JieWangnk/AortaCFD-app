@@ -28,6 +28,7 @@ class WorkflowManager:
             "generate_bc_files": setup_tasks.GenerateBCFilesTask,
             "generate_control_dict": setup_tasks.GenerateControlDictTask,
             "update_control_dict": setup_tasks.GenerateControlDictTask,
+            "generate_simulation_report": setup_tasks.GenerateSimulationReportTask,
             "execute_meshing": execution_tasks.ExecuteMeshingTask,
             "execute_solver": execution_tasks.ExecuteSolverTask,
             "execute_post": execution_tasks.ExecutePostProcessingTask
@@ -86,6 +87,7 @@ class WorkflowManager:
                 "generate_solver_settings",
                 "generate_decompose_par_dict",
                 "generate_control_dict",
+                "generate_simulation_report",  # Generate report after setup
                 "execute_meshing",
                 "prepare_boundary_data",
                 "generate_bc_files",
