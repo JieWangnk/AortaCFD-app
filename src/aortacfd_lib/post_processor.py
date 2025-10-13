@@ -358,3 +358,75 @@ class OpenFOAMParaView:
 
             log.write("[INFO] Animation creation completed.\n")
 
+
+# Main execution block
+if __name__ == "__main__":
+    """
+    Main execution when running with pvbatch.
+
+    Usage:
+        cd output/patient1/run_*/openfoam
+        pvbatch ../../../../src/aortacfd_lib/post_processor.py
+
+    Or with custom case path:
+        pvbatch post_processor.py /path/to/case
+    """
+    import sys
+
+    # Get case path from command line argument or environment variable
+    if len(sys.argv) > 1:
+        case_path = sys.argv[1]
+    elif "CASE_PATH" in os.environ:
+        case_path = os.environ["CASE_PATH"]
+    else:
+        # Use current directory
+        case_path = os.getcwd()
+
+    print(f"[INFO] OpenFOAM Post-Processing with ParaView")
+    print(f"[INFO] Case path: {case_path}")
+
+    # Check if case exists
+    if not os.path.exists(case_path):
+        print(f"[ERROR] Case directory not found: {case_path}")
+        sys.exit(1)
+
+    # Look for .foam file
+    foam_files = [f for f in os.listdir(case_path) if f.endswith('.foam')]
+    if not foam_files:
+        print(f"[ERROR] No .foam file found in {case_path}")
+        print("[INFO] Make sure meshing completed successfully")
+        sys.exit(1)
+
+    print(f"[INFO] Found {foam_files[0]}")
+
+    # Initialize post-processor
+    try:
+        processor = OpenFOAMParaView(
+            casePath=case_path,
+            caseType='Reconstructed',
+            fields=["U", "p"]  # Start with basic fields
+        )
+
+        print("[INFO] Generating visualizations...")
+
+        # Generate screenshots for all time steps
+        processor.screenShot()
+
+        print(f"[INFO] Screenshots saved to: {processor.imageDir}")
+        print("[INFO] Post-processing completed successfully!")
+
+        # Optionally create animations if ffmpeg is available
+        try:
+            print("[INFO] Creating animations...")
+            processor.anima(fps=30)
+            print("[INFO] Animations created successfully!")
+        except Exception as e:
+            print(f"[WARNING] Could not create animations: {e}")
+            print("[INFO] Install ffmpeg to enable animation generation")
+
+    except Exception as e:
+        print(f"[ERROR] Post-processing failed: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
