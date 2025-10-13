@@ -251,25 +251,38 @@ class PatientCaseRunner:
             'parallel': merged_config['mesh']['SNAPPY_SETTINGS'].get('parallel', False)
         }
     
-    def run_workflow_step(self, sim_config: dict, workflow_step: str = 'runAll') -> bool:
-        """Run specific workflow step."""
+    def run_workflow_step(self, sim_config: dict, workflow_step: str = 'runAll', case_dir: str = None) -> bool:
+        """Run specific workflow step.
+
+        Args:
+            sim_config: Simulation configuration dictionary
+            workflow_step: Workflow command to execute
+            case_dir: Optional existing case directory (for post-processing old cases)
+        """
         try:
             manager = WorkflowManager(sim_config['config'])
-            
-            # Setup case directory
-            run_dir = sim_config['run_dir']
-            openfoam_dir = run_dir / "openfoam"
-            openfoam_dir.mkdir(parents=True, exist_ok=True)
-            
+
+            # Use existing case directory if provided, otherwise create new
+            if case_dir:
+                openfoam_dir = Path(case_dir)
+                if not openfoam_dir.exists():
+                    raise PatientSimulationError(f"Case directory not found: {case_dir}")
+                self.logger.info(f"Using existing case directory: {openfoam_dir}")
+            else:
+                # Setup new case directory
+                run_dir = sim_config['run_dir']
+                openfoam_dir = run_dir / "openfoam"
+                openfoam_dir.mkdir(parents=True, exist_ok=True)
+
             # Set context
             manager.context['case_directory'] = str(openfoam_dir)
-            
+
             # Execute workflow step
             manager.run_workflow(workflow_step)
-            
+
             sim_config['output_directory'] = str(openfoam_dir)
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Workflow step '{workflow_step}' failed: {e}")
             return False

@@ -69,6 +69,8 @@ CASE STRUCTURE:
                        help='Override simulation profile using sim_* profile keys')
     parser.add_argument('--config',
                        help='Path to a custom patient configuration JSON (defaults to cases_input/<patient_id>/config.json)')
+    parser.add_argument('--case-dir',
+                       help='Use existing case directory (for running post-processing on old simulations)')
 
     return parser
 
@@ -136,6 +138,8 @@ def main():
         options['profile'] = args.profile
     if args.overwrite:
         options['overwrite'] = True
+    if args.case_dir:
+        options['case_dir'] = args.case_dir
 
     config_override = args.config
 
@@ -175,10 +179,11 @@ def main():
         for step in steps:
             workflow_command = step_mapping.get(step, step)
             print(f"\n🔄 Running workflow step: {step} ({workflow_command})")
-            
+
             options['workflow_step'] = workflow_command
-            step_success = runner.run_workflow_step(sim_config, workflow_command)
-            
+            case_dir = options.get('case_dir')
+            step_success = runner.run_workflow_step(sim_config, workflow_command, case_dir=case_dir)
+
             if not step_success:
                 print(f"❌ Step '{step}' failed!")
                 success = False
