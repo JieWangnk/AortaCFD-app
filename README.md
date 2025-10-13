@@ -686,14 +686,11 @@ AortaCFD includes advanced hemodynamic analysis capabilities:
 - **Performance Optimization**: Automatic mesh and solver optimization
 - **Publication Reporting**: Generate research-ready reports and figures
 
-### Analysis Tools
+### Post-Processing and Visualization
 
 ```bash
-# View analysis capabilities
-python -c "from src.aortacfd_lib.hemodynamic_analyzer import HemodynamicAnalyzer; help(HemodynamicAnalyzer)"
-
-# Generate publication-quality reports
-python -c "from src.aortacfd_lib.publication_reporter import PublicationReporter; help(PublicationReporter)"
+# View post-processing capabilities
+python -c "from src.aortacfd_lib.post_processor import OpenFOAMParaView; help(OpenFOAMParaView)"
 ```
 
 ---
