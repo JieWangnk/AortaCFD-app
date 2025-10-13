@@ -410,7 +410,7 @@ if __name__ == "__main__":
         print("[INFO] Generating visualizations...")
 
         # Generate screenshots for all time steps
-        processor.screenShot()
+        processor.generate_screenshots()
 
         print(f"[INFO] Screenshots saved to: {processor.imageDir}")
         print("[INFO] Post-processing completed successfully!")
