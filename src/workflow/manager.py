@@ -63,7 +63,11 @@ class WorkflowManager:
             # COMMAND 4: Executes the solver.
             "run:solver": ["execute_solver"],
 
-            # COMMAND 5: A user-friendly alias to set up a case completely.
+            # COMMAND 5: Executes post-processing.
+            "run:post": ["execute_post"],
+            "execute_post": ["execute_post"],  # Alias
+
+            # COMMAND 7: A user-friendly alias to set up a case completely.
             "createCase": [
                 "create_case_structure",
                 "generate_mesh_files",
@@ -78,7 +82,7 @@ class WorkflowManager:
                 "update_control_dict"
             ],
 
-            # COMMAND 6: The full end-to-end run.
+            # COMMAND 8: The full end-to-end run.
             "runAll": [
                 "create_case_structure",
                 "generate_mesh_files",

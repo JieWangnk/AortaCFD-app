@@ -71,5 +71,10 @@
     "solution_type": "parallel",
     "subdomains": 4,
     "decomposition_method": "scotch"
+  },
+    "post_processing": {
+    "case_type": "Decomposed",
+    "fields": ["U", "p"],
+    "time_steps": "last"
   }
 }

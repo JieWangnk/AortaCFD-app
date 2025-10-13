@@ -131,32 +131,60 @@ class ExecuteSolverTask(Task):
 
 class ExecutePostProcessingTask(Task):
     """Runs the pvbatch post-processing script."""
-    
+
     def execute(self, context: dict) -> bool:
         """This task contains the execution logic from your original run_postprocessing method."""
         logger.info("Executing post-processing script...")
         case_dir = context["case_directory"]
         pp_config = self.config.get("post_processing", {})
-        
+
         # Setup environment variables for the script
         os.environ["CASE_PATH"] = case_dir
-        # Additional environment variables can be added here if needed
-        
+
+        # Try to find pvbatch executable
         pvbatch_exe = pp_config.get("pvbatch_exe")
-        if not pvbatch_exe or not os.path.exists(pvbatch_exe):
+        if not pvbatch_exe:
+            # Try to find pvbatch in PATH
+            import shutil as sh
+            pvbatch_exe = sh.which("pvbatch")
+            if not pvbatch_exe:
+                logger.error("pvbatch executable not found in PATH")
+                logger.error("Install ParaView: sudo apt-get install paraview")
+                logger.error("Or set 'pvbatch_exe' in config.json post_processing section")
+                return False
+            logger.info(f"Found pvbatch: {pvbatch_exe}")
+
+        if not os.path.exists(pvbatch_exe):
             logger.error(f"pvbatch executable not found at path: {pvbatch_exe}")
             return False
-            
-        # The script to run should be in your library
-        script_path = os.path.join("aortacfd_lib", "post_processor.py")
+
+        # Find the post_processor.py script
+        # Look in src/aortacfd_lib/ relative to current directory
+        script_path = os.path.join(os.getcwd(), "src", "aortacfd_lib", "post_processor.py")
+        if not os.path.exists(script_path):
+            # Try alternative path
+            script_path = os.path.join("aortacfd_lib", "post_processor.py")
+
+        if not os.path.exists(script_path):
+            logger.error(f"post_processor.py not found at: {script_path}")
+            return False
+
+        logger.info(f"Using post-processor script: {script_path}")
+        logger.info(f"Case directory: {case_dir}")
 
         try:
-            # We use the standard run_command, which will source the OF environment.
-            # This isn't strictly necessary for pvbatch but is good practice.
-            run_command(self.config, [pvbatch_exe, script_path], ".", "log.postProcessing")
+            # Run pvbatch with the case directory as argument
+            cmd = [pvbatch_exe, script_path, case_dir]
+            logger.info(f"Running: {' '.join(cmd)}")
+
+            run_command(self.config, cmd, ".", "log.postProcessing")
         except CommandExecutionError as e:
             logger.error(f"Post-processing failed: {e}")
+            logger.warning("You can run post-processing manually:")
+            logger.warning(f"  cd {case_dir}")
+            logger.warning(f"  pvbatch {script_path}")
             return False
-        
+
         logger.info("Post-processing completed successfully.")
+        logger.info(f"Check results in: {case_dir}/Images/")
         return True
