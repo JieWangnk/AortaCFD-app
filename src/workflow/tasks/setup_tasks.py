@@ -26,6 +26,7 @@ try:
     from ...aortacfd_lib.utils.patch_utils import detect_world_patch_mode
     from ...aortacfd_lib.utils.format_points import EnhancedPointsFormatter
     from ...aortacfd_lib.wk_setup import WkSetup
+    from ...aortacfd_lib.simulation_report_generator import SimulationReportGenerator
 except ImportError:
     from aortacfd_lib.solver_setup import FvSolutionWriter
     from aortacfd_lib.simulation_control import SimulationSetup
@@ -35,6 +36,7 @@ except ImportError:
     from aortacfd_lib.utils.patch_utils import detect_world_patch_mode
     from aortacfd_lib.utils.format_points import EnhancedPointsFormatter
     from aortacfd_lib.wk_setup import WkSetup
+    from aortacfd_lib.simulation_report_generator import SimulationReportGenerator
 
 class CreateCaseStructureTask(Task):
     """
@@ -306,6 +308,45 @@ class GenerateControlDictTask(Task):
         
         writer = SimulationSetup(config=self.config, case_directory=context["case_directory"])
         writer.write_controlDict(final_control_dict=control_dict_template)
-        
+
         return True
-    
+
+
+class GenerateSimulationReportTask(Task):
+    """
+    Generates comprehensive technical report documenting the CFD simulation setup.
+    Creates markdown, JSON, and text reports in the output/reports/ directory.
+    """
+    def execute(self, context: dict) -> bool:
+        logger.info("Generating simulation technical report...")
+
+        # Get output directory (parent of case_directory/openfoam)
+        case_dir = context["case_directory"]
+        output_dir = os.path.dirname(case_dir)
+        case_name = context.get("patient_name", "unknown")
+
+        # Initialize report generator
+        report_gen = SimulationReportGenerator(output_dir, case_name)
+
+        # Gather geometry info from context if available
+        geometry_info = context.get("geometry_info", None)
+
+        # Mesh info would be added after mesh generation
+        mesh_info = context.get("mesh_info", None)
+
+        # Generate all reports
+        try:
+            report_path = report_gen.generate_full_report(
+                config=self.config,
+                geometry_info=geometry_info,
+                mesh_info=mesh_info
+            )
+            logger.info(f"Technical report generated: {report_path}")
+            logger.info(f"Report directory: {output_dir}/reports/")
+            context["report_path"] = report_path
+            return True
+        except Exception as e:
+            logger.error(f"Failed to generate simulation report: {e}")
+            # Don't fail the workflow if report generation fails
+            return True
+
