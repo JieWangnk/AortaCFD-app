@@ -335,37 +335,16 @@ When `flow_split` is a percentage AND `flow_split_method` is specified:
 
 ## Documentation References
 
-**Boundary Conditions:**
-- `INLET_BC_CLINICAL_STRATEGY.md` - Complete inlet BC specification
-- `WINDKESSEL_BC_REFERENCE.md` - 3EWK clinical methodology
-- `CONSTANT_INLET_CARDIAC_OUTPUT.md` - Cardiac output-based inlet
-- `FLOW_SPLIT_EXPLANATION.md` - Flow split percentage with methods
+**User Documentation:**
+- `USER_GUIDE.md` - Complete user guide (installation, configuration, boundary conditions, troubleshooting)
+- `README.md` - Main project documentation and overview
+- `CHANGELOG.md` - Version history and updates
 
-**Setup & Testing:**
-- `README.md` - Main project documentation
+**Technical Documentation:**
 - `TESTING.md` - Test suite organization and guidelines
-- `QUICKSTART.md` - Fast reference for daily usage
-- `SETUP_ENVIRONMENT.md` - Installation guide
-
-**Mesh Quality:**
 - `docs/MESH_QUALITY_GUIDE.md` - Validated mesh settings
 - `docs/MESH_VALIDATION_RESULTS.md` - Quality metrics
 - `validation/README.md` - CFD validation framework
-
-## Git Status Context
-
-Currently on branch: `intelConfig`
-
-**Recent commits focus:**
-- Intelligent configuration system
-- Workflow API development
-- Core architecture for case configuration
-
-**Modified files in this session:**
-- `README.md` - Documentation updates
-- `config/builder.py` - Configuration system
-- `workflow/manager.py` - Workflow orchestration
-- New files: `api_server.py`, `workflow_api.py` (untracked)
 
 ## Python Environment
 
