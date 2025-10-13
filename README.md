@@ -688,9 +688,37 @@ AortaCFD includes advanced hemodynamic analysis capabilities:
 
 ### Post-Processing and Visualization
 
+Post-processing generates screenshots and animations in `output/patient1/run_*/images/` directory.
+
 ```bash
-# View post-processing capabilities
+# Navigate to OpenFOAM case directory
+cd output/patient1/run_20251005_142902/openfoam
+
+# Generate visualizations for all time steps (with animations)
+pvbatch ../../../../src/aortacfd_lib/post_processor.py
+
+# Only last time step (no animations)
+pvbatch ../../../../src/aortacfd_lib/post_processor.py . last
+
+# Only peak systole (maximum velocity time)
+pvbatch ../../../../src/aortacfd_lib/post_processor.py . peak
+
+# View capabilities
 python -c "from src.aortacfd_lib.post_processor import OpenFOAMParaView; help(OpenFOAMParaView)"
+```
+
+**Output Structure:**
+```
+output/patient1/run_*/
+├── openfoam/          # OpenFOAM case files
+└── images/            # Post-processing outputs
+    ├── Velocity_*.png
+    ├── Pressure_*.png
+    ├── WSS_*.png
+    ├── Velocity.avi   # Animation (if all time steps)
+    ├── Pressure.avi
+    ├── WSS.avi
+    └── postProcessing.log
 ```
 
 ---

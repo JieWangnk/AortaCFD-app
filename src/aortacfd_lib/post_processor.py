@@ -50,16 +50,35 @@ def hideAllScalarBarsManually(renderView, arrayNames):
 
 class OpenFOAMParaView:
     def __init__(self, casePath, caseType='Reconstructed', timeSteps=None, fields=None, rescaleSettings=None):
+        """
+        Initialize OpenFOAM ParaView post-processor.
+
+        Args:
+            casePath: Path to OpenFOAM case directory
+            caseType: 'Reconstructed' or 'Decomposed' case type
+            timeSteps: List of time steps to process. Options:
+                      - None: Use all available time steps (default)
+                      - [t1, t2, ...]: Specific time steps
+                      - 'last': Only the last time step
+                      - 'peak': Only peak systole (maximum velocity time)
+            fields: List of fields to visualize ['U', 'p', 'wallShearStress']
+            rescaleSettings: Dictionary of rescale settings per field
+        """
         self.casePath  = casePath
         self.caseType  = caseType
         self.foamFile  = f"{casePath}/f.foam"
-        self.imageDir  = f"{casePath}/Images"
+
+        # Place images directory at run level (one level up from openfoam/)
+        # e.g., output/patient1/run_*/images/ instead of output/patient1/run_*/openfoam/Images/
+        run_dir = os.path.dirname(os.path.abspath(casePath))
+        self.imageDir  = os.path.join(run_dir, "images")
+
         self.timeSteps = timeSteps
         self.fields    = fields if fields else ["U", "p", "wallShearStress"]
-        
-        # check the Images folder
+
+        # check the images folder
         if not os.path.exists(self.imageDir):
-            os.makedirs(self.imageDir,exist_ok=True)
+            os.makedirs(self.imageDir, exist_ok=True)
 
         self.property_map = {
             "U": {
@@ -109,15 +128,17 @@ class OpenFOAMParaView:
         self.rescaleSettings = rescaleSettings or {
             key: {"rescaleToData": False, "rescaleRange": val} for key, val in default_ranges.items()
         }
-        
+
     def generate_screenshots(self):
         """
         Build the pipeline, do PCA-based camera orientation, generate
         new 'KE', 'WSS', and 'Pressure' fields, and save screenshots.
+
+        Screenshots saved to: run_directory/images/
         """
-        # Ensure the Images directory exists
+        # Ensure the images directory exists
         if not os.path.exists(self.imageDir):
-            os.makedirs(self.imageDir)
+            os.makedirs(self.imageDir, exist_ok=True)
             print(f"[INFO] Created directory: {self.imageDir}\n")
 
         log_file = os.path.join(self.imageDir, "postProcessing.log")
@@ -250,12 +271,72 @@ class OpenFOAMParaView:
         # 8) Prepare time steps
         animationScene1 = GetAnimationScene()
         timeKeeper1 = GetTimeKeeper()
+
+        # Get all available time steps from OpenFOAM case
+        availableTimes = timeKeeper1.TimestepValues if timeKeeper1 else []
+
         if not self.timeSteps:
-            availableTimes = timeKeeper1.TimestepValues if timeKeeper1 else []
+            # Default: use all available time steps
+            if availableTimes:
+                self.timeSteps = list(availableTimes)
+                with open(log_file, "a") as log:
+                    log.write(f"[INFO] Using all available time steps ({len(self.timeSteps)} total): {self.timeSteps[0]:.6f} to {self.timeSteps[-1]:.6f}\n")
+            else:
+                self.timeSteps = [0.0]
+                with open(log_file, "a") as log:
+                    log.write("[INFO] No available timesteps found. Using 0.0.\n")
+
+        elif self.timeSteps == 'last':
+            # Use only the last time step
             if availableTimes:
                 self.timeSteps = [max(availableTimes)]
                 with open(log_file, "a") as log:
-                    log.write(f"[INFO] Defaulting to last time step: {self.timeSteps}\n")
+                    log.write(f"[INFO] Using last time step only: {self.timeSteps[0]:.6f}\n")
+            else:
+                self.timeSteps = [0.0]
+                with open(log_file, "a") as log:
+                    log.write("[INFO] No available timesteps found. Using 0.0.\n")
+
+        elif self.timeSteps == 'peak':
+            # Use peak systole (time with maximum velocity)
+            if availableTimes:
+                max_vel = 0
+                peak_time = availableTimes[0]
+                for t in availableTimes:
+                    animationScene1.AnimationTime = t
+                    timeKeeper1.Time = t
+                    renderView1.Update()
+                    data = servermanager.Fetch(ffoam)
+                    try:
+                        if hasattr(data, 'GetPointData'):
+                            u_array = data.GetPointData().GetArray('U')
+                            if u_array:
+                                u_data = vtk_to_numpy(u_array)
+                                vel_mag = np.linalg.norm(u_data, axis=1).max()
+                                if vel_mag > max_vel:
+                                    max_vel = vel_mag
+                                    peak_time = t
+                    except Exception:
+                        pass
+                self.timeSteps = [peak_time]
+                with open(log_file, "a") as log:
+                    log.write(f"[INFO] Using peak systole time step: {peak_time:.6f} (max velocity: {max_vel:.4f} m/s)\n")
+            else:
+                self.timeSteps = [0.0]
+                with open(log_file, "a") as log:
+                    log.write("[INFO] No available timesteps found. Using 0.0.\n")
+
+        elif isinstance(self.timeSteps, (list, tuple)):
+            # User specified exact time steps
+            with open(log_file, "a") as log:
+                log.write(f"[INFO] Using user-specified time steps: {self.timeSteps}\n")
+
+        else:
+            # Invalid input - use last time step as fallback
+            if availableTimes:
+                self.timeSteps = [max(availableTimes)]
+                with open(log_file, "a") as log:
+                    log.write(f"[WARNING] Invalid timeSteps parameter. Using last time step: {self.timeSteps[0]:.6f}\n")
             else:
                 self.timeSteps = [0.0]
                 with open(log_file, "a") as log:
@@ -285,7 +366,7 @@ class OpenFOAMParaView:
                 else:
                     lut.RescaleTransferFunction(*prop["rescaleRange"])
                     pwf.RescaleTransferFunction(*prop["rescaleRange"])
-                    
+
                 # Show colorbar with units
                 finalDisplay.SetScalarBarVisibility(renderView1, True)
                 scalarBar = GetScalarBar(lut, renderView1)
@@ -365,11 +446,20 @@ if __name__ == "__main__":
     Main execution when running with pvbatch.
 
     Usage:
-        cd output/patient1/run_*/openfoam
+        # All time steps (default) with animations
         pvbatch ../../../../src/aortacfd_lib/post_processor.py
 
-    Or with custom case path:
-        pvbatch post_processor.py /path/to/case
+        # All time steps explicitly
+        pvbatch ../../../../src/aortacfd_lib/post_processor.py . all
+
+        # Only last time step
+        pvbatch ../../../../src/aortacfd_lib/post_processor.py . last
+
+        # Only peak systole (max velocity)
+        pvbatch ../../../../src/aortacfd_lib/post_processor.py . peak
+
+        # Custom case path
+        pvbatch post_processor.py /path/to/case last
     """
     import sys
 
@@ -399,34 +489,53 @@ if __name__ == "__main__":
 
     print(f"[INFO] Found {foam_files[0]}")
 
+    # Parse command-line options for time step selection
+    time_option = None
+    if len(sys.argv) > 2:
+        time_arg = sys.argv[2].lower()
+        if time_arg == 'last':
+            time_option = 'last'
+            print("[INFO] Time step mode: Last time step only")
+        elif time_arg == 'peak':
+            time_option = 'peak'
+            print("[INFO] Time step mode: Peak systole (maximum velocity)")
+        elif time_arg == 'all':
+            time_option = None
+            print("[INFO] Time step mode: All available time steps")
+        else:
+            print(f"[WARNING] Unknown time option '{time_arg}'. Using default (all time steps)")
+
     # Initialize post-processor
     try:
         processor = OpenFOAMParaView(
             casePath=case_path,
             caseType='Reconstructed',
-            fields=["U", "p"]  # Start with basic fields
+            timeSteps=time_option,  # None, 'last', or 'peak'
+            fields=["U", "p", "wallShearStress"]  # All available fields
         )
 
         print("[INFO] Generating visualizations...")
 
-        # Generate screenshots for all time steps
+        # Generate screenshots for specified time steps
         processor.generate_screenshots()
 
         print(f"[INFO] Screenshots saved to: {processor.imageDir}")
         print("[INFO] Post-processing completed successfully!")
 
-        # Optionally create animations if ffmpeg is available
-        try:
-            print("[INFO] Creating animations...")
-            processor.anima(fps=30)
-            print("[INFO] Animations created successfully!")
-        except Exception as e:
-            print(f"[WARNING] Could not create animations: {e}")
-            print("[INFO] Install ffmpeg to enable animation generation")
+        # Optionally create animations if multiple time steps and ffmpeg available
+        if time_option is None:  # Only create animations for all time steps
+            try:
+                print("[INFO] Creating animations...")
+                processor.anima(fps=30)
+                print("[INFO] Animations created successfully!")
+            except Exception as e:
+                print(f"[WARNING] Could not create animations: {e}")
+                print("[INFO] Install ffmpeg to enable animation generation")
+        else:
+            print("[INFO] Skipping animation (single time step mode)")
 
     except Exception as e:
         print(f"[ERROR] Post-processing failed: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
-
