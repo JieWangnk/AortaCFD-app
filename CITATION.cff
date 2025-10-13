@@ -2,9 +2,9 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 title: "AortaCFD: Automated Patient-Specific Aortic Blood Flow Simulation Pipeline"
 version: 1.2.0
-date-released: 2024-12-01
-url: "https://github.com/yourusername/AortaCFD-app"
-repository-code: "https://github.com/yourusername/AortaCFD-app"
+date-released: 2025-10-13
+url: "https://github.com/JieWangnk/AortaCFD-app"
+repository-code: "https://github.com/JieWangnk/AortaCFD-app"
 license: MIT
 type: software
 authors:
@@ -12,7 +12,7 @@ authors:
     given-names: "Jie"
     email: "jie.wang-2@manchester.ac.uk"
     affiliation: "University of Manchester"
-    orcid: "https://orcid.org/0000-0000-0000-0000"
+    orcid: "https://orcid.org/0000-0002-6671-3690"
 keywords:
   - computational fluid dynamics
   - aortic blood flow
