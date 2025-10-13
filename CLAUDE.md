@@ -49,17 +49,15 @@ python run_patient.py --list
 ./venv/bin/pytest --cov=src --cov-report=html
 ```
 
-### Mesh Optimization
+### Mesh Validation
 
 ```bash
-# Stage 1: Geometry-driven mesh (novice-friendly)
-python -m mesh_optim stage1 --geometry cases_input/patient1
+# Check mesh quality
+cd output/patient1/run_*/openfoam
+checkMesh
 
-# Stage 2: Physics-aware RANS mesh (y+ ≈ 1)
-python -m mesh_optim stage2 --geometry cases_input/patient1 --model RANS
-
-# Stage 2: Wall-resolved LES mesh
-python -m mesh_optim stage2 --geometry cases_input/patient1 --model LES
+# Run mesh quality validation tests
+./venv/bin/pytest test_cfd_validation.py -v -s
 ```
 
 ## Architecture Overview
@@ -199,12 +197,13 @@ When `flow_split` is a number (e.g., 40), it means:
    - Regime-specific (Laminar/RANS/LES)
    - Production-quality meshes
 
-**Physics-aware features:**
-- Actual y+ targeting from patient velocity and geometry
-- Distance-based refinement (1.5mm/3.0mm from wall)
-- QoI convergence monitoring
+**Mesh generation features:**
+- Automated snappyHexMesh setup
+- Boundary layer generation
+- Profile-based mesh sizing (coarse/medium/fine)
+- Quality validation with checkMesh
 
-**Implementation:** `mesh_optim/` package
+**Implementation:** `src/aortacfd_lib/mesh_setup.py`
 
 ## OpenFOAM 12 Specifics
 

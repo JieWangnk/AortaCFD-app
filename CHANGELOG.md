@@ -38,14 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Simulation validation with OpenFOAM execution
   - Multi-config comparison tools
 
-#### Mesh Optimization
-- **Two-stage mesh optimization system**
-  - Stage 1: Geometry-driven mesh (novice-friendly)
-  - Stage 2: Physics-aware QoI mesh (RANS/LES targeting)
-- **Physics-aware features**
-  - Actual y+ targeting from patient velocity
-  - Distance-based refinement (1.5mm/3.0mm from wall)
-  - QoI convergence monitoring (WSS, velocity, pressure)
+#### Mesh Generation
+- **Automated mesh generation** with snappyHexMesh
+  - blockMesh for background mesh
+  - snappyHexMesh for patient geometry refinement
+- **Boundary layer generation** with configurable settings
+  - Number of layers, expansion ratio, thickness
+- **Profile-based mesh sizing** (coarse/medium/fine)
+- **Quality validation** with checkMesh
 
 #### Configuration System
 - **Profile-based configuration** - Pre-defined solver/resolution combinations
@@ -116,7 +116,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Key Features |
 |---------|------|--------------|
-| 1.2.0 | 2024-12-01 | OpenFOAM 12, testing framework, mesh optimization, cardiac output inlet |
+| 1.2.0 | 2024-12-01 | OpenFOAM 12, testing framework, automated mesh generation, cardiac output inlet |
 | 1.0.0 | 2024-06-01 | Initial release, basic pipeline, Murray's Law, 3EWK |
 
 ---
