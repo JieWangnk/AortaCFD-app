@@ -64,7 +64,7 @@ See [Features](#features) for a detailed breakdown.
 
 ## Features
 
-- **Two-Stage Mesh Optimization**: Physics-aware mesh generation for accurate CFD results
+- **Automated Mesh Generation**: snappyHexMesh with boundary layers for accurate CFD results
 - Automated case directory and file structure creation
 - Advanced mesh generation with QoI-driven adaptation
 - Automated boundary condition setup (including Windkessel models)
@@ -100,16 +100,6 @@ AortaCFD-app/
 │   │   ├── base.py             # Base configuration
 │   │   └── profiles/           # Simulation profiles
 │   └── templates/         # OpenFOAM template files
-├── mesh_optim/            # Advanced mesh optimization package
-│   ├── stage1_mesh.py     # Geometry-driven mesh generation (inner loop)
-│   ├── stage2_qoi.py      # QoI-driven mesh adaptation (outer loop)
-│   ├── utils.py           # Mesh optimization utilities
-│   ├── __main__.py        # CLI interface
-│   └── configs/           # Physics-aware configurations
-│       ├── stage1_default.json    # Baseline geometry-driven settings
-│       ├── stage2_laminar.json    # Laminar flow QoI criteria
-│       ├── stage2_rans.json       # RANS flow QoI criteria
-│       └── stage2_les.json        # LES flow QoI criteria
 ├── cases_input/           # Input patient cases
 │   ├── patient1/         # Example patient case 1
 │   └── patient2/         # Example patient case 2
@@ -347,14 +337,12 @@ If you prefer manual setup or encounter issues with the automated script:
 | `python run_patient.py patient1 --config custom.json` | Use an alternate configuration file             |
 | `python run_patient.py --list`            | List all available patient cases              |
 
-### Advanced Mesh Optimization (`mesh_optim`)
+### Mesh Quality Validation
 
 | Command                                    | Description                                      |
 |--------------------------------------------|--------------------------------------------------|
-| `python -m mesh_optim stage1 --geometry cases_input/patient1` | Geometry-driven mesh optimization (novice-friendly) |
-| `python -m mesh_optim stage2 --geometry cases_input/patient1 --model RANS` | Physics-aware RANS mesh with y+ ≈ 1 targeting |
-| `python -m mesh_optim stage2 --geometry cases_input/patient1 --model LES`  | Wall-resolved LES mesh optimization |
-| `python -m mesh_optim stage2 --geometry cases_input/patient1 --model LAMINAR` | Laminar flow mesh optimization |
+| `checkMesh`                               | Check mesh quality in OpenFOAM case directory   |
+| `./venv/bin/pytest test_cfd_validation.py` | Run mesh quality validation tests              |
 
 ### Simple Runner (`simple_run.py`)
 
@@ -385,78 +373,60 @@ python run_patient.py patient1 --quick
 # Simple one-command run
 python simple_run.py ~/my_stl_files/
 
-# Advanced mesh optimization for RANS
-python -m mesh_optim stage2 --geometry cases_input/patient1 --model RANS
+# Validate mesh quality
+cd output/patient1/run_*/openfoam
+checkMesh
 
 # Help
 python run_patient.py --help
-python -m mesh_optim stage1 --help
 ```
 
 ---
 
-## Advanced Mesh Optimization
+## Mesh Generation
 
-AortaCFD includes a sophisticated two-stage mesh optimization system designed for physics-aware mesh generation with QoI (Quantities of Interest) targeting.
+AortaCFD uses automated mesh generation with blockMesh and snappyHexMesh.
 
-### Two-Stage Workflow
+### Mesh Quality Control
 
-#### Stage 1: Geometry-Driven Mesh Generation (Inner Loop)
-- **Purpose**: Generate quality mesh based purely on geometry
-- **Target Users**: Novice users who need a reliable mesh quickly
-- **Process**: Iterates on surface refinement and boundary layer settings until quality criteria are met
-- **Output**: Mesh with good orthogonality, skewness, and boundary layer coverage
+- **Automated mesh generation** via snappyHexMesh
+- **Boundary layer generation** with configurable layer settings
+- **Quality validation** with checkMesh
+- **Profile-based mesh sizing** (coarse/medium/fine)
 
-```bash
-# Basic geometry-driven mesh
-python -m mesh_optim stage1 --geometry cases_input/patient1
+### Mesh Settings
 
-# With custom settings
-python -m mesh_optim stage1 --geometry cases_input/patient1 --config mesh_optim/configs/stage1_default.json --max-iterations 5
+Configure mesh resolution in your config file:
+
+```json
+{
+  "mesh": {
+    "mesh_resolution": {
+      "target_cell_size_mm": 1.0
+    },
+    "boundary_layers": {
+      "n_surface_layers": 5,
+      "expansion_ratio": 1.2,
+      "final_layer_thickness": 0.0003
+    }
+  }
+}
 ```
 
-#### Stage 2: QoI-Driven Mesh Adaptation (Outer Loop)  
-- **Purpose**: Physics-aware mesh optimization with CFD validation
-- **Target Users**: Advanced users requiring production-quality meshes
-- **Process**: Runs Stage 1, then iteratively solves CFD and adapts mesh based on y+, WSS, and flow metrics
-- **Output**: Mesh optimized for specific flow regime (Laminar/RANS/LES)
+### Quality Validation
 
 ```bash
-# Physics-aware RANS mesh with y+ ≈ 1 targeting
-python -m mesh_optim stage2 --geometry cases_input/patient1 --model RANS
+# Check mesh quality after generation
+cd output/patient1/run_*/openfoam
+checkMesh
 
-# Wall-resolved LES mesh
-python -m mesh_optim stage2 --geometry cases_input/patient1 --model LES
-
-# Custom configuration
-python -m mesh_optim stage2 --geometry cases_input/patient1 --model RANS --config mesh_optim/configs/stage2_rans.json
+# Expected results:
+# - Max non-orthogonality < 70°
+# - Max skewness < 4
+# - Max aspect ratio < 100
 ```
 
-### Physics-Aware Features
-
-- **Actual y+ Targeting**: Uses patient-specific peak velocity (from BPM75.csv) and geometry to calculate proper first layer thickness for y+ ≈ 1
-- **Flow Regime Optimization**: Different settings for Laminar (Re < 2300), RANS, and wall-resolved LES
-- **Distance Refinement**: Physics-based refinement distances (1.5mm/3.0mm from wall) rather than arbitrary cell multiples  
-- **QoI Convergence**: Monitors velocity stability, pressure drop accuracy, and WSS reliability
-
-### Configuration Files
-
-| File | Description | Target y+ | Layers | Use Case |
-|------|-------------|-----------|---------|----------|
-| `stage1_default.json` | Baseline geometry-driven | N/A | 10 | Quick prototyping |
-| `stage2_laminar.json` | Laminar flow (Re < 2300) | < 1 | 8-10 | Steady laminar flow |
-| `stage2_rans.json` | SST-RANS turbulence | 0.5-2.0 | 12-15 | Most clinical cases |  
-| `stage2_les.json` | Wall-resolved LES | 0.3-1.5 | 20-25 | Research/high fidelity |
-
-### Benefits Over Traditional Meshing
-
-| Aspect | Traditional | AortaCFD Mesh Optimization |
-|--------|-------------|----------------------------|
-| **Layer Targeting** | Trial and error | Physics-based y+ = 1 calculation |
-| **Distance Refinement** | Cell size multiples | Boundary layer physics (1.5/3.0mm) |
-| **Quality Validation** | checkMesh only | CFD + QoI convergence |
-| **Flow Regime** | One-size-fits-all | Regime-specific (Laminar/RANS/LES) |
-| **Ease of Use** | Complex config files | Simple CLI commands |
+See [USER_GUIDE.md](USER_GUIDE.md) for detailed mesh configuration options.
 
 ---
 

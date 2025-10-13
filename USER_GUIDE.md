@@ -475,19 +475,6 @@ ls $FOAM_USER_LIBBIN/libwindkesselConditions.so
 
 ## Advanced Usage
 
-### Mesh Optimization
-
-```bash
-# Stage 1: Geometry-driven mesh
-python -m mesh_optim stage1 --geometry cases_input/patient1
-
-# Stage 2: Physics-aware RANS mesh
-python -m mesh_optim stage2 --geometry cases_input/patient1 --model RANS
-
-# Stage 2: Wall-resolved LES mesh
-python -m mesh_optim stage2 --geometry cases_input/patient1 --model LES
-```
-
 ### Parallel Workflow
 
 ```bash
