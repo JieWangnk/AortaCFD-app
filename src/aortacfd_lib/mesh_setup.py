@@ -186,96 +186,234 @@ class GeometryAnalyzer:
         self.log.info(f"BlockMesh bounds (mm, expanded): min({min_expanded}), max({max_expanded})")
         return {"min": min_expanded, "max": max_expanded}
 
+    def _coerce_positive(self, value, label: str):
+        """
+        Validate and coerce a value to positive float.
+
+        Args:
+            value: Value to validate (may be None, bool, numeric, or non-numeric)
+            label: Parameter name for logging
+
+        Returns:
+            float or None: Validated positive float, or None if invalid
+        """
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            self.log.warning(f"Ignoring boolean {label}: {value}")
+            return None
+        try:
+            coerced = float(value)
+        except (TypeError, ValueError):
+            self.log.warning(f"Ignoring non-numeric {label}: {value}")
+            return None
+        if coerced <= 0:
+            self.log.warning(f"Ignoring non-positive {label}: {value}")
+            return None
+        return coerced
+
+    def _cell_size_from_target_mm(self, mesh_resolution: dict) -> tuple:
+        """
+        Priority 1: Direct cell size specification in millimeters.
+
+        Config: mesh.mesh_resolution.target_cell_size_mm
+        Formula: cell_size = target_cell_size_mm
+
+        Returns:
+            (cell_size_mm, source_description) or (None, None)
+        """
+        target_mm = mesh_resolution.get('target_cell_size_mm')
+        validated = self._coerce_positive(target_mm, "mesh.mesh_resolution.target_cell_size_mm")
+
+        if validated is not None:
+            return validated, "mesh.mesh_resolution.target_cell_size_mm (explicit)"
+        return None, None
+
+    def _cell_size_from_blockmesh_resolution(self, mesh_resolution: dict) -> tuple:
+        """
+        Priority 2: Cell size from blockMesh resolution parameter.
+
+        Config: mesh.mesh_resolution.blockmesh_resolution (or blockMesh_resolution)
+        Formula: cell_size = 2 * reference_radius / blockmesh_resolution
+
+        Requires: Reference radius from geometry analysis
+
+        Returns:
+            (cell_size_mm, source_description) or (None, None)
+        """
+        # Try multiple naming conventions
+        block_res = mesh_resolution.get('blockmesh_resolution')
+        if block_res is None:
+            block_res = mesh_resolution.get('blockMesh_resolution')
+        if block_res is None:
+            block_res = self.mesh_settings.get('BLOCKMESH_SETTINGS', {}).get('resolution')
+
+        block_res_val = self._coerce_positive(block_res, "mesh.mesh_resolution.blockmesh_resolution")
+
+        if block_res_val is not None:
+            if self.reference_radius_mm is not None and self.reference_radius_mm > 0:
+                cell_size = (2.0 * self.reference_radius_mm) / block_res_val
+                return cell_size, f"2*R/{block_res_val:.1f} (ref_radius={self.reference_radius_mm:.2f}mm)"
+            else:
+                self.log.warning(
+                    "blockmesh_resolution provided but reference radius unavailable; "
+                    "skipping this method (check STL geometry)"
+                )
+        return None, None
+
+    def _cell_size_from_cells_per_diameter(self, mesh_resolution: dict) -> tuple:
+        """
+        Priority 3: Cell size from cells-per-diameter specification.
+
+        Config: mesh.mesh_resolution.cells_per_diameter (dict or scalar)
+        Formula: cell_size = 2 * reference_radius / cells_per_diameter
+
+        Supports:
+            - cells_per_diameter: 10 (scalar)
+            - cells_per_diameter: {branch: 10, inlet: 8} (dict)
+
+        Returns:
+            (cell_size_mm, source_description) or (None, None)
+        """
+        cells_per_diam_cfg = mesh_resolution.get('cells_per_diameter')
+        cells_val = None
+
+        if isinstance(cells_per_diam_cfg, dict):
+            # Try 'branch' first, then 'inlet'
+            for key in ('branch', 'inlet'):
+                cells_val = self._coerce_positive(
+                    cells_per_diam_cfg.get(key),
+                    f"mesh.mesh_resolution.cells_per_diameter.{key}"
+                )
+                if cells_val is not None:
+                    break
+        else:
+            cells_val = self._coerce_positive(
+                cells_per_diam_cfg,
+                "mesh.mesh_resolution.cells_per_diameter"
+            )
+
+        if cells_val is not None:
+            if self.reference_radius_mm is not None and self.reference_radius_mm > 0:
+                cell_size = (2.0 * self.reference_radius_mm) / cells_val
+                return cell_size, f"2*R/{cells_val:.1f} cells (ref_radius={self.reference_radius_mm:.2f}mm)"
+            else:
+                self.log.warning(
+                    "cells_per_diameter provided but reference radius unavailable; "
+                    "skipping this method"
+                )
+        return None, None
+
+    def _cell_size_from_refinement_level(self) -> tuple:
+        """
+        Priority 4: Cell size from named refinement level.
+
+        Config:
+            - geometry.refinement_level: "coarse" / "medium" / "fine"
+            - mesh.refinement_levels: {coarse: 0.002, medium: 0.001, fine: 0.0005}
+
+        Returns:
+            (cell_size_mm, source_description) or (None, None)
+        """
+        ref_level_key = self.geom_settings.get('refinement_level')
+        if not ref_level_key:
+            return None, None
+
+        refinement_levels = self.mesh_settings.get('refinement_levels', {})
+        if not isinstance(refinement_levels, dict):
+            return None, None
+
+        level_meters = refinement_levels.get(ref_level_key)
+        level_meters = self._coerce_positive(
+            level_meters,
+            f"mesh.refinement_levels['{ref_level_key}']"
+        )
+
+        if level_meters is not None:
+            cell_size_mm = level_meters * 1000.0  # Convert m to mm
+            return cell_size_mm, f"refinement_levels['{ref_level_key}']={level_meters}m"
+        return None, None
+
     def _calculate_blockmesh_cells(self, bounds: dict) -> dict:
-        """Calculates number of cells for blockMesh based on target cell size."""
+        """
+        Calculate blockMesh cell counts based on target cell size.
+
+        MESH RESOLUTION PARAMETER HIERARCHY (checked in order):
+
+        1. target_cell_size_mm (highest priority)
+           - Direct specification: mesh.mesh_resolution.target_cell_size_mm = 1.0
+           - All other parameters ignored if this is set
+
+        2. blockmesh_resolution
+           - Formula: cell_size = 2 * reference_radius / blockmesh_resolution
+           - Config: mesh.mesh_resolution.blockmesh_resolution = 10
+           - Requires: Valid reference radius from STL geometry
+
+        3. cells_per_diameter
+           - Formula: cell_size = 2 * reference_radius / cells_per_diameter
+           - Config: mesh.mesh_resolution.cells_per_diameter = 8
+           - Supports dict: {branch: 10, inlet: 8}
+           - Requires: Valid reference radius
+
+        4. refinement_levels (lowest priority)
+           - Lookup: mesh.refinement_levels[geometry.refinement_level]
+           - Example: refinement_level="medium" → 0.001m → 1.0mm
+
+        5. Default fallback: 1.5mm
+           - Used only if all above methods fail
+           - Validated for adult aorta (see REPRODUCIBILITY.md)
+
+        RECOMMENDATION: Set only ONE parameter per simulation to avoid confusion.
+
+        Args:
+            bounds: BlockMesh bounding box {min: ndarray, max: ndarray} in mm
+
+        Returns:
+            dict: Cell counts {x: int, y: int, z: int}
+        """
         raw_mesh_resolution = self.mesh_settings.get('mesh_resolution', {})
         mesh_resolution = raw_mesh_resolution if isinstance(raw_mesh_resolution, dict) else {}
 
-        def _coerce_positive(value, label: str):
-            if value is None:
-                return None
-            if isinstance(value, bool):
-                self.log.warning(f"Ignoring boolean {label}: {value}")
-                return None
-            try:
-                coerced = float(value)
-            except (TypeError, ValueError):
-                self.log.warning(f"Ignoring non-numeric {label}: {value}")
-                return None
-            if coerced <= 0:
-                self.log.warning(f"Ignoring non-positive {label}: {value}")
-                return None
-            return coerced
-
-        target_mm_raw = mesh_resolution.get('target_cell_size_mm')
-        target_mm = _coerce_positive(target_mm_raw, "mesh.mesh_resolution.target_cell_size_mm")
-
-        block_res_raw = mesh_resolution.get('blockmesh_resolution')
-        if block_res_raw is None:
-            block_res_raw = mesh_resolution.get('blockMesh_resolution')
-        block_res_val = _coerce_positive(block_res_raw, "mesh.mesh_resolution.blockmesh_resolution")
-
-        if block_res_val is None:
-            alt_block_res = self.mesh_settings.get('BLOCKMESH_SETTINGS', {}).get('resolution')
-            block_res_val = _coerce_positive(alt_block_res, "mesh.BLOCKMESH_SETTINGS.resolution")
-
-        cell_size_mm = None
-        cell_size_source = None
-
-        if target_mm is not None:
-            cell_size_mm = target_mm
-            cell_size_source = "target_cell_size_mm"
-            if block_res_val is not None:
-                self.log.info("Both target_cell_size_mm and blockmesh_resolution provided; using target_cell_size_mm for blockMesh cell sizing.")
-
-        if cell_size_mm is None and block_res_val is not None:
-            reference_radius = self.reference_radius_mm
-            if reference_radius is not None and reference_radius > 0:
-                cell_size_mm = (2.0 * reference_radius) / block_res_val
-                cell_size_source = f"blockMesh resolution={block_res_val:g}"
-            else:
-                self.log.warning("blockmesh_resolution provided but reference radius could not be determined; skipping blockMesh-derived sizing.")
+        # Try each method in priority order
+        cell_size_mm, source = self._cell_size_from_target_mm(mesh_resolution)
 
         if cell_size_mm is None:
-            reference_radius = self.reference_radius_mm
-            cells_per_diameter_cfg = mesh_resolution.get('cells_per_diameter')
-            branch_cells_val = None
-            if isinstance(cells_per_diameter_cfg, dict):
-                for key in ('branch', 'inlet'):
-                    branch_cells_val = _coerce_positive(cells_per_diameter_cfg.get(key), f"mesh.mesh_resolution.cells_per_diameter.{key}")
-                    if branch_cells_val is not None:
-                        break
-            else:
-                branch_cells_val = _coerce_positive(cells_per_diameter_cfg, "mesh.mesh_resolution.cells_per_diameter")
-
-            if reference_radius is not None and reference_radius > 0 and branch_cells_val is not None:
-                cell_size_mm = (2.0 * reference_radius) / branch_cells_val
-                cell_size_source = f"cells_per_diameter={branch_cells_val:g}"
+            cell_size_mm, source = self._cell_size_from_blockmesh_resolution(mesh_resolution)
 
         if cell_size_mm is None:
-            ref_level_key = self.geom_settings.get('refinement_level')
-            refinement_levels = self.mesh_settings.get('refinement_levels', {}) if isinstance(self.mesh_settings.get('refinement_levels', {}), dict) else {}
-            level_meters = refinement_levels.get(ref_level_key) if ref_level_key else None
-            level_meters = _coerce_positive(level_meters, f"mesh.refinement_levels[{ref_level_key}]") if level_meters is not None else None
-            if level_meters is not None:
-                cell_size_mm = level_meters * 1000.0
-                cell_size_source = f"refinement_levels[{ref_level_key}]"
-            else:
-                cell_size_mm = 1.5
-                cell_size_source = "default 1.5mm"
+            cell_size_mm, source = self._cell_size_from_cells_per_diameter(mesh_resolution)
 
+        if cell_size_mm is None:
+            cell_size_mm, source = self._cell_size_from_refinement_level()
+
+        if cell_size_mm is None:
+            cell_size_mm = 1.5
+            source = "default fallback (no parameters set)"
+            self.log.warning(
+                "No mesh resolution parameters found; using 1.5mm default. "
+                "See docs for available parameters."
+            )
+
+        # Validate
         if cell_size_mm <= 0:
-            raise ValueError(f"Computed cell size must be positive, got {cell_size_mm}")
+            raise ValueError(
+                f"Computed cell size must be positive, got {cell_size_mm}mm. "
+                f"Check configuration for parameter: {source}"
+            )
 
-        if cell_size_source:
-            self.log.info(f"Target cell size: {cell_size_mm:.3f} mm (source: {cell_size_source})")
-        else:
-            self.log.info(f"Target cell size: {cell_size_mm:.3f} mm")
-        
+        # Log with clear source attribution
+        self.log.info(f"✓ Target cell size: {cell_size_mm:.3f} mm")
+        self.log.info(f"  Source: {source}")
+        if self.reference_radius_mm:
+            self.log.info(f"  Reference radius: {self.reference_radius_mm:.3f} mm (strategy: {self.geom_settings.get('reference_radius_strategy', 'min')})")
+
+        # Calculate cell counts
         ranges = bounds['max'] - bounds['min']
         num_cells = np.maximum(1, np.round(ranges / cell_size_mm)).astype(int)
-        
-        self.log.info(f"BlockMesh cells: Nx={num_cells[0]}, Ny={num_cells[1]}, Nz={num_cells[2]}")
+
+        self.log.info(f"✓ BlockMesh grid: {num_cells[0]} × {num_cells[1]} × {num_cells[2]} cells")
+        self.log.info(f"  Domain size: {ranges[0]:.1f} × {ranges[1]:.1f} × {ranges[2]:.1f} mm")
+
         return {"x": num_cells[0], "y": num_cells[1], "z": num_cells[2]}
 
     def _get_internal_point_for_snappy(self) -> np.ndarray:
