@@ -19,15 +19,49 @@ class WkSetup:
     5. R2 (distal) = R_total - R1
     6. C (compliance) = tau / R2 (from diastolic decay time constant)
 
+    PHYSICAL UNITS (SI):
+        Input Parameters:
+            - systolic_pressure (SP): mmHg → converted to Pa (×133.322)
+            - diastolic_pressure (DP): mmHg → Pa
+            - venous_pressure (P_v): mmHg → Pa (default: 0 mmHg = 0 Pa)
+            - pwv (pulse wave velocity): m/s (default: 6 m/s for aorta)
+            - tau (diastolic decay time): s (default: 1.8 s)
+            - blood density (ρ): kg/m³ (default: 1060 kg/m³)
+            - flow rate (Q): m³/s (from inlet data)
+            - vessel radius (r): m (from STL geometry)
+            - vessel area (A): m² (A = πr²)
+
+        Computed Windkessel Parameters:
+            - R1 (proximal resistance): Pa·s/m³ = kg/(m⁴·s)
+              Formula: R1 = ρ·c/A (characteristic impedance)
+              Typical: 1e7-1e8 Pa·s/m³
+
+            - R2 (distal resistance): Pa·s/m³
+              Formula: R2 = R_total - R1
+              Typical: 1e8-1e9 Pa·s/m³ (R2 >> R1)
+
+            - C (compliance): m³/Pa = m⁴·s²/kg
+              Formula: C = tau / R2
+              Typical: 1e-9 to 1e-8 m³/Pa
+
+        Physiological Ranges (adult aorta):
+            - Systolic pressure: 90-140 mmHg (12-19 kPa)
+            - Diastolic pressure: 60-90 mmHg (8-12 kPa)
+            - Mean arterial pressure: 70-110 mmHg (9-15 kPa)
+            - Cardiac output: 4-7 L/min (6.7e-5 to 1.2e-4 m³/s)
+            - Pulse wave velocity: 4-10 m/s (increases with age/stiffness)
+            - Diastolic decay time: 1.5-2.5 s
+
     Flow Split Options:
-    - None: Auto Murray's law for all outlets
-    - Percentage (e.g., 60): Main outlet (last) gets 60%, branches share 40% by Murray
-    - Dict: User-specified ratios for each outlet
+        - None: Auto Murray's law (Q_i ∝ r_i³) for all outlets
+        - Percentage (e.g., 60): Main outlet (last) gets 60%, branches share 40% by Murray
+        - Dict: User-specified ratios for each outlet
 
     References:
-    - Westerhof et al., Med Biol Eng Comput 2009 (DC allocation)
-    - Nichols & O'Rourke, McDonald's Blood Flow in Arteries (MAP formula)
-    - Stergiopulos et al., J Biomech 1992 (tau=R2·C)
+        - Westerhof et al., Med Biol Eng Comput 2009 (DC allocation)
+        - Nichols & O'Rourke, McDonald's Blood Flow in Arteries (MAP formula)
+        - Stergiopulos et al., J Biomech 1992 (tau=R2·C)
+        - Reymond et al., J Biomech 2009 (lumped parameter models)
     """
 
     # Unit conversions

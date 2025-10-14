@@ -49,13 +49,13 @@ def hideAllScalarBarsManually(renderView, arrayNames):
                 scalarBar.Visibility = 0
 
 class OpenFOAMParaView:
-    def __init__(self, casePath, caseType='Reconstructed', timeSteps=None, fields=None, rescaleSettings=None):
+    def __init__(self, casePath, caseType='auto', timeSteps=None, fields=None, rescaleSettings=None):
         """
         Initialize OpenFOAM ParaView post-processor.
 
         Args:
             casePath: Path to OpenFOAM case directory
-            caseType: 'Reconstructed' or 'Decomposed' case type
+            caseType: Case type - 'Reconstructed', 'Decomposed', or 'auto' (auto-detect, default)
             timeSteps: List of time steps to process. Options:
                       - None: Use all available time steps (default)
                       - [t1, t2, ...]: Specific time steps
@@ -65,7 +65,14 @@ class OpenFOAMParaView:
             rescaleSettings: Dictionary of rescale settings per field
         """
         self.casePath  = casePath
-        self.caseType  = caseType
+
+        # Auto-detect case type if set to 'auto'
+        if caseType == 'auto':
+            self.caseType = self._detect_case_type(casePath)
+            print(f"[INFO] Auto-detected case type: {self.caseType}")
+        else:
+            self.caseType = caseType
+
         self.foamFile  = f"{casePath}/f.foam"
 
         # Place images directory at run level (one level up from openfoam/)
@@ -439,6 +446,43 @@ class OpenFOAMParaView:
 
             log.write("[INFO] Animation creation completed.\n")
 
+    def _detect_case_type(self, casePath: str) -> str:
+        """
+        Auto-detect whether the case is Reconstructed or Decomposed.
+
+        Returns:
+            'Reconstructed' if time directories exist in case root
+            'Decomposed' if only processor directories exist
+        """
+        import glob
+
+        # Check for processor directories
+        processor_dirs = glob.glob(os.path.join(casePath, "processor*"))
+        has_processors = len(processor_dirs) > 0
+
+        # Check for time directories in case root (excluding 0/)
+        time_dirs = []
+        for item in os.listdir(casePath):
+            item_path = os.path.join(casePath, item)
+            if os.path.isdir(item_path):
+                # Check if directory name is numeric (time directory)
+                try:
+                    float(item)
+                    if item != '0':  # Ignore initial condition
+                        time_dirs.append(item)
+                except ValueError:
+                    pass
+
+        has_time_dirs = len(time_dirs) > 0
+
+        if has_time_dirs:
+            return 'Reconstructed'
+        elif has_processors:
+            return 'Decomposed'
+        else:
+            # Default to Reconstructed (case might have only 0/ directory)
+            return 'Reconstructed'
+
 
 # Main execution block
 if __name__ == "__main__":
@@ -509,7 +553,7 @@ if __name__ == "__main__":
     try:
         processor = OpenFOAMParaView(
             casePath=case_path,
-            caseType='Reconstructed',
+            caseType='auto',  # Auto-detect Reconstructed or Decomposed
             timeSteps=time_option,  # None, 'last', or 'peak'
             fields=["U", "p", "wallShearStress"]  # All available fields
         )

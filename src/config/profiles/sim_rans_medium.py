@@ -16,6 +16,7 @@ RANS_MEDIUM_EXTRAS = {
         "solution_type": "parallel",
         "subdomains": 4,
         "decomposition_method": "scotch",
+        "skip_reconstruction": True,  # Skip blocking reconstruction for faster workflow
     },
     "mesh": {
         "automatic_refinement": {

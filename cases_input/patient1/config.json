@@ -70,7 +70,8 @@
   "run_settings": {
     "solution_type": "parallel",
     "subdomains": 4,
-    "decomposition_method": "scotch"
+    "decomposition_method": "scotch",
+    "skip_reconstruction": true
   },
     "post_processing": {
     "case_type": "Decomposed",
