@@ -3,6 +3,25 @@
 These fragments encapsulate turbulence modeling strategies (laminar, RANS, LES)
 as reusable configuration blocks that can be composed with spatial resolution
 and solver recipe fragments.
+
+PHYSICAL UNITS CONVENTION (SI):
+    - nu (kinematic viscosity): m²/s  [e.g., 3.77e-6 m²/s for blood]
+    - rho (density): kg/m³            [e.g., 1060 kg/m³ for blood]
+    - turbulence_intensity: dimensionless fraction [0.05 = 5%]
+    - turbulence_viscosity_ratio: dimensionless [ν_t/ν, typically 1-100]
+    - y_plus: dimensionless wall distance [y⁺ = yuτ/ν]
+
+BLOOD PROPERTIES (37°C):
+    - Density: 1060 kg/m³ (typical range: 1025-1065 kg/m³)
+    - Dynamic viscosity: 0.004 Pa·s = 4 mPa·s (range: 3-5 mPa·s)
+    - Kinematic viscosity: μ/ρ = 3.77×10⁻⁶ m²/s
+    - Newtonian assumption valid for: shear rate > 100 s⁻¹ (large vessels)
+
+TURBULENCE INTENSITY GUIDELINES (arterial flows):
+    - Healthy aorta (laminar-transitional): I = 1-3%
+    - Aortic valve jets: I = 5-10%
+    - Post-stenotic region: I = 8-15%
+    - Coarctation/aneurysm: I = 10-20%
 """
 
 from __future__ import annotations

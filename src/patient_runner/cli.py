@@ -18,6 +18,7 @@ WORKFLOW STEPS:
     mesh        Generate mesh using blockMesh, surfaceFeatures, snappyHexMesh
     boundary    Setup boundary conditions and flow data
     solver      Run CFD solver (pimpleFoam/foamRun)
+    reconstruct Reconstruct parallel case from processor directories
     post        Execute post-processing
     all         Complete workflow (default)
 
@@ -57,7 +58,7 @@ CASE STRUCTURE:
     parser.add_argument('--list-steps', action='store_true',
                        help='List available workflow steps')
     parser.add_argument('--step', action='append',
-                       choices=['case', 'mesh', 'boundary', 'solver', 'post', 'all'],
+                       choices=['case', 'mesh', 'boundary', 'solver', 'reconstruct', 'post', 'all'],
                        help='Run specific workflow step(s) - can be used multiple times')
     parser.add_argument('--quick', action='store_true',
                        help='Quick test run (coarse settings)')
@@ -109,6 +110,7 @@ def main():
             'mesh': ('Generate mesh using blockMesh, surfaceFeatures, snappyHexMesh', ['run:mesh']),
             'boundary': ('Setup boundary conditions and flow data', ['setup:bc']),
             'solver': ('Run CFD solver (pimpleFoam/foamRun)', ['run:solver']),
+            'reconstruct': ('Reconstruct parallel case from processor directories', ['run:reconstruct']),
             'post': ('Execute post-processing', ['execute_post']),
             'all': ('Complete workflow (default)', ['runAll'])
         }
@@ -150,8 +152,9 @@ def main():
     step_mapping = {
         'case': 'setup:dict',
         'mesh': 'run:mesh',
-        'boundary': 'setup:bc', 
+        'boundary': 'setup:bc',
         'solver': 'run:solver',
+        'reconstruct': 'run:reconstruct',
         'post': 'execute_post',
         'all': 'runAll'
     }

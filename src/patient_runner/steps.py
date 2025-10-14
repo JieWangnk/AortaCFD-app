@@ -13,18 +13,20 @@ class WorkflowSteps:
     Workflow steps available:
     1. case - Create case structure and configuration files
     2. mesh - Generate mesh (blockMesh, surfaceFeatures, snappyHexMesh)
-    3. boundary - Setup boundary conditions and flow data  
+    3. boundary - Setup boundary conditions and flow data
     4. solver - Run CFD solver
-    5. post - Execute post-processing
+    5. reconstruct - Reconstruct parallel case from processor directories
+    6. post - Execute post-processing
     """
-    
+
     def __init__(self):
         self.runner = PatientCaseRunner()
         self._step_mapping = {
             'case': 'setup:dict',
-            'mesh': 'run:mesh', 
+            'mesh': 'run:mesh',
             'boundary': 'setup:bc',
             'solver': 'run:solver',
+            'reconstruct': 'run:reconstruct',
             'post': 'execute_post'
         }
         self._step_descriptions = {
@@ -32,6 +34,7 @@ class WorkflowSteps:
             'mesh': 'Generate mesh using blockMesh, surfaceFeatures, snappyHexMesh',
             'boundary': 'Setup boundary conditions and flow data',
             'solver': 'Run CFD solver (pimpleFoam/foamRun)',
+            'reconstruct': 'Reconstruct parallel case from processor directories',
             'post': 'Execute post-processing'
         }
     

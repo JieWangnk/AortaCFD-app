@@ -31,6 +31,7 @@ class WorkflowManager:
             "generate_simulation_report": setup_tasks.GenerateSimulationReportTask,
             "execute_meshing": execution_tasks.ExecuteMeshingTask,
             "execute_solver": execution_tasks.ExecuteSolverTask,
+            "execute_reconstruct": execution_tasks.ExecuteReconstructionTask,
             "execute_post": execution_tasks.ExecutePostProcessingTask
         }
         
@@ -66,6 +67,10 @@ class WorkflowManager:
             # COMMAND 5: Executes post-processing.
             "run:post": ["execute_post"],
             "execute_post": ["execute_post"],  # Alias
+
+            # COMMAND 6: Executes reconstruction.
+            "run:reconstruct": ["execute_reconstruct"],
+            "execute_reconstruct": ["execute_reconstruct"],  # Alias
 
             # COMMAND 7: A user-friendly alias to set up a case completely.
             "createCase": [

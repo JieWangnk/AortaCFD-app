@@ -7,8 +7,34 @@ from .utils.patch_processing import PatchProcessing
 
 class GeometryAnalyzer:
     """
-    Analyzes geometry and generates all mesh-related OpenFOAM dictionaries
-    using a robust, centerline-path-aligned method to find locationInMesh.
+    Analyzes patient-specific aortic geometry and generates OpenFOAM mesh dictionaries.
+
+    This class handles:
+    - STL geometry analysis (areas, normals, centroids)
+    - Automatic mesh sizing based on vessel dimensions
+    - BlockMesh background grid generation
+    - SnappyHexMesh refinement configuration
+    - Internal point detection for mesh domain
+
+    Physical Units:
+        - Geometry: millimeters (mm) - clinical imaging standard
+        - OpenFOAM output: meters (m) - SI units for CFD
+        - Conversion: scale_factor (default 1e-3 for mm→m)
+
+    Mesh Sizing Strategy:
+        1. Reference radius: smallest vessel diameter (default: inlet or min outlet)
+        2. Cell size: diameter / cells_per_diameter (profile-dependent)
+        3. Fallback: 1.5mm default (validated for adult aorta: 10-30mm diameter)
+
+    Default 1.5mm Rationale:
+        - Adult aorta: 20-30mm diameter → 13-20 cells across (adequate for laminar)
+        - Small branches: ~5mm diameter → 3-4 cells (minimum for flow capture)
+        - Based on mesh independence studies (see docs/MESH_QUALITY_GUIDE.md)
+
+    Args:
+        config: Full configuration dictionary with 'geometry', 'mesh', 'physics' sections
+        case_directory: OpenFOAM case path (e.g., output/patient1/run_*/openfoam)
+        enable_automatic_refinement: If True, attempts Murray's law-based sizing (deprecated)
     """
     def __init__(self, config: dict, case_directory: str, enable_automatic_refinement: bool = True):
         self.config = config
@@ -42,7 +68,16 @@ class GeometryAnalyzer:
         self._calculate_patch_properties()
 
     def _calculate_patch_properties(self):
-        """Uses PatchProcessing to find the centroids of all inlet/outlet patches."""
+        """
+        Calculate geometric properties of inlet/outlet patches from STL files.
+
+        Computes:
+            - Centroid coordinates (mm): geometric center of each patch
+            - Equivalent radius (mm): sqrt(area/π) for circular cross-section approximation
+            - Normal vector (unit): surface normal direction for flow orientation
+
+        Units: All calculations in millimeters, converted to meters via scale_factor
+        """
         self.log.info("Analyzing inlet and outlet patch geometries...")
         scale_factor = self.geom_settings.get('scale_factor', 1e-3)
         
@@ -65,6 +100,23 @@ class GeometryAnalyzer:
             self.log.warning("Could not determine reference radius from geometry; falling back to default cell sizing.")
 
     def _determine_reference_radius(self):
+        """
+        Determine reference radius for mesh sizing from vessel geometry.
+
+        Strategy Options (config: geometry.reference_radius_strategy):
+            - 'min' (default): Smallest vessel radius - ensures adequate resolution everywhere
+            - 'inlet': Inlet radius only - for inlet-dominated flows
+            - 'mean': Average of all vessels - balanced approach
+            - 'max': Largest vessel - coarser overall mesh
+
+        Rationale for 'min' default:
+            Mesh quality is limited by worst-resolved region. Using minimum radius
+            ensures small branches have sufficient cells while allowing coarser
+            mesh in large vessels (adaptive refinement handles this automatically).
+
+        Returns:
+            float: Reference radius in millimeters, or None if no valid geometry
+        """
         radii = []
         if self.inlet_radius and self.inlet_radius > 0:
             radii.append(self.inlet_radius)
@@ -79,7 +131,7 @@ class GeometryAnalyzer:
             return float(np.mean(radii))
         if strategy == 'max':
             return max(radii)
-        return min(radii)
+        return min(radii)  # Default: conservative sizing based on smallest vessel
 
     def write_all_mesh_files(self):
         """A single public method to generate all necessary mesh files."""

@@ -118,16 +118,57 @@ class ExecuteSolverTask(Task):
                 n_proc = run_settings.get("subdomains", 1)
                 run_command(self.config, ["decomposePar", "-force"], case_dir, "log.decomposePar")
                 run_command(self.config, ["mpirun", "-np", str(n_proc), solver_cmd, "-parallel"], case_dir, "log.solver")
-                run_command(self.config, ["reconstructPar"], case_dir, "log.reconstructPar")
+
+                # Handle reconstruction based on skip_reconstruction flag
+                skip_reconstruction = run_settings.get("skip_reconstruction", False)
+                if skip_reconstruction:
+                    logger.info("⏭️  Skipping reconstruction (skip_reconstruction=True)")
+                    logger.info("📂 Case remains in decomposed state (processor directories)")
+                    logger.info("💡 Use 'reconstructPar' manually if needed, or run: python run_patient.py <patient> --step reconstruct")
+                    context["case_decomposed"] = True  # Flag for downstream tasks
+                else:
+                    logger.info("🔄 Reconstructing case...")
+                    run_command(self.config, ["reconstructPar"], case_dir, "log.reconstructPar")
+                    context["case_decomposed"] = False
             else:
                 run_command(self.config, [solver_cmd], case_dir, "log.solver")
-        
+                context["case_decomposed"] = False
+
         except CommandExecutionError as e:
             logger.error(f"Solver execution failed: {e}")
             return False
 
         logger.info("Solver execution completed successfully.")
         return True
+
+
+class ExecuteReconstructionTask(Task):
+    """Reconstructs parallel case from processor directories."""
+
+    def execute(self, context: dict) -> bool:
+        """Reconstruct decomposed OpenFOAM case."""
+        logger.info("Reconstructing case from processor directories...")
+        case_dir = context["case_directory"]
+        run_settings = self.config.get("run_settings", {})
+
+        # Check if case is actually decomposed
+        import glob
+        processor_dirs = glob.glob(os.path.join(case_dir, "processor*"))
+        if not processor_dirs:
+            logger.warning("No processor directories found - case may already be reconstructed")
+            return True
+
+        try:
+            # Run reconstructPar for all times
+            run_command(self.config, ["reconstructPar"], case_dir, "log.reconstructPar")
+            logger.info("✅ Case reconstructed successfully")
+            context["case_decomposed"] = False
+            return True
+
+        except CommandExecutionError as e:
+            logger.error(f"Reconstruction failed: {e}")
+            return False
+
 
 class ExecutePostProcessingTask(Task):
     """Runs the pvbatch post-processing script."""
