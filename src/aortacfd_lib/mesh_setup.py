@@ -388,6 +388,51 @@ class GeometryAnalyzer:
             return cell_size_mm, f"refinement_levels['{ref_level_key}']={level_meters}m"
         return None, None
 
+    def _validate_resolution_config(self, mesh_resolution: dict) -> None:
+        """
+        Validate that only one resolution parameter is set.
+
+        Raises warning if multiple parameters detected, as this can lead to confusion
+        about which value will actually be used.
+        """
+        # Check what parameters are set
+        set_params = []
+
+        # Priority 1: resolution_level
+        if self.mesh_settings.get('resolution_level') or mesh_resolution.get('resolution_level'):
+            set_params.append(('resolution_level', 1))
+
+        # Priority 2: target_cell_size_mm
+        if mesh_resolution.get('target_cell_size_mm') is not None:
+            set_params.append(('target_cell_size_mm', 2))
+
+        # Priority 3: blockmesh_resolution
+        if (mesh_resolution.get('blockmesh_resolution') is not None or
+            mesh_resolution.get('blockMesh_resolution') is not None or
+            self.mesh_settings.get('BLOCKMESH_SETTINGS', {}).get('resolution') is not None):
+            set_params.append(('blockmesh_resolution', 3))
+
+        # Priority 4: cells_per_diameter
+        if mesh_resolution.get('cells_per_diameter') is not None:
+            set_params.append(('cells_per_diameter', 4))
+
+        # Priority 5: refinement_levels
+        if (self.geom_settings.get('refinement_level') and
+            self.mesh_settings.get('refinement_levels')):
+            set_params.append(('refinement_levels', 5))
+
+        # If multiple parameters set, warn user
+        if len(set_params) > 1:
+            params_str = ', '.join([f"{name} (priority {p})" for name, p in set_params])
+            highest_priority = min(set_params, key=lambda x: x[1])
+
+            self.log.warning(
+                f"Multiple mesh resolution parameters detected: {params_str}. "
+                f"Only '{highest_priority[0]}' (priority {highest_priority[1]}) will be used. "
+                f"Recommendation: Set only ONE parameter to avoid confusion. "
+                f"See MESH_RESOLUTION_GUIDE.md"
+            )
+
     def _get_cell_size_strategies(self, mesh_resolution: dict):
         """
         Define cell size computation strategies in priority order.
@@ -401,7 +446,7 @@ class GeometryAnalyzer:
             3. blockmesh_resolution - Cells across diameter (2*R/N formula)
             4. cells_per_diameter - Same as blockmesh_resolution (different naming)
             5. refinement_levels - Named quality levels with lookup table
-            6. default_fallback - 1.5mm (validated for adult aorta)
+            6. default_fallback - 1.0mm (matches 'medium' profile for consistency)
         """
         return [
             (1, "resolution_level", lambda: self._cell_size_from_resolution_level(mesh_resolution)),
@@ -409,7 +454,7 @@ class GeometryAnalyzer:
             (3, "blockmesh_resolution", lambda: self._cell_size_from_blockmesh_resolution(mesh_resolution)),
             (4, "cells_per_diameter", lambda: self._cell_size_from_cells_per_diameter(mesh_resolution)),
             (5, "refinement_levels", lambda: self._cell_size_from_refinement_level()),
-            (6, "default_fallback", lambda: (1.5, "default fallback (1.5mm validated for adult aorta)"))
+            (6, "default_fallback", lambda: (1.0, "default fallback (1.0mm, matches 'medium' profile)"))
         ]
 
     def _resolve_cell_size(self, mesh_resolution: dict) -> tuple:
@@ -496,6 +541,9 @@ class GeometryAnalyzer:
         raw_mesh_resolution = self.mesh_settings.get('mesh_resolution', {})
         mesh_resolution = raw_mesh_resolution if isinstance(raw_mesh_resolution, dict) else {}
 
+        # Validate configuration (warn if multiple parameters set)
+        self._validate_resolution_config(mesh_resolution)
+
         # Resolve cell size using strategy cascade (encapsulated in separate method)
         cell_size_mm, source, priority = self._resolve_cell_size(mesh_resolution)
 
@@ -506,9 +554,28 @@ class GeometryAnalyzer:
                 f"Source: {source} (priority {priority})"
             )
 
-        # Log with clear source attribution
-        self.log.info(f"✓ Target cell size: {cell_size_mm:.3f} mm")
-        self.log.info(f"  Source: {source} (priority {priority}/5)")
+        # Enhanced logging with profile information
+        self.log.info(f"✓ Mesh Resolution Selected:")
+        self.log.info(f"  Cell size: {cell_size_mm:.3f} mm")
+        self.log.info(f"  Source: {source}")
+        self.log.info(f"  Priority: {priority}/6 (1=highest)")
+
+        # Add profile context if using resolution_level
+        if priority == 1:
+            level = self.mesh_settings.get('resolution_level') or mesh_resolution.get('resolution_level')
+            profile_info = {
+                'coarse': '~100K-300K cells, 5-15 min runtime',
+                'draft': '~100K-300K cells, 5-15 min runtime',
+                'medium': '~500K-1.5M cells, 30-90 min runtime',
+                'clinical': '~500K-1.5M cells, 30-90 min runtime',
+                'fine': '~2M-5M cells, 2-4 hours runtime',
+                'publication': '~2M-5M cells, 2-4 hours runtime',
+                'ultra_fine': '~10M+ cells, 6-12 hours runtime'
+            }
+            info = profile_info.get(str(level).lower(), '')
+            if info:
+                self.log.info(f"  Profile '{level}': {info}")
+
         if self.reference_radius_mm:
             self.log.info(f"  Reference radius: {self.reference_radius_mm:.3f} mm (strategy: {self.geom_settings.get('reference_radius_strategy', 'min')})")
 
