@@ -5,7 +5,6 @@ from jinja2 import Environment, FileSystemLoader
 from .utils.logger import Logger
 from .utils.patch_processing import PatchProcessing
 from .utils.mesh_constants import (
-    RESOLUTION_PRESETS,
     DEFAULT_CELL_SIZE_MM,
     get_cell_size_from_preset,
     get_profile_info,
@@ -55,19 +54,14 @@ class GeometryAnalyzer:
     Args:
         config: Full configuration dictionary with 'geometry', 'mesh', 'physics' sections
         case_directory: OpenFOAM case path (e.g., output/patient1/run_*/openfoam)
-        enable_automatic_refinement: If True, attempts Murray's law-based sizing (deprecated)
     """
-    def __init__(self, config: dict, case_directory: str, enable_automatic_refinement: bool = True):
+    def __init__(self, config: dict, case_directory: str):
         self.config = config
         self.case_dir = case_directory
         self.log = Logger("mesh_setup").get_logger()
 
         template_path = os.path.join(os.path.dirname(__file__), '..', 'templates')
         self.jinja_env = Environment(loader=FileSystemLoader(template_path), trim_blocks=True, lstrip_blocks=True)
-
-        # Record user preference but avoid modifying mesh settings automatically
-        if enable_automatic_refinement and self.config.get('mesh', {}).get('automatic_refinement', {}).get('enabled', True):
-            self.log.info("Automatic refinement request detected but Murray-based updates are disabled; proceeding with profile-defined mesh settings only.")
 
         self.geom_settings = self.config['geometry']
         self.mesh_settings = self.config['mesh']
