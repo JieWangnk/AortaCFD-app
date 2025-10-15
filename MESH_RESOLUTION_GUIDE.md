@@ -181,15 +181,15 @@ AortaCFD checks mesh resolution parameters in **strict priority order**. Set **O
 
 ---
 
-### Priority 5: Default Fallback
+### Priority 6: Default Fallback
 
 If **none** of the above are set:
 
-- **Default:** `1.5mm`
-- **Rationale:** Validated for adult aorta (10-30mm diameter)
-  - 20mm aorta → 13 cells across (adequate for laminar)
-  - 5mm branch → 3 cells across (minimum for flow capture)
-- **Warning:** You'll see a log warning if this is used
+- **Default:** `1.0mm` (matches 'medium' profile for consistency)
+- **Rationale:** Validated for adult aorta clinical simulations
+  - 20mm aorta → 20 cells across (good for laminar/RANS)
+  - 5mm branch → 5 cells across (adequate for flow capture)
+- **Warning:** You'll see a log warning recommending you set `resolution_level` explicitly
 
 ---
 
@@ -347,32 +347,75 @@ Look for this log message during meshing:
 
 ```
 [INFO] Reference branch radius for meshing: 10.234 mm
-[INFO] ✓ Target cell size: 1.367 mm
+[INFO] ✓ Mesh Resolution Selected:
+[INFO]   Cell size: 1.367 mm
 [INFO]   Source: 2*R/15.0 cells (ref_radius=10.23mm)
+[INFO]   Priority: 3/6 (1=highest)
 [INFO]   Reference radius: 10.234 mm (strategy: min)
 ```
 
-### Mixed Resolution (NOT RECOMMENDED)
+### Enhanced Logging (NEW) 📊
+
+**When using `resolution_level`, you'll see profile context:**
+
+```
+[INFO] ✓ Mesh Resolution Selected:
+[INFO]   Cell size: 1.000 mm
+[INFO]   Source: mesh.resolution_level='medium' → 1.0mm
+[INFO]   Priority: 1/6 (1=highest)
+[INFO]   Profile 'medium': ~500K-1.5M cells, 30-90 min runtime
+```
+
+**What you'll see for each priority:**
+
+| Priority | Parameter | Example Output |
+|----------|-----------|----------------|
+| 1 | resolution_level | `Source: mesh.resolution_level='medium' → 1.0mm`<br>`Profile 'medium': ~500K-1.5M cells, 30-90 min runtime` |
+| 2 | target_cell_size_mm | `Source: mesh.mesh_resolution.target_cell_size_mm (explicit)` |
+| 3 | blockmesh_resolution | `Source: 2*R/15.0 cells (ref_radius=10.23mm)` |
+| 4 | cells_per_diameter | `Source: 2*R/8.0 cells_per_diameter (ref_radius=10.23mm)` |
+| 5 | refinement_levels | `Source: mesh.refinement_levels['medium'] → 1.0mm` |
+| 6 | default_fallback | `Source: default fallback (1.0mm, matches 'medium' profile)`<br>*+ warning recommending explicit configuration* |
+
+**Benefits:**
+- ✅ Know exactly which parameter was used
+- ✅ See expected cell count and runtime (for `resolution_level`)
+- ✅ Understand priority hierarchy
+- ✅ Validate your configuration is correct
+
+### Mixed Resolution (NOT RECOMMENDED) ⚠️
+
+**NEW:** AortaCFD now validates your configuration and warns if multiple parameters are set.
 
 If you accidentally set multiple parameters:
 
 ```json
 {
-  "mesh_resolution": {
-    "target_cell_size_mm": 1.0,       // This will be used
-    "cells_per_diameter": 15          // This will be IGNORED
+  "mesh": {
+    "resolution_level": "medium",        // Priority 1 - This will be used
+    "mesh_resolution": {
+      "target_cell_size_mm": 1.5,       // Priority 2 - IGNORED
+      "cells_per_diameter": 15          // Priority 4 - IGNORED
+    }
   }
 }
 ```
 
-**Warning message:**
+**New validation warning:**
 
 ```
-[INFO] Both target_cell_size_mm and cells_per_diameter provided;
-       using target_cell_size_mm (highest priority)
+[WARNING] Multiple mesh resolution parameters detected: resolution_level (priority 1),
+          target_cell_size_mm (priority 2), cells_per_diameter (priority 4).
+          Only 'resolution_level' (priority 1) will be used.
+          Recommendation: Set only ONE parameter to avoid confusion.
 ```
 
-**Recommendation:** Remove one parameter to avoid confusion.
+**What happens:**
+- The highest-priority parameter wins (Priority 1-6 order)
+- Other parameters are completely ignored
+- You'll see which parameter was chosen in the logs
+
+**Recommendation:** Remove all but ONE parameter to avoid confusion and make your intent clear.
 
 ###Mesh Overwrite Behavior
 
@@ -437,12 +480,23 @@ checkMesh
 **Symptom:**
 
 ```
-[WARNING] No mesh resolution parameters found; using 1.5mm default
+[WARNING] No mesh resolution parameters found (checked priorities 1-5).
+          Using 1.0mm default.
+          Recommendation: Set mesh.resolution_level = 'medium' in config.
+          See MESH_RESOLUTION_GUIDE.md
 ```
 
-**Cause:** None of the 4 priority methods are configured.
+**Cause:** None of the 5 priority methods are configured.
 
-**Solution:** Add any mesh resolution parameter (see examples above).
+**Solution:** Add mesh resolution parameter (recommended: `resolution_level`):
+
+```json
+{
+  "mesh": {
+    "resolution_level": "medium"
+  }
+}
+```
 
 ### Problem: Mesh too coarse/fine
 
