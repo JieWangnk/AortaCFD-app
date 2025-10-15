@@ -8,11 +8,17 @@
   "===================================================================": "",
 
   "mesh": {
+    "_comment_priority": "Method 1 (RECOMMENDED): Use resolution_level preset",
+    "resolution_level": "coarse",
+    "_mapping": "coarse → 2.0mm cell size",
+    "_alternatives": ["draft"],
+    "_expected": "~100K-300K cells, 5-15 min runtime",
+
     "mesh_resolution": {
-      "_comment": "Method 1: Direct cell size (RECOMMENDED for beginners)",
-      "target_cell_size_mm": 2.0,
+      "_comment": "Method 2 (Alternative): Direct cell size for custom values",
+      "_target_cell_size_mm": 2.0,
       "_formula": "cell_size = 2.0 mm (explicit)",
-      "_rationale": "2mm cells → ~10 cells across 20mm aorta (adequate for flow patterns)"
+      "_note": "Use this if you need a specific cell size not covered by presets"
     },
 
     "_alternative_methods": {

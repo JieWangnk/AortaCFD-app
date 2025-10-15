@@ -8,11 +8,17 @@
   "===================================================================": "",
 
   "mesh": {
+    "_comment_priority": "Method 1 (RECOMMENDED): Use resolution_level preset",
+    "resolution_level": "fine",
+    "_mapping": "fine → 0.5mm cell size (publication standard)",
+    "_alternatives": ["publication"],
+    "_expected": "~2M-5M cells, 2-4 hours runtime",
+
     "mesh_resolution": {
-      "_comment": "Method 1: Direct cell size (RECOMMENDED)",
-      "target_cell_size_mm": 0.5,
+      "_comment": "Method 2 (Alternative): Direct cell size for custom values",
+      "_target_cell_size_mm": 0.5,
       "_formula": "cell_size = 0.5 mm (explicit)",
-      "_rationale": "0.5mm cells → ~40 cells across 20mm aorta (publication standard)"
+      "_note": "Use this if you need a specific cell size not covered by presets"
     },
 
     "_alternative_methods": {
