@@ -520,9 +520,9 @@ class GeometryAnalyzer:
            - Lookup: mesh.refinement_levels[geometry.refinement_level]
            - Example: refinement_level="medium" → 0.001m → 1.0mm
 
-        6. Default fallback: 1.5mm
+        6. Default fallback: 1.0mm
            - Used only if all above methods fail
-           - Validated for adult aorta (see REPRODUCIBILITY.md)
+           - Matches 'medium' profile for consistency
 
         RECOMMENDATION: Use resolution_level = "medium" for most simulations.
         Only use lower priorities if you need custom values.
