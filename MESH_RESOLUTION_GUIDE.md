@@ -523,7 +523,7 @@ checkMesh
 | `blockmesh_resolution` | 3 | `size = 2R / value` | Yes | dimensionless | 10 |
 | `cells_per_diameter` | 4 | `size = 2R / value` | Yes | dimensionless | 15 |
 | `refinement_levels` | 5 (legacy) | `size = lookup[level]` | No | m | 0.001 |
-| Default | 6 (fallback) | `size = 1.5mm` | No | mm | 1.5 |
+| Default | 6 (fallback) | `size = 1.0mm` | No | mm | 1.0 |
 
 **Preset Mappings:**
 - `resolution_level = "coarse"` → 2.0mm

@@ -35,11 +35,12 @@ The mesh resolution system uses a **Strategy Pattern** to make the parameter hie
 │   Returns: [(priority, name, function), ...]               │
 │                                                             │
 │   [                                                         │
-│     (1, "target_cell_size_mm", λ: method_1()),            │
-│     (2, "blockmesh_resolution", λ: method_2()),           │
-│     (3, "cells_per_diameter", λ: method_3()),             │
-│     (4, "refinement_levels", λ: method_4()),              │
-│     (5, "default_fallback", λ: (1.5, "default"))          │
+│     (1, "resolution_level", λ: method_1()),               │
+│     (2, "target_cell_size_mm", λ: method_2()),            │
+│     (3, "blockmesh_resolution", λ: method_3()),           │
+│     (4, "cells_per_diameter", λ: method_4()),             │
+│     (5, "refinement_levels", λ: method_5()),              │
+│     (6, "default_fallback", λ: (1.0, "default"))          │
 │   ]                                                         │
 └────────────────────┬────────────────────────────────────────┘
                      │
@@ -139,11 +140,12 @@ Each strategy is implemented as a separate method:
 
 | Method | Priority | Formula | Requires Geometry |
 |--------|----------|---------|-------------------|
-| `_cell_size_from_target_mm()` | 1 | `size = value` | No |
-| `_cell_size_from_blockmesh_resolution()` | 2 | `size = 2R/N` | Yes |
-| `_cell_size_from_cells_per_diameter()` | 3 | `size = 2R/cells` | Yes |
-| `_cell_size_from_refinement_level()` | 4 | `size = lookup[level]` | No |
-| Default (inline lambda) | 5 | `size = 1.5mm` | No |
+| `_cell_size_from_resolution_level()` | 1 | `preset lookup` | No |
+| `_cell_size_from_target_mm()` | 2 | `size = value` | No |
+| `_cell_size_from_blockmesh_resolution()` | 3 | `size = 2R/N` | Yes |
+| `_cell_size_from_cells_per_diameter()` | 4 | `size = 2R/cells` | Yes |
+| `_cell_size_from_refinement_level()` | 5 | `size = lookup[level]` | No |
+| Default (inline lambda) | 6 | `size = 1.0mm` | No |
 
 **Contract:** All methods return `(cell_size: float | None, source: str)`
 
