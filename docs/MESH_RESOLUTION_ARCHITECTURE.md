@@ -77,11 +77,12 @@ The mesh resolution system uses a **Strategy Pattern** to make the parameter hie
 ```python
 def _get_cell_size_strategies(self, mesh_resolution: dict):
     return [
-        (1, "target_cell_size_mm", lambda: self._cell_size_from_target_mm(mesh_resolution)),
-        (2, "blockmesh_resolution", lambda: self._cell_size_from_blockmesh_resolution(mesh_resolution)),
-        (3, "cells_per_diameter", lambda: self._cell_size_from_cells_per_diameter(mesh_resolution)),
-        (4, "refinement_levels", lambda: self._cell_size_from_refinement_level()),
-        (5, "default_fallback", lambda: (1.5, "default fallback (1.5mm)"))
+        (1, "resolution_level", lambda: self._cell_size_from_resolution_level(mesh_resolution)),
+        (2, "target_cell_size_mm", lambda: self._cell_size_from_target_mm(mesh_resolution)),
+        (3, "blockmesh_resolution", lambda: self._cell_size_from_blockmesh_resolution(mesh_resolution)),
+        (4, "cells_per_diameter", lambda: self._cell_size_from_cells_per_diameter(mesh_resolution)),
+        (5, "refinement_levels", lambda: self._cell_size_from_refinement_level()),
+        (6, "default_fallback", lambda: (1.0, "default fallback (1.0mm, matches 'medium' profile)"))
     ]
 ```
 
