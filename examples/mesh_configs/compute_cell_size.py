@@ -16,6 +16,14 @@ import sys
 from pathlib import Path
 from typing import Optional, Tuple
 
+# Add src to path to import mesh constants
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+from aortacfd_lib.utils.mesh_constants import (
+    get_cell_size_from_preset,
+    get_available_presets,
+    DEFAULT_CELL_SIZE_MM
+)
+
 
 class CellSizeCalculator:
     """Calculate cell size from configuration following AortaCFD hierarchy."""
@@ -77,17 +85,15 @@ class CellSizeCalculator:
         if level is None:
             return None, ""
 
-        # Preset mappings
-        RESOLUTION_PRESETS = {
-            'coarse': 2.0, 'medium': 1.0, 'fine': 0.5, 'ultra_fine': 0.25,
-            'draft': 2.0, 'clinical': 1.0, 'publication': 0.5,
-        }
-
-        cell_size = RESOLUTION_PRESETS.get(str(level).lower())
+        # Use centralized preset mapping
+        cell_size = get_cell_size_from_preset(level)
         if cell_size is not None:
             return cell_size, f"mesh.resolution_level='{level}' → {cell_size}mm"
 
+        # Unknown level
+        available = ', '.join(get_available_presets())
         print(f"⚠️  Unknown resolution_level: '{level}'")
+        print(f"   Available: {available}")
         return None, ""
 
     def method_2_target_mm(self) -> Tuple[Optional[float], str]:
@@ -198,8 +204,8 @@ class CellSizeCalculator:
         if cell_size is not None:
             return cell_size, source, 5
 
-        # Default fallback
-        return 1.0, "default fallback (1.0mm, matches 'medium' profile)", 6
+        # Default fallback (use centralized constant)
+        return DEFAULT_CELL_SIZE_MM, f"default fallback ({DEFAULT_CELL_SIZE_MM}mm, matches 'medium' profile)", 6
 
 
 def main():
@@ -321,10 +327,10 @@ Examples:
     # Recommendations
     if priority == 6:
         print()
-        print("⚠️  WARNING: Using default fallback (1.0mm)")
+        print(f"⚠️  WARNING: Using default fallback ({DEFAULT_CELL_SIZE_MM}mm)")
         print("   Recommendation: Set one of these parameters explicitly:")
         print("   1. mesh.resolution_level = 'medium' (RECOMMENDED)")
-        print("   2. mesh.mesh_resolution.target_cell_size_mm = 1.0")
+        print(f"   2. mesh.mesh_resolution.target_cell_size_mm = {DEFAULT_CELL_SIZE_MM}")
         print("   3. mesh.mesh_resolution.cells_per_diameter = 15")
 
 

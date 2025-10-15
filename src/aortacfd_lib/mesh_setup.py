@@ -4,6 +4,13 @@ from stl import mesh as np_stl_mesh
 from jinja2 import Environment, FileSystemLoader
 from .utils.logger import Logger
 from .utils.patch_processing import PatchProcessing
+from .utils.mesh_constants import (
+    RESOLUTION_PRESETS,
+    DEFAULT_CELL_SIZE_MM,
+    get_cell_size_from_preset,
+    get_profile_info,
+    get_available_presets
+)
 
 class GeometryAnalyzer:
     """
@@ -253,25 +260,13 @@ class GeometryAnalyzer:
         if level is None:
             return None, None
 
-        # Map resolution levels to cell sizes (in mm)
-        RESOLUTION_PRESETS = {
-            'coarse': 2.0,
-            'medium': 1.0,
-            'fine': 0.5,
-            'ultra_fine': 0.25,
-            # Aliases for convenience
-            'draft': 2.0,
-            'clinical': 1.0,
-            'publication': 0.5,
-        }
-
-        level_lower = str(level).lower()
-        cell_size = RESOLUTION_PRESETS.get(level_lower)
+        # Use centralized preset mapping from utils.mesh_constants
+        cell_size = get_cell_size_from_preset(level)
 
         if cell_size is not None:
             return cell_size, f"mesh.resolution_level='{level}' → {cell_size}mm"
         else:
-            available = ', '.join(sorted(RESOLUTION_PRESETS.keys()))
+            available = ', '.join(get_available_presets())
             self.log.warning(
                 f"Unknown resolution_level: '{level}'. "
                 f"Available: {available}"
@@ -468,7 +463,7 @@ class GeometryAnalyzer:
             (3, "blockmesh_resolution", lambda: self._cell_size_from_blockmesh_resolution(mesh_resolution)),
             (4, "cells_per_diameter", lambda: self._cell_size_from_cells_per_diameter(mesh_resolution)),
             (5, "refinement_levels", lambda: self._cell_size_from_refinement_level()),
-            (6, "default_fallback", lambda: (1.0, "default fallback (1.0mm, matches 'medium' profile)"))
+            (6, "default_fallback", lambda: (DEFAULT_CELL_SIZE_MM, f"default fallback ({DEFAULT_CELL_SIZE_MM}mm, matches 'medium' profile)"))
         ]
 
     def _resolve_cell_size(self, mesh_resolution: dict) -> tuple:
@@ -577,18 +572,9 @@ class GeometryAnalyzer:
         # Add profile context if using resolution_level
         if priority == 1:
             level = self.mesh_settings.get('resolution_level') or mesh_resolution.get('resolution_level')
-            profile_info = {
-                'coarse': '~100K-300K cells, 5-15 min runtime',
-                'draft': '~100K-300K cells, 5-15 min runtime',
-                'medium': '~500K-1.5M cells, 30-90 min runtime',
-                'clinical': '~500K-1.5M cells, 30-90 min runtime',
-                'fine': '~2M-5M cells, 2-4 hours runtime',
-                'publication': '~2M-5M cells, 2-4 hours runtime',
-                'ultra_fine': '~10M+ cells, 6-12 hours runtime'
-            }
-            info = profile_info.get(str(level).lower(), '')
-            if info:
-                self.log.info(f"  Profile '{level}': {info}")
+            profile = get_profile_info(level)
+            if profile:
+                self.log.info(f"  Profile '{level}': {profile['expected_cells']}, {profile['runtime']}")
 
         if self.reference_radius_mm:
             self.log.info(f"  Reference radius: {self.reference_radius_mm:.3f} mm (strategy: {self.geom_settings.get('reference_radius_strategy', 'min')})")
