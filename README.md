@@ -50,8 +50,13 @@ source ~/.bashrc
 # 3. Install Windkessel BC (for 3EWK outlets)
 ./scripts/install_windkessel_of12.sh
 
-# 4. Run your first simulation
-python run_patient.py patient1
+# 4. Run example simulation (automated quick-start)
+./run_example.sh               # Complete demonstration with patient1
+
+# OR run manually with different quality levels:
+python run_patient.py patient1 --quick                    # Fast (5-15 min)
+python run_patient.py patient1                            # Medium quality (30-90 min)
+python run_patient.py patient1 --profile sim_laminar_fine # High quality (2-4 hours)
 
 # 5. View results
 paraview output/patient1/run_*/openfoam/openfoam.foam
@@ -60,7 +65,7 @@ paraview output/patient1/run_*/openfoam/openfoam.foam
 **File Structure:**
 ```
 cases_input/patient1/          # Patient input data
-├── config.json                # Simulation configuration
+├── config.json                # Simulation configuration (minimal: mesh.resolution_level = "medium")
 ├── inlet.stl                  # Inlet geometry
 ├── outlet*.stl                # Outlet geometries
 ├── wall_aorta.stl             # Vessel wall
@@ -69,7 +74,8 @@ cases_input/patient1/          # Patient input data
 output/patient1/               # Results
 └── run_YYYYMMDD_HHMMSS/
     ├── openfoam/              # OpenFOAM case
-    └── images/                # Post-processing visualizations
+    ├── reports/               # Simulation documentation
+    └── logs/                  # Execution logs
 ```
 
 ---
@@ -159,7 +165,43 @@ python run_patient.py patient1 --step case --step mesh --step boundary
 
 ### Configuration
 
-**Basic config.json structure:**
+**Minimal config.json (RECOMMENDED for beginners):**
+
+```json
+{
+  "case_info": {
+    "patient_id": "patient1",
+    "description": "Patient-specific aortic simulation"
+  },
+  "mesh": {
+    "resolution_level": "medium"
+  },
+  "boundary_conditions": {
+    "inlet": {
+      "type": "TIMEVARYING",
+      "csv_file": "BPM75.csv"
+    },
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80
+      }
+    }
+  }
+}
+```
+
+**Mesh Resolution Levels:**
+
+| Level | Cell Size | Expected Cells | Runtime | Use Case |
+|-------|-----------|---------------|---------|----------|
+| `"coarse"` or `"draft"` | 2.0mm | ~100K-300K | 5-15 min | Quick checks, debugging |
+| **`"medium"` or `"clinical"`** | **1.0mm** | **~500K-1.5M** | **30-90 min** | **Clinical analysis (start here)** |
+| `"fine"` or `"publication"` | 0.5mm | ~2M-5M | 2-4 hours | Research, publications |
+| `"ultra_fine"` | 0.25mm | ~10M+ | 6-12 hours | Mesh independence studies |
+
+**Advanced configuration (all options):**
 
 ```json
 {
@@ -177,9 +219,7 @@ python run_patient.py patient1 --step case --step mesh --step boundary
     "target_normal": [0, 0, 1]
   },
   "mesh": {
-    "mesh_resolution": {
-      "target_cell_size_mm": 0.5
-    },
+    "resolution_level": "medium",
     "SNAPPY_SETTINGS": {
       "parallel": true,
       "nProcessors": 4
@@ -222,6 +262,154 @@ python run_patient.py patient1 --step case --step mesh --step boundary
   }
 }
 ```
+
+**See also:**
+- [MESH_RESOLUTION_GUIDE.md](MESH_RESOLUTION_GUIDE.md) - Complete mesh configuration reference
+- [examples/mesh_configs/](examples/mesh_configs/) - Example configurations
+
+---
+
+## Simulation Profiles
+
+AortaCFD provides pre-configured profiles for different simulation fidelities and turbulence models.
+
+### Mesh Quality Levels
+
+Control mesh resolution with `mesh.resolution_level`:
+
+#### Coarse / Draft (`"coarse"` or `"draft"`)
+- **Cell size:** 2.0mm
+- **Expected cells:** ~100K-300K
+- **Runtime:** 5-15 minutes
+- **Use for:**
+  - Initial geometry validation
+  - Quick flow pattern visualization
+  - Testing boundary conditions
+  - Debugging workflow
+- **NOT suitable for:**
+  - Clinical decisions
+  - Publication results
+  - Quantitative WSS analysis
+
+#### Medium / Clinical (`"medium"` or `"clinical"`) ← **RECOMMENDED START**
+- **Cell size:** 1.0mm
+- **Expected cells:** ~500K-1.5M
+- **Runtime:** 30-90 minutes
+- **Use for:**
+  - Clinical hemodynamic assessment
+  - Pressure gradient calculations
+  - Flow distribution analysis
+  - Virtual surgical planning
+  - Routine analysis
+- **Suitable for:**
+  - Most applications
+  - Clinical decision support
+  - Preliminary research
+
+#### Fine / Publication (`"fine"` or `"publication"`)
+- **Cell size:** 0.5mm
+- **Expected cells:** ~2M-5M
+- **Runtime:** 2-4 hours
+- **Use for:**
+  - Research publications
+  - Detailed WSS gradient analysis
+  - Mesh independence verification
+  - High-fidelity hemodynamics
+- **Computational requirements:**
+  - 16-32 GB RAM
+  - 8+ CPU cores recommended
+
+#### Ultra Fine (`"ultra_fine"`)
+- **Cell size:** 0.25mm
+- **Expected cells:** ~10M+ cells
+- **Runtime:** 6-12 hours
+- **Use for:**
+  - Mesh independence studies
+  - Ultra-high resolution research
+  - LES turbulence modeling
+- **Computational requirements:**
+  - 32-64 GB RAM
+  - 16+ CPU cores
+  - Large storage (50-100 GB per case)
+
+### Turbulence Model Profiles
+
+Profiles combine mesh resolution with appropriate turbulence models (configured via command-line or config):
+
+#### Laminar Profiles
+```bash
+# Coarse laminar (quick check)
+python run_patient.py patient1 --profile sim_laminar_coarse
+
+# Medium laminar (clinical, RECOMMENDED)
+python run_patient.py patient1 --profile sim_laminar_medium
+
+# Fine laminar (publication)
+python run_patient.py patient1 --profile sim_laminar_fine
+```
+
+**Recommended for:**
+- Healthy aorta (Re < 2300)
+- Straightforward geometries
+- Most clinical applications
+
+#### RANS Profiles (k-ω SST)
+```bash
+# Coarse RANS (exploratory)
+python run_patient.py patient1 --profile sim_rans_coarse
+
+# Medium RANS (balanced)
+python run_patient.py patient1 --profile sim_rans_medium
+
+# Fine RANS (research)
+python run_patient.py patient1 --profile sim_rans_fine
+```
+
+**Recommended for:**
+- Transitional/turbulent flows (Re > 2300)
+- Post-stenotic regions
+- Aortic valve jets
+- Complex geometries with recirculation
+
+#### LES Profiles (WALE)
+```bash
+# Medium LES (exploratory)
+python run_patient.py patient1 --profile sim_les_medium
+
+# Fine LES (high-fidelity)
+python run_patient.py patient1 --profile sim_les_fine
+```
+
+**Recommended for:**
+- High-fidelity turbulence-resolving simulations
+- Vortex structure analysis
+- Unsteady transitional flows
+- Research requiring temporal accuracy
+
+**Requirements:**
+- Fine or ultra_fine mesh resolution
+- Small time steps (Δt ~ 1e-5 to 1e-6 s)
+- Significant computational resources
+- 10-20 cardiac cycles for statistical convergence
+
+### Profile Selection Guide
+
+| Application | Mesh Level | Turbulence | Profile | Expected Runtime |
+|-------------|------------|------------|---------|------------------|
+| Quick geometry check | Coarse | Laminar | `sim_laminar_coarse` | 5-15 min |
+| Boundary condition test | Coarse | Laminar | `sim_laminar_coarse` | 5-15 min |
+| Clinical assessment | Medium | Laminar | `sim_laminar_medium` | 30-90 min |
+| Stenosis analysis | Medium | RANS | `sim_rans_medium` | 2-3 hours |
+| Publication (laminar) | Fine | Laminar | `sim_laminar_fine` | 2-4 hours |
+| Publication (turbulent) | Fine | RANS | `sim_rans_fine` | 3-5 hours |
+| High-fidelity research | Fine | LES | `sim_les_fine` | 6-10 hours |
+| Mesh independence | Ultra Fine | Laminar/RANS | Custom config | 6-12 hours |
+
+**Quick selection:**
+- **Don't know?** → Start with `sim_laminar_medium`
+- **Need faster?** → Use `sim_laminar_coarse`
+- **Need better?** → Use `sim_laminar_fine`
+- **Have turbulence?** → Replace `laminar` with `rans` in profile name
 
 ---
 
