@@ -4,21 +4,27 @@ Complete reference for controlling mesh resolution in AortaCFD simulations.
 
 ---
 
-## Quick Start
+## Quick Start (RECOMMENDED ✨)
 
-**Recommended for beginners:** Use direct cell size specification:
+**Simplest method - Use quality presets:**
 
 ```json
 {
   "mesh": {
-    "mesh_resolution": {
-      "target_cell_size_mm": 1.0
-    }
+    "resolution_level": "medium"
   }
 }
 ```
 
-**Result:** Uniform 1mm cells throughout the domain (clinical quality).
+**Available levels:**
+- `"coarse"` or `"draft"` - 2.0mm (draft quality, ~100K-300K cells, 5-15 min)
+- `"medium"` or `"clinical"` - 1.0mm (clinical quality, ~500K-1.5M cells, 30-90 min) **← START HERE**
+- `"fine"` or `"publication"` - 0.5mm (publication quality, ~2M-5M cells, 2-4 hours)
+- `"ultra_fine"` - 0.25mm (mesh independence studies, ~10M+ cells, 6-12 hours)
+
+**That's it!** No need to understand cell sizes, formulas, or geometry analysis.
+
+**When to use advanced parameters:** Only if you need a specific cell size not covered by these presets (e.g., 1.5mm, 0.75mm).
 
 ---
 
@@ -26,28 +32,52 @@ Complete reference for controlling mesh resolution in AortaCFD simulations.
 
 AortaCFD checks mesh resolution parameters in **strict priority order**. Set **ONLY ONE** parameter per simulation to avoid confusion.
 
-### Priority 1: `target_cell_size_mm` (HIGHEST)
+### Priority 1: `resolution_level` (RECOMMENDED ✨)
 
-**Direct specification in millimeters** - All other parameters ignored if this is set.
+**Simple preset selection** - Best for 95% of users.
+
+```json
+{
+  "mesh": {
+    "resolution_level": "medium"
+  }
+}
+```
+
+- **Options:** `coarse`, `medium`, `fine`, `ultra_fine`, `draft`, `clinical`, `publication`
+- **Mapping:**
+  - coarse/draft → 2.0mm
+  - medium/clinical → 1.0mm
+  - fine/publication → 0.5mm
+  - ultra_fine → 0.25mm
+- **Use when:** You want standard quality levels
+- **Independent of:** Geometry (doesn't need reference radius)
+- **Location:** Can be set at `mesh.resolution_level` or `mesh.mesh_resolution.resolution_level`
+
+---
+
+### Priority 2: `target_cell_size_mm` (Advanced)
+
+**Direct specification in millimeters** - For custom cell sizes.
 
 ```json
 {
   "mesh": {
     "mesh_resolution": {
-      "target_cell_size_mm": 1.0
+      "target_cell_size_mm": 1.5
     }
   }
 }
 ```
 
 - **Formula:** `cell_size = target_cell_size_mm`
-- **Example:** `1.0` → 1mm cells everywhere
-- **Use when:** You know exactly what cell size you want
+- **Example:** `1.5` → 1.5mm cells everywhere
+- **Use when:** You need a specific cell size not covered by presets (e.g., 0.75mm, 1.5mm)
 - **Independent of:** Geometry (doesn't need reference radius)
 
 ---
 
-### Priority 2: `blockmesh_resolution`
+### Priority 3: `blockmesh_resolution`
 
 **Cells across diameter** - Requires reference radius from STL geometry.
 
@@ -169,6 +199,16 @@ If **none** of the above are set:
 
 **Purpose:** Quick checks, geometry validation, debugging
 
+**New way (RECOMMENDED):**
+```json
+{
+  "mesh": {
+    "resolution_level": "coarse"
+  }
+}
+```
+
+**Alternative (advanced):**
 ```json
 {
   "mesh": {
@@ -184,10 +224,20 @@ If **none** of the above are set:
 - **Runtime:** 5-15 minutes
 - **Use for:** Flow pattern visualization, testing
 
-### Medium (Clinical Quality)
+### Medium (Clinical Quality) ← START HERE
 
 **Purpose:** Routine analysis, clinical decision support
 
+**New way (RECOMMENDED):**
+```json
+{
+  "mesh": {
+    "resolution_level": "medium"
+  }
+}
+```
+
+**Alternative (advanced):**
 ```json
 {
   "mesh": {
@@ -207,6 +257,16 @@ If **none** of the above are set:
 
 **Purpose:** Research, mesh independence, detailed WSS
 
+**New way (RECOMMENDED):**
+```json
+{
+  "mesh": {
+    "resolution_level": "fine"
+  }
+}
+```
+
+**Alternative (advanced):**
 ```json
 {
   "mesh": {
@@ -404,11 +464,18 @@ checkMesh
 
 | Parameter | Priority | Formula | Requires Geometry | Units | Example |
 |-----------|----------|---------|-------------------|-------|---------|
-| `target_cell_size_mm` | 1 (highest) | `size = value` | No | mm | 1.0 |
-| `blockmesh_resolution` | 2 | `size = 2R / value` | Yes | dimensionless | 10 |
-| `cells_per_diameter` | 3 | `size = 2R / value` | Yes | dimensionless | 15 |
-| `refinement_levels` | 4 (lowest) | `size = lookup[level]` | No | m | 0.001 |
-| Default | 5 (fallback) | `size = 1.5mm` | No | mm | 1.5 |
+| `resolution_level` | 1 (RECOMMENDED) | `lookup preset` | No | string | "medium" |
+| `target_cell_size_mm` | 2 | `size = value` | No | mm | 1.0 |
+| `blockmesh_resolution` | 3 | `size = 2R / value` | Yes | dimensionless | 10 |
+| `cells_per_diameter` | 4 | `size = 2R / value` | Yes | dimensionless | 15 |
+| `refinement_levels` | 5 (legacy) | `size = lookup[level]` | No | m | 0.001 |
+| Default | 6 (fallback) | `size = 1.5mm` | No | mm | 1.5 |
+
+**Preset Mappings:**
+- `resolution_level = "coarse"` → 2.0mm
+- `resolution_level = "medium"` → 1.0mm
+- `resolution_level = "fine"` → 0.5mm
+- `resolution_level = "ultra_fine"` → 0.25mm
 
 **R** = reference radius from STL geometry (strategy-dependent)
 
@@ -416,10 +483,10 @@ checkMesh
 
 ## Best Practices
 
-1. ✅ **Set only ONE parameter** per simulation
-2. ✅ **Use `target_cell_size_mm`** for beginners (most explicit)
+1. ✅ **Use `resolution_level = "medium"`** for most simulations (simplest)
+2. ✅ **Set only ONE parameter** per simulation to avoid confusion
 3. ✅ **Test with `compute_cell_size.py`** before running full simulation
-4. ✅ **Start coarse (2mm)**, then refine to medium (1mm) or fine (0.5mm)
+4. ✅ **Start coarse**, then refine to medium or fine for production
 5. ✅ **Verify mesh quality** with `checkMesh` after meshing
 6. ✅ **Document which parameter** you used in your notes/paper
 
