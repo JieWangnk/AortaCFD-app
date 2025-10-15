@@ -21,14 +21,18 @@ class GeometryAnalyzer:
         - OpenFOAM output: meters (m) - SI units for CFD
         - Conversion: scale_factor (default 1e-3 for mm→m)
 
-    Mesh Sizing Strategy:
-        1. Reference radius: smallest vessel diameter (default: inlet or min outlet)
-        2. Cell size: diameter / cells_per_diameter (profile-dependent)
-        3. Fallback: 1.5mm default (validated for adult aorta: 10-30mm diameter)
+    Mesh Sizing Strategy (6-Priority Hierarchy):
+        1. resolution_level: Simple presets (coarse/medium/fine) - RECOMMENDED
+        2. target_cell_size_mm: Direct specification in mm
+        3. blockmesh_resolution: Cells across diameter (geometry-based)
+        4. cells_per_diameter: Same as #3, different naming
+        5. refinement_levels: Legacy lookup table
+        6. Fallback: 1.0mm default (matches 'medium' profile)
 
-    Default 1.5mm Rationale:
-        - Adult aorta: 20-30mm diameter → 13-20 cells across (adequate for laminar)
-        - Small branches: ~5mm diameter → 3-4 cells (minimum for flow capture)
+    Default 1.0mm Rationale:
+        - Matches 'medium' profile for consistency
+        - Adult aorta: 20mm diameter → 20 cells across (good for laminar/RANS)
+        - Small branches: ~5mm diameter → 5 cells (adequate for flow capture)
         - Based on mesh independence studies (see docs/MESH_QUALITY_GUIDE.md)
 
     Args:
