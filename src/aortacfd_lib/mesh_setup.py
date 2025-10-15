@@ -212,12 +212,66 @@ class GeometryAnalyzer:
             return None
         return coerced
 
+    def _cell_size_from_resolution_level(self, mesh_resolution: dict) -> tuple:
+        """
+        Priority 1: High-level resolution preset (coarse/medium/fine).
+
+        Config: mesh.resolution_level = "coarse" | "medium" | "fine"
+        Maps to predefined cell sizes:
+            - coarse: 2.0mm (draft quality, ~100K-300K cells, 5-15 min)
+            - medium: 1.0mm (clinical quality, ~500K-1.5M cells, 30-90 min)
+            - fine: 0.5mm (publication quality, ~2M-5M cells, 2-4 hours)
+            - ultra_fine: 0.25mm (mesh independence studies, ~10M+ cells)
+
+        Aliases: draft=coarse, clinical=medium, publication=fine
+
+        This is the RECOMMENDED method for most users.
+        Advanced users can override with target_cell_size_mm.
+
+        Returns:
+            (cell_size_mm, source_description) or (None, None)
+        """
+        # Check both locations for backward compatibility
+        level = self.mesh_settings.get('resolution_level')
+        if level is None:
+            level = mesh_resolution.get('resolution_level')
+
+        if level is None:
+            return None, None
+
+        # Map resolution levels to cell sizes (in mm)
+        RESOLUTION_PRESETS = {
+            'coarse': 2.0,
+            'medium': 1.0,
+            'fine': 0.5,
+            'ultra_fine': 0.25,
+            # Aliases for convenience
+            'draft': 2.0,
+            'clinical': 1.0,
+            'publication': 0.5,
+        }
+
+        level_lower = str(level).lower()
+        cell_size = RESOLUTION_PRESETS.get(level_lower)
+
+        if cell_size is not None:
+            return cell_size, f"mesh.resolution_level='{level}' → {cell_size}mm"
+        else:
+            available = ', '.join(sorted(RESOLUTION_PRESETS.keys()))
+            self.log.warning(
+                f"Unknown resolution_level: '{level}'. "
+                f"Available: {available}"
+            )
+            return None, None
+
     def _cell_size_from_target_mm(self, mesh_resolution: dict) -> tuple:
         """
-        Priority 1: Direct cell size specification in millimeters.
+        Priority 2: Direct cell size specification in millimeters.
 
         Config: mesh.mesh_resolution.target_cell_size_mm
         Formula: cell_size = target_cell_size_mm
+
+        Use when you need a specific cell size not covered by presets.
 
         Returns:
             (cell_size_mm, source_description) or (None, None)
@@ -340,13 +394,22 @@ class GeometryAnalyzer:
 
         Returns list of (priority, method_name, method_function) tuples.
         This makes the fallback order explicit and easy to modify.
+
+        Priority Order (highest to lowest):
+            1. resolution_level - Simple preset (coarse/medium/fine) [RECOMMENDED]
+            2. target_cell_size_mm - Explicit cell size in mm
+            3. blockmesh_resolution - Cells across diameter (2*R/N formula)
+            4. cells_per_diameter - Same as blockmesh_resolution (different naming)
+            5. refinement_levels - Named quality levels with lookup table
+            6. default_fallback - 1.5mm (validated for adult aorta)
         """
         return [
-            (1, "target_cell_size_mm", lambda: self._cell_size_from_target_mm(mesh_resolution)),
-            (2, "blockmesh_resolution", lambda: self._cell_size_from_blockmesh_resolution(mesh_resolution)),
-            (3, "cells_per_diameter", lambda: self._cell_size_from_cells_per_diameter(mesh_resolution)),
-            (4, "refinement_levels", lambda: self._cell_size_from_refinement_level()),
-            (5, "default_fallback", lambda: (1.5, "default fallback (1.5mm validated for adult aorta)"))
+            (1, "resolution_level", lambda: self._cell_size_from_resolution_level(mesh_resolution)),
+            (2, "target_cell_size_mm", lambda: self._cell_size_from_target_mm(mesh_resolution)),
+            (3, "blockmesh_resolution", lambda: self._cell_size_from_blockmesh_resolution(mesh_resolution)),
+            (4, "cells_per_diameter", lambda: self._cell_size_from_cells_per_diameter(mesh_resolution)),
+            (5, "refinement_levels", lambda: self._cell_size_from_refinement_level()),
+            (6, "default_fallback", lambda: (1.5, "default fallback (1.5mm validated for adult aorta)"))
         ]
 
     def _resolve_cell_size(self, mesh_resolution: dict) -> tuple:
@@ -366,14 +429,16 @@ class GeometryAnalyzer:
 
             if cell_size is not None:
                 # Log which priority level was used
-                if priority == 5:  # Default fallback
+                if priority == 6:  # Default fallback
                     self.log.warning(
-                        f"No mesh resolution parameters found (checked priorities 1-4). "
-                        f"Using {cell_size}mm default. See MESH_RESOLUTION_GUIDE.md"
+                        f"No mesh resolution parameters found (checked priorities 1-5). "
+                        f"Using {cell_size}mm default. "
+                        f"Recommendation: Set mesh.resolution_level = 'medium' in config. "
+                        f"See MESH_RESOLUTION_GUIDE.md"
                     )
                 return cell_size, source, priority
 
-        # This should never happen (priority 5 always returns a value)
+        # This should never happen (priority 6 always returns a value)
         raise RuntimeError(
             "Cell size resolution failed - default fallback did not return value. "
             "This is a code bug, please report."
@@ -385,30 +450,37 @@ class GeometryAnalyzer:
 
         MESH RESOLUTION PARAMETER HIERARCHY (checked in order):
 
-        1. target_cell_size_mm (highest priority)
-           - Direct specification: mesh.mesh_resolution.target_cell_size_mm = 1.0
-           - All other parameters ignored if this is set
+        1. resolution_level (RECOMMENDED for most users)
+           - Simple preset: mesh.resolution_level = "coarse" | "medium" | "fine"
+           - Maps to: coarse=2mm, medium=1mm, fine=0.5mm, ultra_fine=0.25mm
+           - Aliases: draft, clinical, publication
+           - Example: mesh.resolution_level = "medium" → 1.0mm
 
-        2. blockmesh_resolution
+        2. target_cell_size_mm (for advanced users)
+           - Direct specification: mesh.mesh_resolution.target_cell_size_mm = 1.0
+           - Use when you need a specific cell size not covered by presets
+
+        3. blockmesh_resolution
            - Formula: cell_size = 2 * reference_radius / blockmesh_resolution
            - Config: mesh.mesh_resolution.blockmesh_resolution = 10
            - Requires: Valid reference radius from STL geometry
 
-        3. cells_per_diameter
+        4. cells_per_diameter
            - Formula: cell_size = 2 * reference_radius / cells_per_diameter
            - Config: mesh.mesh_resolution.cells_per_diameter = 8
            - Supports dict: {branch: 10, inlet: 8}
            - Requires: Valid reference radius
 
-        4. refinement_levels (lowest priority)
+        5. refinement_levels (legacy)
            - Lookup: mesh.refinement_levels[geometry.refinement_level]
            - Example: refinement_level="medium" → 0.001m → 1.0mm
 
-        5. Default fallback: 1.5mm
+        6. Default fallback: 1.5mm
            - Used only if all above methods fail
            - Validated for adult aorta (see REPRODUCIBILITY.md)
 
-        RECOMMENDATION: Set only ONE parameter per simulation to avoid confusion.
+        RECOMMENDATION: Use resolution_level = "medium" for most simulations.
+        Only use lower priorities if you need custom values.
 
         Implementation Notes:
             - Priority order defined in _get_cell_size_strategies()
