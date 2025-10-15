@@ -165,6 +165,10 @@ python run_patient.py patient1 --step case --step mesh --step boundary
 
 ### Configuration
 
+> **💡 RECOMMENDED WORKFLOW:** Use `mesh.resolution_level` for mesh configuration.
+> This provides presets (coarse/medium/fine/ultra_fine) without needing to understand cell sizes or formulas.
+> Start with `"medium"` for clinical-quality results. See [MESH_RESOLUTION_GUIDE.md](MESH_RESOLUTION_GUIDE.md) for details.
+
 **Minimal config.json (RECOMMENDED for beginners):**
 
 ```json
