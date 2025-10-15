@@ -23,17 +23,27 @@ class GeometryAnalyzer:
 
     Mesh Sizing Strategy (6-Priority Hierarchy):
         1. resolution_level: Simple presets (coarse/medium/fine) - RECOMMENDED
-        2. target_cell_size_mm: Direct specification in mm
+           - coarse/draft: 2.0mm (~100K-300K cells, 5-15 min)
+           - medium/clinical: 1.0mm (~500K-1.5M cells, 30-90 min) ← START HERE
+           - fine/publication: 0.5mm (~2M-5M cells, 2-4 hours)
+           - ultra_fine: 0.25mm (~10M+ cells, 6-12 hours)
+        2. target_cell_size_mm: Direct specification in mm (advanced users)
         3. blockmesh_resolution: Cells across diameter (geometry-based)
         4. cells_per_diameter: Same as #3, different naming
         5. refinement_levels: Legacy lookup table
-        6. Fallback: 1.0mm default (matches 'medium' profile)
+        6. Fallback: 1.0mm default (only if none of above set)
 
-    Default 1.0mm Rationale:
-        - Matches 'medium' profile for consistency
-        - Adult aorta: 20mm diameter → 20 cells across (good for laminar/RANS)
-        - Small branches: ~5mm diameter → 5 cells (adequate for flow capture)
-        - Based on mesh independence studies (see docs/MESH_QUALITY_GUIDE.md)
+    RECOMMENDED WORKFLOW:
+        Set mesh.resolution_level = "medium" in your config for most cases.
+        Only use lower priorities if you need custom values not covered by presets.
+        See MESH_RESOLUTION_GUIDE.md for complete documentation.
+
+    Default Fallback (Priority 6):
+        - Value: 1.0mm (matches 'medium' profile for consistency)
+        - Only used when no resolution parameters are configured
+        - Triggers warning recommending explicit resolution_level configuration
+        - Adult aorta: 20mm diameter → 20 cells across (adequate for RANS)
+        - Small branches: ~5mm diameter → 5 cells (minimum for flow capture)
 
     Args:
         config: Full configuration dictionary with 'geometry', 'mesh', 'physics' sections
