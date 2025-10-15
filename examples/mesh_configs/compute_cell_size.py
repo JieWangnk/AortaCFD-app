@@ -67,8 +67,31 @@ class CellSizeCalculator:
         print("   provide --reference-radius or run geometry analysis first")
         return None
 
-    def method_1_target_mm(self) -> Tuple[Optional[float], str]:
-        """Priority 1: target_cell_size_mm."""
+    def method_1_resolution_level(self) -> Tuple[Optional[float], str]:
+        """Priority 1: resolution_level preset."""
+        mesh = self.config.get('mesh', {})
+        mesh_res = mesh.get('mesh_resolution', {})
+
+        # Check both locations
+        level = mesh.get('resolution_level') or mesh_res.get('resolution_level')
+        if level is None:
+            return None, ""
+
+        # Preset mappings
+        RESOLUTION_PRESETS = {
+            'coarse': 2.0, 'medium': 1.0, 'fine': 0.5, 'ultra_fine': 0.25,
+            'draft': 2.0, 'clinical': 1.0, 'publication': 0.5,
+        }
+
+        cell_size = RESOLUTION_PRESETS.get(str(level).lower())
+        if cell_size is not None:
+            return cell_size, f"mesh.resolution_level='{level}' → {cell_size}mm"
+
+        print(f"⚠️  Unknown resolution_level: '{level}'")
+        return None, ""
+
+    def method_2_target_mm(self) -> Tuple[Optional[float], str]:
+        """Priority 2: target_cell_size_mm."""
         mesh_res = self.config.get('mesh', {}).get('mesh_resolution', {})
         target_mm = mesh_res.get('target_cell_size_mm')
         validated = self._coerce_positive(target_mm, "mesh.mesh_resolution.target_cell_size_mm")
@@ -77,8 +100,8 @@ class CellSizeCalculator:
             return validated, "mesh.mesh_resolution.target_cell_size_mm (explicit)"
         return None, ""
 
-    def method_2_blockmesh_resolution(self) -> Tuple[Optional[float], str]:
-        """Priority 2: blockmesh_resolution."""
+    def method_3_blockmesh_resolution(self) -> Tuple[Optional[float], str]:
+        """Priority 3: blockmesh_resolution."""
         mesh = self.config.get('mesh', {})
         mesh_res = mesh.get('mesh_resolution', {})
 
@@ -100,8 +123,8 @@ class CellSizeCalculator:
                 print("⚠️  blockmesh_resolution requires reference_radius")
         return None, ""
 
-    def method_3_cells_per_diameter(self) -> Tuple[Optional[float], str]:
-        """Priority 3: cells_per_diameter."""
+    def method_4_cells_per_diameter(self) -> Tuple[Optional[float], str]:
+        """Priority 4: cells_per_diameter."""
         mesh_res = self.config.get('mesh', {}).get('mesh_resolution', {})
         cells_per_diam = mesh_res.get('cells_per_diameter')
         cells_val = None
@@ -126,8 +149,8 @@ class CellSizeCalculator:
                 print("⚠️  cells_per_diameter requires reference_radius")
         return None, ""
 
-    def method_4_refinement_level(self) -> Tuple[Optional[float], str]:
-        """Priority 4: refinement_levels lookup."""
+    def method_5_refinement_level(self) -> Tuple[Optional[float], str]:
+        """Priority 5: refinement_levels lookup."""
         geom = self.config.get('geometry', {})
         mesh = self.config.get('mesh', {})
 
@@ -155,24 +178,28 @@ class CellSizeCalculator:
             (cell_size_mm, source_description, priority_level)
         """
         # Try each method in order
-        cell_size, source = self.method_1_target_mm()
+        cell_size, source = self.method_1_resolution_level()
         if cell_size is not None:
             return cell_size, source, 1
 
-        cell_size, source = self.method_2_blockmesh_resolution()
+        cell_size, source = self.method_2_target_mm()
         if cell_size is not None:
             return cell_size, source, 2
 
-        cell_size, source = self.method_3_cells_per_diameter()
+        cell_size, source = self.method_3_blockmesh_resolution()
         if cell_size is not None:
             return cell_size, source, 3
 
-        cell_size, source = self.method_4_refinement_level()
+        cell_size, source = self.method_4_cells_per_diameter()
         if cell_size is not None:
             return cell_size, source, 4
 
+        cell_size, source = self.method_5_refinement_level()
+        if cell_size is not None:
+            return cell_size, source, 5
+
         # Default fallback
-        return 1.5, "default fallback (no parameters set)", 5
+        return 1.0, "default fallback (1.0mm, matches 'medium' profile)", 6
 
 
 def main():
@@ -292,13 +319,13 @@ Examples:
     print("=" * 70)
 
     # Recommendations
-    if priority == 5:
+    if priority == 6:
         print()
-        print("⚠️  WARNING: Using default fallback (1.5mm)")
+        print("⚠️  WARNING: Using default fallback (1.0mm)")
         print("   Recommendation: Set one of these parameters explicitly:")
-        print("   1. mesh.mesh_resolution.target_cell_size_mm = 1.0")
-        print("   2. mesh.mesh_resolution.cells_per_diameter = 15")
-        print("   3. geometry.refinement_level = 'medium'")
+        print("   1. mesh.resolution_level = 'medium' (RECOMMENDED)")
+        print("   2. mesh.mesh_resolution.target_cell_size_mm = 1.0")
+        print("   3. mesh.mesh_resolution.cells_per_diameter = 15")
 
 
 if __name__ == '__main__':
