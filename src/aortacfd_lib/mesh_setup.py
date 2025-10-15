@@ -334,6 +334,51 @@ class GeometryAnalyzer:
             return cell_size_mm, f"refinement_levels['{ref_level_key}']={level_meters}m"
         return None, None
 
+    def _get_cell_size_strategies(self, mesh_resolution: dict):
+        """
+        Define cell size computation strategies in priority order.
+
+        Returns list of (priority, method_name, method_function) tuples.
+        This makes the fallback order explicit and easy to modify.
+        """
+        return [
+            (1, "target_cell_size_mm", lambda: self._cell_size_from_target_mm(mesh_resolution)),
+            (2, "blockmesh_resolution", lambda: self._cell_size_from_blockmesh_resolution(mesh_resolution)),
+            (3, "cells_per_diameter", lambda: self._cell_size_from_cells_per_diameter(mesh_resolution)),
+            (4, "refinement_levels", lambda: self._cell_size_from_refinement_level()),
+            (5, "default_fallback", lambda: (1.5, "default fallback (1.5mm validated for adult aorta)"))
+        ]
+
+    def _resolve_cell_size(self, mesh_resolution: dict) -> tuple:
+        """
+        Resolve cell size using priority cascade of strategies.
+
+        This method encapsulates the entire fallback logic in one place.
+        To change priority order, modify _get_cell_size_strategies().
+
+        Returns:
+            (cell_size_mm: float, source: str, priority: int)
+        """
+        strategies = self._get_cell_size_strategies(mesh_resolution)
+
+        for priority, method_name, method_func in strategies:
+            cell_size, source = method_func()
+
+            if cell_size is not None:
+                # Log which priority level was used
+                if priority == 5:  # Default fallback
+                    self.log.warning(
+                        f"No mesh resolution parameters found (checked priorities 1-4). "
+                        f"Using {cell_size}mm default. See MESH_RESOLUTION_GUIDE.md"
+                    )
+                return cell_size, source, priority
+
+        # This should never happen (priority 5 always returns a value)
+        raise RuntimeError(
+            "Cell size resolution failed - default fallback did not return value. "
+            "This is a code bug, please report."
+        )
+
     def _calculate_blockmesh_cells(self, bounds: dict) -> dict:
         """
         Calculate blockMesh cell counts based on target cell size.
@@ -365,6 +410,11 @@ class GeometryAnalyzer:
 
         RECOMMENDATION: Set only ONE parameter per simulation to avoid confusion.
 
+        Implementation Notes:
+            - Priority order defined in _get_cell_size_strategies()
+            - Resolution logic in _resolve_cell_size()
+            - Easy to add new strategies or change priority order
+
         Args:
             bounds: BlockMesh bounding box {min: ndarray, max: ndarray} in mm
 
@@ -374,40 +424,23 @@ class GeometryAnalyzer:
         raw_mesh_resolution = self.mesh_settings.get('mesh_resolution', {})
         mesh_resolution = raw_mesh_resolution if isinstance(raw_mesh_resolution, dict) else {}
 
-        # Try each method in priority order
-        cell_size_mm, source = self._cell_size_from_target_mm(mesh_resolution)
+        # Resolve cell size using strategy cascade (encapsulated in separate method)
+        cell_size_mm, source, priority = self._resolve_cell_size(mesh_resolution)
 
-        if cell_size_mm is None:
-            cell_size_mm, source = self._cell_size_from_blockmesh_resolution(mesh_resolution)
-
-        if cell_size_mm is None:
-            cell_size_mm, source = self._cell_size_from_cells_per_diameter(mesh_resolution)
-
-        if cell_size_mm is None:
-            cell_size_mm, source = self._cell_size_from_refinement_level()
-
-        if cell_size_mm is None:
-            cell_size_mm = 1.5
-            source = "default fallback (no parameters set)"
-            self.log.warning(
-                "No mesh resolution parameters found; using 1.5mm default. "
-                "See docs for available parameters."
-            )
-
-        # Validate
+        # Validate result
         if cell_size_mm <= 0:
             raise ValueError(
                 f"Computed cell size must be positive, got {cell_size_mm}mm. "
-                f"Check configuration for parameter: {source}"
+                f"Source: {source} (priority {priority})"
             )
 
         # Log with clear source attribution
         self.log.info(f"✓ Target cell size: {cell_size_mm:.3f} mm")
-        self.log.info(f"  Source: {source}")
+        self.log.info(f"  Source: {source} (priority {priority}/5)")
         if self.reference_radius_mm:
             self.log.info(f"  Reference radius: {self.reference_radius_mm:.3f} mm (strategy: {self.geom_settings.get('reference_radius_strategy', 'min')})")
 
-        # Calculate cell counts
+        # Calculate cell counts from resolved cell size
         ranges = bounds['max'] - bounds['min']
         num_cells = np.maximum(1, np.round(ranges / cell_size_mm)).astype(int)
 
