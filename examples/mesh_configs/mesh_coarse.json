@@ -1,105 +1,23 @@
 {
-  "_comment": "===================================================================",
-  "_description": "COARSE MESH CONFIGURATION - Fast preliminary analysis",
-  "_use_case": "Quick geometry check, flow pattern visualization, draft runs",
-  "_expected_cells": "~100K-300K cells",
-  "_expected_time": "5-15 minutes (mesh + solve)",
-  "_quality_level": "Draft quality - not for publication",
-  "===================================================================": "",
+  "_comment": "COARSE MESH - Fast draft quality",
+  "_expected": "~100K-300K cells, 5-15 min runtime",
+  "_use_case": "Quick checks, debugging, geometry validation",
 
   "mesh": {
-    "_comment_priority": "Method 1 (RECOMMENDED): Use resolution_level preset",
     "resolution_level": "coarse",
-    "_mapping": "coarse → 2.0mm cell size",
-    "_alternatives": ["draft"],
-    "_expected": "~100K-300K cells, 5-15 min runtime",
-
-    "mesh_resolution": {
-      "_comment": "Method 2 (Alternative): Direct cell size for custom values",
-      "_target_cell_size_mm": 2.0,
-      "_formula": "cell_size = 2.0 mm (explicit)",
-      "_note": "Use this if you need a specific cell size not covered by presets"
-    },
-
-    "_alternative_methods": {
-      "_comment": "Use ONLY ONE method below (comment out others)",
-
-      "_method_2_blockmesh_resolution": {
-        "blockmesh_resolution": 5,
-        "_formula": "cell_size = 2 * reference_radius / 5",
-        "_example": "If ref_radius=10mm → cell_size=4mm (very coarse)"
-      },
-
-      "_method_3_cells_per_diameter": {
-        "cells_per_diameter": 8,
-        "_formula": "cell_size = 2 * reference_radius / 8",
-        "_example": "If ref_radius=10mm → cell_size=2.5mm"
-      },
-
-      "_method_4_named_level": {
-        "_requires_geometry_refinement_level": "coarse",
-        "_and_mesh_refinement_levels": {
-          "coarse": 0.002,
-          "medium": 0.001,
-          "fine": 0.0005
-        },
-        "_formula": "cell_size = 0.002m = 2.0mm"
-      }
-    },
 
     "SNAPPY_SETTINGS": {
       "castellatedMesh": true,
       "snap": true,
       "addLayers": true,
-
-      "refinementSurfaces": {
-        "wall_aorta": {"level": [1, 2]},
-        "inlet": {"level": [1, 2]},
-        "outlet1": {"level": [1, 2]},
-        "outlet2": {"level": [1, 2]}
-      },
-
-      "refinementRegions": {},
-
       "nSurfaceLayers": 2,
       "expansionRatio": 1.3,
-      "finalLayerThickness": 0.5,
-
       "parallel": true,
       "nProcessors": 4
     }
   },
 
   "geometry": {
-    "scale_factor": 0.001,
-    "reference_radius_strategy": "min",
-    "_strategy_options": ["min", "inlet", "mean", "max"],
-    "_strategy_explanation": {
-      "min": "Use smallest vessel (ensures all branches resolved)",
-      "inlet": "Use inlet only (for inlet-dominated flows)",
-      "mean": "Average of all vessels (balanced)",
-      "max": "Use largest vessel (coarsest overall mesh)"
-    }
-  },
-
-  "_validation_criteria": {
-    "orthogonality_max": "< 75° (acceptable for coarse)",
-    "skewness_max": "< 5 (acceptable for coarse)",
-    "aspect_ratio_max": "< 150",
-    "y_plus": "Not critical for coarse mesh"
-  },
-
-  "_when_to_use": [
-    "Initial geometry validation",
-    "Testing boundary conditions",
-    "Debugging workflow",
-    "Teaching demonstrations"
-  ],
-
-  "_not_suitable_for": [
-    "Publication results",
-    "Clinical decision support",
-    "Quantitative WSS analysis",
-    "Mesh independence studies"
-  ]
+    "scale_factor": 0.001
+  }
 }

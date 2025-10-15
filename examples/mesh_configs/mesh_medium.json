@@ -1,102 +1,23 @@
 {
-  "_comment": "===================================================================",
-  "_description": "MEDIUM MESH CONFIGURATION - Clinical-quality analysis",
-  "_use_case": "Clinical decision support, routine hemodynamic analysis",
-  "_expected_cells": "~500K-1.5M cells",
-  "_expected_time": "30-90 minutes (mesh + solve)",
-  "_quality_level": "Clinical quality - suitable for most applications",
-  "===================================================================": "",
+  "_comment": "MEDIUM MESH - Clinical quality (RECOMMENDED)",
+  "_expected": "~500K-1.5M cells, 30-90 min runtime",
+  "_use_case": "Clinical analysis, routine hemodynamics",
 
   "mesh": {
-    "_comment_priority": "Method 1 (RECOMMENDED): Use resolution_level preset",
     "resolution_level": "medium",
-    "_mapping": "medium → 1.0mm cell size (clinical standard)",
-    "_alternatives": ["clinical"],
-    "_expected": "~500K-1.5M cells, 30-90 min runtime",
-
-    "mesh_resolution": {
-      "_comment": "Method 2 (Alternative): Direct cell size for custom values",
-      "_target_cell_size_mm": 1.0,
-      "_formula": "cell_size = 1.0 mm (explicit)",
-      "_note": "Use this if you need a specific cell size not covered by presets"
-    },
-
-    "_alternative_methods": {
-      "_method_2_blockmesh_resolution": {
-        "blockmesh_resolution": 10,
-        "_formula": "cell_size = 2 * reference_radius / 10",
-        "_example": "If ref_radius=10mm → cell_size=2mm"
-      },
-
-      "_method_3_cells_per_diameter": {
-        "cells_per_diameter": 15,
-        "_formula": "cell_size = 2 * reference_radius / 15",
-        "_example": "If ref_radius=10mm → cell_size=1.33mm (good resolution)"
-      },
-
-      "_method_4_named_level": {
-        "_requires": "geometry.refinement_level = 'medium'",
-        "_and": "mesh.refinement_levels.medium = 0.001 (1mm)"
-      }
-    },
 
     "SNAPPY_SETTINGS": {
       "castellatedMesh": true,
       "snap": true,
       "addLayers": true,
-
-      "refinementSurfaces": {
-        "wall_aorta": {"level": [2, 3]},
-        "inlet": {"level": [2, 3]},
-        "outlet1": {"level": [2, 3]},
-        "outlet2": {"level": [2, 3]}
-      },
-
-      "refinementRegions": {
-        "_optional_high_interest_region": {
-          "mode": "inside",
-          "levels": [[0.005, 3]],
-          "_description": "Extra refinement in coarctation/aneurysm"
-        }
-      },
-
       "nSurfaceLayers": 3,
       "expansionRatio": 1.2,
-      "finalLayerThickness": 0.4,
-      "minThickness": 0.1,
-
       "parallel": true,
-      "nProcessors": 8,
-
-      "_quality_controls": {
-        "maxNonOrtho": 65,
-        "maxBoundarySkewness": 4,
-        "maxInternalSkewness": 4
-      }
+      "nProcessors": 8
     }
   },
 
   "geometry": {
-    "scale_factor": 0.001,
-    "reference_radius_strategy": "min",
-    "_explanation": "Use minimum radius to ensure small branches well-resolved"
-  },
-
-  "_validation_criteria": {
-    "orthogonality_max": "< 65° (good quality)",
-    "skewness_max": "< 4 (good quality)",
-    "aspect_ratio_max": "< 100",
-    "y_plus": "< 5 for laminar, < 300 for RANS with wall functions",
-    "boundary_layers": "3 layers minimum, expansion ratio 1.2"
-  },
-
-  "_suitable_for": [
-    "Clinical hemodynamic assessment",
-    "Pressure gradient calculations",
-    "Flow distribution analysis",
-    "WSS pattern identification",
-    "Virtual surgical planning"
-  ],
-
-  "_mesh_independence_note": "For research publications, verify with fine mesh"
+    "scale_factor": 0.001
+  }
 }

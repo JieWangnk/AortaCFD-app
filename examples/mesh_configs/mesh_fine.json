@@ -1,155 +1,24 @@
 {
-  "_comment": "===================================================================",
-  "_description": "FINE MESH CONFIGURATION - Research/publication quality",
-  "_use_case": "Publication results, mesh independence verification, detailed WSS",
-  "_expected_cells": "~2M-5M cells",
-  "_expected_time": "2-4 hours (mesh + solve)",
-  "_quality_level": "Publication quality - highest fidelity",
-  "===================================================================": "",
+  "_comment": "FINE MESH - Publication quality",
+  "_expected": "~2M-5M cells, 2-4 hours runtime",
+  "_use_case": "Research, publications, detailed WSS analysis",
 
   "mesh": {
-    "_comment_priority": "Method 1 (RECOMMENDED): Use resolution_level preset",
     "resolution_level": "fine",
-    "_mapping": "fine → 0.5mm cell size (publication standard)",
-    "_alternatives": ["publication"],
-    "_expected": "~2M-5M cells, 2-4 hours runtime",
-
-    "mesh_resolution": {
-      "_comment": "Method 2 (Alternative): Direct cell size for custom values",
-      "_target_cell_size_mm": 0.5,
-      "_formula": "cell_size = 0.5 mm (explicit)",
-      "_note": "Use this if you need a specific cell size not covered by presets"
-    },
-
-    "_alternative_methods": {
-      "_method_2_blockmesh_resolution": {
-        "blockmesh_resolution": 20,
-        "_formula": "cell_size = 2 * reference_radius / 20",
-        "_example": "If ref_radius=10mm → cell_size=1mm (still coarser than explicit 0.5mm)"
-      },
-
-      "_method_3_cells_per_diameter": {
-        "cells_per_diameter": 30,
-        "_formula": "cell_size = 2 * reference_radius / 30",
-        "_example": "If ref_radius=10mm → cell_size=0.67mm (publication quality)"
-      },
-
-      "_method_4_named_level": {
-        "_requires": "geometry.refinement_level = 'fine'",
-        "_and": "mesh.refinement_levels.fine = 0.0005 (0.5mm)"
-      }
-    },
 
     "SNAPPY_SETTINGS": {
       "castellatedMesh": true,
       "snap": true,
       "addLayers": true,
-
-      "refinementSurfaces": {
-        "wall_aorta": {"level": [3, 4]},
-        "inlet": {"level": [3, 4]},
-        "outlet1": {"level": [3, 4]},
-        "outlet2": {"level": [3, 4]},
-        "_comment": "Level 4 = 0.5mm / (2^4) = 0.03125mm near-wall resolution"
-      },
-
-      "refinementRegions": {
-        "_high_gradient_region": {
-          "mode": "inside",
-          "levels": [[0.003, 4]],
-          "_description": "Extra refinement for stenosis/coarctation"
-        },
-        "_recirculation_zone": {
-          "mode": "inside",
-          "levels": [[0.005, 3]],
-          "_description": "Capture vortex structures downstream of lesions"
-        }
-      },
-
       "nSurfaceLayers": 5,
-      "expansionRatio": 1.15,
+      "expansionRatio": 1.2,
       "finalLayerThickness": 0.3,
-      "minThickness": 0.05,
-      "firstLayerThickness": 0.01,
-
       "parallel": true,
-      "nProcessors": 16,
-
-      "_quality_controls": {
-        "maxNonOrtho": 60,
-        "maxBoundarySkewness": 3,
-        "maxInternalSkewness": 3,
-        "minVol": 1e-18,
-        "minTetQuality": 1e-15,
-        "minFaceWeight": 0.05
-      },
-
-      "_snap_controls": {
-        "nSmoothPatch": 5,
-        "tolerance": 2.0,
-        "nSolveIter": 100,
-        "nRelaxIter": 8
-      },
-
-      "_layer_controls": {
-        "relativeSizes": false,
-        "minMedianAxisAngle": 80,
-        "maxFaceThicknessRatio": 0.5,
-        "maxThicknessToMedialRatio": 0.6,
-        "nGrow": 0,
-        "featureAngle": 130,
-        "nRelaxIter": 5,
-        "nSmoothSurfaceNormals": 3,
-        "nSmoothNormals": 5,
-        "nSmoothThickness": 10,
-        "maxThicknessRatio": 1.2,
-        "slipFeatureAngle": 60
-      }
+      "nProcessors": 16
     }
   },
 
   "geometry": {
-    "scale_factor": 0.001,
-    "reference_radius_strategy": "min",
-    "_rationale": "Ensures even smallest branches have 10+ cells across diameter"
-  },
-
-  "_validation_criteria": {
-    "orthogonality_max": "< 60° (excellent quality)",
-    "skewness_max": "< 3 (excellent quality)",
-    "aspect_ratio_max": "< 50 in critical regions",
-    "y_plus_laminar": "< 1 (wall-resolved)",
-    "y_plus_rans": "< 1 for low-Re models, 30-100 for wall functions",
-    "boundary_layers": "5 layers minimum, smooth thickness distribution",
-    "cell_count": "Verify mesh-independent results vs. medium mesh"
-  },
-
-  "_suitable_for": [
-    "Research publications",
-    "Mesh independence verification",
-    "Detailed WSS gradient analysis",
-    "Oscillatory shear index (OSI) calculations",
-    "Turbulence-resolving simulations (RANS/LES)",
-    "High-Re transitional flows",
-    "Stenosis/coarctation hemodynamics"
-  ],
-
-  "_computational_requirements": {
-    "memory": "16-32 GB RAM",
-    "processors": "16+ cores recommended",
-    "storage": "10-50 GB per case (time series data)",
-    "runtime": "2-4 hours on 16 cores (laminar), 6-12 hours (RANS)"
-  },
-
-  "_mesh_independence_procedure": [
-    "1. Run coarse mesh (~300K cells)",
-    "2. Run medium mesh (~1M cells)",
-    "3. Run fine mesh (~3M cells)",
-    "4. Compare peak velocity: < 5% difference",
-    "5. Compare mean WSS: < 10% difference",
-    "6. Compare pressure drop: < 5% difference",
-    "7. If not converged, refine to ultra-fine (0.25mm)"
-  ],
-
-  "_post_processing_note": "Extract high-resolution data every 0.01s for publication figures"
+    "scale_factor": 0.001
+  }
 }
