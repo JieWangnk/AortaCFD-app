@@ -42,7 +42,6 @@ LES_FINE_EXTRAS = {
             "adjustTimeStep": "yes",
             "maxCo": 0.5,
             "maxDeltaT": 5e-05,
-            "minDeltaT": 5e-09,
             "functions": ["wallShearStress", "Q", "Lambda2"],
         }
     },

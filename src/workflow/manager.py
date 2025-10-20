@@ -29,6 +29,7 @@ class WorkflowManager:
             "generate_control_dict": setup_tasks.GenerateControlDictTask,
             "update_control_dict": setup_tasks.GenerateControlDictTask,
             "generate_simulation_report": setup_tasks.GenerateSimulationReportTask,
+            "generate_windkessel_report": setup_tasks.GenerateWindkesselReportTask,
             "execute_meshing": execution_tasks.ExecuteMeshingTask,
             "execute_solver": execution_tasks.ExecuteSolverTask,
             "execute_reconstruct": execution_tasks.ExecuteReconstructionTask,
@@ -102,7 +103,8 @@ class WorkflowManager:
                 "generate_bc_files",
                 "update_control_dict",
                 "execute_solver",
-                "execute_post"
+                "execute_post",
+                "generate_windkessel_report"  # Generate WK analysis after simulation
             ]
         }
         
@@ -117,6 +119,9 @@ class WorkflowManager:
             self.context["case_directory"] = os.path.join(
                 os.getcwd(), "output", "OPENFOAM", f"{geom_cfg['case_name']}_{refinement}"
             )
+            # Add patient name for report generation
+            self.context["patient_name"] = self.config.get('case_info', {}).get('patient_id',
+                                                                                geom_cfg.get('case_name', 'unknown'))
         logger.info(f"Starting workflow for command: '{command}'")
         for task_name in task_sequence:
             task_class = self.available_tasks.get(task_name)

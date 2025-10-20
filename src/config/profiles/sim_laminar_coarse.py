@@ -41,7 +41,6 @@ LAMINAR_COARSE_EXTRAS = {
             "adjustTimeStep": "yes",
             "maxCo": 0.5,
             "maxDeltaT": 1e-3,
-            "minDeltaT": 1e-7,
             "functions": ["wallShearStress"],
         }
     },

@@ -350,3 +350,40 @@ class GenerateSimulationReportTask(Task):
             # Don't fail the workflow if report generation fails
             return True
 
+
+
+class GenerateWindkesselReportTask(Task):
+    """
+    Generates Windkessel analysis report with flow rate plots and parameters.
+    Only runs if 3EWINDKESSEL outlets are configured.
+    """
+    def execute(self, context: dict) -> bool:
+        # Check if Windkessel BC is used
+        bc_type = self.config.get('boundary_conditions', {}).get('outlets', {}).get('type', '')
+
+        if bc_type != '3EWINDKESSEL':
+            logger.info("Skipping Windkessel analysis (not using 3EWINDKESSEL BC)")
+            return True
+
+        logger.info("Generating Windkessel analysis report...")
+
+        try:
+            from aortacfd_lib.windkessel_analyzer import WindkesselAnalyzer
+
+            case_dir = context["case_directory"]
+            output_dir = os.path.dirname(case_dir)
+            reports_dir = os.path.join(output_dir, "reports")
+
+            analyzer = WindkesselAnalyzer(case_dir, self.config)
+            pdf_path = analyzer.generate_report(reports_dir)
+
+            logger.info(f"Windkessel analysis report saved: {pdf_path}")
+            context["windkessel_report_path"] = pdf_path
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to generate Windkessel report: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            # Don't fail the workflow
+            return True

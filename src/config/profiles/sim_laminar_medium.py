@@ -41,7 +41,6 @@ LAMINAR_MEDIUM_EXTRAS = {
             "adjustTimeStep": "yes",
             "maxCo": 1.0,
             "maxDeltaT": 2e-4,
-            "minDeltaT": 1e-7,
             "functions": ["wallShearStress"],
         }
     },

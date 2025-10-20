@@ -1,8 +1,8 @@
 # AortaCFD: Patient-Specific Aortic Blood Flow Simulation
 
 ![Python Version](https://img.shields.io/badge/python-3.12-blue.svg)
-![Tests](https://img.shields.io/badge/tests-362%20passing-success.svg)
-![Coverage](https://img.shields.io/badge/coverage-29%25-yellow.svg)
+![Tests](https://img.shields.io/badge/tests-18%20passing-success.svg)
+![Coverage](https://img.shields.io/badge/coverage-TBD-lightgrey.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![OpenFOAM](https://img.shields.io/badge/OpenFOAM-12-orange.svg)
 
@@ -89,7 +89,7 @@ output/patient1/               # Results
 - ✅ **Parallel Execution** - Multi-core solver with optional reconstruction skip
 - ✅ **Post-Processing** - Automated ParaView visualization with auto-detection
 - ✅ **Modular Architecture** - Clean, task-based workflow system
-- ✅ **Comprehensive Testing** - 362 tests with CFD quality validation
+- ✅ **Comprehensive Testing** - Automated test suite with CFD quality validation
 - ✅ **OpenFOAM 12 Native** - Uses `foamRun -solver incompressibleFluid`
 
 ---
@@ -605,35 +605,25 @@ python run_patient.py patient1 --step reconstruct
 
 ## Testing
 
-AortaCFD includes **362 code tests** plus **CFD quality validation** with **100% pass rate**:
+AortaCFD includes automated tests for core functionality:
 
 ```bash
 # Run all tests
-./venv/bin/pytest tests/ test_patient1_e2e.py test_multi_patient_e2e.py
+./venv/bin/pytest tests/ -v
 
-# Unit tests only (302 tests)
+# Unit tests (mesh resolution, inlet mapping, etc.)
 ./venv/bin/pytest tests/unit/ -v
 
-# Integration tests (42 tests)
+# Integration tests (complete workflow validation)
 ./venv/bin/pytest tests/integration/ -v
-
-# End-to-end tests (18 tests)
-./venv/bin/pytest test_patient1_e2e.py test_multi_patient_e2e.py -v
-
-# CFD quality validation (8 tests)
-./venv/bin/pytest test_cfd_validation.py -v -s
 
 # With coverage report
 ./venv/bin/pytest --cov=src --cov-report=html
 ```
 
-**Test Coverage:**
-- inlet_mapping.py: 92% ✅
-- mesh_setup.py: 79% ✅
-- patch_processing.py: 72% ✅
-- setup_tasks.py: 56% ✅
-- murray_calculator.py: 46% 🟡
-- **Overall: 29%** 🟡
+**Current Test Suite:**
+- Mesh resolution parameter hierarchy (18 tests)
+- Additional tests under development
 
 ---
 

@@ -34,16 +34,25 @@ RANS_COARSE_EXTRAS = {
             "startTime": 0.0,
             "stopAt": "endTime",
             "endTime": "auto",
-            "deltaT": 1e-4,
+            "deltaT": 1e-05,
             "writeControl": "adjustableRunTime",
             "writeInterval": 0.01,
             "runTimeModifiable": "true",
             "adjustTimeStep": "yes",
-            "maxCo": 1.0,
-            "maxDeltaT": 1e-3,
-            "minDeltaT": 1e-7,
+            "maxCo": 0.6,
+            "maxDeltaT": 3e-04,
             "functions": ["wallShearStress"],
         }
+    },
+    "fvSolution": {
+        "PIMPLE": {
+            "nOuterCorrectors": 2,
+            "nCorrectors": 2,
+        },
+        "relaxationFactors": {
+            "fields": {"p": 0.25},
+            "equations": {"U": 0.6, "k": 0.6, "omega": 0.6, "epsilon": 0.6}
+        },
     },
     "boundary": {
         "BC_INLET": "TIMEVARYING",

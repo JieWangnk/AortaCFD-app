@@ -36,14 +36,13 @@ RANS_MEDIUM_EXTRAS = {
             "startTime": 0.0,
             "stopAt": "endTime",
             "endTime": "auto",
-            "deltaT": 5e-05,
+            "deltaT": 1e-05,
             "writeControl": "adjustableRunTime",
             "writeInterval": 0.01,
             "runTimeModifiable": "true",
             "adjustTimeStep": "yes",
-            "maxCo": 1.0,
-            "maxDeltaT": 5e-04,
-            "minDeltaT": 1e-07,
+            "maxCo": 0.5,
+            "maxDeltaT": 2e-04,
             "functions": ["wallShearStress", "Q"],
         }
     },
@@ -58,7 +57,7 @@ RANS_MEDIUM_EXTRAS = {
 
 config = composer.compose(
     spatial_resolution="medium",
-    solver_recipe="balanced",
+    solver_recipe="robust",  # Robust recipe provides strong stability for all RANS cases
     turbulence_model="rans_high_intensity",
     extras=RANS_MEDIUM_EXTRAS,
 )

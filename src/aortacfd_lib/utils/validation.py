@@ -751,8 +751,32 @@ class BoundaryConditionValidator:
     # Valid outlet types
     VALID_OUTLET_TYPES = ['ZEROGRADIENT', 'FIXEDVALUE', '3EWINDKESSEL', 'RCRLUMPED']
 
-    # Valid data types for inlet
+    # Valid data types for inlet (normalized to lowercase)
     VALID_DATA_TYPES = ['velocity', 'flowrate', 'pressure']
+
+    @staticmethod
+    def normalize_data_type(data_type):
+        """
+        Normalize data type to lowercase standard format.
+
+        Accepts: flowRate, flowrate, FLOWRATE, flow_rate, velocity, Velocity, etc.
+        Returns: 'flowrate', 'velocity', or 'pressure'
+        """
+        if not data_type:
+            return None
+
+        normalized = str(data_type).lower().strip()
+
+        # Handle common variations
+        if normalized in ['flowrate', 'flow_rate', 'flow', 'q']:
+            return 'flowrate'
+        elif normalized in ['velocity', 'vel', 'u', 'v']:
+            return 'velocity'
+        elif normalized in ['pressure', 'p', 'press']:
+            return 'pressure'
+        else:
+            # Return as-is if not recognized
+            return normalized
 
     # Valid profiles
     VALID_PROFILES = ['plug', 'parabolic', 'womersley']
@@ -901,11 +925,13 @@ class BoundaryConditionValidator:
                         f"Allowed profiles for {inlet_type}: {', '.join(allowed_profiles)}"
                     )
 
-        # Validate data_type
-        data_type = inlet_config.get('data_type', '').lower()
+        # Validate data_type (normalize to handle flowRate, flow_rate, etc.)
+        data_type_raw = inlet_config.get('data_type', '')
+        data_type = self.normalize_data_type(data_type_raw) if data_type_raw else ''
         if data_type and data_type not in self.VALID_DATA_TYPES:
             result.add_error(
-                f"Invalid data_type '{data_type}'. Valid types: {', '.join(self.VALID_DATA_TYPES)}"
+                f"Invalid data_type '{data_type_raw}' (normalized: '{data_type}'). "
+                f"Valid types: {', '.join(self.VALID_DATA_TYPES)} (case-insensitive)"
             )
 
         # Type-specific validation
@@ -1054,10 +1080,14 @@ class BoundaryConditionValidator:
                 return result
 
             # Check for at least one data column (velocity, flowrate, or pressure)
-            data_columns = [col for col in df.columns if col.lower() in self.VALID_DATA_TYPES]
+            # Normalize column names to handle flowRate, flow_rate, etc.
+            normalized_columns = {col: self.normalize_data_type(col) for col in df.columns}
+            data_columns = [col for col, norm in normalized_columns.items()
+                          if norm and norm in self.VALID_DATA_TYPES]
             if not data_columns:
                 result.add_error(
-                    f"CSV file missing data column. Expected one of: {', '.join(self.VALID_DATA_TYPES)}"
+                    f"CSV file missing data column. Expected one of: {', '.join(self.VALID_DATA_TYPES)} "
+                    f"(case-insensitive, accepts flowRate/flow_rate)"
                 )
                 return result
 

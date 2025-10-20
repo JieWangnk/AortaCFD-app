@@ -177,7 +177,18 @@ class PatientCaseRunner:
         patient_output_dir = self.output_dir / case_info['patient_id']
         patient_output_dir.mkdir(parents=True, exist_ok=True)
 
-        if options and options.get('overwrite'):
+        # Check if we're resuming from an existing case directory
+        if options and options.get('case_dir'):
+            # Use existing case directory - extract run_dir from it
+            case_dir_path = Path(options['case_dir'])
+            # If case_dir is the OpenFOAM directory itself, run_dir is parent
+            # If case_dir is already run_dir level, use it
+            if case_dir_path.name == 'openfoam':
+                run_dir = case_dir_path.parent
+            else:
+                run_dir = case_dir_path
+            self.logger.info(f"Resuming: using existing run directory: {run_dir}")
+        elif options and options.get('overwrite'):
             run_dir = patient_output_dir / "latest"
             if run_dir.exists():
                 shutil.rmtree(run_dir)
@@ -218,6 +229,9 @@ class PatientCaseRunner:
         merged_config['simulation_settings']['selected_profile_key'] = profile_key
         merged_config['simulation_settings']['solver_type'] = profile_data['solver_type']
         merged_config['simulation_settings']['analysis_level'] = profile_data['analysis_level']
+        # Preserve analysis_type if set in case config, otherwise use analysis_level
+        if 'analysis_type' not in merged_config['simulation_settings']:
+            merged_config['simulation_settings']['analysis_type'] = profile_data['analysis_level']
         if variant_label:
             merged_config['simulation_settings']['profile_variant'] = variant_label
 
@@ -241,6 +255,13 @@ class PatientCaseRunner:
             'max_CFL': profile_data.get('max_CFL'),
         }
 
+        # Store config source information for reporting
+        merged_config['config_source'] = {
+            'case_config_file': case_info['config_file'],
+            'profile_name': profile_name,
+            'profile_key': profile_key
+        }
+
         return {
             'config': merged_config,
             'profile_name': profile_name,
@@ -248,6 +269,7 @@ class PatientCaseRunner:
             'run_dir': run_dir,
             'patient_output_dir': patient_output_dir,
             'case_config': case_info['config'],
+            'case_config_file': case_info['config_file'],
             'parallel': merged_config['mesh']['SNAPPY_SETTINGS'].get('parallel', False)
         }
     
@@ -276,6 +298,8 @@ class PatientCaseRunner:
 
             # Set context
             manager.context['case_directory'] = str(openfoam_dir)
+            manager.context['patient_name'] = sim_config['config'].get('case_info', {}).get('patient_id',
+                                                                                            sim_config['config'].get('geometry', {}).get('case_name', 'unknown'))
 
             # Execute workflow step
             manager.run_workflow(workflow_step)
@@ -636,10 +660,10 @@ class PatientCaseRunner:
                 'resolution_fragment': 'medium',
                 'solver_recipe_fragment': 'balanced',
                 'solver_recipe_label': 'balanced',
-                'max_CFL': 1.0,
+                'max_CFL': 0.8,
                 'estimated_time': '30-60 minutes',
                 'use_case': 'Routine clinical decision support',
-                'details': 'Second-order bounded numerics with a medium mesh',
+                'details': 'Second-order accurate numerics with medium mesh for good fidelity',
                 'description': 'Clinical laminar configuration',
                 'aliases': ['laminar:medium', 'medium', 'clinical', 'standard'],
                 'variants': {}
@@ -651,12 +675,12 @@ class PatientCaseRunner:
                 'analysis_level': 'fine',
                 'mesh_resolution': 20,
                 'resolution_fragment': 'fine',
-                'solver_recipe_fragment': 'balanced',
-                'solver_recipe_label': 'balanced',
-                'max_CFL': 1.5,
+                'solver_recipe_fragment': 'aggressive',
+                'solver_recipe_label': 'aggressive',
+                'max_CFL': 1.0,
                 'estimated_time': '2-4 hours',
                 'use_case': 'High-resolution laminar studies',
-                'details': 'Second-order bounded numerics with fine mesh control',
+                'details': 'Maximum accuracy with fine mesh and pure 2nd-order schemes',
                 'description': 'High resolution laminar analysis',
                 'aliases': ['laminar:fine', 'fine', 'high_resolution'],
                 'variants': {}
@@ -687,11 +711,11 @@ class PatientCaseRunner:
                 'resolution_fragment': 'medium',
                 'solver_recipe_fragment': 'balanced',
                 'solver_recipe_label': 'balanced',
-                'max_CFL': 1.0,
+                'max_CFL': 0.8,
                 'estimated_time': '2-3 hours',
-                'use_case': 'Balanced turbulence simulations',
-                'details': 'Balanced PIMPLE recipe with medium resolution turbulence mesh',
-                'description': 'Balanced RANS configuration',
+                'use_case': 'Accurate turbulence simulations',
+                'details': 'Second-order accurate with 2 outer correctors for good turbulence resolution',
+                'description': 'Accurate RANS configuration',
                 'aliases': ['rans:medium', 'rans_medium'],
                 'variants': {}
             },
@@ -702,12 +726,12 @@ class PatientCaseRunner:
                 'analysis_level': 'fine',
                 'mesh_resolution': 22,
                 'resolution_fragment': 'fine',
-                'solver_recipe_fragment': 'balanced',
-                'solver_recipe_label': 'balanced',
-                'max_CFL': 1.5,
+                'solver_recipe_fragment': 'aggressive',
+                'solver_recipe_label': 'aggressive',
+                'max_CFL': 1.0,
                 'estimated_time': '3-5 hours',
                 'use_case': 'Research-grade turbulence modeling',
-                'details': 'Balanced PIMPLE control with fine turbulence mesh',
+                'details': 'Maximum accuracy with pure 2nd-order schemes and tight tolerances for publication quality',
                 'description': 'Research-quality RANS configuration',
                 'aliases': ['rans:fine', 'rans_fine', 'research', 'publication'],
                 'variants': {
@@ -727,8 +751,8 @@ class PatientCaseRunner:
                 'max_CFL': 0.5,
                 'estimated_time': '3-5 hours',
                 'use_case': 'Transitional flow LES studies',
-                'details': 'WALE LES with balanced solver recipe on a medium mesh',
-                'description': 'Medium fidelity LES configuration',
+                'details': 'WALE LES with 2nd-order accurate schemes and 2 outer correctors',
+                'description': 'Accurate LES configuration',
                 'aliases': ['les:medium', 'les_medium'],
                 'variants': {}
             },
@@ -739,12 +763,12 @@ class PatientCaseRunner:
                 'analysis_level': 'fine',
                 'mesh_resolution': 25,
                 'resolution_fragment': 'fine',
-                'solver_recipe_fragment': 'balanced',
-                'solver_recipe_label': 'balanced',
+                'solver_recipe_fragment': 'aggressive',
+                'solver_recipe_label': 'aggressive',
                 'max_CFL': 0.5,
                 'estimated_time': '5-7 hours',
                 'use_case': 'High-fidelity LES simulations',
-                'details': 'WALE LES on a fine mesh with balanced solver settings',
+                'details': 'WALE LES with maximum accuracy (pure 2nd-order central schemes, tight tolerances)',
                 'description': 'High fidelity LES configuration',
                 'aliases': ['les:fine', 'les_fine', 'les_publication'],
                 'variants': {
