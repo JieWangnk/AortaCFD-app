@@ -40,11 +40,16 @@ RANS_FINE_EXTRAS = {
             "writeInterval": 0.005,
             "runTimeModifiable": "true",
             "adjustTimeStep": "yes",
-            "maxCo": 1.0,
-            "maxDeltaT": 2e-04,
-            "minDeltaT": 1e-08,
+            "maxCo": 0.6,
+            "maxDeltaT": 3e-04,
             "functions": ["wallShearStress", "pressureDrop"],
         }
+    },
+    "fvSolution": {
+        "relaxationFactors": {
+            "fields": {"p": 0.25},
+            "equations": {"U": 0.55, "k": 0.55, "omega": 0.55, "epsilon": 0.55}
+        },
     },
     "boundary": {
         "BC_INLET": "TIMEVARYING",
@@ -63,7 +68,7 @@ RANS_FINE_EXTRAS = {
 
 config = composer.compose(
     spatial_resolution="fine",
-    solver_recipe="balanced",
+    solver_recipe="robust",  # Robust recipe for RANS stability
     turbulence_model="rans_komega_sst",
     extras=RANS_FINE_EXTRAS,
 )

@@ -282,7 +282,6 @@
       "maxCo": 1.0,
       "_maxCo_range": "0.5-2.0 (Courant number limit)",
       "maxDeltaT": 0.0002,
-      "minDeltaT": 1e-7,
 
       "functions": ["wallShearStress"],
       "_functions_options": ["wallShearStress", "forceCoeffs", "fieldAverage"]
@@ -298,7 +297,6 @@
     "initial_deltaT": 0.001,
     "maxCo": 1.0,
     "maxDeltaT": 0.01,
-    "minDeltaT": 1e-7,
 
     "_schemes_override": {
       "ddtSchemes": {"default": "CrankNicolson 0.9"},

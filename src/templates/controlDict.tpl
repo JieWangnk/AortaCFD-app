@@ -51,11 +51,7 @@ adjustTimeStep  {{ controlDict.get('adjustTimeStep', 'yes') }};
 
 maxCo           {{ controlDict.get('maxCo', 1.2) }};
 
-maxAlphaCo      {{ controlDict.get('maxAlphaCo', 1.2) }};
-
 maxDeltaT       {{ controlDict.get('maxDeltaT', 1e-3) }};
-
-minDeltaT       {{ controlDict.get('minDeltaT', 1e-8) }};
 
 {% if config.get('windkessel_enabled', False) or config.get('outlets', {}).get('type') == '3EWINDKESSEL' or config.get('boundary_conditions', {}).get('outlets', {}).get('type') == '3EWINDKESSEL' %}
 

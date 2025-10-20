@@ -30,9 +30,10 @@ class InletMapping:
 
         self.center = None
         self.radius = None
+        self.area = None  # Actual STL surface area
         self.cardiac_cycle = None
         self.auto_flip_normal = False  # For automatic orientation detection
-        
+
         self.log.info("InletMapping initialized successfully.")
 
     def run(self):
@@ -46,7 +47,8 @@ class InletMapping:
         inlet_patch_processor = PatchProcessing(tri_surface_dir, self.inlet_name)
         scale_factor = self.geom_settings.get('scale_factor', 1e-3)
         self.center, self.radius, inlet_normal = inlet_patch_processor.calculate_inlet_center_radius(scale_factor=scale_factor)
-        self.log.info(f"Inlet center: {self.center}, Radius: {self.radius}")
+        self.area = inlet_patch_processor.calculate_surface_area(scale_factor=scale_factor)
+        self.log.info(f"Inlet center: {self.center}, Radius: {self.radius}, Area: {self.area:.6e} m²")
         
         # Automatic orientation detection
         if self.orientation == 'auto':
@@ -194,6 +196,13 @@ class InletMapping:
         return speed_scalar * direction_multiplier * normal_vec
 
     def compute_cross_sectional_area(self):
+        """
+        Returns the actual STL surface area instead of circular approximation.
+        Falls back to π*r² if STL area not yet calculated.
+        """
+        if self.area is not None:
+            return self.area
+        # Fallback to circular approximation if area not yet computed
         return np.pi * self.radius**2
 
     def plug_profile_speed(self, data_val):

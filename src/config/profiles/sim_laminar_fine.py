@@ -41,7 +41,6 @@ LAMINAR_FINE_EXTRAS = {
             "adjustTimeStep": "yes",
             "maxCo": 1.0,
             "maxDeltaT": 1e-4,
-            "minDeltaT": 1e-8,
             "functions": ["wallShearStress"],
         }
     },

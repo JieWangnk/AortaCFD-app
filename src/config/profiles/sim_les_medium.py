@@ -42,7 +42,6 @@ LES_MEDIUM_EXTRAS = {
             "adjustTimeStep": "yes",
             "maxCo": 0.5,
             "maxDeltaT": 1e-04,
-            "minDeltaT": 1e-08,
             "functions": ["wallShearStress", "Q"],
         }
     },

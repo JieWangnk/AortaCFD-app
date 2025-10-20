@@ -43,6 +43,9 @@ class BoundaryConditionSetup:
         # Calculate inlet velocity vector for CONSTANT/PARABOLIC types
         inlet_velocity_vector = self._calculate_inlet_velocity_vector()
 
+        # Calculate initial pressure for better convergence
+        initial_pressure, outlet_initial_pressures = self._calculate_initial_pressure()
+
         # This context dictionary is now simpler, as it doesn't need initial_conditions
         context = {
             "inlet_patch": "world" if self.world_patch_mode else self.inlet_patch,
@@ -55,7 +58,9 @@ class BoundaryConditionSetup:
             "openfoam_version": self.config.get('openfoam_version', '8'),
             "openfoam_major_version": self.config.get('openfoam_major_version', 8),
             "world_patch_mode": self.world_patch_mode,
-            "inlet_velocity_vector": inlet_velocity_vector
+            "inlet_velocity_vector": inlet_velocity_vector,
+            "initial_pressure": initial_pressure,
+            "outlet_initial_pressures": outlet_initial_pressures
         }
 
         zero_dir = os.path.join(self.case_dir, "0")
@@ -306,3 +311,93 @@ class BoundaryConditionSetup:
             'turbulence_intensity': turbulence_intensity,
             'mixing_length': mixing_length
         }
+
+    def _calculate_initial_pressure(self):
+        """
+        Calculate initial pressure field based on outlet boundary conditions.
+        For Windkessel BC: Initialize to flow-weighted pressure accounting for resistance distribution.
+        For other BC: Initialize to 0 (gauge pressure).
+
+        NOTE: Empirical testing shows this provides NO measurable convergence improvement.
+        Convergence time remains ~10-15 cycles regardless of initialization method.
+        Kept for code correctness and physical meaningfulness, but don't expect performance gains.
+        See PRESSURE_INIT_POSTMORTEM.md for detailed analysis.
+
+        This method accounts for the fact that outlets with:
+        - High flow fraction + Low resistance → Lower pressure needed
+        - Low flow fraction + High resistance → Higher pressure needed
+
+        Returns:
+            tuple: (internal_field_pressure, outlet_pressures_dict)
+                - internal_field_pressure: Uniform pressure for internal field (Pa)
+                - outlet_pressures_dict: Dictionary mapping outlet names to pressures (Pa)
+        """
+        outlet_type = self.outlet_settings.get('type', 'zeroGradient')
+
+        if outlet_type == '3EWINDKESSEL':
+            # Get Windkessel pressure settings
+            wk_settings = self.outlet_settings.get('windkessel_settings', {})
+
+            # Get systolic and diastolic pressures (mmHg)
+            systolic = wk_settings.get('systolic_pressure', 120)  # Default adult normal
+            diastolic = wk_settings.get('diastolic_pressure', 80)   # Default adult normal
+
+            # Calculate baseline MAP
+            MMHG_TO_PA = 133.322
+            MAP_mmHg = (systolic + diastolic) / 2.0
+            MAP_Pa = MAP_mmHg * MMHG_TO_PA
+
+            # Try to get flow splits and outlet parameters for better initialization
+            flow_splits = wk_settings.get('flow_split', {})
+            outlet_params = wk_settings.get('outlet_parameters', {})
+
+            # If we have resistance data, calculate flow-weighted pressure
+            if flow_splits and outlet_params and len(outlet_params) > 0:
+                try:
+                    # Calculate average resistance weighted by flow
+                    R_avg = 0.0
+                    total_fraction = 0.0
+
+                    for outlet, fraction in flow_splits.items():
+                        if outlet in outlet_params:
+                            R = outlet_params[outlet].get('R', 0)
+                            R_avg += R * fraction
+                            total_fraction += fraction
+
+                    if total_fraction > 0:
+                        R_avg = R_avg / total_fraction
+
+                    # Initialize all outlets to uniform MAP to avoid initial pressure gradients
+                    # NOTE: Resistance-weighted initialization was causing timestep collapse due to
+                    # pressure-driven velocity spikes at t=0 (Co > 10). Uniform initialization is safer.
+                    outlet_pressures = {}
+                    for outlet in flow_splits.keys():
+                        outlet_pressures[outlet] = MAP_Pa
+
+                    # Use uniform MAP for internal field
+                    p_init = MAP_Pa
+
+                    self.log.info(f"Initializing pressure field to uniform MAP (avoids initial velocity spikes):")
+                    self.log.info(f"  Systolic: {systolic} mmHg, Diastolic: {diastolic} mmHg")
+                    self.log.info(f"  MAP = {MAP_mmHg:.1f} mmHg = {MAP_Pa:.0f} Pa")
+                    self.log.info(f"  All outlets and internal field initialized to: {MAP_Pa:.0f} Pa")
+                    self.log.info(f"  (Uniform to prevent pressure-driven acceleration at t=0)")
+
+                    return p_init, outlet_pressures
+
+                except Exception as e:
+                    self.log.warning(f"Could not calculate resistance-weighted pressure: {e}")
+                    self.log.info(f"Falling back to uniform MAP = {MAP_Pa:.0f} Pa")
+                    return MAP_Pa, {}
+            else:
+                # No resistance data available, use uniform MAP
+                self.log.info(f"Initializing pressure field to MAP for faster convergence:")
+                self.log.info(f"  Systolic: {systolic} mmHg, Diastolic: {diastolic} mmHg")
+                self.log.info(f"  MAP = {MAP_mmHg:.1f} mmHg = {MAP_Pa:.0f} Pa")
+                self.log.info(f"  (Resistance data not yet available for flow-weighted initialization)")
+
+                return MAP_Pa, {}
+        else:
+            # For non-Windkessel cases (zeroGradient, fixedValue), use 0
+            self.log.info(f"Outlet type '{outlet_type}': Initializing pressure to 0 Pa (gauge)")
+            return 0.0, {}

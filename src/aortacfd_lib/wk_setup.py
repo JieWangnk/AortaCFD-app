@@ -77,8 +77,9 @@ class WkSetup:
         self.log = Logger("wk_setup").get_logger()
 
         self.geom_settings = self.config['geometry']
-        self.inlet_settings = self.config['inlet']
-        self.outlet_settings = self.config['outlets']
+        # Support both flattened and nested config structures
+        self.inlet_settings = self.config.get('boundary_conditions', {}).get('inlet') or self.config.get('inlet', {})
+        self.outlet_settings = self.config.get('boundary_conditions', {}).get('outlets') or self.config.get('outlets', {})
         self.wk_model_settings = self.outlet_settings['windkessel_settings']
 
     def execute(self):
@@ -145,14 +146,15 @@ class WkSetup:
         DP = self.wk_model_settings.get("diastolic_pressure", 80)  # mmHg
         P_venous = self.wk_model_settings.get("venous_pressure", 0)  # mmHg (0-5 typical)
 
-        MAP = DP + (SP - DP) / 3.0  # Mean arterial pressure (mmHg)
+        # Use MATLAB formula: MAP = (SP + DP) / 2 (simple average)
+        MAP = (SP + DP) / 2.0  # Mean arterial pressure (mmHg)
         MAP_Pa = MAP * self.MMHG_TO_PA  # Convert to Pa
         P_venous_Pa = P_venous * self.MMHG_TO_PA
 
         self.log.info(f"Step 1: Pressure targets")
         self.log.info(f"  Systolic pressure (SP): {SP} mmHg")
         self.log.info(f"  Diastolic pressure (DP): {DP} mmHg")
-        self.log.info(f"  Mean arterial pressure (MAP): {MAP:.1f} mmHg ({MAP_Pa:.0f} Pa)")
+        self.log.info(f"  Mean arterial pressure (MAP): {MAP:.1f} mmHg ({MAP_Pa:.0f} Pa) [MATLAB formula: (SP+DP)/2]")
         self.log.info(f"  Venous pressure (P_v): {P_venous} mmHg")
         self.log.info(f"  Driving pressure (MAP - P_v): {MAP - P_venous:.1f} mmHg")
 
@@ -166,12 +168,12 @@ class WkSetup:
             self.wk_model_settings['flow_split'] = flow_split_ratios
         else:
             if not isinstance(flow_split_ratios, dict):
-                # Flow split is a percentage for main outlet
-                self.log.info(f"\nStep 2: Flow distribution (Main outlet percentage + Murray's law for branches)")
+                # Flow split is a percentage for branches
+                self.log.info(f"\nStep 2: Flow distribution (Branch percentage + area-based distribution - MATLAB method)")
                 flow_split_ratios = self._parse_flow_split_percentage(
                     flow_split_ratios,
                     outlet_patches,
-                    'murray',
+                    'area',  # MATLAB uses area-based, not Murray's law
                     outlet_radii
                 )
                 self.wk_model_settings['flow_split'] = flow_split_ratios
@@ -204,20 +206,30 @@ class WkSetup:
         # Step 4: Proximal resistance R1 (characteristic impedance)
         self.log.info(f"\nStep 4: Proximal resistance R1 = ρ·c/A (characteristic impedance)")
 
-        rho = self.config['physics']['rho']  # kg/m³
-        pwv_method = self.wk_model_settings.get('pwv_method', 'empirical')
+        # Get density - support both 'blood_density' and 'rho' keys
+        rho = self.config['physics'].get('blood_density', self.config['physics'].get('rho', 1060))  # kg/m³
+        pwv_method = self.wk_model_settings.get('pwv_method', 'matlab')  # Default to MATLAB formula
         pwv_value = self.wk_model_settings.get('pwv', None)  # m/s, if specified
+
+        # MATLAB PWV formula parameters
+        pwv_a = self.wk_model_settings.get('pwv_a', 13.3)
+        pwv_b = self.wk_model_settings.get('pwv_b', 0.3)
 
         R1 = np.zeros(num_outlets)
 
         for i, outlet in enumerate(outlet_patches):
             A_i = outlet_areas[outlet]
+            A_mm2 = A_i * 1e6  # Convert m² to mm²
 
             # Determine pulse wave velocity (PWV)
             if pwv_value is not None:
                 # User-specified PWV
                 c_i = pwv_value
                 method = "user-specified"
+            elif pwv_method == 'matlab':
+                # MATLAB formula: c = a / (2*sqrt(A_mm²/π))^b
+                c_i = pwv_a / (2 * np.sqrt(A_mm2 / np.pi)) ** pwv_b
+                method = f"MATLAB formula: {pwv_a}/(2√(A/π))^{pwv_b}"
             elif pwv_method == 'empirical':
                 # Empirical PWV from diameter (typical aortic values)
                 # Arch: 4-6 m/s, Thoracic: 5-7 m/s, Abdominal: 6-8 m/s
@@ -240,7 +252,7 @@ class WkSetup:
             R1[i] = rho * c_i / A_i
 
             R1_mmHg = R1[i] / (self.MMHG_TO_PA * 1e6)
-            self.log.info(f"  {outlet}: PWV = {c_i:.1f} m/s ({method}) → R1 = {R1[i]:.2e} Pa·s/m³ ({R1_mmHg:.1f} mmHg·s/mL)")
+            self.log.info(f"  {outlet}: A={A_mm2:.2f}mm², PWV = {c_i:.2f} m/s ({method}) → R1 = {R1[i]:.2e} Pa·s/m³ ({R1_mmHg:.1f} mmHg·s/mL)")
 
         # Step 5: Distal resistance R2
         self.log.info(f"\nStep 5: Distal resistance R2 = R_total - R1")
@@ -257,10 +269,10 @@ class WkSetup:
             self.log.info(f"  {outlet}: R2 = {R2[i]:.2e} Pa·s/m³ ({R2_mmHg:.1f} mmHg·s/mL)")
 
         # Step 6: Compliance C
-        self.log.info(f"\nStep 6: Compliance C = tau / R2 (from diastolic decay)")
+        self.log.info(f"\nStep 6: Compliance C = tau / R_total (from diastolic decay)")
 
-        tau_systemic = self.wk_model_settings.get('tau', 1.8)  # seconds (typical: 1.5-2.0)
-        C_distribution = self.wk_model_settings.get('compliance_distribution', 'proportional')
+        tau_systemic = self.wk_model_settings.get('tau', 1.92)  # seconds, MATLAB default: 1.92
+        C_distribution = self.wk_model_settings.get('compliance_distribution', 'uniform')  # MATLAB uses uniform
 
         C = np.zeros(num_outlets)
 
@@ -281,9 +293,10 @@ class WkSetup:
                 C_mmHg = C[i] / (self.ML_TO_M3 / self.MMHG_TO_PA)
                 self.log.info(f"  {outlet}: C = {C[i]:.2e} m³/Pa ({C_mmHg:.2e} mL/mmHg), RC = {RC_i:.2f} s")
         else:
-            # Uniform tau for all outlets
+            # Uniform tau for all outlets, C = tau / R2 (correct 3-element WK formula)
+            self.log.info(f"  Systemic tau: {tau_systemic:.2f} s")
             for i, outlet in enumerate(outlet_patches):
-                C[i] = tau_systemic / R2[i]
+                C[i] = tau_systemic / R2[i]  # Correct: C = tau / R2 (distal resistance only)
                 RC_i = R2[i] * C[i]
                 C_mmHg = C[i] / (self.ML_TO_M3 / self.MMHG_TO_PA)
                 self.log.info(f"  {outlet}: C = {C[i]:.2e} m³/Pa ({C_mmHg:.2e} mL/mmHg), RC = {RC_i:.2f} s")
@@ -307,6 +320,14 @@ class WkSetup:
         self.log.info("Windkessel calculation complete - coefficients stored in config")
         self.log.info("=" * 80)
 
+        # Generate flow distribution plot if inlet is time-varying
+        if inlet_type in ['TIMEVARYING', 'WOMERSLEY']:
+            # Save plot to reports folder
+            reports_dir = os.path.join(os.path.dirname(self.case_dir), "reports")
+            os.makedirs(reports_dir, exist_ok=True)
+            plot_path = os.path.join(reports_dir, "flow_distribution.png")
+            self.plot_flow_distribution(times, flow_inlet, flow_split_ratios, plot_path)
+
     def _calculate_murray_flow_split(self, outlet_radii: dict) -> dict:
         """
         Calculate flow split using Murray's law: f_i = r³ / Σr³
@@ -329,77 +350,124 @@ class WkSetup:
 
         return flow_split
 
-    def _parse_flow_split_percentage(self, flow_split_value, outlet_patches, method='murray', geometry_data=None):
+    def _parse_flow_split_percentage(self, flow_split_value, outlet_patches, method='area', geometry_data=None):
         """
-        Simplified flow split: specify main outlet percentage, rest split by Murray's law.
+        Simplified flow split: specify branches percentage, rest to main outlet.
+
+        MATLAB METHOD (matching published code):
+        - Branches (first N-1 outlets) get specified percentage, distributed by AREA ratio
+        - Last outlet (descending aorta) gets remainder
 
         Logic:
-        - Last outlet (typically descending aorta/abdominal) gets specified percentage
-        - First N-1 outlets (branches) share remainder using Murray's law (r³)
+        - flow_split_value: Percentage for BRANCHES (e.g., 70 means 70% to branches)
+        - First N-1 outlets (branches) share this percentage by AREA ratio (A_i / Σ A_branches)
+        - Last outlet gets remainder
 
         Args:
-            flow_split_value: Percentage for LAST outlet (e.g., 60 means 60% to main outlet)
+            flow_split_value: Percentage for BRANCHES (e.g., 70 means 70% to branches total)
             outlet_patches: List of outlet patch names (LAST is main outlet)
-            method: Must be 'murray' (only method supported)
-            geometry_data: Dictionary of outlet radii (meters)
+            method: 'area' (MATLAB method) or 'murray' (r³)
+            geometry_data: Dictionary of outlet radii (meters) - will convert to areas
 
         Returns:
             Dictionary of flow ratios summing to 1.0
 
-        Example:
-            flow_split = 60, 4 outlets [BRACH, LCCA, RCCA, DESC_AORTA]:
-            - DESC_AORTA (last): 60%
-            - BRACH, LCCA, RCCA: share 40% by Murray's law (r³)
+        Example (MATLAB matching):
+            flow_split = 70, 4 outlets [outlet1, outlet2, outlet3, outlet4]:
+            - Branches (outlet1, outlet2, outlet3): share 70% by area ratio
+            - Main (outlet4): gets 30%
         """
         num_outlets = len(outlet_patches)
         if num_outlets == 0:
             raise ValueError("No outlet patches provided")
 
-        # Convert percentage to fraction
-        main_outlet_fraction = float(flow_split_value) / 100.0
-        branches_fraction = 1.0 - main_outlet_fraction
+        # Convert percentage to fraction for BRANCHES
+        branches_fraction = float(flow_split_value) / 100.0
+        main_outlet_fraction = 1.0 - branches_fraction
 
         if num_outlets == 1:
             return {outlet_patches[0]: 1.0}
 
         # Last outlet is main (descending aorta/abdominal)
-        # First N-1 are branches (split by Murray)
+        # First N-1 are branches
         num_branches = num_outlets - 1
         branch_outlets = outlet_patches[:num_branches]
         main_outlet = outlet_patches[-1]
 
         flow_split_ratios = {}
 
+        self.log.info(f"  Branches (outlets 1-{num_branches}): {branches_fraction*100:.1f}% total")
         self.log.info(f"  Main outlet '{main_outlet}': {main_outlet_fraction*100:.1f}%")
-        self.log.info(f"  Branches share {branches_fraction*100:.1f}% by Murray's law:")
 
-        # Distribute branches using Murray's law ONLY
         if not geometry_data:
-            raise ValueError("Geometry data (outlet radii) required for Murray's law flow split")
+            raise ValueError("Geometry data (outlet radii) required for flow split")
 
-        # Murray's law distribution among branches
+        # MATLAB method: Distribute by AREA ratio
         branch_data = {name: geometry_data[name] for name in branch_outlets}
-        r_cubed = {name: r**3 for name, r in branch_data.items()}
-        total_r_cubed = sum(r_cubed.values())
 
-        for name in branch_outlets:
-            # Fraction within branches group
-            branch_fraction = r_cubed[name] / total_r_cubed
-            # Scale to overall branches allocation
-            flow_split_ratios[name] = branch_fraction * branches_fraction
-            r_mm = geometry_data[name] * 1000
-            self.log.info(f"    {name}: r={r_mm:.2f}mm → {flow_split_ratios[name]*100:.1f}%")
+        if method == 'area':
+            # Convert radii to areas: A = π r²
+            branch_areas = {name: np.pi * r**2 for name, r in branch_data.items()}
+            total_branch_area = sum(branch_areas.values())
+
+            self.log.info(f"  Branch distribution by AREA ratio (MATLAB method):")
+            for name in branch_outlets:
+                # Fraction within branches group
+                branch_fraction = branch_areas[name] / total_branch_area
+                # Scale to overall branches allocation
+                flow_split_ratios[name] = branch_fraction * branches_fraction
+                A_mm2 = branch_areas[name] * 1e6
+                self.log.info(f"    {name}: A={A_mm2:.2f}mm² → {flow_split_ratios[name]*100:.1f}%")
+        else:
+            # Murray's law (r³) distribution among branches
+            r_cubed = {name: r**3 for name, r in branch_data.items()}
+            total_r_cubed = sum(r_cubed.values())
+
+            self.log.info(f"  Branch distribution by Murray's law (r³):")
+            for name in branch_outlets:
+                # Fraction within branches group
+                branch_fraction = r_cubed[name] / total_r_cubed
+                # Scale to overall branches allocation
+                flow_split_ratios[name] = branch_fraction * branches_fraction
+                r_mm = geometry_data[name] * 1000
+                self.log.info(f"    {name}: r={r_mm:.2f}mm → {flow_split_ratios[name]*100:.1f}%")
 
         # Main outlet (last) gets specified percentage
         flow_split_ratios[main_outlet] = main_outlet_fraction
 
         return flow_split_ratios
 
+    def _normalize_data_type(self, data_type):
+        """
+        Normalize data type string to lowercase standard format.
+
+        Accepts: flowRate, flowrate, FLOWRATE, velocity, Velocity, VELOCITY, etc.
+        Returns: 'flowrate', 'velocity', or 'pressure'
+        """
+        if not data_type:
+            return None
+
+        normalized = data_type.lower().strip()
+
+        # Handle common variations
+        if normalized in ['flowrate', 'flow_rate', 'flow', 'q']:
+            return 'flowrate'
+        elif normalized in ['velocity', 'vel', 'u', 'v']:
+            return 'velocity'
+        elif normalized in ['pressure', 'p', 'press']:
+            return 'pressure'
+        else:
+            # Return as-is if not recognized (will trigger error downstream)
+            return normalized
+
     def _read_inlet_flow(self, file_path, data_type, inlet_area):
         """Reads the inlet flow CSV and converts to flow rate if necessary."""
         if not os.path.isfile(file_path):
             self.log.error(f"Could not find inlet data file: {file_path}")
             raise FileNotFoundError(f"Could not find inlet data file: {file_path}")
+
+        # Normalize data type for case-insensitive comparison
+        data_type_norm = self._normalize_data_type(data_type)
 
         with open(file_path, 'r') as f:
             first_line = f.readline()
@@ -408,14 +476,60 @@ class WkSetup:
             else:
                 Q_data = np.loadtxt(file_path, delimiter=",")
 
-        if data_type == "flowRate":
+        if data_type_norm == "flowrate":
             times = Q_data[:, 0]
             flow_inlet = Q_data[:, 1]
-        elif data_type == "velocity":
+        elif data_type_norm == "velocity":
             times = Q_data[:, 0]
             flow_inlet = Q_data[:, 1] * inlet_area
         else:
-            self.log.error(f"Unknown data type: {data_type}. Use 'flowRate' or 'velocity'.")
-            raise ValueError(f"Unknown data type: {data_type}. Use 'flowRate' or 'velocity'.")
+            self.log.error(f"Unknown data type: {data_type} (normalized: {data_type_norm}). Use 'flowrate' or 'velocity'.")
+            raise ValueError(f"Unknown data type: {data_type}. Use 'flowrate' or 'velocity'.")
 
         return times, flow_inlet
+
+    def plot_flow_distribution(self, times, flow_inlet, flow_splits, output_path):
+        """
+        Plot inlet and outlet flow rates over one cardiac cycle.
+
+        Args:
+            times: Time array (s)
+            flow_inlet: Inlet flow rate array (m³/s)
+            flow_splits: Dict of outlet flow fractions
+            output_path: Path to save PNG file
+        """
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            self.log.warning("matplotlib not available, skipping flow plot")
+            return
+
+        # Calculate outlet flows
+        outlet_flows = {}
+        for outlet, fraction in flow_splits.items():
+            outlet_flows[outlet] = flow_inlet * fraction
+
+        # Create plot
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        # Plot inlet
+        ax.plot(times * 1000, flow_inlet * 1e6, 'k-', linewidth=2, label='Inlet')
+
+        # Plot outlets
+        colors = plt.cm.tab10(np.linspace(0, 1, len(outlet_flows)))
+        for (outlet, flow), color in zip(outlet_flows.items(), colors):
+            fraction = flow_splits[outlet]
+            ax.plot(times * 1000, flow * 1e6, '--', linewidth=1.5,
+                   label=f'{outlet} ({fraction*100:.1f}%)', color=color)
+
+        ax.set_xlabel('Time (ms)', fontsize=12)
+        ax.set_ylabel('Flow Rate (mL/s)', fontsize=12)
+        ax.set_title('Inlet and Outlet Flow Rates (One Cardiac Cycle)', fontsize=14, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc='best', fontsize=10)
+
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        plt.close()
+
+        self.log.info(f"Flow distribution plot saved to: {output_path}")

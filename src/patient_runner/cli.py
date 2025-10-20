@@ -26,6 +26,9 @@ EXAMPLES:
     # Run complete workflow for patient1:
     python run_patient.py patient1
 
+    # Resume from most recent run:
+    python run_patient.py patient1 --resume
+
     # Run only meshing step:
     python run_patient.py patient1 --step mesh
 
@@ -64,6 +67,8 @@ CASE STRUCTURE:
                        help='Quick test run (coarse settings)')
     parser.add_argument('--overwrite', action='store_true',
                        help='Overwrite existing results')
+    parser.add_argument('--resume', action='store_true',
+                       help='Resume from most recent run directory')
     profile_choices = list(PatientCaseRunner().get_available_profiles().keys())
     parser.add_argument('--profile',
                        choices=profile_choices,
@@ -140,6 +145,46 @@ def main():
         options['profile'] = args.profile
     if args.overwrite:
         options['overwrite'] = True
+
+    # Handle --resume flag
+    if args.resume:
+        from pathlib import Path
+        import glob
+
+        # Find most recent run directory for this patient
+        output_dir = Path('output') / args.patient_id
+        if output_dir.exists():
+            run_dirs = sorted(output_dir.glob('run_*'), key=lambda p: p.stat().st_mtime, reverse=True)
+            if run_dirs:
+                most_recent = run_dirs[0]
+                # Check if it's already an OpenFOAM case directory (has system/, constant/, 0/)
+                if (most_recent / 'system').exists() and (most_recent / 'constant').exists():
+                    # Direct OpenFOAM case directory
+                    options['case_dir'] = str(most_recent)
+                    print(f"🔄 Resuming from: {most_recent}")
+                elif (most_recent / 'openfoam').exists():
+                    # Nested structure with openfoam subdirectory
+                    options['case_dir'] = str(most_recent / 'openfoam')
+                    print(f"🔄 Resuming from: {most_recent / 'openfoam'}")
+                else:
+                    print(f"⚠️  Run directory exists but doesn't contain OpenFOAM case files")
+                    print(f"   Directory: {most_recent}")
+                    print(f"   Starting fresh run instead")
+                    options['case_dir'] = None
+
+                # If no specific steps provided, suggest what to run
+                if not args.step and options.get('case_dir'):
+                    print(f"\n💡 Tip: Specify which step to resume from, e.g.:")
+                    print(f"   --step boundary    (if mesh is done)")
+                    print(f"   --step solver      (if BC is done)")
+                    print(f"   --step reconstruct (if solver is done)")
+            else:
+                print(f"⚠️  No existing run directories found for {args.patient_id}")
+                print(f"   Starting fresh run instead")
+        else:
+            print(f"⚠️  No output directory found for {args.patient_id}")
+            print(f"   Starting fresh run instead")
+
     if args.case_dir:
         options['case_dir'] = args.case_dir
 

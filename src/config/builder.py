@@ -213,7 +213,10 @@ class ConfigBuilder:
         # Extract run settings from unified config
         run_settings = case_config.get('run_settings', {})
 
-        # Merge all components: STL discovery + geometry settings + boundary conditions + simulation control + mesh + run_settings
+        # Extract simulation settings from unified config
+        simulation_settings = case_config.get('simulation_settings', {})
+
+        # Merge all components: STL discovery + geometry settings + boundary conditions + simulation control + mesh + run_settings + simulation_settings
         result = deep_merge(discovered_geom_config, {"geometry": geometry_settings})
         result = deep_merge(result, boundary_conditions)
         result = deep_merge(result, {"simulation_control": simulation_control})
@@ -221,6 +224,8 @@ class ConfigBuilder:
             result = deep_merge(result, {"mesh": mesh_settings})
         if run_settings:
             result = deep_merge(result, {"run_settings": run_settings})
+        if simulation_settings:
+            result = deep_merge(result, {"simulation_settings": simulation_settings})
 
         return result
 

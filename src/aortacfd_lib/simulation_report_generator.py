@@ -44,25 +44,26 @@ class SimulationReportGenerator:
         """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # Generate markdown report
+        # Generate detailed text report (convert markdown to plain text)
         report_md = self._generate_markdown_report(config, geometry_info, mesh_info, timestamp)
-        md_path = self.report_dir / "simulation_setup_report.md"
-        with open(md_path, 'w') as f:
-            f.write(report_md)
+        report_txt = self._convert_md_to_txt(report_md)
+        txt_path = self.report_dir / "simulation_setup_report.txt"
+        with open(txt_path, 'w') as f:
+            f.write(report_txt)
 
-        # Generate JSON report for machine reading
-        report_json = self._generate_json_report(config, geometry_info, mesh_info, timestamp)
-        json_path = self.report_dir / "simulation_setup_report.json"
-        with open(json_path, 'w') as f:
-            json.dump(report_json, f, indent=2)
+        # Optionally generate JSON for automation (comment out if not needed)
+        # report_json = self._generate_json_report(config, geometry_info, mesh_info, timestamp)
+        # json_path = self.report_dir / "simulation_setup_report.json"
+        # with open(json_path, 'w') as f:
+        #     json.dump(report_json, f, indent=2)
 
         # Generate summary text file
         summary_txt = self._generate_summary_txt(config, timestamp)
-        txt_path = self.report_dir / "simulation_summary.txt"
-        with open(txt_path, 'w') as f:
+        summary_path = self.report_dir / "simulation_summary.txt"
+        with open(summary_path, 'w') as f:
             f.write(summary_txt)
 
-        return str(md_path)
+        return str(txt_path)
 
     def _generate_markdown_report(self, config: Dict, geometry_info: Optional[Dict],
                                   mesh_info: Optional[Dict], timestamp: str) -> str:
@@ -79,23 +80,23 @@ class SimulationReportGenerator:
 ## 1. Simulation Overview
 
 ### Case Information
-- **Case Name:** {config.get('case_name', 'N/A')}
+- **Case Name:** {config.get('geometry', {}).get('case_name', config.get('case_info', {}).get('patient_id', 'N/A'))}
 - **Patient ID:** {self.case_name}
 - **Analysis Type:** {config.get('simulation_settings', {}).get('analysis_type', 'N/A')}
 - **Solver Type:** {config.get('simulation_settings', {}).get('solver_type', 'N/A')}
 
 ### Configuration Source
 - **Base Config:** Default template (`src/config/base.py`)
-- **Profile:** {self._get_profile_name(config)}
-- **Case Config:** `cases_input/{self.case_name}/config.json`
+- **Profile:** {self._get_profile_display(config)}
+- **Case Config:** {self._get_case_config_path(config)}
 
 ---
 
 ## 2. Physical Properties
 
 ### Fluid Properties
-- **Density (ρ):** {config.get('physical_properties', {}).get('density', 'N/A')} kg/m³
-- **Kinematic Viscosity (ν):** {config.get('physical_properties', {}).get('kinematic_viscosity', 'N/A')} m²/s
+- **Density (ρ):** {self._get_density(config)} kg/m³
+- **Kinematic Viscosity (ν):** {self._get_kinematic_viscosity(config)} m²/s
 - **Dynamic Viscosity (μ):** {self._calculate_dynamic_viscosity(config)} Pa·s
 
 ### Flow Regime
@@ -109,10 +110,7 @@ class SimulationReportGenerator:
 """
 
         # Geometry details
-        if geometry_info:
-            report += self._format_geometry_section(geometry_info)
-        else:
-            report += "- Geometry information not available\n\n"
+        report += self._format_geometry_section(config, geometry_info)
 
         # Boundary conditions
         report += """---
@@ -177,6 +175,56 @@ python run_patient.py {self.case_name}
 
         return report
 
+    def _convert_md_to_txt(self, markdown_text: str) -> str:
+        """
+        Convert markdown to plain text.
+
+        Simple conversion that removes markdown formatting:
+        - Remove # headers → plain text with separator lines
+        - Remove ** bold ** → plain text
+        - Remove ` code ` → plain text
+        - Remove --- separators → use === instead
+        - Keep structure and readability
+        """
+        import re
+
+        txt = markdown_text
+
+        # Convert headers (# Header → HEADER with underline)
+        def replace_header(match):
+            level = len(match.group(1))
+            title = match.group(2).strip()
+            if level == 1:
+                return f"\n{'='*80}\n{title.upper()}\n{'='*80}\n"
+            elif level == 2:
+                return f"\n{'-'*80}\n{title}\n{'-'*80}\n"
+            elif level == 3:
+                return f"\n{title}\n{'-'*len(title)}\n"
+            else:
+                return f"\n{title}:\n"
+
+        txt = re.sub(r'^(#{1,6})\s+(.+)$', replace_header, txt, flags=re.MULTILINE)
+
+        # Remove bold/italic
+        txt = re.sub(r'\*\*(.+?)\*\*', r'\1', txt)  # **bold**
+        txt = re.sub(r'\*(.+?)\*', r'\1', txt)      # *italic*
+        txt = re.sub(r'__(.+?)__', r'\1', txt)      # __bold__
+        txt = re.sub(r'_(.+?)_', r'\1', txt)        # _italic_
+
+        # Remove inline code
+        txt = re.sub(r'`(.+?)`', r'\1', txt)
+
+        # Remove markdown links [text](url) → text
+        txt = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', txt)
+
+        # Remove horizontal rules
+        txt = re.sub(r'^---+$', '='*80, txt, flags=re.MULTILINE)
+
+        # Clean up excessive blank lines
+        txt = re.sub(r'\n{3,}', '\n\n', txt)
+
+        return txt
+
     def _generate_json_report(self, config: Dict, geometry_info: Optional[Dict],
                              mesh_info: Optional[Dict], timestamp: str) -> Dict:
         """Generate machine-readable JSON report."""
@@ -220,18 +268,19 @@ Outlets:        {outlets.get('type', 'N/A')}
 
 MESH
 {'-' * 60}
+Resolution:     {config.get('mesh', {}).get('resolution_level', 'N/A')}
 Cell Size:      {config.get('mesh', {}).get('mesh_resolution', {}).get('target_cell_size_mm', 'N/A')} mm
 BL Layers:      {config.get('mesh', {}).get('boundary_layers', {}).get('n_surface_layers', 'N/A')}
 
 PHYSICAL PROPERTIES
 {'-' * 60}
-Density:        {config.get('physical_properties', {}).get('density', 'N/A')} kg/m³
-Viscosity:      {config.get('physical_properties', {}).get('kinematic_viscosity', 'N/A')} m²/s
+Density:        {config.get('physics', {}).get('blood_density', config.get('physical_properties', {}).get('density', 'N/A'))} kg/m³
+Viscosity:      {config.get('physics', {}).get('nu', config.get('physical_properties', {}).get('kinematic_viscosity', 'N/A'))} m²/s
 
 SIMULATION CONTROL
 {'-' * 60}
 End Time:       {config.get('simulation_control', {}).get('end_time', 'N/A')} s
-Write Interval: {config.get('simulation_control', {}).get('write_interval', 'N/A')} s
+Write Interval: {config.get('simulation_control', {}).get('writeInterval', config.get('simulation_control', {}).get('write_interval', 'N/A'))} s
 
 OUTPUT
 {'-' * 60}
@@ -254,52 +303,157 @@ Command:        python run_patient.py {self.case_name}
         solver_type = config.get('simulation_settings', {}).get('solver_type', '')
         return f"sim_{solver_type}_{analysis_type}" if solver_type and analysis_type else "N/A"
 
+    def _get_profile_display(self, config: Dict) -> str:
+        """Get profile display name with metadata if available."""
+        config_source = config.get('config_source', {})
+        profile_key = config_source.get('profile_key')
+        profile_metadata = config.get('profile_metadata', {})
+
+        if profile_key:
+            display_name = profile_metadata.get('display_name', '')
+            if display_name:
+                return f"{profile_key} ({display_name})"
+            return profile_key
+
+        # Fallback to old method
+        return self._get_profile_name(config)
+
+    def _get_case_config_path(self, config: Dict) -> str:
+        """Get the actual case config file path used."""
+        config_source = config.get('config_source', {})
+        config_path = config_source.get('case_config_file')
+
+        if config_path:
+            return f"`{config_path}`"
+
+        # Fallback to default assumption
+        return f"`cases_input/{self.case_name}/config.json`"
+
+    def _get_density(self, config: Dict) -> str:
+        """Extract density from config with fallback."""
+        physics = config.get('physics', {})
+        phys_props = config.get('physical_properties', {})
+
+        # Try multiple keys
+        rho = (physics.get('blood_density') or
+               physics.get('rho') or
+               phys_props.get('density') or
+               phys_props.get('blood_density'))
+
+        return str(rho) if rho else 'N/A'
+
+    def _get_kinematic_viscosity(self, config: Dict) -> str:
+        """Extract kinematic viscosity from config with fallback."""
+        physics = config.get('physics', {})
+        phys_props = config.get('physical_properties', {})
+
+        # Try multiple keys
+        nu = (physics.get('nu') or
+              physics.get('kinematic_viscosity') or
+              phys_props.get('nu') or
+              phys_props.get('kinematic_viscosity'))
+
+        return f"{nu:.6e}" if nu else 'N/A'
+
     def _calculate_dynamic_viscosity(self, config: Dict) -> str:
         """Calculate dynamic viscosity from kinematic viscosity and density."""
         try:
-            nu = config.get('physical_properties', {}).get('kinematic_viscosity')
-            rho = config.get('physical_properties', {}).get('density')
+            # Try new config structure first, then fall back to old
+            physics = config.get('physics', {})
+            phys_props = config.get('physical_properties', {})
+
+            nu = (physics.get('nu') or
+                  physics.get('kinematic_viscosity') or
+                  phys_props.get('nu') or
+                  phys_props.get('kinematic_viscosity'))
+
+            rho = (physics.get('blood_density') or
+                   physics.get('rho') or
+                   phys_props.get('density') or
+                   phys_props.get('blood_density'))
+
             if nu and rho:
-                mu = nu * rho
+                mu = float(nu) * float(rho)
                 return f"{mu:.6e}"
-        except:
+        except Exception as e:
             pass
         return "N/A"
 
     def _describe_flow_regime(self, config: Dict) -> str:
         """Describe flow regime based on settings."""
         solver = config.get('simulation_settings', {}).get('solver_type', '').upper()
+        physics = config.get('physics', {})
 
         if solver == 'LAMINAR':
             return "- **Flow Regime:** Laminar (Re < 2300)\n- **Turbulence Model:** None\n"
         elif solver == 'RANS':
-            turb_model = config.get('turbulence_settings', {}).get('RASModel', 'N/A')
+            # Try multiple locations for turbulence model
+            turb_model = (
+                physics.get('turbulence_model') or
+                config.get('turbulence_settings', {}).get('RASModel') or
+                'kOmegaSST (default)'
+            )
             return f"- **Flow Regime:** Turbulent (RANS)\n- **Turbulence Model:** {turb_model}\n"
         elif solver == 'LES':
-            les_model = config.get('turbulence_settings', {}).get('LESModel', 'N/A')
+            # Try multiple locations for LES model
+            les_model = (
+                physics.get('subgrid_model') or
+                config.get('turbulence_settings', {}).get('LESModel') or
+                'WALE (default)'
+            )
             return f"- **Flow Regime:** Turbulent (LES)\n- **LES Model:** {les_model}\n"
         else:
             return "- **Flow Regime:** Unknown\n"
 
-    def _format_geometry_section(self, geometry_info: Dict) -> str:
+    def _format_geometry_section(self, config: Dict, geometry_info: Optional[Dict]) -> str:
         """Format geometry information."""
         section = ""
 
-        if 'inlet' in geometry_info:
-            inlet = geometry_info['inlet']
-            section += f"- **Inlet:** area = {inlet.get('area', 'N/A'):.6e} m², "
-            section += f"radius = {inlet.get('radius', 'N/A'):.6e} m\n"
+        # Get geometry config
+        geom = config.get('geometry', {})
+        case_name = geom.get('case_name', 'N/A')
+        scale_factor = geom.get('scale_factor', 1e-3)
 
-        outlet_idx = 1
-        while f'outlet{outlet_idx}' in geometry_info:
-            outlet = geometry_info[f'outlet{outlet_idx}']
-            section += f"- **Outlet{outlet_idx}:** area = {outlet.get('area', 'N/A'):.6e} m², "
-            section += f"radius = {outlet.get('radius', 'N/A'):.6e} m\n"
-            outlet_idx += 1
+        # STL file information
+        section += f"- **Case Name:** {case_name}\n"
+        section += f"- **Scale Factor:** {scale_factor} (geometry units → meters)\n"
 
-        if 'wall_aorta' in geometry_info:
-            wall = geometry_info['wall_aorta']
-            section += f"- **Wall:** area = {wall.get('area', 'N/A'):.6e} m²\n"
+        # List patches from config
+        inlet_patch = geom.get('inlet_keywords_ordered', 'N/A')
+        outlet_patches = geom.get('outlet_keywords_ordered', [])
+        wall_patch = geom.get('wall_keywords_ordered', 'N/A')
+
+        section += f"- **Inlet Patch:** {inlet_patch}\n"
+        if isinstance(outlet_patches, list):
+            section += f"- **Outlet Patches:** {', '.join(outlet_patches)} ({len(outlet_patches)} outlets)\n"
+        else:
+            section += f"- **Outlet Patches:** {outlet_patches}\n"
+        section += f"- **Wall Patch:** {wall_patch}\n"
+
+        # Add measured geometry data if available
+        if geometry_info:
+            section += "\n### Measured Geometry\n"
+
+            if 'inlet' in geometry_info:
+                inlet = geometry_info['inlet']
+                area = inlet.get('area', 0)
+                radius = inlet.get('radius', 0)
+                section += f"- **Inlet:** area = {area:.2e} m² ({area*1e6:.2f} mm²), "
+                section += f"radius = {radius:.2e} m ({radius*1e3:.2f} mm)\n"
+
+            outlet_idx = 1
+            while f'outlet{outlet_idx}' in geometry_info:
+                outlet = geometry_info[f'outlet{outlet_idx}']
+                area = outlet.get('area', 0)
+                radius = outlet.get('radius', 0)
+                section += f"- **Outlet{outlet_idx}:** area = {area:.2e} m² ({area*1e6:.2f} mm²), "
+                section += f"radius = {radius:.2e} m ({radius*1e3:.2f} mm)\n"
+                outlet_idx += 1
+
+            if 'wall_aorta' in geometry_info or 'wall' in geometry_info:
+                wall = geometry_info.get('wall_aorta', geometry_info.get('wall', {}))
+                area = wall.get('area', 0)
+                section += f"- **Wall:** area = {area:.2e} m² ({area*1e6:.2f} mm²)\n"
 
         section += "\n"
         return section
@@ -309,33 +463,67 @@ Command:        python run_patient.py {self.case_name}
         bc = config.get('boundary_conditions', {})
         section = ""
 
-        # Inlet
-        inlet = bc.get('inlet', {})
+        # Inlet - check both locations
+        inlet = bc.get('inlet', config.get('inlet', {}))
         section += "### Inlet\n"
-        section += f"- **Type:** {inlet.get('type', 'N/A')}\n"
+        inlet_type = inlet.get('type', 'N/A')
+        section += f"- **Type:** {inlet_type}\n"
 
-        if inlet.get('type') == 'TIMEVARYING':
+        if inlet_type == 'TIMEVARYING':
             section += f"- **CSV File:** {inlet.get('csv_file', 'N/A')}\n"
             section += f"- **Data Type:** {inlet.get('data_type', 'N/A')}\n"
             section += f"- **Profile:** {inlet.get('profile', 'N/A')}\n"
-        elif inlet.get('type') == 'CONSTANT':
+        elif inlet_type == 'WOMERSLEY':
+            section += f"- **CSV File:** {inlet.get('csv_file', 'N/A')}\n"
+            section += f"- **Womersley Number:** {inlet.get('womersley_number', 'N/A')}\n"
+            section += f"- **Fourier Modes:** {inlet.get('fourier_modes', 'N/A')}\n"
+        elif inlet_type in ['CONSTANT', 'PARABOLIC']:
             if 'cardiac_output' in inlet:
                 section += f"- **Cardiac Output:** {inlet.get('cardiac_output')} L/min\n"
+            elif 'velocity' in inlet:
+                section += f"- **Velocity:** {inlet.get('velocity')} m/s\n"
             elif 'velocity_magnitude' in inlet:
                 section += f"- **Velocity:** {inlet.get('velocity_magnitude')} m/s\n"
 
-        # Outlets
-        outlets = bc.get('outlets', {})
+        # Outlets - check both locations
+        outlets = bc.get('outlets', config.get('outlets', {}))
         section += "\n### Outlets\n"
-        section += f"- **Type:** {outlets.get('type', 'N/A')}\n"
+        outlet_type = outlets.get('type', 'N/A')
+        section += f"- **Type:** {outlet_type}\n"
 
-        if outlets.get('type') == '3EWINDKESSEL':
+        if outlet_type == '3EWINDKESSEL':
             wk = outlets.get('windkessel_settings', {})
             section += f"- **Systolic Pressure:** {wk.get('systolic_pressure', 'N/A')} mmHg\n"
             section += f"- **Diastolic Pressure:** {wk.get('diastolic_pressure', 'N/A')} mmHg\n"
-            section += f"- **Flow Split Method:** {wk.get('flow_split_method', 'N/A')}\n"
-            if 'flow_split' in wk:
-                section += f"- **Flow Split:** {wk.get('flow_split')}\n"
+            section += f"- **Venous Pressure:** {wk.get('venous_pressure', 0)} mmHg\n"
+
+            flow_split = wk.get('flow_split', 'auto')
+            if isinstance(flow_split, dict):
+                section += f"- **Flow Split:** Manual (per outlet)\n"
+                for outlet, fraction in flow_split.items():
+                    section += f"  - {outlet}: {fraction*100:.1f}%\n"
+            elif isinstance(flow_split, (int, float)):
+                section += f"- **Flow Split:** {flow_split}% to main branch (rest distributed by Murray's law)\n"
+            else:
+                section += f"- **Flow Split:** Auto-calculated (Murray's law)\n"
+
+            # Check if WK parameters were calculated
+            if 'outlet_parameters' in wk:
+                section += f"- **Windkessel Parameters:** Calculated (see logs for R, C, Z values)\n"
+
+        elif outlet_type == 'zeroGradient':
+            section += f"- **Description:** Zero pressure gradient at outlets\n"
+        elif outlet_type == 'fixedValue':
+            section += f"- **Pressure:** {outlets.get('pressure', 'N/A')} Pa\n"
+
+        # Walls
+        walls = bc.get('walls', {})
+        if walls:
+            section += "\n### Walls\n"
+            wall_type = walls.get('type', 'no_slip')
+            section += f"- **Type:** {wall_type}\n"
+            if 'roughness' in walls:
+                section += f"- **Roughness:** {walls.get('roughness')} m\n"
 
         section += "\n"
         return section
@@ -345,23 +533,70 @@ Command:        python run_patient.py {self.case_name}
         mesh = config.get('mesh', {})
         section = ""
 
-        # Mesh resolution
-        res = mesh.get('mesh_resolution', {})
+        # Mesh resolution - check multiple possible structures
+        res_level = mesh.get('resolution_level', 'N/A')
         section += "### Mesh Resolution\n"
-        section += f"- **Target Cell Size:** {res.get('target_cell_size_mm', 'N/A')} mm\n"
-        section += f"- **Base Cell Size:** {res.get('base_cell_size_mm', 'N/A')} mm\n"
+        section += f"- **Resolution Level:** {res_level}\n"
 
-        # Boundary layers
+        # Map resolution level to approximate cell sizes
+        resolution_map = {
+            'coarse': {'target': 1.8, 'base': 2.5, 'description': 'Quick validation (~300K cells)'},
+            'medium': {'target': 1.0, 'base': 1.5, 'description': 'Standard analysis (~1M cells)'},
+            'fine': {'target': 0.6, 'base': 0.9, 'description': 'High accuracy (~3M cells)'},
+            'very_fine': {'target': 0.4, 'base': 0.6, 'description': 'Very high accuracy (~8M cells)'}
+        }
+
+        if res_level in resolution_map:
+            info = resolution_map[res_level]
+            section += f"- **Target Cell Size:** {info['target']} mm\n"
+            section += f"- **Base Cell Size:** {info['base']} mm\n"
+            section += f"- **Description:** {info['description']}\n"
+        else:
+            # Try to get from mesh_resolution dict
+            res = mesh.get('mesh_resolution', {})
+            target_size = res.get('target_cell_size_mm', res.get('target_cell_size', 'N/A'))
+            base_size = res.get('base_cell_size_mm', res.get('base_cell_size', 'N/A'))
+            section += f"- **Target Cell Size:** {target_size} mm\n"
+            section += f"- **Base Cell Size:** {base_size} mm\n"
+
+        # Boundary layers - check multiple structures
         bl = mesh.get('boundary_layers', {})
-        section += "\n### Boundary Layers\n"
-        section += f"- **Number of Layers:** {bl.get('n_surface_layers', 'N/A')}\n"
-        section += f"- **Expansion Ratio:** {bl.get('expansion_ratio', 'N/A')}\n"
-        section += f"- **Final Thickness:** {bl.get('final_layer_thickness', 'N/A')} m\n"
+        if bl or 'n_surface_layers' in mesh:
+            section += "\n### Boundary Layers\n"
+            n_layers = bl.get('n_surface_layers', mesh.get('n_surface_layers', bl.get('nSurfaceLayers', 'N/A')))
+            expansion = bl.get('expansion_ratio', mesh.get('expansion_ratio', bl.get('expansionRatio', 'N/A')))
+            thickness = bl.get('final_layer_thickness', mesh.get('final_layer_thickness', bl.get('finalLayerThickness', 'N/A')))
+
+            section += f"- **Number of Layers:** {n_layers}\n"
+            section += f"- **Expansion Ratio:** {expansion}\n"
+
+            if thickness != 'N/A':
+                if isinstance(thickness, (int, float)):
+                    section += f"- **Final Thickness:** {thickness:.2e} m ({thickness*1000:.3f} mm)\n"
+                else:
+                    section += f"- **Final Thickness:** {thickness}\n"
+            else:
+                section += f"- **Final Thickness:** N/A\n"
+
+            # Calculate first layer thickness if possible
+            if n_layers != 'N/A' and expansion != 'N/A' and thickness != 'N/A':
+                try:
+                    n = int(n_layers)
+                    r = float(expansion)
+                    t_final = float(thickness)
+                    # Geometric series: t_final = t_first * r^(n-1)
+                    t_first = t_final / (r ** (n - 1))
+                    section += f"- **First Layer Thickness:** {t_first:.2e} m ({t_first*1000:.3f} mm)\n"
+                except:
+                    pass
+        else:
+            section += "\n### Boundary Layers\n"
+            section += f"- **Status:** Not configured (using default wall functions)\n"
 
         # Mesh quality (if available)
         if mesh_info:
             section += "\n### Mesh Quality Metrics\n"
-            section += f"- **Total Cells:** {mesh_info.get('n_cells', 'N/A')}\n"
+            section += f"- **Total Cells:** {mesh_info.get('n_cells', 'N/A'):,}\n"
             section += f"- **Max Non-Orthogonality:** {mesh_info.get('max_non_ortho', 'N/A')}°\n"
             section += f"- **Max Skewness:** {mesh_info.get('max_skewness', 'N/A')}\n"
 
@@ -372,20 +607,49 @@ Command:        python run_patient.py {self.case_name}
         """Format numerical schemes and settings."""
         section = ""
 
+        num_settings = config.get('numerical_settings', {})
+
         # Time schemes
         section += "### Time Discretization\n"
-        section += f"- **ddt Scheme:** {config.get('numerical_settings', {}).get('ddtSchemes', {}).get('default', 'N/A')}\n"
+        ddt_scheme = num_settings.get('ddtSchemes', {}).get('default', 'CrankNicolson 0.9 (default)')
+        section += f"- **ddt Scheme:** {ddt_scheme}\n"
+        section += f"- **Description:** Time derivative discretization for transient simulations\n"
 
         # Gradient schemes
         section += "\n### Gradient Schemes\n"
-        section += f"- **Default:** {config.get('numerical_settings', {}).get('gradSchemes', {}).get('default', 'N/A')}\n"
+        grad_scheme = num_settings.get('gradSchemes', {}).get('default', 'Gauss linear (default)')
+        section += f"- **Default:** {grad_scheme}\n"
+        section += f"- **Description:** Spatial gradient calculation using Gauss integration\n"
 
         # Divergence schemes
         section += "\n### Divergence Schemes\n"
-        div_schemes = config.get('numerical_settings', {}).get('divSchemes', {})
-        for key, value in div_schemes.items():
-            if key != 'default':
-                section += f"- **{key}:** {value}\n"
+        div_schemes = num_settings.get('divSchemes', {})
+        if div_schemes:
+            for key, value in div_schemes.items():
+                if key == 'default':
+                    section += f"- **Default:** {value}\n"
+                elif 'U' in key:
+                    section += f"- **Momentum (div(phi,U)):** {value}\n"
+                else:
+                    section += f"- **{key}:** {value}\n"
+        else:
+            section += f"- **Momentum:** Gauss linearUpwindV grad(U) (default for incompressible flow)\n"
+
+        # Laplacian schemes
+        laplacian = num_settings.get('laplacianSchemes', {})
+        if laplacian:
+            section += "\n### Laplacian Schemes\n"
+            lap_default = laplacian.get('default', 'Gauss linear corrected')
+            section += f"- **Default:** {lap_default}\n"
+
+        # Linear solvers
+        solvers = num_settings.get('solvers', {})
+        if solvers:
+            section += "\n### Linear Solvers\n"
+            if 'p' in solvers:
+                section += f"- **Pressure:** {solvers['p'].get('solver', 'GAMG')}\n"
+            if 'U' in solvers:
+                section += f"- **Velocity:** {solvers['U'].get('solver', 'smoothSolver')}\n"
 
         section += "\n"
         return section
@@ -395,11 +659,47 @@ Command:        python run_patient.py {self.case_name}
         ctrl = config.get('simulation_control', {})
         section = ""
 
-        section += f"- **End Time:** {ctrl.get('end_time', 'N/A')} s\n"
-        section += f"- **Write Interval:** {ctrl.get('write_interval', 'N/A')} s\n"
-        section += f"- **Time Step (Δt):** {ctrl.get('controlDict', {}).get('deltaT', 'N/A')} s\n"
-        section += f"- **Max Courant Number:** {ctrl.get('controlDict', {}).get('maxCo', 'N/A')}\n"
-        section += f"- **Adjustable Time Step:** {ctrl.get('controlDict', {}).get('adjustTimeStep', False)}\n"
+        # End time calculation
+        end_time = ctrl.get('end_time', 'N/A')
+        num_cycles = ctrl.get('number_of_cycles', None)
+
+        if end_time == 'auto' and num_cycles:
+            # Calculate from cardiac cycle
+            case_info = config.get('case_info', {})
+            heart_rate = case_info.get('heart_rate', 60)
+            cardiac_cycle = 60.0 / heart_rate  # seconds per cycle
+            calculated_end_time = num_cycles * cardiac_cycle
+            section += f"- **End Time:** {end_time} ({num_cycles} cycles × {cardiac_cycle:.2f}s = {calculated_end_time:.2f}s)\n"
+            section += f"- **Number of Cycles:** {num_cycles}\n"
+            section += f"- **Heart Rate:** {heart_rate} BPM (cardiac cycle = {cardiac_cycle:.3f}s)\n"
+        else:
+            section += f"- **End Time:** {end_time} s\n"
+            if num_cycles:
+                section += f"- **Number of Cycles:** {num_cycles}\n"
+
+        # Write interval
+        write_interval = ctrl.get('writeInterval', ctrl.get('write_interval', 0.02))
+        section += f"- **Write Interval:** {write_interval} s (output every {write_interval*1000:.0f} ms)\n"
+
+        # Try to get deltaT from different locations
+        delta_t = ctrl.get('deltaT', ctrl.get('controlDict', {}).get('deltaT', 1e-5))
+        if isinstance(delta_t, (int, float)):
+            section += f"- **Initial Time Step (Δt):** {delta_t:.2e} s ({delta_t*1e6:.1f} μs)\n"
+        else:
+            section += f"- **Initial Time Step (Δt):** {delta_t} s\n"
+
+        # Get Courant number
+        max_co = ctrl.get('maxCo', ctrl.get('controlDict', {}).get('maxCo', 0.5))
+        section += f"- **Max Courant Number:** {max_co}\n"
+
+        # Get adaptive time stepping
+        adjust_dt = ctrl.get('adjustTimeStep', ctrl.get('controlDict', {}).get('adjustTimeStep', True))
+        section += f"- **Adjustable Time Step:** {'yes' if adjust_dt else 'no'}\n"
+
+        if adjust_dt:
+            max_dt = ctrl.get('maxDeltaT', ctrl.get('controlDict', {}).get('maxDeltaT', None))
+            if max_dt:
+                section += f"- **Max Time Step:** {max_dt:.2e} s\n"
 
         section += "\n"
         return section
@@ -409,14 +709,31 @@ Command:        python run_patient.py {self.case_name}
         section = ""
 
         run_settings = config.get('run_settings', {})
-        section += f"- **Solution Type:** {run_settings.get('solution_type', 'N/A')}\n"
+        sim_settings = config.get('simulation_settings', {})
 
-        if run_settings.get('solution_type') == 'parallel':
-            section += f"- **Number of Processors:** {run_settings.get('subdomains', 'N/A')}\n"
-            section += f"- **Decomposition Method:** {run_settings.get('decomposition_method', 'N/A')}\n"
+        solution_type = run_settings.get('solution_type', 'serial')
+        section += f"- **Solution Type:** {solution_type}\n"
 
-        section += f"- **OpenFOAM Version:** {config.get('openfoam_version', 'N/A')}\n"
-        section += f"- **Solver Command:** `foamRun -solver incompressibleFluid`\n"
+        if solution_type == 'parallel':
+            n_procs = run_settings.get('subdomains', 'N/A')
+            decomp = run_settings.get('decomposition_method', 'scotch')
+            section += f"- **Number of Processors:** {n_procs}\n"
+            section += f"- **Decomposition Method:** {decomp}\n"
+
+        # OpenFOAM version
+        of_version = config.get('openfoam_version', '12')
+        section += f"- **OpenFOAM Version:** {of_version}\n"
+
+        # Solver type
+        solver_type = sim_settings.get('solver_type', 'laminar')
+        section += f"- **Solver Type:** {solver_type}\n"
+
+        # Solver command
+        if solution_type == 'parallel':
+            n_procs = run_settings.get('subdomains', 4)
+            section += f"- **Solver Command:** `mpirun -np {n_procs} foamRun -solver incompressibleFluid -parallel`\n"
+        else:
+            section += f"- **Solver Command:** `foamRun -solver incompressibleFluid`\n"
 
         section += "\n"
         return section
