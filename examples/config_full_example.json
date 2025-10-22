@@ -1,0 +1,295 @@
+{
+  "_comment": "=============================================================================",
+  "_comment_desc": "AortaCFD - Complete Configuration Example",
+  "_comment_version": "This file demonstrates ALL possible configuration parameters",
+  "_comment_usage": "Copy and modify for your patient case. Most parameters are optional.",
+  "_comment_docs": "See README.md for detailed documentation of each parameter",
+  "_comment_line": "=============================================================================",
+
+  "case_info": {
+    "_comment": "Basic case identification and metadata",
+    "patient_id": "patient_example",
+    "description": "Complete example showing all configuration options",
+    "reference": "Optional: Publication DOI, clinical trial ID, etc.",
+    "heart_rate": 75,
+    "notes": "Any additional case-specific notes"
+  },
+
+  "simulation_settings": {
+    "_comment": "Profile selection - determines solver, mesh resolution, and numerical schemes",
+    "_comment_options": "solver_type: laminar|rans|les, analysis_type: coarse|medium|fine|publication",
+    "solver_type": "laminar",
+    "analysis_type": "medium",
+    "_comment_note": "Combines to select profile: sim_{solver_type}_{analysis_type}",
+    "_comment_override": "Can be overridden via CLI: --profile sim_rans_fine"
+  },
+
+  "physics": {
+    "_comment": "Physical properties of blood",
+    "blood_density": 1060,
+    "_comment_density": "Units: kg/m³. Normal range: 1050-1070. Default: 1060",
+    "blood_viscosity": 0.004,
+    "_comment_viscosity": "Dynamic viscosity. Units: Pa·s. Normal range: 0.003-0.005. Default: 0.004",
+    "_comment_note": "System auto-calculates kinematic viscosity nu = mu/rho"
+  },
+
+  "geometry": {
+    "_comment": "Geometry processing and patch identification",
+    "scale_factor": 0.001,
+    "_comment_scale": "Multiply STL coordinates by this. 0.001 converts mm to meters",
+    "rotation": false,
+    "_comment_rotation": "Whether to rotate geometry to align inlet with target_normal",
+    "target_normal": [0, 0, 1],
+    "_comment_target": "Target normal vector for inlet after rotation (if enabled)",
+
+    "_comment_patches": "Patch keywords for STL file identification",
+    "inlet_keywords_ordered": "inlet",
+    "_comment_inlet": "Keywords to identify inlet STL file (e.g., 'inlet', 'inflow')",
+    "outlet_keywords_ordered": ["outlet1", "outlet2", "outlet3", "outlet4"],
+    "_comment_outlet": "Ordered list of outlet patch names matching STL files",
+    "wall_keywords_ordered": "wall_aorta",
+    "_comment_wall": "Keywords to identify wall STL file (e.g., 'wall', 'aorta')",
+
+    "case_name": "patient_example",
+    "_comment_case": "Case name for output directories (auto-set from patient_id if omitted)"
+  },
+
+  "computational": {
+    "_comment": "High-level computational resource settings",
+    "parallel": true,
+    "_comment_parallel": "Enable parallel processing for mesh generation and solving",
+    "max_processors": 8,
+    "_comment_max_proc": "Maximum number of processor cores to use (or 'auto')"
+  },
+
+  "mesh": {
+    "_comment": "Mesh generation settings - typically auto-configured by profiles",
+    "_comment_note": "Most mesh parameters are set by profiles. Override only if needed.",
+
+    "_comment_yplus_section": "=== Y+ BASED BOUNDARY LAYER CONTROL (NEW) ===",
+    "boundary_layers": {
+      "_comment": "Automatic first layer thickness calculation from target y+ value",
+      "target_yplus": null,
+      "_comment_target_yplus": "Target y+ value (e.g., 1.0 for RANS, 30 for wall functions). null = use manual finalLayerThickness",
+      "_comment_when_to_use": "Set target_yplus for RANS/LES simulations where y+ control is critical",
+
+      "estimation_method": "auto",
+      "_comment_method": "Options: 'auto' (geometry-based estimate) | 'user_provided' (specify velocity/length)",
+
+      "_option_auto": {
+        "_comment": "Auto mode estimates from geometry + typical cardiac output (5 L/min)",
+        "_comment_override1": "Optional: Specify characteristic_velocity (m/s) to override estimated velocity",
+        "_comment_override2": "Optional: Specify characteristic_length (m) to override inlet diameter",
+        "characteristic_velocity": null,
+        "characteristic_length": null
+      },
+
+      "_option_user_provided": {
+        "_comment": "User-provided mode requires BOTH values",
+        "characteristic_velocity": 0.5,
+        "_comment_velocity": "Typical velocity in m/s (e.g., peak systolic or time-averaged)",
+        "characteristic_length": 0.025,
+        "_comment_length": "Hydraulic diameter in meters (e.g., inlet diameter)"
+      },
+
+      "_comment_example_rans": "Example for RANS k-omega SST: target_yplus=1.0, estimation_method='auto'",
+      "_comment_example_les": "Example for LES WALE: target_yplus=1.0, estimation_method='auto'",
+      "_comment_example_wall_fn": "Example for wall functions: target_yplus=30, estimation_method='auto'",
+
+      "_comment_calculation": "System calculates: Δy₁ = y+ × ν / u_τ, where u_τ estimated from pipe flow correlations",
+      "_comment_output": "Logs show: Reynolds number, friction velocity, calculated finalLayerThickness, total BL thickness",
+      "_comment_validation": "Post-simulation: Verify actual y+ using built-in y+ post-processing"
+    },
+
+    "SNAPPY_SETTINGS": {
+      "_comment": "snappyHexMesh-specific settings",
+      "parallel": true,
+      "_comment_parallel": "Run snappyHexMesh in parallel",
+      "nProcessors": 8,
+      "_comment_nProc": "Number of processors for meshing (can differ from solver)",
+
+      "_comment_advanced": "Advanced mesh control - usually set by profile",
+      "castellatedMesh": true,
+      "snap": true,
+      "addLayers": true,
+
+      "_comment_quality": "Mesh quality controls",
+      "maxNonOrtho": 70,
+      "maxBoundarySkewness": 20,
+      "maxInternalSkewness": 4,
+
+      "_comment_layers": "Boundary layer settings (auto-calculated if target_yplus is set)",
+      "addLayer": 3,
+      "_comment_addLayer": "Number of boundary layers (MUST use 'addLayer' not 'nSurfaceLayers'). Typical: 3-5 for laminar, 5-7 for RANS/LES",
+      "expansionRatio": 1.2,
+      "_comment_expansion": "Layer growth ratio. Typical: 1.1-1.3. Lower = more uniform, higher = faster transition",
+      "finalLayerThickness": 0.3,
+      "_comment_final": "Relative thickness (if relativeSizes=true). AUTO-CALCULATED if target_yplus is set",
+      "minThickness": 0.1,
+      "_comment_min": "Minimum layer thickness to prevent collapse",
+      "relativeSizes": true,
+      "_comment_relative": "true = relative to local cell size, false = absolute in meters"
+    },
+
+    "_comment_resolution": "Mesh resolution controlled by profile fragments",
+    "_comment_priority": "Priority values (10-25) set refinement levels via profiles"
+  },
+
+  "run_settings": {
+    "_comment": "Solver execution settings",
+    "solution_type": "parallel",
+    "_comment_solution": "Options: serial | parallel",
+    "subdomains": 8,
+    "_comment_subdomains": "Number of processor subdomains for parallel solving",
+    "decomposition_method": "scotch",
+    "_comment_decomp": "Options: scotch (automatic) | simple | hierarchical | manual",
+
+    "_comment_reconstruction": "Post-simulation reconstruction settings",
+    "skip_reconstruction": false,
+    "_comment_skip": "If true, skip automatic reconstructPar after solver (21% faster)"
+  },
+
+  "boundary_conditions": {
+    "_comment": "=== INLET BOUNDARY CONDITIONS ===",
+
+    "inlet": {
+      "_comment": "Options: TIMEVARYING | CONSTANT | PARABOLIC",
+      "type": "TIMEVARYING",
+
+      "_option1_TIMEVARYING": {
+        "_comment": "Time-varying flow from CSV file (most common)",
+        "csv_file": "BPM75.csv",
+        "_comment_csv": "CSV file in patient directory with time,value columns",
+        "data_type": "flowRate",
+        "_comment_data_type": "Options: flowRate (m³/s) | velocity (m/s)",
+        "profile": "plug",
+        "_comment_profile": "Options: plug | parabolic | womersley",
+        "orientation": "out",
+        "_comment_orientation": "Options: out (default) | in"
+      },
+
+      "_option2_CONSTANT": {
+        "_comment": "Steady uniform velocity",
+        "velocity": 0.5,
+        "_comment_velocity": "Velocity in m/s",
+        "_alternative": "OR specify cardiac_output in L/min (auto-calculates velocity)"
+      },
+
+      "_option3_PARABOLIC": {
+        "_comment": "Steady Poiseuille (parabolic) profile",
+        "velocity": 1.0,
+        "_comment_velocity": "Centerline velocity in m/s"
+      }
+    },
+
+    "_comment": "=== OUTLET BOUNDARY CONDITIONS ===",
+
+    "outlets": {
+      "_comment": "Options: 3EWINDKESSEL | PRESSURE | ZEROGRADIENT",
+      "type": "3EWINDKESSEL",
+
+      "_option1_3EWINDKESSEL": {
+        "_comment": "3-element Windkessel model (physiologically realistic)",
+        "windkessel_settings": {
+          "_comment_pressures": "Clinical pressure measurements (REQUIRED)",
+          "systolic_pressure": 120,
+          "_comment_systolic": "Systolic BP in mmHg",
+          "diastolic_pressure": 80,
+          "_comment_diastolic": "Diastolic BP in mmHg",
+          "venous_pressure": 0,
+          "_comment_venous": "Venous pressure in mmHg (usually 0-5)",
+
+          "_comment_flow_split": "Flow distribution across outlets",
+          "flow_split": 40,
+          "_comment_split_meaning": "If number: first N-1 outlets share X%, last gets (100-X)%",
+          "_comment_split_alt": "Or dict: {'outlet1': 0.4, 'outlet2': 0.3, 'outlet3': 0.3}",
+
+          "flow_split_method": "murray",
+          "_comment_method": "Options: murray (r³ law) | area | equal | custom",
+
+          "_comment_pwv": "Pulse wave velocity for compliance calculation",
+          "pwv_method": "empirical",
+          "_comment_pwv_method": "Options: empirical | measured",
+          "pwv": 5.0,
+          "_comment_pwv_value": "If pwv_method=measured, provide PWV in m/s",
+
+          "tau": 1.8,
+          "_comment_tau": "RC time constant (seconds). Range: 1.0-2.5. Should be ~60-80% of cardiac cycle period.",
+
+          "_comment_wk_coefficients": "=== WINDKESSEL COEFFICIENTS (AUTO-CALCULATED) ===",
+          "_comment_auto_calc": "The system automatically calculates R1, R2, C from pressures above.",
+          "_comment_calculation": "MAP = DP + (SP-DP)/3, R_total = (MAP-Pv)/Q_mean, R1 = ρ×PWV/A, R2 = R_total-R1, C = τ/R2",
+
+          "R1": null,
+          "_comment_R1": "Proximal resistance (Pa·s/m³). AUTO-CALCULATED from PWV. Typical: 1e5-5e5",
+          "R2": null,
+          "_comment_R2": "Distal resistance (Pa·s/m³). AUTO-CALCULATED from MAP. Typical: 1e6-5e6",
+          "C": null,
+          "_comment_C": "Compliance (m³/Pa). AUTO-CALCULATED from tau and R2. Typical: 5e-7 to 2e-6",
+
+          "_comment_example_output": "Example auto-calculated values for SP=123, DP=60, HR=120:",
+          "_example_table": "outlet1: R1=2.37e5, R2=2.13e6, C=7.04e-7 | outlet2: R1=2.96e5, R2=2.07e6, C=7.24e-7",
+          "_comment_see_docs": "See examples/windkessel_parameters_example.md for detailed calculation methodology"
+        }
+      },
+
+      "_option2_PRESSURE": {
+        "_comment": "Fixed pressure outlets",
+        "pressure": 10666,
+        "_comment_pressure": "Fixed pressure in Pa (80 mmHg = 10666 Pa)"
+      },
+
+      "_option3_ZEROGRADIENT": {
+        "_comment": "Zero gradient (fully developed flow assumed)"
+      }
+    },
+
+    "_comment": "=== WALL BOUNDARY CONDITIONS ===",
+
+    "walls": {
+      "type": "no_slip",
+      "_comment": "Options: no_slip (default) | slip | moving_wall",
+
+      "_option_moving_wall": {
+        "_comment": "For FSI or prescribed wall motion",
+        "velocity": [0, 0, 0]
+      }
+    }
+  },
+
+  "simulation_control": {
+    "_comment": "Time control and output settings",
+
+    "number_of_cycles": 5,
+    "_comment_cycles": "Number of cardiac cycles to simulate",
+
+    "end_time": "auto",
+    "_comment_end_time": "Options: 'auto' (from CSV) | numeric value in seconds",
+
+    "writeInterval": 0.01,
+    "_comment_write": "Write interval in seconds (0.01 = 100 snapshots/second)",
+
+    "_comment_advanced": "Advanced time stepping (usually auto-configured)",
+    "deltaT": "adjustable",
+    "_comment_deltaT": "Time step: 'adjustable' (auto) | numeric value",
+    "maxCo": 1.0,
+    "_comment_maxCo": "Maximum Courant number for adjustable time step",
+    "maxDeltaT": 0.001,
+    "_comment_maxDeltaT": "Maximum time step size for adjustable stepping"
+  },
+
+  "_comment_final": "=============================================================================",
+  "_comment_profiles": "AVAILABLE PROFILES (set via simulation_settings or --profile flag):",
+  "_profile_list": [
+    "sim_laminar_coarse   - Quick validation (5-10 min)",
+    "sim_laminar_medium   - Clinical standard (30-60 min) [DEFAULT]",
+    "sim_laminar_fine     - High resolution (2-4 hours)",
+    "sim_rans_coarse      - Turbulence screening (1-2 hours)",
+    "sim_rans_medium      - Accurate turbulence (2-3 hours)",
+    "sim_rans_fine        - Research turbulence (3-5 hours)",
+    "sim_les_medium       - Transitional LES (3-5 hours)",
+    "sim_les_fine         - High-fidelity LES (5-7 hours)"
+  ],
+  "_comment_docs": "See README.md and examples/ for more details",
+  "_comment_end": "============================================================================="
+}

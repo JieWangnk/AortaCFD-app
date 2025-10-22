@@ -629,13 +629,196 @@ class GeometryAnalyzer:
         self._write_file_from_template("blockMeshDict.tpl", os.path.join(self.case_dir, "system", "blockMeshDict"), context)
 
     def _write_snappyhexmesh_dict(self, internal_point: np.ndarray):
+        """
+        Generate snappyHexMeshDict with optional y+ based boundary layer calculation.
+
+        If mesh.boundary_layers.target_yplus is specified in config, this will
+        automatically calculate the appropriate finalLayerThickness to achieve
+        the target y+ value using flow correlations.
+        """
+        # Check if y+ based layer sizing is requested
+        boundary_layer_config = self.mesh_settings.get('boundary_layers', {})
+        target_yplus = boundary_layer_config.get('target_yplus')
+
+        # Make a mutable copy of snappy_settings for potential y+ override
+        snappy_settings_with_yplus = dict(self.snappy_settings)
+
+        if target_yplus is not None:
+            self._apply_yplus_layer_sizing(target_yplus, boundary_layer_config, snappy_settings_with_yplus)
+            # Override the config with calculated values
+            modified_config = dict(self.config)
+            modified_config['mesh'] = dict(self.config['mesh'])
+            modified_config['mesh']['SNAPPY_SETTINGS'] = snappy_settings_with_yplus
+        else:
+            modified_config = self.config
+
         context = {
-            "config": self.config,
+            "config": modified_config,
             "patches": self.all_patches,
             "wall_patch": self.wall_patch,
             "internal_point": internal_point
         }
         self._write_file_from_template("snappyHexMeshDict.tpl", os.path.join(self.case_dir, "system", "snappyHexMeshDict"), context)
+
+    def _apply_yplus_layer_sizing(self, target_yplus: float, boundary_layer_config: dict, snappy_settings: dict):
+        """
+        Calculate and apply finalLayerThickness based on target y+ value.
+
+        Args:
+            target_yplus: Target y+ value (e.g., 1.0 for RANS)
+            boundary_layer_config: mesh.boundary_layers configuration
+            snappy_settings: SNAPPY_SETTINGS dict to modify (in-place)
+        """
+        from .yplus_estimator import YPlusEstimator
+
+        # Get fluid properties with defaults
+        physics = self.config.get('physics', {})
+
+        # Try blood_density first, fallback to defaults
+        density = physics.get('blood_density')
+        if density is None:
+            density = 1060.0
+            self.log.warning(
+                "physics.blood_density not found in config, using default: 1060 kg/m³"
+            )
+
+        # Try blood_viscosity first, fallback to defaults
+        viscosity = physics.get('blood_viscosity')
+        if viscosity is None:
+            viscosity = 0.004
+            self.log.warning(
+                "physics.blood_viscosity not found in config, using default: 0.004 Pa·s"
+            )
+
+        self.log.info(
+            f"Y+ calculator using fluid properties: "
+            f"ρ={density} kg/m³, μ={viscosity} Pa·s, ν={viscosity/density:.6e} m²/s"
+        )
+
+        # Get or estimate flow parameters
+        estimation_method = boundary_layer_config.get('estimation_method', 'auto')
+
+        # Use user-provided values if available, otherwise estimate
+        if estimation_method == 'user_provided':
+            char_velocity = boundary_layer_config.get('characteristic_velocity')
+            char_length = boundary_layer_config.get('characteristic_length')
+
+            if char_velocity is None or char_length is None:
+                self.log.error(
+                    "estimation_method='user_provided' requires both characteristic_velocity "
+                    "and characteristic_length. Falling back to auto estimation."
+                )
+                estimation_method = 'auto'
+
+        if estimation_method == 'auto':
+            # Use typical aortic values or geometry-based estimates
+            # Default: Use inlet diameter as characteristic length
+            char_length = (2.0 * self.inlet_radius / 1000.0) if self.inlet_radius else 0.025  # Convert mm to m
+
+            # Estimate velocity from typical cardiac output
+            # Typical: ~5 L/min = 8.33e-5 m³/s, inlet area = π*r²
+            if self.inlet_radius:
+                inlet_area_m2 = np.pi * (self.inlet_radius / 1000.0) ** 2
+                typical_flow_m3s = 8.33e-5  # 5 L/min
+                char_velocity = typical_flow_m3s / inlet_area_m2
+                self.log.info(
+                    f"Auto-estimated characteristic velocity: {char_velocity:.3f} m/s "
+                    f"(based on 5 L/min cardiac output and inlet radius {self.inlet_radius:.2f} mm)"
+                )
+            else:
+                char_velocity = 0.5  # Fallback: typical aortic velocity
+                self.log.warning("Using fallback velocity of 0.5 m/s (inlet radius unavailable)")
+
+            # Allow user override
+            if boundary_layer_config.get('characteristic_velocity') is not None:
+                char_velocity = boundary_layer_config['characteristic_velocity']
+                self.log.info(f"Using user-specified characteristic_velocity: {char_velocity} m/s")
+
+            if boundary_layer_config.get('characteristic_length') is not None:
+                char_length = boundary_layer_config['characteristic_length']
+                self.log.info(f"Using user-specified characteristic_length: {char_length} m")
+
+        # Get layer parameters
+        n_layers = snappy_settings.get('addLayer', 5)
+        expansion_ratio = snappy_settings.get('expansionRatio', 1.2)
+
+        # Create estimator
+        estimator = YPlusEstimator(
+            density=density,
+            viscosity=viscosity,
+            flow_regime='auto'
+        )
+
+        # Calculate first layer thickness
+        results = estimator.estimate_first_layer_thickness(
+            target_yplus=target_yplus,
+            mean_velocity=char_velocity,
+            characteristic_length=char_length,
+            n_layers=n_layers,
+            expansion_ratio=expansion_ratio
+        )
+
+        # Update snappy_settings with calculated value
+        snappy_settings['finalLayerThickness'] = results['finalLayerThickness']
+
+        # CRITICAL: Y+ calculator returns ABSOLUTE thickness in meters
+        # Must override relativeSizes to false
+        if snappy_settings.get('relativeSizes', True):
+            self.log.warning(
+                "Overriding relativeSizes from 'true' to 'false' - "
+                "Y+ calculator provides absolute layer thickness in meters"
+            )
+        snappy_settings['relativeSizes'] = False
+
+        # Also adjust minThickness to absolute units if needed
+        min_thick = snappy_settings.get('minThickness', 0.1)
+        if min_thick > 0.01:  # Likely relative (e.g., 0.1 = 10%)
+            # Convert to small absolute value (e.g., 1 micron)
+            snappy_settings['minThickness'] = 1e-6
+            self.log.warning(
+                f"Adjusted minThickness from {min_thick} (relative) to {1e-6:.2e} m (absolute)"
+            )
+
+        # Print detailed report
+        self.log.info("="*60)
+        self.log.info("Y+ BASED BOUNDARY LAYER CALCULATION")
+        self.log.info("="*60)
+        self.log.info(f"Target y+:                  {target_yplus:.2f}")
+        self.log.info(f"Characteristic velocity:    {char_velocity:.3f} m/s")
+        self.log.info(f"Characteristic length:      {char_length*1000:.2f} mm")
+        self.log.info(f"Reynolds number:            {results['reynolds_number']:.0f} ({results['flow_regime'].capitalize()})")
+        self.log.info(f"Friction velocity (u_τ):    {results['friction_velocity']:.4f} m/s")
+        self.log.info("-"*60)
+        self.log.info(f"Calculated finalLayerThickness: {results['finalLayerThickness']:.6f} ({results['finalLayerThickness']*1000:.4f} mm)")
+        self.log.info(f"Number of layers:               {n_layers}")
+        self.log.info(f"Expansion ratio:                {expansion_ratio}")
+        self.log.info(f"Total BL thickness:             {results['total_layer_thickness']*1000:.4f} mm")
+        self.log.info(f"Estimated y+:                   {results['estimated_yplus']:.2f}")
+        self.log.info("="*60)
+
+        # Validate settings
+        solver_type = self.config.get('simulation_settings', {}).get('solver_type', 'laminar')
+        validation = estimator.validate_settings(
+            results['finalLayerThickness'],
+            results['total_layer_thickness'],
+            char_length,
+            solver_type,
+            results['reynolds_number']
+        )
+
+        if validation['warnings']:
+            self.log.warning("⚠️  Y+ Estimation Warnings:")
+            for warning in validation['warnings']:
+                self.log.warning(f"  - {warning}")
+
+        if validation['recommendations']:
+            self.log.info("💡 Recommendations:")
+            for rec in validation['recommendations']:
+                self.log.info(f"  - {rec}")
+
+        self.log.info("-"*60)
+        self.log.info("Note: Verify actual y+ using post-processing after simulation.")
+        self.log.info("="*60)
             
     def _write_surfacefeatures_dict(self):
         context = {

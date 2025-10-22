@@ -18,7 +18,7 @@
     "wall_keywords_ordered": "wall_aorta",
     "scale_factor": 0.001,
     "case_name": "BPM120",
-    "rotation": false
+    "rotation": true
   },
   "mesh": {
     "resolution_level": "coarse",
@@ -34,7 +34,7 @@
       "type": "TIMEVARYING",
       "csv_file": "BPM120.csv",
       "data_type": "flowRate",
-      "profile": "plug"
+      "profile": "parabolic"
     },
     "outlets": {
       "type": "3EWINDKESSEL",
@@ -58,8 +58,8 @@
     "comment": "5 cycles for quick validation testing"
   },
   "run_settings": {
-    "solution_type": "serial",
-    "subdomains": 1,
+    "solution_type": "parallel",
+    "subdomains": 2,
     "decomposition_method": "simple"
   }
 }

@@ -1,0 +1,25 @@
+{
+  "case_info": {
+    "patient_id": "patient1",
+    "description": "Minimal configuration example - only required parameters"
+  },
+
+  "simulation_settings": {
+    "solver_type": "laminar",
+    "analysis_type": "medium"
+  },
+
+  "boundary_conditions": {
+    "inlet": {
+      "type": "TIMEVARYING",
+      "csv_file": "BPM75.csv"
+    },
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80
+      }
+    }
+  }
+}

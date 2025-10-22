@@ -22,6 +22,11 @@
   },
   "mesh": {
     "resolution_level": "medium",
+    "nSurfaceLayers": 3,
+    "expansionRatio": 1.2,
+    "finalLayerThickness": 0.3,
+    "minThickness": 0.1,
+    "relativeSizes": true,
     "comment": "Medium mesh for balanced accuracy and performance - ~1M cells"
   },
   "physics": {
