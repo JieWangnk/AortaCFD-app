@@ -1,0 +1,69 @@
+{
+  "case_info": {
+    "patient_id": "example_case",
+    "description": "Example laminar simulation with medium resolution",
+    "heart_rate": 75,
+    "notes": "Laminar flow assumption (Re < 2300) with medium mesh resolution"
+  },
+
+  "simulation_settings": {
+    "solver_type": "laminar",
+    "analysis_type": "medium"
+  },
+
+  "physics": {
+    "blood_density": 1060,
+    "blood_viscosity": 0.004
+  },
+
+  "geometry": {
+    "scale_factor": 0.001,
+    "rotation": false
+  },
+
+  "computational": {
+    "parallel": true,
+    "max_processors": 4
+  },
+
+  "mesh": {
+    "_comment_yplus": "Laminar flow: y+ control not applicable (direct resolution, no turbulence model)",
+    "_comment_layers": "Boundary layers still improve solution accuracy but not constrained by y+ requirements",
+    "SNAPPY_SETTINGS": {
+      "addLayer": 3,
+      "expansionRatio": 1.2,
+      "finalLayerThickness": 0.3
+    }
+  },
+
+  "boundary_conditions": {
+    "inlet": {
+      "type": "TIMEVARYING",
+      "csv_file": "BPM75.csv",
+      "data_type": "flowRate",
+      "profile": "plug",
+      "orientation": "out"
+    },
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80,
+        "venous_pressure": 0,
+        "flow_split": 40,
+        "flow_split_method": "murray",
+        "pwv_method": "empirical",
+        "tau": 1.8
+      }
+    },
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+
+  "simulation_control": {
+    "number_of_cycles": 5,
+    "end_time": "auto",
+    "writeInterval": 0.01
+  }
+}

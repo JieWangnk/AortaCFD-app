@@ -105,8 +105,8 @@ coarc_refine*
 .env
 
 # Documentation build
-docs/_build/
 site/
+docs/
 
 # Development progress documentation
 *_SUMMARY.md

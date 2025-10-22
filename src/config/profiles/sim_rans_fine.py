@@ -42,7 +42,7 @@ RANS_FINE_EXTRAS = {
             "adjustTimeStep": "yes",
             "maxCo": 0.6,
             "maxDeltaT": 3e-04,
-            "functions": ["wallShearStress", "pressureDrop"],
+            "functions": ["wallShearStress"],
         }
     },
     "fvSolution": {

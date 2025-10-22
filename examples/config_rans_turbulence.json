@@ -1,0 +1,83 @@
+{
+  "case_info": {
+    "patient_id": "example_case_turbulent",
+    "description": "Example RANS turbulence simulation with medium resolution",
+    "heart_rate": 120,
+    "notes": "Example showing RANS k-omega SST turbulence model setup for transitional/turbulent flows (Re > 2300)"
+  },
+
+  "simulation_settings": {
+    "solver_type": "rans",
+    "analysis_type": "medium"
+  },
+
+  "physics": {
+    "blood_density": 1060,
+    "blood_viscosity": 0.0037
+  },
+
+  "geometry": {
+    "scale_factor": 0.001,
+    "rotation": false,
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": ["outlet1", "outlet2", "outlet3", "outlet4"],
+    "wall_keywords_ordered": "wall_aorta"
+  },
+
+  "computational": {
+    "parallel": true,
+    "max_processors": 8
+  },
+
+  "mesh": {
+    "boundary_layers": {
+      "target_yplus": 1.0,
+      "estimation_method": "auto"
+    },
+    "SNAPPY_SETTINGS": {
+      "parallel": true,
+      "nProcessors": 8,
+      "addLayer": 5,
+      "expansionRatio": 1.2
+    },
+    "_comment_yplus": "target_yplus auto-calculates finalLayerThickness for desired y+ value",
+    "_comment_estimation": "estimation_method='auto' uses geometry-based flow estimates. Use 'user_provided' with characteristic_velocity and characteristic_length for custom values"
+  },
+
+  "run_settings": {
+    "solution_type": "parallel",
+    "subdomains": 8,
+    "decomposition_method": "scotch"
+  },
+
+  "boundary_conditions": {
+    "inlet": {
+      "type": "TIMEVARYING",
+      "csv_file": "BPM120.csv",
+      "data_type": "flowRate",
+      "profile": "plug",
+      "orientation": "out"
+    },
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 123,
+        "diastolic_pressure": 60,
+        "venous_pressure": 0,
+        "flow_split": 70,
+        "flow_split_method": "murray",
+        "pwv_method": "empirical",
+        "tau": 1.5
+      }
+    },
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+
+  "simulation_control": {
+    "number_of_cycles": 5,
+    "end_time": "auto",
+    "writeInterval": 0.01
+  }
+}

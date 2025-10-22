@@ -130,7 +130,7 @@ RESOLUTION_MEDIUM: Dict[str, Any] = {
 RESOLUTION_FINE: Dict[str, Any] = {
     "mesh": {
         "mesh_resolution": {
-            "target_cell_size_mm": 0.6,
+            "target_cell_size_mm": 0.4,
             "cells_per_diameter": {
                 "inlet": 22,
                 "branch": 18,
