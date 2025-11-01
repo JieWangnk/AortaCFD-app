@@ -46,6 +46,9 @@ class ConfigBuilder:
         final_config = deep_merge(final_config, sim_config)
         final_config = deep_merge(final_config, case_specific_config)
 
+        # Check for explicit mesh specification
+        self._warn_if_no_explicit_mesh(case_specific_config, sim_profile_name)
+
         # OpenFOAM 12 specific settings
         final_config = self._apply_openfoam_12_settings(final_config)
 
@@ -108,6 +111,9 @@ class ConfigBuilder:
         final_config = deep_merge(final_config, base_config)
         final_config = deep_merge(final_config, sim_config)
         final_config = deep_merge(final_config, case_specific_config)
+
+        # Check for explicit mesh specification (pass original case_config for direct check)
+        self._warn_if_no_explicit_mesh(case_config, sim_profile_name)
 
         # OpenFOAM 12 specific settings
         final_config = self._apply_openfoam_12_settings(final_config)
@@ -248,21 +254,72 @@ class ConfigBuilder:
             "openfoam_version": "12",
             "openfoam_major_version": 12
         }
-        
+
+        # Set default run_settings if not present
+        if 'run_settings' not in config:
+            config['run_settings'] = {}
+
+        # Set default decomposition_method if not specified
+        if 'decomposition_method' not in config['run_settings']:
+            config['run_settings']['decomposition_method'] = 'scotch'  # Default: scotch (automatic load balancing)
+
         # Map physics properties for transportProperties
         if 'physics' in config:
-            # Calculate kinematic viscosity nu = mu/rho
-            if 'default_viscosity' in config['physics'] and 'default_density' in config['physics']:
+            # NEW FORMAT: physics.transport_properties.{nu, rho} (already in SI units)
+            if 'transport_properties' in config['physics']:
+                transport = config['physics']['transport_properties']
+                if 'nu' in transport:
+                    config['physics']['nu'] = transport['nu']
+                if 'rho' in transport:
+                    config['physics']['rho'] = transport['rho']
+                # Calculate mu from nu and rho if available
+                if 'nu' in transport and 'rho' in transport:
+                    config['physics']['mu'] = transport['nu'] * transport['rho']
+
+            # OLD FORMAT: Calculate kinematic viscosity nu = mu/rho
+            elif 'default_viscosity' in config['physics'] and 'default_density' in config['physics']:
                 mu = config['physics']['default_viscosity']  # Dynamic viscosity in Pa·s
                 rho = config['physics']['default_density']   # Density in kg/m³
                 nu = mu / rho  # Kinematic viscosity in m²/s
                 config['physics']['nu'] = nu
                 config['physics']['rho'] = rho
-            # Also set mu for convenience
-            if 'default_viscosity' in config['physics']:
-                config['physics']['mu'] = config['physics']['default_viscosity']
+                config['physics']['mu'] = mu
 
         return config
+
+    def _warn_if_no_explicit_mesh(self, case_config: dict, profile_name: str) -> None:
+        """
+        Warn if user config does not explicitly specify mesh resolution.
+
+        Profiles contain default mesh settings, but these are DEPRECATED.
+        Users should always specify mesh resolution explicitly in their config.
+        """
+        mesh_config = case_config.get('mesh', {})
+        mesh_resolution = mesh_config.get('mesh_resolution', {})
+
+        # Check if user has specified ANY explicit mesh resolution method
+        has_explicit_mesh = (
+            'target_cell_size_mm' in mesh_resolution or
+            'cells_per_diameter' in mesh_resolution
+        )
+
+        if not has_explicit_mesh:
+            self.logger.warning(
+                f"\n"
+                f"⚠️  DEPRECATION WARNING: No mesh resolution specified in config\n"
+                f"─────────────────────────────────────────────────────────────\n"
+                f"Profile '{profile_name}' contains default mesh settings, but these are DEPRECATED.\n"
+                f"You should ALWAYS specify mesh resolution explicitly in your config:\n\n"
+                f"  {{\n"
+                f"    \"mesh\": {{\n"
+                f"      \"mesh_resolution\": {{\n"
+                f"        \"cells_per_diameter\": 15  // Recommended: geometry-adaptive\n"
+                f"      }}\n"
+                f"    }}\n"
+                f"  }}\n\n"
+                f"Profile defaults will be removed in a future release.\n"
+                f"See docs/PROFILE_USAGE_GUIDE.md for details.\n"
+            )
 
     def _validate_physical_parameters(self, config: dict) -> None:
         """

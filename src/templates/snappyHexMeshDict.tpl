@@ -29,6 +29,16 @@ geometry
         name {{ patch_name }};
     }
     {% endfor %}
+
+    {% if bounding_box_refine_level and bounding_box_refine_level > 0 %}
+    // Bounding box for two-stage refinement (coarse blockMesh + snappy refinement)
+    geometryRefinementBox
+    {
+        type searchableBox;
+        min ({{ '%.6g' % geometry_bbox.min[0] }} {{ '%.6g' % geometry_bbox.min[1] }} {{ '%.6g' % geometry_bbox.min[2] }});
+        max ({{ '%.6g' % geometry_bbox.max[0] }} {{ '%.6g' % geometry_bbox.max[1] }} {{ '%.6g' % geometry_bbox.max[2] }});
+    }
+    {% endif %}
 };
 
 castellatedMeshControls
@@ -44,7 +54,10 @@ castellatedMeshControls
         {% for patch_name in patches %}
         {
             file "{{ patch_name }}.eMesh";
-            level {{ config.mesh.SNAPPY_SETTINGS.get('featureLevel', 2) }};
+            {# Feature level should match max surface refinement to avoid over-refinement #}
+            {% set surface_levels = config.mesh.SNAPPY_SETTINGS.get('surfaceRefinementLevels', [2, 3]) %}
+            {% set auto_feature_level = surface_levels[1] if surface_levels|length > 1 else surface_levels[0] %}
+            level {{ config.mesh.SNAPPY_SETTINGS.get('featureLevel', auto_feature_level) }};
         }
         {% endfor %}
     );
@@ -61,6 +74,16 @@ castellatedMeshControls
     
     refinementRegions
     {
+    {% if bounding_box_refine_level and bounding_box_refine_level > 0 %}
+        // Two-stage mesh refinement: bounding box refinement for fine meshes
+        // This prevents blockMesh from becoming too large (> 5M cells)
+        // Strategy: coarse blockMesh (2-4mm) + snappyHexMesh refinement inside geometry
+        geometryRefinementBox
+        {
+            mode            inside;
+            levels          (({{ bounding_box_refine_level }} {{ bounding_box_refine_level }}));
+        }
+    {% endif %}
     {% if config.mesh.SNAPPY_SETTINGS.get('span_refinement_enabled', False) %}
         // Span-based refinement for aortic coarctation and narrow regions
         // Guarantees minimum cells across vessel diameter
@@ -80,10 +103,10 @@ castellatedMeshControls
 
 snapControls
 {
-    nSmoothPatch        {{ config.mesh.SNAPPY_SETTINGS.get('nSmoothPatch', 3) }};
-    tolerance           {{ config.mesh.SNAPPY_SETTINGS.get('snapTolerance', 2.0) }};
-    nSolveIter          {{ config.mesh.SNAPPY_SETTINGS.get('nSolveIter', 30) }};
-    nRelaxIter          {{ config.mesh.SNAPPY_SETTINGS.get('nRelaxIter', 5) }};
+    nSmoothPatch        {{ config.mesh.SNAPPY_SETTINGS.get('nSmoothPatch', 2) }};
+    tolerance           {{ config.mesh.SNAPPY_SETTINGS.get('snapTolerance', 1.5) }};
+    nSolveIter          {{ config.mesh.SNAPPY_SETTINGS.get('nSolveIter', 10) }};
+    nRelaxIter          {{ config.mesh.SNAPPY_SETTINGS.get('nRelaxIter', 10) }};
     nFeatureSnapIter    {{ config.mesh.SNAPPY_SETTINGS.get('nFeatureSnapIter', 10) }};
     implicitFeatureSnap {{ config.mesh.SNAPPY_SETTINGS.get('implicitFeatureSnap', 'false') | string | lower }};
     explicitFeatureSnap {{ config.mesh.SNAPPY_SETTINGS.get('explicitFeatureSnap', 'true') | string | lower }};
@@ -101,7 +124,13 @@ addLayersControls
         }
     }
     expansionRatio      {{ config.mesh.SNAPPY_SETTINGS.get('expansionRatio', 1.2) }};
-    finalLayerThickness {{ config.mesh.SNAPPY_SETTINGS.get('finalLayerThickness', 0.3) }};
+    {% if config.mesh.SNAPPY_SETTINGS.get('firstLayerThickness') is not none %}
+    firstLayerThickness {{ config.mesh.SNAPPY_SETTINGS.get('firstLayerThickness') }};
+    {% elif config.mesh.SNAPPY_SETTINGS.get('finalLayerThickness') is not none %}
+    finalLayerThickness {{ config.mesh.SNAPPY_SETTINGS.get('finalLayerThickness') }};
+    {% else %}
+    finalLayerThickness 0.3;
+    {% endif %}
     minThickness        {{ config.mesh.SNAPPY_SETTINGS.get('minThickness', 0.1) }};
     nGrow               {{ config.mesh.SNAPPY_SETTINGS.get('nGrow', 0) }};
     featureAngle        {{ config.mesh.SNAPPY_SETTINGS.get('featureAngle', 60) }};
@@ -123,17 +152,26 @@ meshQualityControls
     maxBoundarySkewness {{ config.mesh.SNAPPY_SETTINGS.get('maxBoundarySkewness', 20) }};
     maxInternalSkewness {{ config.mesh.SNAPPY_SETTINGS.get('maxInternalSkewness', 4) }};
     maxConcave          {{ config.mesh.SNAPPY_SETTINGS.get('maxConcave', 80) }};
-    minVol              {{ config.mesh.SNAPPY_SETTINGS.get('minVol', 1e-13) }};
-    minTetQuality       {{ config.mesh.SNAPPY_SETTINGS.get('minTetQuality', 1e-30) }};
+    minVol              {{ config.mesh.SNAPPY_SETTINGS.get('minVol', 1e-18) }};
+    minTetQuality       {{ config.mesh.SNAPPY_SETTINGS.get('minTetQuality', 1e-20) }};
     minArea             {{ config.mesh.SNAPPY_SETTINGS.get('minArea', -1) }};
-    minTwist            {{ config.mesh.SNAPPY_SETTINGS.get('minTwist', 0.02) }};
-    minTriangleTwist    {{ config.mesh.SNAPPY_SETTINGS.get('minTriangleTwist', 0.02) }};
+    minTwist            {{ config.mesh.SNAPPY_SETTINGS.get('minTwist', 0.01) }};
     minDeterminant      {{ config.mesh.SNAPPY_SETTINGS.get('minDeterminant', 0.001) }};
-    minFaceWeight       {{ config.mesh.SNAPPY_SETTINGS.get('minFaceWeight', 0.05) }};
+    minFaceWeight       {{ config.mesh.SNAPPY_SETTINGS.get('minFaceWeight', 0.02) }};
     minVolRatio         {{ config.mesh.SNAPPY_SETTINGS.get('minVolRatio', 0.01) }};
-    maxAspectRatio      {{ config.mesh.SNAPPY_SETTINGS.get('maxAspectRatio', 10) }};
+    minTriangleTwist    {{ config.mesh.SNAPPY_SETTINGS.get('minTriangleTwist', -1) }};
+
+    // Relaxation for snap phase
     nSmoothScale        {{ config.mesh.SNAPPY_SETTINGS.get('nSmoothScale', 4) }};
     errorReduction      {{ config.mesh.SNAPPY_SETTINGS.get('errorReduction', 0.75) }};
+
+    // More gradual transition between refinement levels
+    {% if config.mesh.SNAPPY_SETTINGS.get('relaxed_maxNonOrtho') %}
+    relaxed
+    {
+        maxNonOrtho {{ config.mesh.SNAPPY_SETTINGS.get('relaxed_maxNonOrtho', 75) }};
+    }
+    {% endif %}
 };
 
 debug 0;

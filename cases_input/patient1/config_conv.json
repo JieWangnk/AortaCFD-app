@@ -1,0 +1,85 @@
+{
+  "_comment": "Configuration for automated mesh convergence study",
+  "_usage": "python src/workflow/convergence_runner.py examples/config_convergence_study.json",
+  "_doc": "This config will be used to generate THREE meshes automatically (coarse/medium/fine)",
+
+  "case_info": {
+    "patient_id": "convergence_patient1",
+    "description": "Mesh convergence study with steady inlet for grid-independent solution validation",
+    "heart_rate": 75
+  },
+
+  "physics": {
+    "model": "laminar",
+    "_comment": "Use laminar for faster convergence. RANS/LES supported but slower.",
+    "blood_density": 1060,
+    "blood_viscosity": 0.00377
+  },
+
+  "numerics": {
+    "profile": "accurate",
+    "_comment": "REQUIRED: Use 'accurate' or 'precise' for convergence studies (consistent 2nd-order schemes)"
+  },
+
+  "mesh": {
+    "_comment": "NOTE: mesh.cells_per_diameter will be OVERRIDDEN by convergence study",
+    "_auto_generated": "Three meshes will be created: coarse (10), medium (14), fine (20) cpd",
+
+    "boundary_layers": {
+      "enabled": true,
+      "n_surface_layers": 5,
+      "expansion_ratio": 1.2,
+      "_comment": "Keep boundary layer settings CONSISTENT across all meshes"
+    },
+
+    "surface_refinement": {
+      "levels": [2, 3],
+      "_comment": "Consistent refinement strategy across all meshes"
+    }
+  },
+
+  "boundary_conditions": {
+    "_comment": "These BCs will be converted to STEADY STATE for pure mesh convergence",
+    "_auto_conversion": "inlet → CONSTANT flow | outlets → FIXEDPRESSURE",
+
+    "inlet": {
+      "type": "CONSTANT",
+      "cardiac_output": 5.0,
+      "_comment": "Steady inlet: 5 L/min cardiac output. Time-varying inlet will be auto-converted to steady."
+    },
+
+    "outlets": {
+      "type": "FIXEDPRESSURE",
+      "pressure": 80,
+      "_comment": "Fixed pressure outlets (mmHg) for mesh convergence. Windkessel not recommended for pure convergence."
+    }
+  },
+
+  "computational": {
+    "parallel": true,
+    "max_processors": 8,
+    "_comment": "Parallel meshing and solving for faster convergence study"
+  },
+
+  "simulation_control": {
+    "number_of_cycles": 10,
+    "_comment": "Run 10 cardiac cycles to ensure quasi-steady state convergence",
+    "writeInterval": 0.01
+  },
+
+  "convergence_study_settings": {
+    "_description": "CLI overrides for convergence runner",
+    "refinement_ratio": 1.414,
+    "_comment_ratio": "√2 refinement (standard). Use 2.0 for coarser spacing.",
+    "base_cells_per_diameter": 10,
+    "_comment_base": "Coarsest mesh resolution. Medium=14, Fine=20 (with r=√2)",
+    "use_mapfields": true,
+    "_comment_mapfields": "Map solution from coarse→medium→fine for faster convergence",
+    "quantities_of_interest": [
+      "pressure_drop",
+      "avg_velocity",
+      "avg_wss",
+      "peak_wss"
+    ]
+  }
+}

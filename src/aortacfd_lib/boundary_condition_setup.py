@@ -176,7 +176,11 @@ class BoundaryConditionSetup:
 
         patch_processor = PatchProcessing(tri_surface_dir, inlet_patch_name)
 
-        # Determine velocity magnitude from either velocity or cardiac_output
+        # Determine velocity magnitude from either velocity, flowrate, or cardiac_output
+        # Note: flowrate is an alias for cardiac_output
+        if 'flowrate' in self.inlet_settings and 'cardiac_output' not in self.inlet_settings:
+            self.inlet_settings['cardiac_output'] = self.inlet_settings['flowrate']
+
         if 'cardiac_output' in self.inlet_settings:
             # Calculate velocity from cardiac output (L/min) and inlet area
             cardiac_output_Lmin = self.inlet_settings['cardiac_output']
@@ -200,7 +204,7 @@ class BoundaryConditionSetup:
             velocity_magnitude = self.inlet_settings['velocity']
             self.log.info(f"Using specified velocity: {velocity_magnitude:.4f} m/s")
         else:
-            self.log.error("Neither 'velocity' nor 'cardiac_output' specified for CONSTANT/PARABOLIC inlet!")
+            self.log.error("Neither 'velocity', 'flowrate', nor 'cardiac_output' specified for CONSTANT/PARABOLIC inlet!")
             return "(0 0 0)"
 
         # For parabolic profile at the boundary, we use centerline velocity

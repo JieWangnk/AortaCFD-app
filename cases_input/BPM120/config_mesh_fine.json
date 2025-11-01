@@ -1,0 +1,100 @@
+{
+  "case_info": {
+    "patient_id": "BPM120_mesh_coarse"
+  },
+
+  "physics": {
+    "model": "laminar",
+    "transport_properties": {
+      "rho": 1060,
+      "nu": 3.7736e-6
+      }
+  },
+
+  "numerics": {
+    "profile": "robust",
+    "max_co": 1,
+    
+    "correctors": {
+      "nOuterCorrectors": 10,
+      "nCorrectors": 3,
+      "nNonOrthogonalCorrectors": 2
+    }
+  },
+
+  "mesh": {
+    "cells_per_diameter": 16,
+
+    "boundary_layers": {
+      "enabled": true,
+
+      "num_layers": 3,             
+      "expansion_ratio": 1.5,       
+      "firstLayerThickness": 0.10   
+    
+    },
+
+    "surface_refinement": {
+      "levels": [1, 1]
+    },
+
+    "SNAPPY_SETTINGS": {
+      "parallel": true,
+      "nProcessors": 8
+    }
+  },
+
+  "geometry": {
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": ["outlet1", "outlet2", "outlet3", "outlet4"],
+    "wall_keywords_ordered": "wall_aorta",
+    "scale_factor": 0.001
+  },
+
+  "boundary_conditions": {
+    "inlet": {
+      "type": "CONSTANT",
+      "flowrate": 4.7,
+      "profile": "plug",
+      "_comment": "4.75 L/min = 7.917e-05 m³/s for pediatric patient BPM120"
+
+    },
+
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80,
+        "venous_pressure": 0,
+
+        "methodology": "murray_law_automatic",
+        "tau": 1.0
+      }
+    },
+
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+
+  "simulation_control": {
+    "end_time": 5,
+    "number_of_cycles": 1,
+    "writeInterval": 0.2,
+
+    "controlDict": {
+      "functions": [
+        "wallShearStress",
+        "yPlus"
+      ]
+    }
+  },
+
+  "run_settings": {
+    "solution_type": "parallel",
+    "subdomains": 4,
+    "decomposition_method": "scotch"
+  }
+}
+
+

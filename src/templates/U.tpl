@@ -45,15 +45,27 @@ boundaryField
     }
 
     // The outlets are created dynamically based on the JSON settings
+    {% set outlet_type = outlet_settings.get('type', '3EWINDKESSEL') %}
     {% for outlet in outlet_patches %}
     {{ outlet }}
     {
-        {% if outlet_settings.type == "3EWINDKESSEL" %}
+        {% if outlet_type == "3EWINDKESSEL" %}
         // Stabilized Windkessel velocity BC (prevents backflow divergence)
         type                stabilizedWindkesselVelocity;
         beta                {{ outlet_settings.get('windkessel_settings', {}).get('beta', 1.0) }};
         enableStabilization {{ 'true' if outlet_settings.get('windkessel_settings', {}).get('enable_stabilization', True) else 'false' }};
+
+        {% elif outlet_type == "fixedPressure" %}
+        // Fixed pressure: velocity adjusts naturally
+        type            pressureInletOutletVelocity;
+        value           uniform (0 0 0);
+
+        {% elif outlet_type == "resistance" %}
+        // Resistance: velocity determined by flow rate
+        type            zeroGradient;
+
         {% else %}
+        // Default: zero gradient velocity
         type            zeroGradient;
         {% endif %}
     }

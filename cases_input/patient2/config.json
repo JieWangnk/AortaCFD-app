@@ -5,27 +5,21 @@
     "imaging_modality": "CT",
     "case_type": "multi_branch_aorta"
   },
-  "simulation_settings": {
-    "analysis_type": "standard",
-    "mesh_quality": "auto",
-    "solver_type": "laminar",
-    "time_discretization": "adaptive",
-    "max_iterations": 1000,
-    "convergence_criteria": {
-      "velocity": 1e-6,
-      "pressure": 1e-7
-    }
-  },
   "physics": {
     "blood_density": 1060,
     "blood_viscosity": 0.004,
     "cardiac_cycle_period": 0.5,
-    "heart_rate_bpm": 120
+    "heart_rate_bpm": 120,
+    "model": "laminar"
   },
   "geometry": {
     "refinement_level": "coarse",
     "rotation": true,
-    "target_normal": [0, 0, 1],
+    "target_normal": [
+      0,
+      0,
+      1
+    ],
     "scale_factor": 0.001
   },
   "mesh": {
@@ -34,7 +28,10 @@
     },
     "SNAPPY_SETTINGS": {
       "parallel": false,
-      "surfaceRefinementLevels": [1, 2],
+      "surfaceRefinementLevels": [
+        1,
+        2
+      ],
       "featureLevel": 2
     }
   },
@@ -67,14 +64,18 @@
   },
   "numerical_settings": {
     "time_stepping": "adaptive",
-    "initial_deltaT": 1e-3,
+    "initial_deltaT": 0.001,
     "maxCo": 1.0,
-    "maxDeltaT": 1e-2,
+    "maxDeltaT": 0.01,
     "solver_tolerance": "balanced"
   },
   "output_settings": {
     "save_frequency": 10,
-    "variables": ["velocity", "pressure", "wall_shear_stress"],
+    "variables": [
+      "velocity",
+      "pressure",
+      "wall_shear_stress"
+    ],
     "post_processing": {
       "generate_report": true,
       "create_animations": false,
@@ -90,5 +91,8 @@
       "target_cell_size": "auto",
       "boundary_layers": true
     }
+  },
+  "numerics": {
+    "profile": "accurate"
   }
 }

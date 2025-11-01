@@ -20,7 +20,9 @@ ddtSchemes
     default         steadyState;
     {% elif schemes and schemes.ddtSchemes %}
     {%- for key, value in schemes.ddtSchemes.items() %}
+    {%- if not key.startswith('_') %}  {# Skip metadata/comments #}
     {{ key }}       {{ value }};
+    {%- endif %}
     {%- endfor %}
     {% elif physics.simulation_performance == 'low' %}
     default         Euler;
@@ -33,7 +35,9 @@ gradSchemes
 {
     {% if schemes and schemes.gradSchemes %}
     {%- for key, value in schemes.gradSchemes.items() %}
+    {%- if not key.startswith('_') %}  {# Skip metadata/comments #}
     {{ key }}       {{ value }};
+    {%- endif %}
     {%- endfor %}
     {% else %}
     // Robust gradient schemes for OpenFOAM 12
@@ -47,7 +51,9 @@ divSchemes
 {
     {% if schemes and schemes.divSchemes %}
     {%- for key, value in schemes.divSchemes.items() %}
+    {%- if not key.startswith('_') %}  {# Skip metadata/comments #}
     {{ key }}       {{ value }};
+    {%- endif %}
     {%- endfor %}
     {% else %}
     default         none;
@@ -69,7 +75,9 @@ laplacianSchemes
 {
     {% if schemes and schemes.laplacianSchemes %}
     {%- for key, value in schemes.laplacianSchemes.items() %}
+    {%- if not key.startswith('_') %}  {# Skip metadata/comments #}
     {{ key }}       {{ value }};
+    {%- endif %}
     {%- endfor %}
     {% elif physics.simulation_type == 'LES' %}
     default         Gauss linear corrected;
@@ -82,7 +90,9 @@ interpolationSchemes
 {
     {% if schemes and schemes.interpolationSchemes %}
     {%- for key, value in schemes.interpolationSchemes.items() %}
+    {%- if not key.startswith('_') %}  {# Skip metadata/comments #}
     {{ key }}       {{ value }};
+    {%- endif %}
     {%- endfor %}
     {% else %}
     default         linear;
@@ -93,7 +103,9 @@ snGradSchemes
 {
     {% if schemes and schemes.snGradSchemes %}
     {%- for key, value in schemes.snGradSchemes.items() %}
+    {%- if not key.startswith('_') %}  {# Skip metadata/comments #}
     {{ key }}       {{ value }};
+    {%- endif %}
     {%- endfor %}
     {% else %}
     default         corrected;

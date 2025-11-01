@@ -1,0 +1,509 @@
+{
+  "_comment": "COMPREHENSIVE AORTACFD CONFIGURATION - ALL PARAMETERS",
+  "_version": "2.0",
+  "_date": "2025-10-31",
+  "_description": "Complete configuration file demonstrating all available parameters for the 3-profile system (robust/standard/accurate)",
+
+  "case_info": {
+    "patient_id": "EXAMPLE_FULL_CONFIG",
+    "description": "Complete configuration example with all parameters",
+    "date": "2025-10-31",
+    "researcher": "Your Name",
+    "notes": "Comprehensive example showing all available configuration options"
+  },
+
+  "physics": {
+    "_comment": "Physics model and fluid properties",
+    "model": "RAS",
+    "_model_options": ["laminar", "RAS", "LES"],
+    "_model_notes": "laminar: No turbulence model; RAS: RANS (k-omega SST); LES: Large Eddy Simulation (WALE)",
+
+    "transport_properties": {
+      "rho": 1060,
+      "_rho_comment": "Blood density in kg/m³ (typical: 1050-1060)",
+
+      "nu": 3.7736e-6,
+      "_nu_comment": "Kinematic viscosity in m²/s = mu/rho (typical blood: 3.77e-6 m²/s)"
+    },
+
+    "turbulence_intensity": 0.05,
+    "_turbulence_intensity_comment": "Turbulence intensity for RANS/LES (typical: 0.05 = 5%)",
+
+    "blood_viscosity": 0.004,
+    "_blood_viscosity_comment": "Dynamic viscosity in Pa·s (optional, for Windkessel/Y+ calculations)",
+
+    "blood_density": 1060,
+    "_blood_density_comment": "Redundant with rho, kept for backward compatibility"
+  },
+
+  "numerics": {
+    "_comment": "Numerical schemes and solver settings using 3-profile system",
+    "profile": "standard",
+    "_profile_options": ["robust", "standard", "accurate"],
+    "_profile_descriptions": {
+      "robust": "Maximum stability (1st order, Euler, upwind) - for difficult meshes",
+      "standard": "Balanced accuracy/stability (2nd order bounded) - recommended",
+      "accurate": "Maximum accuracy (LUST, CrankNicolson) - for well-resolved meshes"
+    },
+
+    "max_co": 1.0,
+    "_max_co_comment": "Maximum Courant number (robust: 0.5, standard: 1.0, accurate: 0.5)",
+
+    "adjustable_timestep": true,
+    "_adjustable_timestep_comment": "Enable adaptive time stepping based on Courant number",
+
+    "correctors": {
+      "_comment": "PIMPLE algorithm corrector settings",
+      "nOuterCorrectors": 3,
+      "_nOuterCorrectors_comment": "Outer correctors (robust: 3, standard: 2, accurate: 3)",
+
+      "nCorrectors": 3,
+      "_nCorrectors_comment": "Inner pressure correctors (robust: 3, standard: 2, accurate: 3)",
+
+      "nNonOrthogonalCorrectors": 2,
+      "_nNonOrthogonalCorrectors_comment": "Non-orthogonal correctors (typical: 2)"
+    },
+
+    "relaxation_factors": {
+      "_comment": "Under-relaxation factors (override profile defaults if needed)",
+      "p": 0.3,
+      "_p_comment": "Pressure relaxation (robust: 0.2, standard: 0.3, accurate: 0.7)",
+
+      "U": 0.7,
+      "_U_comment": "Velocity relaxation (robust: 0.5, standard: 0.7, accurate: 0.9)",
+
+      "k": 0.7,
+      "_k_comment": "Turbulent kinetic energy relaxation (for RANS)",
+
+      "omega": 0.7,
+      "_omega_comment": "Specific dissipation rate relaxation (for RANS)"
+    },
+
+    "residual_control": {
+      "_comment": "Convergence tolerances (override profile defaults if needed)",
+      "p": 1e-6,
+      "_p_comment": "Pressure residual (robust: 1e-5, standard: 1e-6, accurate: 1e-8)",
+
+      "U": 1e-6,
+      "_U_comment": "Velocity residual",
+
+      "k": 1e-6,
+      "_k_comment": "TKE residual (for RANS)",
+
+      "omega": 1e-6,
+      "_omega_comment": "Omega residual (for RANS)"
+    }
+  },
+
+  "mesh": {
+    "_comment": "Mesh generation parameters",
+
+    "resolution_method": "cells_per_diameter",
+    "_resolution_method_options": ["cells_per_diameter", "target_cell_size"],
+    "_resolution_method_comment": "Method for specifying mesh resolution",
+
+    "cells_per_diameter": 15,
+    "_cells_per_diameter_comment": "Number of cells across vessel diameter (coarse: 8-10, medium: 12-15, fine: 18-20)",
+    "_cells_per_diameter_note": "Used when resolution_method='cells_per_diameter'",
+
+    "target_cell_size_mm": 1.5,
+    "_target_cell_size_comment": "Target cell size in mm (alternative to cells_per_diameter)",
+    "_target_cell_size_note": "Used when resolution_method='target_cell_size'",
+
+    "reference_diameter_mm": 25.0,
+    "_reference_diameter_comment": "Reference vessel diameter in mm (for cells_per_diameter calculation)",
+
+    "boundary_layers": {
+      "_comment": "Boundary layer (inflation layer) settings",
+      "enabled": true,
+
+      "method": "auto",
+      "_method_options": ["auto", "manual"],
+      "_method_comment": "auto: Calculate from Y+; manual: Specify thickness directly",
+
+      "target_yplus": 1.0,
+      "_target_yplus_comment": "Target Y+ value (RANS: 1-5, wall functions: 30-100)",
+      "_target_yplus_note": "Used when method='auto'",
+
+      "num_layers": 5,
+      "_num_layers_comment": "Number of boundary layers (robust: 3, typical: 5, fine: 8-10)",
+
+      "expansion_ratio": 1.2,
+      "_expansion_ratio_comment": "Growth rate between layers (typical: 1.15-1.25)",
+
+      "first_layer_thickness": 0.0001,
+      "_first_layer_thickness_comment": "First layer thickness in meters (used when method='manual')",
+      "_first_layer_thickness_note": "Only used if method='manual'",
+
+      "final_layer_thickness": 0.2,
+      "_final_layer_thickness_comment": "Relative final layer thickness (fraction of base cell size)",
+
+      "min_thickness": 0.05,
+      "_min_thickness_comment": "Minimum layer thickness (allows graceful collapse)",
+
+      "estimation_params": {
+        "_comment": "Parameters for Y+ estimation (when method='auto')",
+        "characteristic_velocity": 0.5,
+        "_characteristic_velocity_comment": "Mean velocity for Y+ estimation (m/s)",
+
+        "characteristic_length": 0.025,
+        "_characteristic_length_comment": "Hydraulic diameter for Y+ estimation (m)",
+
+        "flow_regime": "auto",
+        "_flow_regime_options": ["auto", "laminar", "turbulent"],
+        "_flow_regime_comment": "Flow regime for Y+ estimation"
+      }
+    },
+
+    "surface_refinement": {
+      "_comment": "Surface refinement levels for geometry features",
+      "levels": [1, 2],
+      "_levels_comment": "Min and max refinement levels [min, max] (conservative: [1,2], fine: [2,3])",
+      "_levels_note": "Higher levels = finer mesh near surfaces"
+    },
+
+    "volume_refinement": {
+      "_comment": "Optional volume refinement regions",
+      "enabled": false,
+      "_enabled_comment": "Enable volume refinement in specific regions",
+
+      "regions": [
+        {
+          "name": "arch_region",
+          "type": "box",
+          "min": [-0.02, -0.02, 0.00],
+          "max": [0.02, 0.02, 0.05],
+          "level": 2,
+          "_comment": "Refine aortic arch region"
+        }
+      ]
+    },
+
+    "feature_refinement": {
+      "_comment": "Feature edge refinement settings",
+      "resolve_feature_angle": 60,
+      "_resolve_feature_angle_comment": "Angle threshold for feature edges (conservative: 60°, aggressive: 30°)",
+
+      "feature_levels": [2, 2],
+      "_feature_levels_comment": "Refinement levels for feature edges [min, max]"
+    },
+
+    "quality_controls": {
+      "_comment": "Mesh quality thresholds (override base.py defaults if needed)",
+      "maxNonOrtho": 65,
+      "_maxNonOrtho_comment": "Maximum non-orthogonality angle (degrees)",
+
+      "maxBoundarySkewness": 8,
+      "_maxBoundarySkewness_comment": "Maximum boundary skewness (CRITICAL for stability)",
+
+      "maxInternalSkewness": 3,
+      "_maxInternalSkewness_comment": "Maximum internal skewness",
+
+      "minVol": 1e-18,
+      "_minVol_comment": "Minimum cell volume (m³)"
+    },
+
+    "SNAPPY_SETTINGS": {
+      "_comment": "Advanced snappyHexMesh settings (most users don't need to modify)",
+      "parallel": true,
+      "nProcessors": 8,
+      "_parallel_comment": "Enable parallel meshing (recommended for large cases)"
+    }
+  },
+
+  "geometry": {
+    "_comment": "Geometry patch definitions (auto-discovered from STL files)",
+    "inlet_keywords_ordered": "inlet",
+    "_inlet_comment": "Inlet patch name (from inlet.stl)",
+
+    "outlet_keywords_ordered": ["outlet1", "outlet2", "outlet3", "outlet4"],
+    "_outlet_comment": "Outlet patch names (from outlet*.stl files)",
+
+    "wall_keywords_ordered": "wall_aorta",
+    "_wall_comment": "Wall patch name (from wall*.stl)",
+
+    "scale_factor": 0.001,
+    "_scale_factor_comment": "Geometry scale factor (0.001 = mm to m)"
+  },
+
+  "boundary_conditions": {
+    "_comment": "Boundary condition specifications",
+
+    "inlet": {
+      "type": "TIMEVARYING",
+      "_type_options": ["CONSTANT", "PARABOLIC", "TIMEVARYING", "WOMERSLEY"],
+      "_type_descriptions": {
+        "CONSTANT": "Uniform plug flow (specify velocity or cardiac_output)",
+        "PARABOLIC": "Parabolic velocity profile",
+        "TIMEVARYING": "Time-varying flow from CSV file",
+        "WOMERSLEY": "Womersley pulsatile profile"
+      },
+
+      "_CONSTANT_parameters": {
+        "velocity": 0.5,
+        "_velocity_comment": "Inlet velocity in m/s (for CONSTANT/PARABOLIC)",
+
+        "cardiac_output": 5.0,
+        "_cardiac_output_comment": "Cardiac output in L/min (alternative to velocity)",
+        "_cardiac_output_note": "If specified, velocity is calculated from CO and inlet area",
+
+        "flowrate": 5.0,
+        "_flowrate_comment": "Alias for cardiac_output (L/min)"
+      },
+
+      "_TIMEVARYING_parameters": {
+        "csv_file": "patient_flow.csv",
+        "_csv_file_comment": "CSV file with flow data (in cases_input/<case>/)",
+
+        "data_type": "velocity",
+        "_data_type_options": ["velocity", "flowrate"],
+        "_data_type_comment": "Type of data in CSV (velocity: m/s, flowrate: mL/s)"
+      },
+
+      "_current_config": {
+        "csv_file": "BPM120.csv",
+        "data_type": "flowrate",
+        "profile": "plug",
+        "_profile_comment": "Flow profile shape (plug, parabolic, womersley)"
+      }
+    },
+
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "_type_options": ["ZEROGRADIENT", "FIXEDPRESSURE", "RESISTANCE", "3EWINDKESSEL"],
+      "_type_descriptions": {
+        "ZEROGRADIENT": "Zero gradient (outflow) - simplest",
+        "FIXEDPRESSURE": "Fixed pressure value",
+        "RESISTANCE": "Resistance boundary condition",
+        "3EWINDKESSEL": "3-element Windkessel model (R1, R2, C)"
+      },
+
+      "_FIXEDPRESSURE_parameters": {
+        "pressure_pa": 10000,
+        "_pressure_pa_comment": "Fixed outlet pressure in Pascals"
+      },
+
+      "_RESISTANCE_parameters": {
+        "resistance": 1e8,
+        "_resistance_comment": "Outlet resistance in Pa·s/m³"
+      },
+
+      "windkessel_settings": {
+        "_comment": "3-element Windkessel model parameters",
+
+        "systolic_pressure": 120,
+        "_systolic_pressure_comment": "Systolic blood pressure in mmHg (typical adult: 110-130)",
+
+        "diastolic_pressure": 80,
+        "_diastolic_pressure_comment": "Diastolic blood pressure in mmHg (typical adult: 70-85)",
+
+        "venous_pressure": 5,
+        "_venous_pressure_comment": "Central venous pressure in mmHg (typical: 0-5)",
+
+        "tau": 1.8,
+        "_tau_comment": "Diastolic decay time constant in seconds (typical: 1.5-2.5)",
+
+        "pwv_method": "matlab",
+        "_pwv_method_options": ["matlab", "empirical", "fixed"],
+        "_pwv_method_comment": "Pulse wave velocity calculation method",
+
+        "pwv": null,
+        "_pwv_comment": "Fixed PWV value in m/s (if pwv_method='fixed', typical aorta: 4-10)",
+
+        "pwv_a": 13.3,
+        "_pwv_a_comment": "PWV formula parameter 'a' (MATLAB formula)",
+
+        "pwv_b": 0.3,
+        "_pwv_b_comment": "PWV formula parameter 'b' (MATLAB formula: c = a/(2√(A/π))^b)",
+
+        "compliance_distribution": "uniform",
+        "_compliance_distribution_options": ["uniform", "proportional"],
+        "_compliance_distribution_comment": "How to distribute compliance across outlets",
+
+        "flow_split": null,
+        "_flow_split_comment": "Flow distribution (null = auto Murray's law)",
+        "_flow_split_manual": {
+          "outlet1": 0.15,
+          "outlet2": 0.15,
+          "outlet3": 0.10,
+          "outlet4": 0.60,
+          "_comment": "Manual flow split ratios (must sum to 1.0)"
+        },
+        "_flow_split_percentage": 40,
+        "_flow_split_percentage_comment": "Or specify percentage for branches (main outlet gets remainder)",
+
+        "methodology": "murray_law_automatic",
+        "_methodology_comment": "Windkessel calculation methodology (informational)"
+      }
+    },
+
+    "walls": {
+      "type": "no_slip",
+      "_type_options": ["no_slip", "slip", "moving_wall"],
+      "_type_comment": "Wall boundary condition type",
+
+      "_moving_wall_parameters": {
+        "velocity": [0, 0, 0],
+        "_velocity_comment": "Wall velocity vector for moving walls"
+      }
+    }
+  },
+
+  "simulation_control": {
+    "_comment": "Simulation time control and output settings",
+
+    "end_time": 5.0,
+    "_end_time_comment": "Simulation end time in seconds (or cardiac cycles)",
+
+    "cardiac_cycle_period": 1.0,
+    "_cardiac_cycle_period_comment": "Duration of one cardiac cycle in seconds (for pulsatile flow)",
+
+    "number_of_cycles": 5,
+    "_number_of_cycles_comment": "Number of cardiac cycles to simulate",
+
+    "delta_t": 0.001,
+    "_delta_t_comment": "Initial time step in seconds (adaptive if adjustable_timestep=true)",
+
+    "writeInterval": 0.1,
+    "_writeInterval_comment": "Write interval in seconds (how often to save results)",
+
+    "write_format": "binary",
+    "_write_format_options": ["ascii", "binary"],
+    "_write_format_comment": "Output file format (binary is faster and smaller)",
+
+    "purge_write": 2,
+    "_purge_write_comment": "Keep only last N time directories (0 = keep all)",
+
+    "functions": {
+      "_comment": "Post-processing functions to compute during simulation",
+      "enabled": true,
+
+      "wallShearStress": {
+        "enabled": true,
+        "type": "wallShearStress",
+        "patches": ["wall_aorta"],
+        "writeControl": "writeTime",
+        "_comment": "Compute wall shear stress on specified patches"
+      },
+
+      "forces": {
+        "enabled": false,
+        "type": "forces",
+        "patches": ["wall_aorta"],
+        "CofR": [0, 0, 0],
+        "_comment": "Compute forces and moments"
+      },
+
+      "probes": {
+        "enabled": false,
+        "type": "probes",
+        "probeLocations": [
+          [0.01, 0.01, 0.03],
+          [0.02, 0.00, 0.05]
+        ],
+        "fields": ["p", "U"],
+        "_comment": "Sample field values at specific locations"
+      },
+
+      "fieldAverage": {
+        "enabled": false,
+        "type": "fieldAverage",
+        "fields": ["U", "p"],
+        "startTime": 2.0,
+        "_comment": "Time-averaged fields (useful for pulsatile flow)"
+      }
+    }
+  },
+
+  "run_settings": {
+    "_comment": "OpenFOAM execution settings",
+
+    "solution_type": "parallel",
+    "_solution_type_options": ["serial", "parallel"],
+    "_solution_type_comment": "Run in serial or parallel mode",
+
+    "subdomains": 8,
+    "_subdomains_comment": "Number of parallel subdomains (cores to use)",
+
+    "decomposition_method": "scotch",
+    "_decomposition_method_options": ["simple", "hierarchical", "scotch", "metis"],
+    "_decomposition_method_comment": "Domain decomposition method (scotch is usually best)",
+
+    "decomposition_coeffs": {
+      "n": [2, 2, 2],
+      "_n_comment": "For 'simple' method: number of divisions in x,y,z"
+    }
+  },
+
+  "post_processing": {
+    "_comment": "Post-simulation analysis and visualization",
+
+    "compute_hemodynamics": true,
+    "_compute_hemodynamics_comment": "Calculate hemodynamic indices (WSS, OSI, RRT)",
+
+    "extract_surfaces": {
+      "enabled": true,
+      "patches": ["wall_aorta"],
+      "time_points": "all",
+      "_time_points_options": ["all", "last", [1.0, 2.0, 3.0]],
+      "_comment": "Extract surface data for visualization"
+    },
+
+    "compute_flow_rate": {
+      "enabled": true,
+      "patches": ["inlet", "outlet1", "outlet2", "outlet3", "outlet4"],
+      "_comment": "Compute flow rate through patches"
+    },
+
+    "pressure_drop": {
+      "enabled": true,
+      "inlet_patch": "inlet",
+      "outlet_patches": ["outlet1", "outlet2", "outlet3", "outlet4"],
+      "_comment": "Calculate pressure drop from inlet to outlets"
+    }
+  },
+
+  "advanced": {
+    "_comment": "Advanced options (most users don't need to modify)",
+
+    "custom_templates": {
+      "enabled": false,
+      "U_template": "custom/U.tpl",
+      "p_template": "custom/p.tpl",
+      "_comment": "Use custom Jinja2 templates for boundary conditions"
+    },
+
+    "manual_mesh_refinement": {
+      "enabled": false,
+      "topoSet_dict": "system/topoSetDict.custom",
+      "_comment": "Use custom topoSet dictionary for manual refinement"
+    },
+
+    "solver_overrides": {
+      "_comment": "Override solver algorithms (expert users only)",
+      "momentum_predictor": true,
+      "consistent": false,
+      "turbOnFinalIterOnly": true
+    }
+  },
+
+  "_usage_notes": {
+    "1_required_files": "STL geometry files in cases_input/<case_name>/",
+    "2_required_names": "inlet.stl, outlet*.stl, wall*.stl",
+    "3_profile_selection": "Use 'robust' for difficult meshes, 'standard' for production, 'accurate' for validation",
+    "4_mesh_resolution": "Start with cells_per_diameter=12-15, adjust based on mesh quality",
+    "5_boundary_layers": "Use target_yplus=1-5 for RANS, 30-100 for wall functions",
+    "6_windkessel": "Leave flow_split=null for automatic Murray's law distribution",
+    "7_simulation_time": "Run at least 3-5 cardiac cycles for pulsatile flow",
+    "8_parallel": "Use 4-8 cores for medium cases, more for large geometries"
+  },
+
+  "_parameter_hierarchy": {
+    "override_order": [
+      "1. base.py defaults",
+      "2. numerics profile (robust/standard/accurate)",
+      "3. config.json values",
+      "4. command-line arguments (if any)"
+    ]
+  }
+}

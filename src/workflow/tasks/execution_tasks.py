@@ -20,6 +20,10 @@ class ExecuteMeshingTask(Task):
 
             if snappy_settings.get("parallel"):
                 n_proc = snappy_settings.get("nProcessors", 1)
+
+                # Temporarily override decomposeParDict for parallel meshing
+                self._override_decompose_par_dict(case_dir, n_proc)
+
                 run_command(self.config, ["decomposePar", "-force"], case_dir, "log.decomposePar.preMesh")
 
                 run_command(
@@ -29,6 +33,10 @@ class ExecuteMeshingTask(Task):
                     "log.snappyHexMesh",
                 )
                 run_command(self.config, ["reconstructPar", "-constant"], case_dir, "log.reconstructPar")
+
+                # Restore original decomposeParDict (using run_settings.subdomains for solver)
+                solver_subdomains = self.config.get("run_settings", {}).get("subdomains", 1)
+                self._override_decompose_par_dict(case_dir, solver_subdomains)
             else:
                 run_command(self.config, ["snappyHexMesh", "-overwrite"], case_dir, "log.snappyHexMesh")
 
@@ -100,7 +108,55 @@ class ExecuteMeshingTask(Task):
         except Exception as e:
             logger.warning(f"Could not analyze mesh quality: {e}")
             logger.warning("Proceeding without mesh quality check")
-    
+
+    def _override_decompose_par_dict(self, case_dir: str, n_subdomains: int):
+        """
+        Temporarily modify decomposeParDict to use a specific number of subdomains.
+
+        This allows different processor counts for meshing vs solving:
+        - Parallel meshing: uses SNAPPY_SETTINGS.nProcessors
+        - Parallel solving: uses run_settings.subdomains
+
+        Args:
+            case_dir: Path to OpenFOAM case directory
+            n_subdomains: Number of subdomains to set
+        """
+        import re
+
+        decompose_dict_path = os.path.join(case_dir, "system", "decomposeParDict")
+
+        if not os.path.exists(decompose_dict_path):
+            logger.warning(f"decomposeParDict not found at {decompose_dict_path}")
+            return
+
+        try:
+            # Read current file
+            with open(decompose_dict_path, 'r') as f:
+                content = f.read()
+
+            # Replace numberOfSubdomains
+            content = re.sub(
+                r'numberOfSubdomains\s+\d+;',
+                f'numberOfSubdomains  {n_subdomains};',
+                content
+            )
+
+            # Replace n coefficients (for simple and hierarchical methods)
+            content = re.sub(
+                r'\bn\s+\(1 1 \d+\);',
+                f'n               (1 1 {n_subdomains});',
+                content
+            )
+
+            # Write back
+            with open(decompose_dict_path, 'w') as f:
+                f.write(content)
+
+            logger.info(f"Updated decomposeParDict: numberOfSubdomains = {n_subdomains}")
+
+        except Exception as e:
+            logger.warning(f"Could not update decomposeParDict: {e}")
+
 class ExecuteSolverTask(Task):
     """Runs the OpenFOAM 12 solver (foamRun with incompressibleFluid)."""
 

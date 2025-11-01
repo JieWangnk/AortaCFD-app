@@ -66,6 +66,24 @@ PIMPLE
     pRefValue       0;
 
     // Corrector convergence criteria for inner PIMPLE loop
+    {% set corr_res_ctrl = fvSolution.get('PIMPLE', {}).get('correctorResidualControl', {}) %}
+    {% if corr_res_ctrl %}
+    correctorResidualControl
+    {
+        {% for field_name, field_value in corr_res_ctrl.items() %}
+        {% if '(' in field_name or '|' in field_name %}"{{ field_name }}"{% else %}{{ field_name }}{% endif %}
+        {
+            {% if field_value is mapping %}
+            tolerance       {{ field_value.get('tolerance', '1e-4') }};
+            relTol          {{ field_value.get('relTol', 0) }};
+            {% else %}
+            tolerance       {{ field_value }};
+            relTol          0;
+            {% endif %}
+        }
+        {% endfor %}
+    }
+    {% else %}
     correctorResidualControl
     {
         p
@@ -79,25 +97,45 @@ PIMPLE
             relTol          0;
         }
     }
+    {% endif %}
 
+    {% set outer_res_ctrl = fvSolution.get('PIMPLE', {}).get('outerCorrectorResidualControl', {}) %}
+    {% if outer_res_ctrl %}
+    outerCorrectorResidualControl
+    {
+        {% for field_name, field_value in outer_res_ctrl.items() %}
+        {% if '(' in field_name or '|' in field_name %}"{{ field_name }}"{% else %}{{ field_name }}{% endif %}
+        {
+            {% if field_value is mapping %}
+            tolerance       {{ field_value.get('tolerance', '1e-5') }};
+            relTol          {{ field_value.get('relTol', 0) }};
+            {% else %}
+            tolerance       {{ field_value }};
+            relTol          0;
+            {% endif %}
+        }
+        {% endfor %}
+    }
+    {% else %}
     outerCorrectorResidualControl
     {
         p
         {
-            tolerance       {{ fvSolution.get('PIMPLE', {}).get('outerCorrectorResidualControl', {}).get('p', '1e-4') }};
+            tolerance       1e-4;
             relTol          0;
         }
         U
         {
-            tolerance       {{ fvSolution.get('PIMPLE', {}).get('outerCorrectorResidualControl', {}).get('U', '1e-5') }};
+            tolerance       1e-5;
             relTol          0;
         }
         "(k|epsilon|omega)"
         {
-            tolerance       {{ fvSolution.get('PIMPLE', {}).get('outerCorrectorResidualControl', {}).get('k', '1e-5') }};
+            tolerance       1e-5;
             relTol          0;
         }
     }
+    {% endif %}
 }
 
 relaxationFactors

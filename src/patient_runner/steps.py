@@ -9,14 +9,15 @@ from .core import PatientCaseRunner
 class WorkflowSteps:
     """
     Provides individual workflow step execution capabilities.
-    
+
     Workflow steps available:
     1. case - Create case structure and configuration files
     2. mesh - Generate mesh (blockMesh, surfaceFeatures, snappyHexMesh)
     3. boundary - Setup boundary conditions and flow data
-    4. solver - Run CFD solver
-    5. reconstruct - Reconstruct parallel case from processor directories
-    6. post - Execute post-processing
+    4. regenerate-numerics - Regenerate fvSchemes/fvSolution with mesh-adaptive adjustments
+    5. solver - Run CFD solver
+    6. reconstruct - Reconstruct parallel case from processor directories
+    7. post - Execute post-processing
     """
 
     def __init__(self):
@@ -27,7 +28,8 @@ class WorkflowSteps:
             'boundary': 'setup:bc',
             'solver': 'run:solver',
             'reconstruct': 'run:reconstruct',
-            'post': 'execute_post'
+            'post': 'execute_post',
+            'regenerate-numerics': 'setup:regenerate-numerics'
         }
         self._step_descriptions = {
             'case': 'Create case structure and configuration files',
@@ -35,7 +37,8 @@ class WorkflowSteps:
             'boundary': 'Setup boundary conditions and flow data',
             'solver': 'Run CFD solver (pimpleFoam/foamRun)',
             'reconstruct': 'Reconstruct parallel case from processor directories',
-            'post': 'Execute post-processing'
+            'post': 'Execute post-processing',
+            'regenerate-numerics': 'Regenerate fvSchemes/fvSolution with mesh-adaptive adjustments (use AFTER meshing)'
         }
     
     def list_available_steps(self) -> List[str]:
@@ -114,8 +117,10 @@ class WorkflowSteps:
         dependencies = {
             'case': [],
             'mesh': ['case'],
-            'boundary': ['case', 'mesh'], 
+            'boundary': ['case', 'mesh'],
+            'regenerate-numerics': ['case', 'mesh'],
             'solver': ['case', 'mesh', 'boundary'],
+            'reconstruct': ['case', 'mesh', 'boundary', 'solver'],
             'post': ['case', 'mesh', 'boundary', 'solver']
         }
         return dependencies.get(step, [])

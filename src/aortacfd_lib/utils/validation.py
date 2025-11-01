@@ -746,7 +746,7 @@ class BoundaryConditionValidator:
     """
 
     # Valid inlet types
-    VALID_INLET_TYPES = ['TIMEVARYING', 'CONSTANT', 'PARABOLIC', 'WOMERSLEY']
+    VALID_INLET_TYPES = ['TIMEVARYING', 'CONSTANT', 'WOMERSLEY']
 
     # Valid outlet types
     VALID_OUTLET_TYPES = ['ZEROGRADIENT', 'FIXEDVALUE', '3EWINDKESSEL', 'RCRLUMPED']
@@ -784,16 +784,14 @@ class BoundaryConditionValidator:
     # Type-profile compatibility rules (strict enforcement)
     TYPE_PROFILE_RULES = {
         'TIMEVARYING': ['plug', 'parabolic', 'womersley'],  # Any profile with time-varying data
-        'CONSTANT': ['plug', 'parabolic'],                  # Steady-state profiles only
-        'PARABOLIC': ['parabolic'],                         # Must use parabolic profile
+        'CONSTANT': ['plug', 'parabolic'],                  # Steady-state profiles only (plug or parabolic)
         'WOMERSLEY': ['womersley']                          # Must use womersley profile
     }
 
     # Required parameters per type
     REQUIRED_PARAMS = {
         'TIMEVARYING': ['csv_file', 'data_type', 'profile'],
-        'CONSTANT': ['velocity', 'profile'],
-        'PARABOLIC': ['velocity', 'profile'],
+        'CONSTANT': ['profile'],  # velocity OR flowrate OR cardiac_output (checked separately)
         'WOMERSLEY': ['csv_file', 'data_type', 'profile']
     }
 
@@ -944,14 +942,20 @@ class BoundaryConditionValidator:
                 if not csv_result.is_valid:
                     result.is_valid = False
 
-        if inlet_type in ['CONSTANT', 'PARABOLIC']:
-            # Check for either velocity or cardiac_output parameter
+        if inlet_type == 'CONSTANT':
+            # Check for either velocity, flowrate, or cardiac_output parameter
             has_velocity = 'velocity' in inlet_config
+            has_flowrate = 'flowrate' in inlet_config
             has_cardiac_output = 'cardiac_output' in inlet_config
+
+            # Allow flowrate as alias for cardiac_output
+            if has_flowrate and not has_cardiac_output:
+                inlet_config['cardiac_output'] = inlet_config['flowrate']
+                has_cardiac_output = True
 
             if not has_velocity and not has_cardiac_output:
                 result.add_error(
-                    f"Inlet type '{inlet_type}' requires either 'velocity' (m/s) or 'cardiac_output' (L/min) parameter"
+                    f"Inlet type '{inlet_type}' requires either 'velocity' (m/s), 'flowrate' (L/min), or 'cardiac_output' (L/min) parameter"
                 )
             elif has_velocity and has_cardiac_output:
                 result.add_warning(

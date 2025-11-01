@@ -3,17 +3,18 @@
     "patient_id": "patient1",
     "description": "Complex aortic geometry with multiple branches"
   },
-  "simulation_settings": {
-    "analysis_type": "medium",
-    "solver_type": "LES"
-  },
   "physics": {
     "blood_density": 1060,
-    "blood_viscosity": 0.004
+    "blood_viscosity": 0.004,
+    "model": "les"
   },
   "geometry": {
     "rotation": true,
-    "target_normal": [0, 0, 1],
+    "target_normal": [
+      0,
+      0,
+      1
+    ],
     "scale_factor": 0.001
   },
   "mesh": {
@@ -54,13 +55,17 @@
   },
   "numerical_settings": {
     "time_stepping": "adaptive",
-    "initial_deltaT": 1e-3,
+    "initial_deltaT": 0.001,
     "maxCo": 0.5,
-    "maxDeltaT": 1e-2
+    "maxDeltaT": 0.01
   },
   "output_settings": {
     "save_frequency": 10,
-    "variables": ["velocity", "pressure", "wall_shear_stress"],
+    "variables": [
+      "velocity",
+      "pressure",
+      "wall_shear_stress"
+    ],
     "post_processing": {
       "generate_report": true,
       "create_animations": false,
@@ -73,9 +78,15 @@
     "decomposition_method": "scotch",
     "skip_reconstruction": true
   },
-    "post_processing": {
+  "post_processing": {
     "case_type": "Decomposed",
-    "fields": ["U", "p"],
+    "fields": [
+      "U",
+      "p"
+    ],
     "time_steps": "last"
+  },
+  "numerics": {
+    "profile": "accurate"
   }
 }
