@@ -14,8 +14,8 @@ if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
 from config.builder import ConfigBuilder, deep_merge
-from config.profiles import ProfileComposer
-from workflow.manager import WorkflowManager  
+from config.numerics_builder import NumericsBuilder
+from workflow.manager import WorkflowManager
 from aortacfd_lib.utils.logger import Logger
 
 
@@ -126,11 +126,41 @@ class PatientCaseRunner:
             )
 
         # Validate required configuration keys
-        required_keys = ['case_info', 'simulation_settings', 'boundary_conditions']
+        # Support both old (simulation_settings) and new (physics + numerics) systems
+        has_old_system = 'simulation_settings' in config
+        has_new_system = 'physics' in config and 'numerics' in config
+
+        if not has_old_system and not has_new_system:
+            raise PatientConfigurationError(
+                "Configuration must have either:\n"
+                "  OLD SYSTEM: 'simulation_settings' key, OR\n"
+                "  NEW SYSTEM: 'physics' and 'numerics' keys\n"
+                "See examples/ directory for new config format."
+            )
+
+        # Always require case_info and boundary_conditions
+        required_keys = ['case_info', 'boundary_conditions']
         missing_keys = [key for key in required_keys if key not in config]
         if missing_keys:
             raise PatientConfigurationError(f"Configuration missing required keys: {missing_keys}")
-        
+
+        # Require NEW format (physics/numerics/mesh)
+        if has_old_system:
+            raise PatientConfigurationError(
+                "OLD config format (simulation_settings) is no longer supported.\n"
+                "All configs have been migrated to NEW format (physics/numerics/mesh).\n"
+                "Backup of old format saved as: *.json.OLD_FORMAT_BACKUP"
+            )
+
+        if not has_new_system:
+            raise PatientConfigurationError(
+                "Configuration missing NEW format keys: 'physics', 'numerics', 'mesh'.\n"
+                "See examples/ directory for config templates."
+            )
+
+        # Mark that config uses new system
+        config['_uses_new_system'] = True
+
         # Find STL files
         stl_files = list(patient_dir.glob('*.stl'))
         if not stl_files:
@@ -150,28 +180,39 @@ class PatientCaseRunner:
         }
     
     def prepare_simulation(self, case_info: dict, options: dict = None) -> dict:
-        """Prepare simulation configuration with fragment-based profiles."""
+        """
+        Prepare simulation configuration using new numerics system.
+
+        All configs (old and new format) are converted to use the new system.
+        Old configs are automatically converted in load_patient_case().
+        """
         config = case_info['config']
 
-        catalog = self._profile_catalog()
-        profile_key, profile_data, variant_label = self._resolve_profile_choice(
-            config.get('simulation_settings', {}),
-            options,
-            catalog
-        )
+        # All configs now use new system (conversion happens in load_patient_case)
+        if config.get('physics') and config.get('numerics'):
+            self.logger.info("✨ Using NEW numerics system (physics/numerics/mesh)")
+            return self._prepare_simulation_new_system(case_info, options)
+        else:
+            raise PatientConfigurationError(
+                "Config missing physics/numerics keys. "
+                "This should have been converted in load_patient_case()."
+            )
 
-        profile_name = profile_data['base_profile']
+    def _prepare_simulation_new_system(self, case_info: dict, options: dict = None) -> dict:
+        """
+        Prepare simulation using NEW numerics system (physics/numerics/mesh).
 
-        # Allow user overrides for solver recipe and mesh resolution
-        if options:
-            if 'solver_recipe' in options:
-                profile_data['solver_recipe_fragment'] = options['solver_recipe']
-                profile_data['solver_recipe_label'] = options['solver_recipe']
-            elif 'numerical_schemes' in options:
-                profile_data['solver_recipe_fragment'] = options['numerical_schemes']
-                profile_data['solver_recipe_label'] = options['numerical_schemes']
-            if 'mesh_resolution' in options:
-                profile_data['mesh_resolution'] = options['mesh_resolution']
+        This method builds configuration using NumericsBuilder for explicit scheme control,
+        bypassing the old ProfileComposer and hardcoded scheme templates.
+
+        Args:
+            case_info: Patient case information from load_patient_case()
+            options: Optional runtime overrides
+
+        Returns:
+            Simulation configuration dictionary with same structure as old system
+        """
+        config = case_info['config'].copy()
 
         # Prepare output directories
         patient_output_dir = self.output_dir / case_info['patient_id']
@@ -179,10 +220,7 @@ class PatientCaseRunner:
 
         # Check if we're resuming from an existing case directory
         if options and options.get('case_dir'):
-            # Use existing case directory - extract run_dir from it
             case_dir_path = Path(options['case_dir'])
-            # If case_dir is the OpenFOAM directory itself, run_dir is parent
-            # If case_dir is already run_dir level, use it
             if case_dir_path.name == 'openfoam':
                 run_dir = case_dir_path.parent
             else:
@@ -198,81 +236,139 @@ class PatientCaseRunner:
             run_dir = patient_output_dir / f"run_{timestamp}"
             run_dir.mkdir(exist_ok=True)
 
+        # Build numerics configuration from profile
+        numerics_builder = NumericsBuilder()
+        try:
+            numerics_config = numerics_builder.build(config)
+            profile_name = config.get('numerics', {}).get('profile', 'standard')
+            self.logger.info(f"✅ Loaded numerics profile: {profile_name}")
+        except Exception as e:
+            raise PatientConfigurationError(f"Failed to build numerics: {e}")
+
+        # Merge base configuration
         builder = ConfigBuilder()
 
-        # Step 1: Build base + profile (without case-specific overrides)
-        base_and_profile = builder.build_base_and_profile(sim_profile_name=profile_name)
+        # Load base config only (no old profiles)
+        base_config = builder._load_python_profile('.base', package='src.config')
 
-        # Step 2: Merge fragments (after base+profile, before case config)
-        composer = ProfileComposer()
-        fragment_config = composer.compose(
-            spatial_resolution=profile_data.get('resolution_fragment'),
-            solver_recipe=profile_data.get('solver_recipe_fragment'),
-        )
-        if fragment_config:
-            merged_config = deep_merge(base_and_profile, fragment_config)
-        else:
-            merged_config = base_and_profile
+        # Start with base
+        merged_config = {}
+        merged_config = deep_merge(merged_config, base_config)
 
-        # Step 3: Convert and apply case-specific config (user overrides win!)
+        # Convert and apply case-specific config
         case_specific_config = builder._convert_unified_config(
             case_name=case_info['patient_id'],
-            case_config=case_info['config']
+            case_config=config
         )
         merged_config = deep_merge(merged_config, case_specific_config)
 
-        # Step 4: Apply OpenFOAM 12 settings and validation
+        # Apply OpenFOAM 12 settings and validation
         merged_config = builder._apply_openfoam_12_settings(merged_config)
         builder._validate_physical_parameters(merged_config)
 
-        merged_config.setdefault('simulation_settings', {})
-        merged_config['simulation_settings']['selected_profile_key'] = profile_key
-        merged_config['simulation_settings']['solver_type'] = profile_data['solver_type']
-        merged_config['simulation_settings']['analysis_level'] = profile_data['analysis_level']
-        # Preserve analysis_type if set in case config, otherwise use analysis_level
-        if 'analysis_type' not in merged_config['simulation_settings']:
-            merged_config['simulation_settings']['analysis_type'] = profile_data['analysis_level']
-        if variant_label:
-            merged_config['simulation_settings']['profile_variant'] = variant_label
+        # Apply numerics from new system
+        merged_config['schemes'] = numerics_config
 
-        self._apply_config_settings(merged_config, case_info['config'])
-        self._apply_numerical_schemes(merged_config, profile_data)
+        # Extract fvSolution settings from numerics (PIMPLE, relaxation, etc.)
+        if 'solvers' in numerics_config:
+            merged_config['fvSolution'] = numerics_config['solvers']
 
+        # Extract time stepping settings for controlDict
+        if 'time_stepping' in numerics_config:
+            time_step_settings = numerics_config['time_stepping']
+            merged_config.setdefault('simulation_control', {})
+            merged_config['simulation_control'].setdefault('controlDict', {})
+
+            # Set initial deltaT and time stepping controls
+            merged_config['simulation_control']['controlDict']['deltaT'] = time_step_settings.get('max_delta_t', 0.0001)
+            merged_config['simulation_control']['controlDict']['adjustTimeStep'] = 'yes' if time_step_settings.get('adjustable_time_step', True) else 'no'
+            merged_config['simulation_control']['controlDict']['maxCo'] = time_step_settings.get('max_co', 1.0)
+            merged_config['simulation_control']['controlDict']['maxDeltaT'] = time_step_settings.get('max_delta_t', 0.001)
+
+            # Add other standard controlDict settings
+            merged_config['simulation_control']['controlDict']['startFrom'] = 'startTime'
+            merged_config['simulation_control']['controlDict']['startTime'] = 0
+            merged_config['simulation_control']['controlDict']['stopAt'] = 'endTime'
+            merged_config['simulation_control']['controlDict']['writeControl'] = 'adjustableRunTime'
+            merged_config['simulation_control']['controlDict']['writeFormat'] = 'binary'
+            merged_config['simulation_control']['controlDict']['writePrecision'] = 6
+            merged_config['simulation_control']['controlDict']['writeCompression'] = 'off'
+            merged_config['simulation_control']['controlDict']['timeFormat'] = 'general'
+            merged_config['simulation_control']['controlDict']['timePrecision'] = 6
+            merged_config['simulation_control']['controlDict']['runTimeModifiable'] = 'true'
+
+        # Add physics settings (use deep_merge to preserve mapped nu/rho/mu from _apply_openfoam_12_settings)
+        if 'physics' not in merged_config:
+            merged_config['physics'] = {}
+        merged_config['physics'] = deep_merge(merged_config['physics'], config['physics'])
+
+        # Add simulation_type for backward compatibility with BC generation
+        # BC setup expects 'simulation_type' with values 'laminar', 'RAS', 'LES'
+        # New system uses 'model' with values 'laminar', 'rans', 'les'
+        model_to_sim_type = {
+            'laminar': 'laminar',
+            'rans': 'RAS',
+            'les': 'LES'
+        }
+        merged_config['physics']['simulation_type'] = model_to_sim_type.get(
+            config['physics']['model'],
+            'laminar'
+        )
+
+        # Add mesh settings if provided
+        if 'mesh' in config:
+            # Ensure mesh.mesh_resolution path exists
+            merged_config.setdefault('mesh', {})
+            merged_config['mesh'].setdefault('mesh_resolution', {})
+
+            if 'cells_per_diameter' in config['mesh']:
+                merged_config['mesh']['mesh_resolution']['cells_per_diameter'] = config['mesh']['cells_per_diameter']
+            if 'target_yplus' in config['mesh']:
+                merged_config['mesh']['mesh_resolution']['target_yplus'] = config['mesh']['target_yplus']
+            if 'target_cell_size_mm' in config['mesh']:
+                merged_config['mesh']['mesh_resolution']['target_cell_size_mm'] = config['mesh']['target_cell_size_mm']
+
+            # Copy other mesh settings
+            for key in ['surface_refinement', 'boundary_layers']:
+                if key in config['mesh']:
+                    merged_config['mesh'][key] = config['mesh'][key]
+
+        # Apply config settings (boundary conditions, etc.)
+        self._apply_config_settings(merged_config, config)
+
+        # Handle writeInterval from user config
+        if 'simulation_control' in config and 'writeInterval' in config['simulation_control']:
+            merged_config['simulation_control']['controlDict']['writeInterval'] = config['simulation_control']['writeInterval']
+
+        # Store metadata
         merged_config['profile_metadata'] = {
-            'profile_key': profile_key,
-            'display_name': profile_data['display_name'],
-            'solver_type': profile_data['solver_type'],
-            'analysis_level': profile_data['analysis_level'],
-            'variant': variant_label,
-            'description': profile_data['description'],
-            'estimated_time': profile_data['estimated_time'],
-            'solver_recipe': profile_data.get('solver_recipe_label'),
-            'numerical_schemes': profile_data.get('solver_recipe_label'),
-            'mesh_resolution': profile_data['mesh_resolution'],
-            'fragments': merged_config.get('profile_fragments', []),
-            'use_case': profile_data['use_case'],
-            'details': profile_data['details'],
-            'max_CFL': profile_data.get('max_CFL'),
+            'system': 'new',
+            'physics_model': config['physics']['model'],
+            'numerics_profile': profile_name,
+            'description': f"{config['physics']['model'].upper()} with {profile_name} numerics",
         }
 
-        # Store config source information for reporting
+        if 'mesh' in config:
+            merged_config['profile_metadata']['mesh'] = config['mesh']
+
+        # Store config source information
         merged_config['config_source'] = {
             'case_config_file': case_info['config_file'],
-            'profile_name': profile_name,
-            'profile_key': profile_key
+            'system': 'new (physics/numerics/mesh)',
+            'numerics_profile': profile_name,
         }
 
         return {
             'config': merged_config,
-            'profile_name': profile_name,
-            'profile_key': profile_key,
+            'profile_name': f"{config['physics']['model']}_{profile_name}",
+            'profile_key': f"{config['physics']['model']}_{profile_name}",
             'run_dir': run_dir,
             'patient_output_dir': patient_output_dir,
             'case_config': case_info['config'],
             'case_config_file': case_info['config_file'],
             'parallel': merged_config['mesh']['SNAPPY_SETTINGS'].get('parallel', False)
         }
-    
+
     def run_workflow_step(self, sim_config: dict, workflow_step: str = 'runAll', case_dir: str = None) -> bool:
         """Run specific workflow step.
 
@@ -315,32 +411,32 @@ class PatientCaseRunner:
         """Generate results summary and organization."""
         run_dir = sim_config['run_dir']
         patient_id = case_info['patient_id']
-        
+
         # Create basic results structure
         results_dir = run_dir / "results"
-        logs_dir = run_dir / "logs"
-        
         results_dir.mkdir(exist_ok=True)
-        logs_dir.mkdir(exist_ok=True)
-        
-        # Copy logs if they exist
-        openfoam_dir = Path(sim_config.get('output_directory', ''))
-        if openfoam_dir.exists():
-            openfoam_logs = openfoam_dir / "logs"
-            if openfoam_logs.exists():
-                shutil.copytree(openfoam_logs, logs_dir / "openfoam", dirs_exist_ok=True)
-        
+
+        # NOTE: Logs are kept in openfoam/logs/ directory (created by run_command)
+        # No need to duplicate them at run_dir/logs/
+
         # Create basic summary file
         summary = {
             'patient_id': patient_id,
             'run_directory': str(run_dir),
             'analysis_completed': datetime.now().isoformat()
         }
-        
+
+        # Add log location information
+        openfoam_dir = Path(sim_config.get('output_directory', ''))
+        if openfoam_dir.exists():
+            openfoam_logs = openfoam_dir / "logs"
+            if openfoam_logs.exists():
+                summary['logs_location'] = str(openfoam_logs.relative_to(run_dir))
+
         with open(run_dir / 'summary.json', 'w') as f:
             json.dump(summary, f, indent=2)
-        
-        
+
+
         return str(run_dir)
     
     def list_available_patients(self) -> list:
@@ -370,7 +466,8 @@ class PatientCaseRunner:
         if '..' in patient_id or '/' in patient_id or '\\\\' in patient_id:
             return False
         return True
-    
+
+
     def _classify_stl_files(self, stl_files: list) -> dict:
         """Classify STL files by type."""
         classified = {}
@@ -400,7 +497,7 @@ class PatientCaseRunner:
             config['physics']['default_density'] = physics['blood_density']
         if 'blood_viscosity' in physics:
             config['physics']['default_viscosity'] = physics['blood_viscosity']
-        
+
         # Apply computational settings while respecting explicit mesh overrides
         comp = case_config.get('computational', {})
         mesh_overrides = case_config.get('mesh', {}).get('SNAPPY_SETTINGS', {})
@@ -419,116 +516,44 @@ class PatientCaseRunner:
         elif comp.get('parallel') is True and 'max_processors' in comp and comp['max_processors'] != 'auto':
             snappy_config['nProcessors'] = comp['max_processors']
 
-    def _apply_numerical_schemes(self, config: dict, profile_data: dict):
-        """Apply numerical scheme templates unless overridden by fragments."""
-        if any(
-            fragment.get("axis") == "solver_recipe"
-            for fragment in config.get("profile_fragments", [])
-        ):
-            self.logger.info("Solver recipe fragment applied; skipping numerical scheme overrides.")
-            return
+        # Convert NEW config format (mesh.boundary_layers, mesh.surface_refinement) to SNAPPY_SETTINGS
+        # This allows users to write human-friendly configs that get mapped to OpenFOAM parameters
+        mesh_config = case_config.get('mesh', {})
 
-        schemes_type = profile_data.get('solver_recipe_label', 'balanced')
+        # Handle boundary_layers.enabled -> SNAPPY_SETTINGS.addLayers
+        boundary_layers = mesh_config.get('boundary_layers', {})
+        if 'enabled' in boundary_layers:
+            snappy_config['addLayers'] = boundary_layers['enabled']
+            self.logger.info(f"🔧 Mapped mesh.boundary_layers.enabled={boundary_layers['enabled']} → SNAPPY_SETTINGS.addLayers")
 
-        schemes_templates = {
-            'stable': {
-                'ddtSchemes': {
-                    'default': 'Euler'
-                },
-                'gradSchemes': {
-                    'default': 'cellLimited Gauss linear 1',
-                    'grad(U)': 'cellLimited Gauss linear 1'
-                },
-                'divSchemes': {
-                    'default': 'none',
-                    'div(phi,U)': 'Gauss upwind',
-                    'div(phi,k)': 'Gauss upwind',
-                    'div(phi,omega)': 'Gauss upwind',
-                    'div((nuEff*dev2(T(grad(U)))))': 'Gauss linear'
-                },
-                'laplacianSchemes': {
-                    'default': 'Gauss linear limited 0.5'
-                },
-                'interpolationSchemes': {
-                    'default': 'linear'
-                },
-                'snGradSchemes': {
-                    'default': 'limited 0.5'
-                }
-            },
-            'balanced': {
-                'ddtSchemes': {
-                    'default': 'CrankNicolson 0.9'
-                },
-                'gradSchemes': {
-                    'default': 'cellLimited Gauss linear 0.5',
-                    'grad(U)': 'cellLimited Gauss linear 1'
-                },
-                'divSchemes': {
-                    'default': 'none',
-                    'div(phi,U)': 'Gauss linearUpwindV grad(U)',
-                    'div(phi,k)': 'Gauss linearUpwind default',
-                    'div(phi,omega)': 'Gauss linearUpwind default',
-                    'div((nuEff*dev2(T(grad(U)))))': 'Gauss linear'
-                },
-                'laplacianSchemes': {
-                    'default': 'Gauss linear limited 1'
-                },
-                'interpolationSchemes': {
-                    'default': 'linear'
-                },
-                'snGradSchemes': {
-                    'default': 'limited 1'
-                }
-            },
-            'accurate': {
-                'ddtSchemes': {
-                    'default': 'CrankNicolson 0.7'
-                },
-                'gradSchemes': {
-                    'default': 'Gauss leastSquares'
-                },
-                'divSchemes': {
-                    'default': 'none',
-                    'div(phi,U)': 'Gauss linear',
-                    'div(phi,k)': 'Gauss limitedLinear 1',
-                    'div(phi,omega)': 'Gauss limitedLinear 1',
-                    'div((nuEff*dev2(T(grad(U)))))': 'Gauss linear'
-                },
-                'laplacianSchemes': {
-                    'default': 'Gauss linear limited 1'
-                },
-                'interpolationSchemes': {
-                    'default': 'linear'
-                },
-                'snGradSchemes': {
-                    'default': 'limited 1'
-                }
-            }
-        }
+        # Handle boundary_layers.num_layers or n_surface_layers -> SNAPPY_SETTINGS.addLayer
+        # (note: singular 'addLayer' is the OpenFOAM key name for nSurfaceLayers)
+        num_layers = boundary_layers.get('num_layers') or boundary_layers.get('n_surface_layers')
+        if num_layers is not None:
+            snappy_config['addLayer'] = num_layers
+            self.logger.info(f"🔧 Mapped mesh.boundary_layers.num_layers={num_layers} → SNAPPY_SETTINGS.addLayer (nSurfaceLayers)")
 
-        selected_schemes = schemes_templates.get(schemes_type, schemes_templates['balanced'])
+        # Handle boundary_layers.expansion_ratio -> SNAPPY_SETTINGS.expansionRatio
+        if 'expansion_ratio' in boundary_layers:
+            snappy_config['expansionRatio'] = boundary_layers['expansion_ratio']
+            self.logger.info(f"🔧 Mapped mesh.boundary_layers.expansion_ratio={boundary_layers['expansion_ratio']} → SNAPPY_SETTINGS.expansionRatio")
 
-        config.setdefault('schemes', {})
-        config['schemes'].update(selected_schemes)
+        # Handle boundary_layers.finalLayerThickness -> SNAPPY_SETTINGS.finalLayerThickness
+        # (EXPLICIT OVERRIDE - disables y+ automatic calculation)
+        if 'finalLayerThickness' in boundary_layers:
+            snappy_config['finalLayerThickness'] = boundary_layers['finalLayerThickness']
+            self.logger.warning(
+                f"🔧 MANUAL OVERRIDE: mesh.boundary_layers.finalLayerThickness={boundary_layers['finalLayerThickness']} mm "
+                f"→ Y+ estimation DISABLED (you control layer thickness directly)"
+            )
 
-        if 'solver' in config:
-            if schemes_type == 'stable':
-                config['solver']['convergence_criteria'] = 1e-4
-                config['solver']['max_iterations'] = 500
-            elif schemes_type == 'accurate':
-                config['solver']['convergence_criteria'] = 1e-6
-                config['solver']['max_iterations'] = 1500
-            else:
-                config['solver']['convergence_criteria'] = 1e-5
-                config['solver']['max_iterations'] = 1000
-
-        max_cfl = profile_data.get('max_CFL', 1.0)
-        config.setdefault('time_stepping', {})
-        config['time_stepping']['maxCo'] = max_cfl
-
-        self.logger.info(f"Applied numerical schemes: {schemes_type}")
-        self.logger.info(f"Max CFL number: {max_cfl}")
+        # Handle surface_refinement.levels -> SNAPPY_SETTINGS.surfaceRefinementLevels
+        surface_refinement = mesh_config.get('surface_refinement', {})
+        if 'levels' in surface_refinement:
+            levels = surface_refinement['levels']
+            if isinstance(levels, list) and len(levels) == 2:
+                snappy_config['surfaceRefinementLevels'] = levels
+                self.logger.info(f"🔧 Mapped mesh.surface_refinement.levels={levels} → SNAPPY_SETTINGS.surfaceRefinementLevels")
 
     def _resolve_profile_choice(self, simulation_settings: dict, options: dict, catalog: dict):
         """

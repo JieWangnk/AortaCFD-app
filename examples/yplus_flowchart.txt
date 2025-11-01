@@ -1,0 +1,186 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                  finalLayerThickness Calculation Flowchart                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+                            ┌─────────────────────────┐
+                            │   USER CONFIG INPUT     │
+                            │                         │
+                            │  boundary_layers:       │
+                            │    target_yplus: 1.0    │
+                            │    num_layers: 10       │
+                            │    expansion_ratio: 1.2 │
+                            └───────────┬─────────────┘
+                                        │
+                                        ▼
+                            ┌───────────────────────┐
+                            │  target_yplus set?    │
+                            └───────┬───────────────┘
+                                    │
+                         ┌──────────┴──────────┐
+                         │ YES                 │ NO
+                         ▼                     ▼
+         ┌───────────────────────────┐   ┌─────────────────────┐
+         │   Check for Manual        │   │  Use base.py        │
+         │   Override                │   │  defaults           │
+         │                           │   │  (legacy mode)      │
+         │ finalLayerThickness in    │   └─────────────────────┘
+         │ boundary_layers config?   │
+         └─────────┬─────────────────┘
+                   │
+        ┌──────────┴──────────┐
+        │ YES                 │ NO
+        ▼                     ▼
+┌───────────────────┐   ┌───────────────────────────────────┐
+│ MANUAL MODE       │   │  AUTOMATIC Y+ ESTIMATION MODE     │
+│                   │   │                                   │
+│ Skip calculation  │   │  Step 1: Gather Inputs            │
+│                   │   │  ├─ Fluid properties (ρ, μ, ν)   │
+│ Use your value:   │   │  ├─ Geometry (inlet radius)      │
+│ finalLayerThickness│  │  └─ Layer params (n, r)          │
+│                   │   │                                   │
+└─────────┬─────────┘   └─────────────┬─────────────────────┘
+          │                           │
+          │                           ▼
+          │             ┌─────────────────────────────────┐
+          │             │  Step 2: Estimate Flow          │
+          │             │                                 │
+          │             │  estimation_method = "auto"?    │
+          │             └────────────┬────────────────────┘
+          │                          │
+          │               ┌──────────┴────────────┐
+          │               │ YES (auto)            │ NO (user_provided)
+          │               ▼                       ▼
+          │   ┌─────────────────────────┐   ┌──────────────────────┐
+          │   │ Auto from geometry:     │   │ Use user values:     │
+          │   │                         │   │                      │
+          │   │ L = 2 × inlet_radius    │   │ U = user velocity    │
+          │   │   = 11.26 mm            │   │ L = user length      │
+          │   │                         │   │                      │
+          │   │ U = 5L/min / inlet_area │   │                      │
+          │   │   = 0.837 m/s           │   │                      │
+          │   └────────────┬────────────┘   └──────────┬───────────┘
+          │                └────────────┬──────────────┘
+          │                             ▼
+          │               ┌──────────────────────────────┐
+          │               │  Step 3: Reynolds Number     │
+          │               │                              │
+          │               │  Re = ρ × U × L / μ          │
+          │               │     = 1060 × 0.837 × 0.01126 │
+          │               │       / 0.004                │
+          │               │     = 2496 (Transitional)    │
+          │               └───────────┬──────────────────┘
+          │                           ▼
+          │               ┌──────────────────────────────┐
+          │               │  Step 4: Friction Factor     │
+          │               │                              │
+          │               │  If Re < 2300:               │
+          │               │    f = 64/Re (Laminar)       │
+          │               │  Else if Re < 100k:          │
+          │               │    f = 0.316/Re^0.25         │
+          │               │      (Blasius)               │
+          │               │  Else:                       │
+          │               │    f = 0.0032 + 0.221/Re^0.237│
+          │               │                              │
+          │               │  f = 0.0447                  │
+          │               └───────────┬──────────────────┘
+          │                           ▼
+          │               ┌──────────────────────────────┐
+          │               │  Step 5: Friction Velocity   │
+          │               │                              │
+          │               │  u_τ = U × √(f/8)            │
+          │               │      = 0.837 × √(0.0447/8)   │
+          │               │      = 0.0625 m/s            │
+          │               └───────────┬──────────────────┘
+          │                           ▼
+          │               ┌──────────────────────────────┐
+          │               │  Step 6: First Layer (Δy₁)   │
+          │               │                              │
+          │               │  Core Y+ Formula:            │
+          │               │  y+ = (Δy × u_τ) / ν         │
+          │               │                              │
+          │               │  Solve for Δy:               │
+          │               │  Δy = y+ × ν / u_τ           │
+          │               │     = 1.0 × 3.77e-6 / 0.0625 │
+          │               │     = 6.033722e-5 m          │
+          │               │     = 0.060337 mm            │
+          │               └───────────┬──────────────────┘
+          │                           ▼
+          │               ┌──────────────────────────────┐
+          │               │  Step 7: Total BL Thickness  │
+          │               │                              │
+          │               │  Δ_total = Δy₁×(r^n-1)/(r-1) │
+          │               │          = 0.060337          │
+          │               │            ×(1.2^10-1)/(0.2) │
+          │               │          = 1.5663 mm         │
+          │               └───────────┬──────────────────┘
+          │                           ▼
+          │               ┌──────────────────────────────┐
+          │               │  Step 8: Unit Conversion     │
+          │               │                              │
+          │               │  Result in meters (SI)       │
+          │               │  Convert to mm (mesh units)  │
+          │               │                              │
+          │               │  finalLayerThickness_mm      │
+          │               │    = 0.060337 mm             │
+          │               └───────────┬──────────────────┘
+          │                           │
+          └───────────────┬───────────┘
+                          ▼
+              ┌─────────────────────────────┐
+              │  Write to snappyHexMeshDict │
+              │                             │
+              │  nSurfaceLayers 10          │
+              │  expansionRatio 1.2         │
+              │  finalLayerThickness 0.060337│
+              │  relativeSizes false        │
+              └─────────────┬───────────────┘
+                            ▼
+                   ┌─────────────────┐
+                   │   MESH FILES    │
+                   │    GENERATED    │
+                   └─────────────────┘
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                             KEY DECISION POINTS                              ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  1. target_yplus present?                                                    ║
+║     YES → Continue to automatic mode                                         ║
+║     NO  → Use base.py defaults (0.2mm)                                       ║
+║                                                                              ║
+║  2. finalLayerThickness in boundary_layers?                                  ║
+║     YES → MANUAL MODE - Skip all calculations, use your value                ║
+║     NO  → AUTO MODE - Calculate from y+ target                               ║
+║                                                                              ║
+║  3. estimation_method?                                                       ║
+║     "auto" → Estimate U,L from geometry and cardiac output                   ║
+║     "user_provided" → Use your characteristic_velocity/length                ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                          EXAMPLE VALUES (Your Config)                        ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  INPUT (from config):                                                        ║
+║    target_yplus = 1.0                                                        ║
+║    num_layers = 10                                                           ║
+║    expansion_ratio = 1.2                                                     ║
+║    ρ = 1060 kg/m³                                                            ║
+║    ν = 3.7736e-6 m²/s                                                        ║
+║                                                                              ║
+║  ESTIMATED (from geometry):                                                  ║
+║    Inlet radius = 5.63 mm                                                    ║
+║    L = 11.26 mm                                                              ║
+║    U = 0.837 m/s (5 L/min cardiac output)                                    ║
+║                                                                              ║
+║  CALCULATED:                                                                 ║
+║    Re = 2496 (Transitional)                                                  ║
+║    f = 0.0447 (Blasius)                                                      ║
+║    u_τ = 0.0625 m/s                                                          ║
+║    Δy₁ = 0.060337 mm ← RESULT                                                ║
+║    Δ_total = 1.5663 mm                                                       ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝

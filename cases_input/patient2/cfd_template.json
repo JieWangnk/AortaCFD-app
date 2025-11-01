@@ -5,22 +5,12 @@
     "imaging_modality": "CT",
     "case_type": "coarctation"
   },
-  "simulation_settings": {
-    "analysis_type": "high_resolution",
-    "mesh_quality": "fine",
-    "solver_type": "transitional",
-    "time_discretization": "fixed",
-    "max_iterations": 2000,
-    "convergence_criteria": {
-      "velocity": 1e-7,
-      "pressure": 1e-8
-    }
-  },
   "physics": {
     "blood_density": 1060,
     "blood_viscosity": 0.004,
     "cardiac_cycle_period": 0.8,
-    "heart_rate_bpm": 75
+    "heart_rate_bpm": 75,
+    "model": "laminar"
   },
   "boundary_conditions": {
     "inlet": {
@@ -42,7 +32,12 @@
   },
   "output_settings": {
     "save_frequency": 5,
-    "variables": ["velocity", "pressure", "wall_shear_stress", "turbulent_kinetic_energy"],
+    "variables": [
+      "velocity",
+      "pressure",
+      "wall_shear_stress",
+      "turbulent_kinetic_energy"
+    ],
     "post_processing": {
       "generate_report": true,
       "create_animations": true,
@@ -67,5 +62,9 @@
       "analyze_jet_formation": true,
       "track_recirculation_zones": true
     }
-  }
+  },
+  "numerics": {
+    "profile": "accurate"
+  },
+  "mesh": {}
 }

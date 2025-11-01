@@ -126,7 +126,7 @@ class YPlusEstimator:
         estimated_yplus = delta_y1 * u_tau / self.nu
 
         return {
-            'finalLayerThickness': delta_y1,
+            'firstLayerThickness': delta_y1,  # CORRECT: innermost layer (wall-adjacent) for y+ control
             'estimated_yplus': estimated_yplus,
             'reynolds_number': Re,
             'friction_velocity': u_tau,

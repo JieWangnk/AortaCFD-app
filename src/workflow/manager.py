@@ -105,6 +105,13 @@ class WorkflowManager:
                 "execute_solver",
                 "execute_post",
                 "generate_windkessel_report"  # Generate WK analysis after simulation
+            ],
+
+            # COMMAND 9: Regenerate numerical schemes with mesh-adaptive adjustments.
+            # Use AFTER meshing to apply mesh-quality-aware settings based on checkMesh results.
+            "setup:regenerate-numerics": [
+                "generate_numerical_schemes",
+                "generate_solver_settings"
             ]
         }
         

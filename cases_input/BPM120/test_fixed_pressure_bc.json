@@ -1,0 +1,147 @@
+{
+  "_comment_header": "=== TEST: FIXED PRESSURE OUTLET BOUNDARY CONDITIONS ===",
+  "_comment_purpose": "Test fixed pressure outlet BCs (simplest BC type)",
+  "_test_objective": "Validate outlets.type='fixedPressure' works correctly",
+  "_expected": "~2.5M cells, 30-45 min runtime, all outlets at same pressure",
+
+  "case_info": {
+    "patient_id": "BPM120",
+    "description": "TEST: Fixed pressure outlet BC validation",
+    "reference": "Config system implementation test",
+    "heart_rate": 120,
+    "notes": "Testing fixed pressure BCs - expect all outlets at 80 mmHg"
+  },
+
+  "physics": {
+    "model": "laminar",
+    "_comment_model": "Laminar for quick test",
+
+    "transport_properties": {
+      "rho": 1060,
+      "nu": 3.7736e-6
+    }
+  },
+
+  "numerics": {
+    "profile": "accurate",
+
+    "max_co": 1.0,
+
+    "correctors": {
+      "nOuterCorrectors": 3,
+      "nCorrectors": 2,
+      "nNonOrthogonalCorrectors": 1
+    }
+  },
+
+  "mesh": {
+    "cells_per_diameter": 10,
+    "_comment_resolution": "Coarse mesh for quick BC test",
+    "_expected_cells": "~2.5M cells",
+
+    "boundary_layers": {
+      "enabled": false,
+      "_comment_enabled": "Disabled for quick test"
+    },
+
+    "surface_refinement": {
+      "levels": [1, 2]
+    },
+
+    "SNAPPY_SETTINGS": {
+      "_comment_quality": "Using robust defaults (maxBoundarySkewness=8, etc.)",
+
+      "parallel": false,
+      "_comment_parallel": "Serial meshing for test"
+    }
+  },
+
+  "geometry": {
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": ["outlet1", "outlet2", "outlet3", "outlet4"],
+    "wall_keywords_ordered": "wall_aorta",
+    "scale_factor": 0.001,
+    "case_name": "BPM120"
+  },
+
+  "boundary_conditions": {
+    "inlet": {
+      "type": "TIMEVARYING",
+      "csv_file": "BPM120.csv",
+      "data_type": "flowRate",
+      "profile": "plug"
+    },
+
+    "outlets": {
+      "_comment": "========== TEST: FIXED PRESSURE BOUNDARY CONDITIONS ==========",
+      "type": "fixedPressure",
+      "_test_focus": "Simplest BC type - all outlets at same pressure",
+
+      "pressure_mmHg": 80,
+      "_comment_pressure": "Mean arterial pressure (80 mmHg ≈ 10666 Pa)",
+      "_expected_behavior": "All 4 outlets will have identical pressure",
+      "_flow_distribution": "Flow split determined purely by outlet geometry (area, resistance)",
+
+      "_note": "This is the SIMPLEST outlet BC - useful for validation and quick tests"
+    },
+
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+
+  "simulation_control": {
+    "end_time": "auto",
+    "number_of_cycles": 3,
+    "_comment_cycles": "3 cycles for BC test",
+
+    "writeInterval": 0.02,
+    "_comment_write": "Write every 0.02s"
+  },
+
+  "run_settings": {
+    "solution_type": "parallel",
+    "subdomains": 4,
+    "decomposition_method": "scotch",
+    "_comment_parallel": "4 cores for test"
+  },
+
+  "_test_checklist": {
+    "1_bc_files": "Verify 0/p file has fixedValue 10666 Pa for all outlets",
+    "2_equal_pressures": "All outlets should have IDENTICAL pressure (80 mmHg = 10666 Pa)",
+    "3_flow_conservation": "Sum of outlet flows should equal inlet flow (within 0.5%)",
+    "4_geometry_based_split": "Flow distribution based on outlet areas/geometry",
+    "5_no_windkessel_files": "Should NOT create Windkessel parameter files",
+    "6_no_resistance_files": "Should NOT have outlet-specific resistance settings",
+    "7_simple_setup": "Simplest BC configuration - easy to verify",
+    "8_stable_convergence": "Very stable (fixed pressure is most robust BC)"
+  },
+
+  "_expected_behavior": {
+    "pressure": "All outlets: p = 10666 Pa (80 mmHg)",
+    "flow_split": "Determined by geometry - larger outlets get more flow",
+    "stability": "Should converge very easily (most stable BC type)",
+    "realistic": "Not physiologically realistic (no compliance), but good for validation"
+  },
+
+  "_validation_commands": {
+    "check_bc": "grep -A 5 'outlet' 0/p  # Should show fixedValue uniform 10666",
+    "check_flow": "postProcess -func 'flowRatePatch(name=outlet1)' -latestTime",
+    "verify_pressure": "All outlets should have identical pressure values"
+  },
+
+  "_advantages_for_testing": {
+    "1_simple": "Easiest BC to understand and verify",
+    "2_stable": "Most stable convergence (no tuning needed)",
+    "3_fast": "No extra computational cost",
+    "4_repeatable": "Deterministic results"
+  },
+
+  "_limitations": {
+    "not_realistic": "Doesn't capture arterial compliance (use Windkessel for that)",
+    "equal_pressure": "All outlets same pressure (not physiological)",
+    "no_wave_propagation": "Ignores pulse wave dynamics"
+  },
+
+  "_expected_runtime": "30-45 minutes (mesh: 10 min, solver: 20-35 min on 4 cores, fastest BC type)"
+}

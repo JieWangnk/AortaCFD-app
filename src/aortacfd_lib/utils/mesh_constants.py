@@ -1,124 +1,112 @@
 """
-Mesh resolution constants and presets for AortaCFD.
+Mesh resolution constants for AortaCFD.
 
-Centralized location for mesh resolution presets to avoid duplication
-across mesh_setup.py and helper scripts.
+Resolution Philosophy:
+    Users specify mesh resolution through ONE of two explicit parameters:
+
+    1. target_cell_size_mm: Absolute cell size in millimeters
+       - Direct control for experienced users
+       - Specify exact element size regardless of geometry
+       - Example: target_cell_size_mm = 0.5
+
+    2. cells_per_diameter: Geometry-adaptive resolution
+       - Cell size computed as: diameter / cells_per_diameter
+       - Automatically scales to patient anatomy
+       - Example: cells_per_diameter = 12
+
+    3. Fallback (if neither specified):
+       - Uses 10 cells across reference diameter
+       - Conservative default suitable for initial exploration
+       - Warning issued to encourage explicit specification
+
+    NO PRESETS (coarse/medium/fine) - These hide actual resolution and
+    prevent mesh independence verification. Users must choose values
+    appropriate for their specific validation requirements.
 """
 
-# Resolution level presets (cell size in mm)
-RESOLUTION_PRESETS = {
-    # Primary presets
-    'coarse': 2.0,      # Draft quality: ~100K-300K cells, 5-15 min runtime
-    'medium': 1.0,      # Clinical quality: ~500K-1.5M cells, 30-90 min runtime
-    'fine': 0.5,        # Publication quality: ~2M-5M cells, 2-4 hours runtime
-    'ultra_fine': 0.25, # Mesh independence: ~10M+ cells, 6-12 hours runtime
+# Default fallback: conservative starting point
+# Only used if user provides no resolution specification
+DEFAULT_CELLS_PER_DIAMETER = 10  # Conservative: resolves basic flow features
 
-    # Aliases for intuitive naming
-    'draft': 2.0,       # Alias for 'coarse'
-    'clinical': 1.0,    # Alias for 'medium'
-    'publication': 0.5, # Alias for 'fine'
-}
+# BlockMesh size warning thresholds
+# We don't try to "fix" large meshes - just warn the user and let them decide
+MAX_BLOCKMESH_CELLS_WARNING = 10_000_000  # 10M cells - inform user it's large
+MAX_BLOCKMESH_CELLS_LARGE = 25_000_000    # 25M cells - warn may cause OOM
+MAX_BLOCKMESH_CELLS_HUGE = 50_000_000     # 50M cells - strongly warn
 
-# Default fallback cell size (matches 'medium' profile)
-DEFAULT_CELL_SIZE_MM = 1.0
-
-# Profile metadata for enhanced logging
-RESOLUTION_PROFILES = {
-    'coarse': {
-        'cell_size_mm': 2.0,
-        'expected_cells': '~100K-300K cells',
-        'runtime': '5-15 min runtime',
-        'aliases': ['draft']
-    },
-    'medium': {
-        'cell_size_mm': 1.0,
-        'expected_cells': '~500K-1.5M cells',
-        'runtime': '30-90 min runtime',
-        'aliases': ['clinical']
-    },
-    'fine': {
-        'cell_size_mm': 0.5,
-        'expected_cells': '~2M-5M cells',
-        'runtime': '2-4 hours runtime',
-        'aliases': ['publication']
-    },
-    'ultra_fine': {
-        'cell_size_mm': 0.25,
-        'expected_cells': '~10M+ cells',
-        'runtime': '6-12 hours runtime',
-        'aliases': []
-    },
-}
-
-def get_cell_size_from_preset(level: str) -> float:
+def compute_cell_size(cells_per_diameter: float, reference_diameter_mm: float) -> float:
     """
-    Get cell size (mm) from resolution level preset.
+    Compute actual cell size in mm from cells/diameter specification.
 
     Args:
-        level: Resolution level string (coarse/medium/fine/ultra_fine or aliases)
+        cells_per_diameter: Target number of cells across diameter
+        reference_diameter_mm: Reference vessel diameter in millimeters
 
     Returns:
-        Cell size in millimeters, or None if invalid preset
+        Cell size in millimeters
 
     Examples:
-        >>> get_cell_size_from_preset('medium')
-        1.0
-        >>> get_cell_size_from_preset('clinical')
-        1.0
-        >>> get_cell_size_from_preset('invalid')
-        None
+        >>> compute_cell_size(12, 18.5)
+        1.542
+        >>> compute_cell_size(20, 6.4)
+        0.32
     """
-    if level is None:
-        return None
-    return RESOLUTION_PRESETS.get(str(level).lower())
+    if cells_per_diameter <= 0 or reference_diameter_mm <= 0:
+        raise ValueError("cells_per_diameter and reference_diameter_mm must be positive")
+
+    return reference_diameter_mm / cells_per_diameter
 
 
-def get_profile_info(level: str) -> dict:
+def check_blockmesh_size(target_cell_size_mm: float, bbox_volume_mm3: float) -> dict:
     """
-    Get complete profile information for a resolution level.
+    Check if blockMesh will be large and return warning info.
+
+    Simple approach: just calculate size and warn if large.
+    NO automatic changes - user gets what they asked for.
 
     Args:
-        level: Resolution level string
+        target_cell_size_mm: User's requested cell size
+        bbox_volume_mm3: Volume of bounding box in mm³
 
     Returns:
-        Dictionary with cell_size_mm, expected_cells, runtime, aliases
-        or None if invalid preset
-
-    Examples:
-        >>> info = get_profile_info('medium')
-        >>> info['expected_cells']
-        '~500K-1.5M cells'
+        dict with 'estimated_cells', 'warning_level', 'message'
     """
-    if level is None:
-        return None
+    estimated_cells = bbox_volume_mm3 / (target_cell_size_mm ** 3)
+    estimated_memory_gb = estimated_cells / 1e6 * 0.3
 
-    # Normalize aliases to primary names
-    level_lower = str(level).lower()
-
-    # Check if it's a primary name
-    if level_lower in RESOLUTION_PROFILES:
-        return RESOLUTION_PROFILES[level_lower]
-
-    # Check if it's an alias
-    for primary, profile in RESOLUTION_PROFILES.items():
-        if level_lower in profile.get('aliases', []):
-            return RESOLUTION_PROFILES[primary]
-
-    return None
-
-
-def get_available_presets() -> list:
-    """
-    Get list of all available preset names (including aliases).
-
-    Returns:
-        Sorted list of preset names
-
-    Examples:
-        >>> presets = get_available_presets()
-        >>> 'medium' in presets
-        True
-        >>> 'clinical' in presets
-        True
-    """
-    return sorted(RESOLUTION_PRESETS.keys())
+    if estimated_cells < MAX_BLOCKMESH_CELLS_WARNING:
+        return {
+            'estimated_cells': estimated_cells,
+            'warning_level': 'ok',
+            'message': None
+        }
+    elif estimated_cells < MAX_BLOCKMESH_CELLS_LARGE:
+        return {
+            'estimated_cells': estimated_cells,
+            'warning_level': 'large',
+            'message': (
+                f"Large blockMesh: {estimated_cells/1e6:.1f}M cells (~{estimated_memory_gb:.1f}GB RAM). "
+                f"Feasible with 16GB+ RAM and parallel meshing. "
+                f"If OOM occurs, reduce cells_per_diameter."
+            )
+        }
+    elif estimated_cells < MAX_BLOCKMESH_CELLS_HUGE:
+        return {
+            'estimated_cells': estimated_cells,
+            'warning_level': 'very_large',
+            'message': (
+                f"Very large blockMesh: {estimated_cells/1e6:.1f}M cells (~{estimated_memory_gb:.1f}GB RAM). "
+                f"May cause OOM. Recommendations: (1) Reduce cells_per_diameter, "
+                f"(2) Use cluster/HPC, (3) Enable parallel meshing."
+            )
+        }
+    else:
+        return {
+            'estimated_cells': estimated_cells,
+            'warning_level': 'huge',
+            'message': (
+                f"Extremely large blockMesh: {estimated_cells/1e6:.1f}M cells (~{estimated_memory_gb:.1f}GB RAM). "
+                f"Will likely cause OOM. Strongly recommend: (1) Reduce cells_per_diameter significantly, "
+                f"(2) Use HPC cluster with 64GB+ RAM."
+            )
+        }

@@ -10,73 +10,84 @@ from .core import PatientCaseRunner
 def create_parser() -> argparse.ArgumentParser:
     """Create command-line argument parser."""
     parser = argparse.ArgumentParser(
-        description="AortaCFD Patient Case Runner - Modular CFD Workflow",
+        prog='run_patient.py',
+        description="AortaCFD - Automated Aortic CFD Pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-WORKFLOW STEPS:
-    case        Create case structure and configuration files
-    mesh        Generate mesh using blockMesh, surfaceFeatures, snappyHexMesh
-    boundary    Setup boundary conditions and flow data
-    solver      Run CFD solver (pimpleFoam/foamRun)
-    reconstruct Reconstruct parallel case from processor directories
-    post        Execute post-processing
-    all         Complete workflow (default)
+═══════════════════════════════════════════════════════════════
+QUICK START EXAMPLES
+═══════════════════════════════════════════════════════════════
 
-EXAMPLES:
-    # Run complete workflow for patient1:
-    python run_patient.py patient1
+  # Run complete workflow
+  python run_patient.py patient1
 
-    # Resume from most recent run:
-    python run_patient.py patient1 --resume
+  # Use custom config
+  python run_patient.py patient1 --config my_config.json
 
-    # Run only meshing step:
-    python run_patient.py patient1 --step mesh
+  # Run only specific steps
+  python run_patient.py patient1 --step mesh --step solver
 
-    # Run case setup and meshing:
-    python run_patient.py patient1 --step case --step mesh
+  # Update existing case with new config (preserves mesh!)
+  python run_patient.py patient1 --update output/patient1/run_xxx/openfoam
 
-    # Quick test run:
-    python run_patient.py patient1 --quick
+═══════════════════════════════════════════════════════════════
+WORKFLOW STEPS
+═══════════════════════════════════════════════════════════════
 
-    # List available patients:
-    python run_patient.py --list
+  case                → Generate OpenFOAM dictionaries (controlDict, fvSchemes, etc.)
+  mesh                → Create computational mesh (blockMesh + snappyHexMesh)
+  boundary            → Setup boundary conditions and inlet flow data
+  regenerate-numerics → Regenerate fvSchemes/fvSolution with mesh-adaptive adjustments
+  solver              → Run CFD solver (parallel execution)
+  reconstruct         → Reconstruct results from parallel decomposition
+  post                → Post-processing and visualization
+  all                 → Run complete workflow (default)
 
-CASE STRUCTURE:
-    cases_input/
-    ├── patient1/
-    │   ├── inlet.stl           
-    │   ├── wall_aorta.stl      
-    │   ├── outlet*.stl         
-    │   ├── flow_data.csv       # Optional
-    │   └── config.json         # Required
-    └── patient2/
-        ├── ...same structure
+═══════════════════════════════════════════════════════════════
         """
     )
 
+    # Positional argument
     parser.add_argument('patient_id', nargs='?',
-                       help='Patient ID to analyze (e.g., patient1, patient2)')
-    parser.add_argument('--list', '-l', action='store_true',
-                       help='List available patient cases')
-    parser.add_argument('--list-steps', action='store_true',
-                       help='List available workflow steps')
-    parser.add_argument('--step', action='append',
-                       choices=['case', 'mesh', 'boundary', 'solver', 'reconstruct', 'post', 'all'],
-                       help='Run specific workflow step(s) - can be used multiple times')
-    parser.add_argument('--quick', action='store_true',
-                       help='Quick test run (coarse settings)')
-    parser.add_argument('--overwrite', action='store_true',
-                       help='Overwrite existing results')
-    parser.add_argument('--resume', action='store_true',
-                       help='Resume from most recent run directory')
+                       help='Patient case to run (e.g., patient1, BPM120)')
+
+    # ═══ INFORMATIONAL ═══
+    info_group = parser.add_argument_group('Information')
+    info_group.add_argument('--list', '-l', action='store_true',
+                           help='List available patient cases')
+    info_group.add_argument('--list-steps', action='store_true',
+                           help='List all workflow steps with details')
+
+    # ═══ WORKFLOW CONTROL ═══
+    workflow_group = parser.add_argument_group('Workflow Control')
+    workflow_group.add_argument('--step', action='append',
+                               choices=['case', 'mesh', 'boundary', 'regenerate-numerics', 'solver', 'reconstruct', 'post', 'all'],
+                               help='Run specific step(s) (default: all). Can use multiple times.')
+
+    # ═══ CONFIGURATION ═══
+    config_group = parser.add_argument_group('Configuration')
+    config_group.add_argument('--config', '-c', metavar='PATH',
+                             help='Config JSON file (default: cases_input/<patient_id>/config.json)')
     profile_choices = list(PatientCaseRunner().get_available_profiles().keys())
-    parser.add_argument('--profile',
-                       choices=profile_choices,
-                       help='Override simulation profile using sim_* profile keys')
-    parser.add_argument('--config',
-                       help='Path to a custom patient configuration JSON (defaults to cases_input/<patient_id>/config.json)')
-    parser.add_argument('--case-dir',
-                       help='Use existing case directory (for running post-processing on old simulations)')
+    config_group.add_argument('--profile', metavar='NAME',
+                             choices=profile_choices,
+                             help='Override simulation profile')
+    config_group.add_argument('--quick', action='store_true',
+                             help='Quick test mode (coarse mesh, fast settings)')
+
+    # ═══ RESUME / UPDATE ═══
+    resume_group = parser.add_argument_group('Resume & Update')
+    resume_group.add_argument('--resume', action='store_true',
+                             help='Resume from most recent run')
+    resume_group.add_argument('--update', metavar='CASE_PATH',
+                             help='Update existing case (preserves mesh, regenerates all else)')
+
+    # ═══ ADVANCED ═══
+    advanced_group = parser.add_argument_group('Advanced Options')
+    advanced_group.add_argument('--case-dir', metavar='PATH',
+                               help='Use specific case directory')
+    advanced_group.add_argument('--overwrite', action='store_true',
+                               help='Overwrite existing output')
 
     return parser
 
@@ -114,6 +125,7 @@ def main():
             'case': ('Create case structure and configuration files', ['setup:dict']),
             'mesh': ('Generate mesh using blockMesh, surfaceFeatures, snappyHexMesh', ['run:mesh']),
             'boundary': ('Setup boundary conditions and flow data', ['setup:bc']),
+            'regenerate-numerics': ('Regenerate fvSchemes/fvSolution with mesh-adaptive adjustments', ['setup:regenerate-numerics']),
             'solver': ('Run CFD solver (pimpleFoam/foamRun)', ['run:solver']),
             'reconstruct': ('Reconstruct parallel case from processor directories', ['run:reconstruct']),
             'post': ('Execute post-processing', ['execute_post']),
@@ -185,10 +197,54 @@ def main():
             print(f"⚠️  No output directory found for {args.patient_id}")
             print(f"   Starting fresh run instead")
 
-    if args.case_dir:
-        options['case_dir'] = args.case_dir
-
+    # Get config override first (used in multiple paths below)
     config_override = args.config
+
+    # Handle --update: regenerate all files except polyMesh
+    if args.update:
+        from pathlib import Path
+        import shutil
+
+        update_case = Path(args.update)
+        if not update_case.exists():
+            print(f"❌ Update case not found: {update_case}")
+            sys.exit(1)
+
+        # Check if it has polyMesh
+        polymesh_dir = update_case / 'constant' / 'polyMesh'
+        if not polymesh_dir.exists():
+            print(f"❌ No polyMesh found in: {update_case}")
+            print(f"   Expected: {polymesh_dir}")
+            sys.exit(1)
+
+        print(f"\n🔄 UPDATE MODE")
+        print(f"=" * 60)
+        print(f"📁 Updating case: {update_case}")
+        print(f"✅ Preserving mesh: {polymesh_dir}")
+        print(f"🔧 Will regenerate: system/, 0/, controlDict, fvSchemes, fvSolution")
+
+        # Use config if specified
+        if config_override:
+            print(f"📝 Using config: {config_override}")
+        else:
+            print(f"📝 Using default config for {args.patient_id}")
+
+        # Backup polyMesh
+        backup_polymesh = update_case / 'constant' / 'polyMesh_BACKUP'
+        print(f"💾 Backing up polyMesh...")
+        if backup_polymesh.exists():
+            shutil.rmtree(backup_polymesh)
+        shutil.copytree(polymesh_dir, backup_polymesh)
+
+        # Set options to regenerate everything except mesh
+        options['case_dir'] = str(update_case)
+        options['update_mode'] = True
+        options['preserve_polymesh'] = str(backup_polymesh)
+
+        print(f"=" * 60)
+        print()
+    elif args.case_dir:
+        options['case_dir'] = args.case_dir
 
     # Handle workflow steps
     steps = args.step if args.step else ['all']
@@ -198,6 +254,7 @@ def main():
         'case': 'setup:dict',
         'mesh': 'run:mesh',
         'boundary': 'setup:bc',
+        'regenerate-numerics': 'setup:regenerate-numerics',
         'solver': 'run:solver',
         'reconstruct': 'run:reconstruct',
         'post': 'execute_post',

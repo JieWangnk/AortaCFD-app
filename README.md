@@ -860,6 +860,59 @@ The post-processor automatically detects whether your case is:
 
 ---
 
+## Mesh Convergence Studies
+
+### Automated Grid Convergence Index (GCI) Analysis
+
+AortaCFD includes a **fully automated mesh convergence study** mode for rigorous uncertainty quantification using Richardson extrapolation and GCI methodology.
+
+**Features:**
+- ✅ Generates 3 systematically refined meshes (coarse/medium/fine)
+- ✅ Automatic solution mapping via `mapFields` between levels
+- ✅ Richardson extrapolation for mesh-independent solution
+- ✅ Grid Convergence Index (GCI) computation
+- ✅ Publication-ready convergence report
+
+**Quick Start:**
+```bash
+# Run complete convergence study (fully automated)
+./run_convergence_study.sh patient1
+
+# Custom refinement ratio (default: √2)
+./run_convergence_study.sh patient1 --ratio 2.0
+
+# Custom base resolution
+./run_convergence_study.sh patient1 --base-cpd 12
+```
+
+**Output:**
+```
+output/mesh_convergence/<patient>_<timestamp>/
+├── coarse/         # 10 cells/diameter
+├── medium/         # 14 cells/diameter
+├── fine/           # 20 cells/diameter
+├── convergence_report.md      # Publication-ready report
+└── convergence_data.json      # Raw numerical data
+```
+
+**Report includes:**
+- Mesh statistics (cell count, representative spacing h)
+- Convergence metrics (observed order p, GCI values)
+- Richardson extrapolated "exact" values
+- Recommendations (converged, acceptable, refinement needed)
+
+**Example Report Output:**
+| Quantity | Coarse | Medium | Fine | Extrapolated | GCI_fine | Status |
+|----------|--------|--------|------|--------------|----------|--------|
+| Pressure Drop | 12.458 Pa | 11.923 Pa | 11.745 Pa | 11.685 Pa | 1.8% | ✅ Converged |
+| Avg WSS | 1.523 Pa | 1.487 Pa | 1.472 Pa | 1.465 Pa | 2.4% | ✅ Converged |
+
+**Typical Runtime:** ~6 hours (8-core workstation, laminar)
+
+See [docs/MESH_CONVERGENCE_GUIDE.md](docs/MESH_CONVERGENCE_GUIDE.md) for complete documentation, theory, and publication guidelines.
+
+---
+
 ## Reconstruction & Performance
 
 ### Skip Reconstruction Feature

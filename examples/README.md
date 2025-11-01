@@ -1,540 +1,731 @@
-# AortaCFD Configuration Examples
+# AortaCFD Examples and User Guide
 
-This directory contains example configuration files demonstrating various use cases and parameter combinations for AortaCFD simulations.
-
-## Quick Start
-
-Copy an example config to your patient directory and modify as needed:
-
-```bash
-# Copy minimal config for quick start
-cp examples/config_minimal.json cases_input/my_patient/config.json
-
-# Or copy full example to see all options
-cp examples/config_full_example.json cases_input/my_patient/config.json
-```
-
-### ⚠️ Important: Profile Override Behavior
-
-**Question: When using `--profile`, are my config.json settings replaced with defaults?**
-
-**Answer: NO!** Your config.json settings are NEVER replaced. They always have the highest priority.
-
-The `--profile` flag ONLY changes profile-specific settings (solver type, mesh resolution, numerical schemes). All your case-specific settings in config.json are preserved:
-- ✅ Physics properties (blood_density, blood_viscosity)
-- ✅ Boundary conditions (inlet type, outlet settings, pressures)
-- ✅ Computational settings (max_processors, nProcessors)
-- ✅ Simulation control (number_of_cycles, writeInterval)
-- ✅ ALL other settings in your config.json
-
-**Configuration Merge Priority:**
-```
-1. Base defaults        (lowest)
-2. Profile settings
-3. Fragment composition
-4. Your config.json     (HIGHEST - always wins!)
-```
-
-**Example:**
-```bash
-# Your config.json has:
-# - blood_density: 1050
-# - max_processors: 16
-# - systolic_pressure: 130
-# - number_of_cycles: 8
-
-python run_patient.py patient1 --profile sim_rans_fine
-
-# Result: Uses RANS fine profile (changes solver/mesh/numerics)
-#         BUT keeps ALL your settings from config.json!
-#         - blood_density: 1050 ✓ (preserved)
-#         - max_processors: 16 ✓ (preserved)
-#         - systolic_pressure: 130 ✓ (preserved)
-#         - number_of_cycles: 8 ✓ (preserved)
-```
-
-**See [profile_override_example.md](profile_override_example.md) for detailed explanation with concrete examples.**
+**Version**: 2.0 (3-Profile System)
+**Last Updated**: October 31, 2025
 
 ---
 
-## Available Examples
+## 📚 Quick Navigation
 
-### 1. **config_minimal.json** - Minimal Configuration ⭐ START HERE
-**Best for:** First-time users, quick testing
-
-**Contains:**
-- Only required parameters
-- Default settings for everything else
-- Perfect starting point for most cases
-
-**Profile:** `sim_laminar_medium` (clinical standard, 30-60 min runtime)
-
-**Use this when:**
-- You want the simplest possible configuration
-- You're testing the workflow for the first time
-- Your case has standard healthy aorta geometry
-
-```bash
-# Run with minimal config
-python run_patient.py patient1 --config examples/config_minimal.json
-```
+- [Configuration Guide](#configuration-guide) - Complete configuration reference
+- [Boundary Layers](#boundary-layer-configuration) - Y+ and mesh layers
+- [Function Objects](#function-objects) - Wall shear stress, post-processing
+- [Troubleshooting](#troubleshooting) - Common issues and solutions
+- [Example Configurations](#example-configurations) - Working examples
 
 ---
 
-### 2. **config_laminar_medium_example.json** - Laminar Medium Resolution
-**Example of:** Laminar simulation with medium mesh resolution
+## 🚀 Quick Start
 
-**Contains:**
-- Laminar solver assumption (Re < 2300)
-- 3EWK outlets with Murray's law
-- 5 cardiac cycles
-- Parallel execution (4 cores)
-- Standard blood properties
+### 1. Minimal Working Configuration
 
-**Profile:** `sim_laminar_medium` (30-60 min runtime)
-
-**Suitable for:**
-- Cases where laminar flow assumption is valid (low Re)
-- Balanced accuracy vs computational cost
-- Testing 3-element Windkessel setup
-
-**Blood properties shown:**
-- Density: 1060 kg/m³
-- Viscosity: 0.004 Pa·s
-
-```bash
-# Run with this example
-python run_patient.py patient1 --config examples/config_laminar_medium_example.json
-```
-
----
-
-### 3. **config_rans_turbulence.json** - RANS Turbulence Example
-**Example of:** RANS k-ω SST turbulence model with medium resolution
-
-**Contains:**
-- RANS k-ω SST turbulence model
-- Higher resolution (priority 18)
-- 8-core parallel execution
-- Example settings for transitional/turbulent flows (Re > 2300)
-
-**Profile:** `sim_rans_medium` (2-3 hour runtime)
-
-**May be appropriate for:**
-- Flows where turbulence modeling is needed (Re > 2300)
-- Cases with potential flow separation or recirculation
-- Transitional flow regions
-
-**Example settings shown:**
-- Heart rate: 120 bpm
-- Viscosity: 0.0037 Pa·s
-- Systolic pressure: 123 mmHg
-- Flow split: 70%
-
-```bash
-# Run with this example
-python run_patient.py example_case --config examples/config_rans_turbulence.json
-```
-
----
-
-### 4. **config_les_fine_example.json** - LES Fine Resolution Example
-**Example of:** LES WALE subgrid model with fine resolution
-
-**Contains:**
-- LES with WALE subgrid model
-- Fine mesh (priority 25)
-- 16-core parallel execution
-- 10 cardiac cycles
-- Womersley inlet profile
-- Skip reconstruction option
-
-**Profile:** `sim_les_fine` (5-7 hour runtime)
-
-**Computational requirements:**
-- **Memory:** 32+ GB RAM
-- **CPU:** 16+ cores
-- **Storage:** 50-100 GB per case
-- **Time:** 5-10 hours per simulation
-
-**May be appropriate for:**
-- Cases requiring high temporal resolution
-- Unsteady flow phenomena
-- When turbulence-resolving approach is needed
-
-**Example settings shown:**
-- Max CFL: 0.5 (tighter stability requirement)
-- Write interval: 0.005s (high frequency output)
-- Fine boundary layers (5 layers, 1.1 expansion)
-
-```bash
-# Run with this example
-python run_patient.py example_case --config examples/config_les_fine_example.json
-```
-
----
-
-### 5. **config_yplus_example.json** - Y+ Based Boundary Layer Control 🆕
-**Example of:** Automatic first layer thickness calculation for target y+ value
-
-**Contains:**
-- Automatic y+ based boundary layer sizing
-- RANS k-ω SST with y+ = 1.0 target
-- Auto-estimation from geometry
-- Complete workflow documentation
-
-**Profile:** `sim_rans_medium` (2-3 hour runtime)
-
-**Features:**
-- **Automatic calculation:** Set `target_yplus`, system calculates `finalLayerThickness`
-- **No manual estimation:** Uses pipe flow correlations to predict wall shear stress
-- **Validation:** Logs show Re, u_τ, layer thickness, warnings
-- **Post-verification:** Built-in y+ post-processing validates results
-
-**How it works:**
-1. Set `mesh.boundary_layers.target_yplus = 1.0` in config
-2. System estimates flow from geometry + cardiac output (or uses your overrides)
-3. Calculates: Δy₁ = y⁺ × ν / u_τ using pipe flow correlations
-4. Generates mesh with calculated layer thickness
-5. Post-processing verifies actual y+ matches target
-
-**Typical targets:**
-- **RANS k-ω SST:** y+ ≈ 1.0 (low-Re wall treatment)
-- **LES WALE:** y+ ≈ 1.0 (wall-resolved)
-- **Wall functions:** y+ ≈ 30-100 (high-Re wall treatment)
-
-**CLI standalone calculator:**
-```bash
-# Calculate layer thickness manually
-python -m src.aortacfd_lib.yplus_estimator \
-  --target-yplus 1.0 \
-  --velocity 0.5 \
-  --diameter 0.025 \
-  --solver-type RANS
-```
-
-```bash
-# Run with y+ auto-calculation
-python run_patient.py patient1 --config examples/config_yplus_example.json
-```
-
----
-
-### 6. **config_full_example.json** - Complete Reference
-**Best for:** Understanding all available parameters
-
-**Contains:**
-- Every possible configuration parameter
-- Inline comments explaining each option
-- Multiple alternatives for each setting
-- Value ranges and units
-- Profile selection guide
-- Y+ calculator documentation
-
-**This is NOT meant to be run directly** - it's a reference document showing all possibilities.
-
-**Use this when:**
-- You need to customize advanced parameters
-- You want to understand what each setting does
-- You're looking for specific configuration options
-- You need to see all available choices
-
----
-
-## Configuration Parameter Categories
-
-### Essential Parameters (required in all configs)
+Create `cases_input/MY_CASE/config.json`:
 
 ```json
 {
-  "case_info": { "patient_id": "...", "description": "..." },
-  "simulation_settings": { "solver_type": "...", "analysis_type": "..." },
-  "boundary_conditions": { ... }
-}
-```
+  "physics": {
+    "model": "laminar",
+    "transport_properties": {
+      "rho": 1060,
+      "nu": 3.7736e-6
+    }
+  },
 
-### Optional Parameters (auto-configured by profiles)
+  "numerics": {
+    "profile": "standard"
+  },
 
-- **physics** - Blood properties (uses defaults if omitted)
-- **geometry** - Scaling, rotation, patch keywords
-- **computational** - Parallel execution settings
-- **mesh** - Advanced mesh controls
-- **run_settings** - Solver execution options
-- **simulation_control** - Time stepping, output frequency
+  "mesh": {
+    "cells_per_diameter": 15,
+    "boundary_layers": {
+      "enabled": true,
+      "target_yplus": 1.0,
+      "num_layers": 5,
+      "expansion_ratio": 1.2
+    }
+  },
 
----
+  "boundary_conditions": {
+    "inlet": {
+      "type": "CONSTANT",
+      "cardiac_output": 5.0
+    },
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80
+      }
+    }
+  },
 
-## Parameter Selection Guide
-
-### Choosing Solver Type
-
-| Condition | Solver Type | Profile Example |
-|-----------|-------------|-----------------|
-| Healthy aorta, Re < 2300 | `laminar` | `sim_laminar_medium` |
-| Stenosis, CoA, Re > 2300 | `rans` | `sim_rans_medium` |
-| Unsteady vortices, research | `les` | `sim_les_fine` |
-
-### Choosing Analysis Level
-
-| Purpose | Analysis Type | Runtime | Use Case |
-|---------|---------------|---------|----------|
-| Quick check | `coarse` | 5-10 min | Geometry validation |
-| Clinical | `medium` | 30-60 min | **Standard analysis** |
-| Research | `fine` | 2-4 hours | Publications |
-
-### Combining Solver + Analysis
-
-The configuration maps to profiles:
-- `solver_type=laminar` + `analysis_type=medium` → `sim_laminar_medium`
-- `solver_type=rans` + `analysis_type=fine` → `sim_rans_fine`
-- `solver_type=les` + `analysis_type=fine` → `sim_les_fine`
-
-Or override directly:
-```bash
-python run_patient.py patient1 --profile sim_rans_medium
-```
-
----
-
-## Common Configuration Patterns
-
-### Pattern 1: Quick Validation Run
-```json
-{
-  "simulation_settings": { "solver_type": "laminar", "analysis_type": "coarse" },
-  "simulation_control": { "number_of_cycles": 1 }
-}
-```
-**Runtime:** ~5 minutes
-
----
-
-### Pattern 2: Clinical Standard
-```json
-{
-  "simulation_settings": { "solver_type": "laminar", "analysis_type": "medium" },
-  "computational": { "parallel": true, "max_processors": 4 },
-  "simulation_control": { "number_of_cycles": 5 }
-}
-```
-**Runtime:** ~30-60 minutes
-
----
-
-### Pattern 3: High-Performance Turbulence
-```json
-{
-  "simulation_settings": { "solver_type": "rans", "analysis_type": "medium" },
-  "computational": { "parallel": true, "max_processors": 8 },
-  "mesh": { "SNAPPY_SETTINGS": { "nProcessors": 8 } },
-  "run_settings": { "subdomains": 8 }
-}
-```
-**Runtime:** ~2-3 hours
-
----
-
-### Pattern 4: Publication Quality
-```json
-{
-  "simulation_settings": { "solver_type": "laminar", "analysis_type": "fine" },
-  "computational": { "parallel": true, "max_processors": 8 },
   "simulation_control": {
-    "number_of_cycles": 10,
-    "writeInterval": 0.005
+    "end_time": 5.0,
+    "writeInterval": 0.1
   }
 }
 ```
-**Runtime:** ~4-6 hours
+
+### 2. Required Geometry Files
+
+Place in `cases_input/MY_CASE/`:
+- `inlet.stl` - Inlet surface
+- `outlet1.stl`, `outlet2.stl`, ... - Outlet surfaces
+- `wall_aorta.stl` (or `wall.stl`) - Wall surfaces
+
+### 3. Run Simulation
+
+```bash
+python run_patient.py MY_CASE --config cases_input/MY_CASE/config.json
+```
 
 ---
 
-## Boundary Condition Examples
+## ⚙️ Configuration Guide
 
-### Time-Varying Inlet (most common)
+### 🎯 The 3-Profile System
+
+| Profile | Time | Convection | Use Case | Best For |
+|---------|------|------------|----------|----------|
+| **robust** | Euler (1st) | Upwind (1st) | Difficult meshes | Poor quality, debugging |
+| **standard** ⭐ | Backward (2nd) | linearUpwind (2nd) | Production | Most cases (recommended) |
+| **accurate** | CrankNicolson | LUST | Validation | Fine meshes, publications |
+
+**Select profile in config:**
 ```json
-"inlet": {
-  "type": "TIMEVARYING",
-  "csv_file": "BPM75.csv",
-  "data_type": "flowRate",
-  "profile": "plug"
+"numerics": {
+  "profile": "standard"
 }
 ```
 
-### Constant Flow Rate
+### 📐 Mesh Resolution Guidelines
+
+| Level | cells_per_diameter | Cell Size (25mm vessel) | Use Case |
+|-------|-------------------|------------------------|----------|
+| Coarse | 8-10 | ~2.5-3 mm | Initial testing |
+| Medium | 12-15 | ~1.7-2 mm | **Production** |
+| Fine | 18-20 | ~1.25-1.4 mm | Convergence studies |
+| Very Fine | 25+ | <1 mm | Publications |
+
+**Configuration:**
+```json
+"mesh": {
+  "cells_per_diameter": 15
+}
+```
+
+---
+
+## 🌊 Boundary Layer Configuration
+
+### Automatic Y+ Control (Recommended)
+
+System calculates layer thickness automatically to achieve target y+:
+
+```json
+"boundary_layers": {
+  "enabled": true,
+  "target_yplus": 1.0,
+  "num_layers": 5,
+  "expansion_ratio": 1.2
+}
+```
+
+**How it works:**
+1. Estimates Reynolds number from inlet geometry
+2. Calculates wall shear stress
+3. Computes first layer thickness for target y+
+4. Generates appropriate snappyHexMesh settings
+
+**Y+ Targets by Physics Model:**
+
+| Model | Target y+ | Recommended Layers | Expansion Ratio |
+|-------|-----------|-------------------|-----------------|
+| Laminar | N/A (use manual) | 5 | 1.2 |
+| RANS (wall-resolved) | 1-5 | 5-8 | 1.15-1.2 |
+| RANS (wall functions) | 30-100 | 3-5 | 1.3-1.5 |
+| LES | <1 | 8-10 | 1.1-1.15 |
+
+### Manual Layer Control
+
+Specify exact thickness (bypasses Y+ calculation):
+
+```json
+"boundary_layers": {
+  "enabled": true,
+  "num_layers": 5,
+  "expansion_ratio": 1.2,
+  "finalLayerThickness": 0.1
+}
+```
+
+**When to use manual:**
+- Laminar simulations (y+ not applicable)
+- Known good values from previous studies
+- Debugging mesh issues
+- Y+ estimation unreliable for geometry
+
+### Boundary Layer Quality Guidelines
+
+**✅ Good Layer Quality:**
+- 90%+ patches achieve target layer count
+- Layers grow smoothly without collapse
+- maxBoundarySkewness < 8
+- Aspect ratio reasonable (<20:1)
+
+**⚠️ Signs of Layer Problems:**
+- < 50% success rate
+- High boundary skewness (>10)
+- Layers collapse near features
+- Very thin layers (<10% cell size)
+
+**Solutions for Layer Collapse:**
+
+1. **Reduce number of layers**
+   ```json
+   "num_layers": 3  // Instead of 5 or 10
+   ```
+
+2. **Gentler expansion ratio**
+   ```json
+   "expansion_ratio": 1.15  // Instead of 1.2
+   ```
+
+3. **Increase target y+** (if acceptable)
+   ```json
+   "target_yplus": 5.0  // Instead of 1.0
+   ```
+
+4. **For fine meshes (>16 cells/diameter):**
+   - Use fewer layers (3-5)
+   - Higher expansion ratio (1.3-1.5)
+   - Finer background mesh provides resolution
+
+**Mesh Resolution vs. Layers:**
+
+| cells_per_diameter | Recommended num_layers | expansion_ratio | Note |
+|-------------------|----------------------|-----------------|------|
+| 8 (coarse) | 8-10 | 1.2 | Need more layers |
+| 12 (medium) | 5-7 | 1.2-1.25 | Balanced |
+| 16 (fine) | 3-5 | 1.3-1.5 | Background mesh helps |
+| 20+ (very fine) | 2-3 | 1.5-1.8 | Minimal layers needed |
+
+---
+
+## 📊 Function Objects
+
+Function objects compute quantities during simulation (not post-processing).
+
+### Built-in Functions
+
+Add to your config:
+
+```json
+"simulation_control": {
+  "controlDict": {
+    "functions": [
+      "wallShearStress",
+      "yPlus",
+      "forces"
+    ]
+  }
+}
+```
+
+### Wall Shear Stress (WSS)
+
+**Purpose:** Calculate wall shear stress on wall patches
+
+**Configuration:**
+```json
+"functions": ["wallShearStress"]
+```
+
+**Output:**
+- Field: `wallShearStress` (vector field, Pa)
+- Written each `writeInterval`
+- View in ParaView: Use `mag(wallShearStress)` for magnitude
+
+**Physiological Values (Aorta):**
+- Normal: 10-20 Pa (time-averaged)
+- Peak systolic: 40-70 Pa
+- Low/disturbed: <4 Pa (atherosclerosis risk)
+- High WSS: >70 Pa (aneurysm risk)
+
+**Clinical Indices:**
+- **OSI** (Oscillatory Shear Index): Directional changes
+- **TAWSS** (Time-Averaged WSS): Average over cycle
+- **RRT** (Relative Residence Time): Blood residence
+
+### Y+ Monitoring
+
+**Purpose:** Check boundary layer resolution (RANS/LES only)
+
+**Configuration:**
+```json
+"functions": ["yPlus"]
+```
+
+**Target Values:**
+- Wall-resolved RANS: y+ < 1-5
+- Wall functions: 30 < y+ < 300
+- LES: y+ < 1
+
+**Note:** Only relevant for turbulent models, not laminar.
+
+### Custom Function Objects
+
+For advanced post-processing:
+
+```json
+"controlDict": {
+  "functions_custom": {
+    "myProbe": {
+      "type": "probes",
+      "libs": ["\"libsampling.so\""],
+      "fields": ["p", "U"],
+      "probeLocations": [
+        [0.01, 0.01, 0.03],
+        [0.02, 0.00, 0.05]
+      ],
+      "writeControl": "timeStep",
+      "writeInterval": 1
+    }
+  }
+}
+```
+
+---
+
+## 🔧 Boundary Conditions
+
+### Inlet Boundary Conditions
+
+#### 1. Constant Flow (Simplest)
+
 ```json
 "inlet": {
   "type": "CONSTANT",
   "cardiac_output": 5.0
 }
 ```
+- Specify cardiac output in L/min
+- System calculates velocity from inlet area
+- Uniform plug flow profile
 
-### Windkessel Outlets with Flow Split
+#### 2. Time-Varying Flow (Realistic)
+
 ```json
-"outlets": {
-  "type": "3EWINDKESSEL",
-  "windkessel_settings": {
-    "systolic_pressure": 120,    // mmHg
-    "diastolic_pressure": 80,     // mmHg
-    "flow_split": 40,             // % (first N-1 outlets share 40%, last gets 60%)
-    "flow_split_method": "murray" // Murray's law based on outlet areas
-  }
+"inlet": {
+  "type": "TIMEVARYING",
+  "csv_file": "patient_flow.csv",
+  "data_type": "flowrate"
 }
 ```
 
-**Automatic WK Coefficient Calculation:**
+**CSV Format:**
+```
+time(s),flowrate(mL/s)
+0.0,100
+0.1,120
+0.2,150
+...
+```
 
-The system automatically calculates the 3 Windkessel parameters (R1, R2, C) from your pressure inputs:
+**Data types:**
+- `"flowrate"`: Flow rate in mL/s
+- `"velocity"`: Velocity in m/s
 
-| Parameter | Calculated From | Typical Range | Physical Meaning |
-|-----------|----------------|---------------|------------------|
-| **R1** (Proximal) | PWV × ρ / Area | 1×10⁵ - 5×10⁵ Pa·s/m³ | Characteristic impedance |
-| **R2** (Distal) | (MAP - P_v)/Q - R1 | 1×10⁶ - 5×10⁶ Pa·s/m³ | Peripheral resistance |
-| **C** (Compliance) | τ / R2 | 5×10⁻⁷ - 2×10⁻⁶ m³/Pa | Arterial compliance |
+#### 3. Parabolic Profile
 
-**Example output for SP=123, DP=60, flow_split=70%:**
+```json
+"inlet": {
+  "type": "PARABOLIC",
+  "velocity": 0.5
+}
+```
+- Parabolic velocity profile (Poiseuille)
+- Good for laminar pipe flow
 
-| Outlet | Area (mm²) | Flow % | R1 (Pa·s/m³) | R2 (Pa·s/m³) | C (m³/Pa) |
-|--------|-----------|--------|--------------|--------------|-----------|
-| outlet1 | 145 | 24.5% | 2.37e5 | 2.13e6 | 7.04e-7 |
-| outlet2 | 118 | 17.5% | 2.96e5 | 2.07e6 | 7.24e-7 |
-| outlet3 | 96 | 13.3% | 3.64e5 | 2.00e6 | 7.48e-7 |
-| outlet4 | 88 | 44.7% | 3.97e5 | 1.97e6 | 7.61e-7 |
+#### 4. Womersley Profile (Advanced)
 
-See [windkessel_parameters_example.md](windkessel_parameters_example.md) for detailed calculation methodology.
+```json
+"inlet": {
+  "type": "WOMERSLEY",
+  "csv_file": "flow.csv",
+  "womersley_number": 10
+}
+```
+- Pulsatile analytical profile
+- Accounts for inertial effects
 
-### Custom Flow Split Ratios
+### Outlet Boundary Conditions
+
+#### 1. Zero Gradient (Simplest)
+
+```json
+"outlets": {
+  "type": "ZEROGRADIENT"
+}
+```
+- Natural outflow
+- No backflow prevention
+- Best for high-velocity outlets
+
+#### 2. Fixed Pressure
+
+```json
+"outlets": {
+  "type": "FIXEDPRESSURE",
+  "pressure_pa": 10000
+}
+```
+- Fixed pressure value in Pascals
+- Simple but may not be physiological
+
+#### 3. 3-Element Windkessel (Recommended)
+
 ```json
 "outlets": {
   "type": "3EWINDKESSEL",
   "windkessel_settings": {
     "systolic_pressure": 120,
     "diastolic_pressure": 80,
-    "flow_split": {
-      "outlet1": 0.4,
-      "outlet2": 0.3,
-      "outlet3": 0.2,
-      "outlet4": 0.1
-    }
+    "venous_pressure": 5,
+    "tau": 1.8,
+    "flow_split": null
   }
 }
 ```
 
+**Parameters:**
+- `systolic_pressure`: mmHg (typical adult: 110-130)
+- `diastolic_pressure`: mmHg (typical adult: 70-85)
+- `venous_pressure`: mmHg (typical: 0-5)
+- `tau`: Diastolic decay time in seconds (1.5-2.5)
+- `flow_split`: `null` = auto Murray's law
+
+**Flow Distribution:**
+
+**Automatic (Murray's Law):**
+```json
+"flow_split": null
+```
+- Distributes flow by vessel radius³
+- Physiologically realistic
+- Recommended for most cases
+
+**Manual Specification:**
+```json
+"flow_split": {
+  "outlet1": 0.15,
+  "outlet2": 0.15,
+  "outlet3": 0.10,
+  "outlet4": 0.60
+}
+```
+- Must sum to 1.0
+- Use for specific clinical scenarios
+
+**Percentage (branches):**
+```json
+"flow_split": 40
+```
+- First N-1 outlets share 40% (by area)
+- Last outlet gets 60% (main vessel)
+
 ---
 
-## Tips and Best Practices
+## 🔍 Troubleshooting
 
-### 1. Start Simple
-- Begin with `config_minimal.json`
-- Add parameters only when needed
-- Let profiles handle most settings
+### Simulation Diverges
 
-### 2. Incremental Refinement
-1. Run `coarse` first to validate geometry
-2. Move to `medium` for actual analysis
-3. Use `fine` only for publications
+**Symptoms:**
+- Residuals increase exponentially
+- Courant number explodes
+- NaN values in fields
 
-### 3. Parallel Execution
-- Match mesh and solver processors: `mesh.SNAPPY_SETTINGS.nProcessors = run_settings.subdomains`
-- Use powers of 2: 2, 4, 8, 16
-- Don't exceed available CPU cores
+**Solutions:**
+1. Use `robust` profile
+   ```json
+   "numerics": {"profile": "robust"}
+   ```
 
-### 4. Memory Management
-- `coarse`: 4-8 GB
-- `medium`: 8-16 GB
-- `fine`: 16-32 GB
-- LES: 32-64 GB
+2. Reduce Courant number
+   ```json
+   "numerics": {"max_co": 0.5}
+   ```
 
-### 5. Validation Workflow
+3. Increase relaxation (lower values)
+   ```json
+   "numerics": {
+     "relaxation_factors": {
+       "p": 0.2,
+       "U": 0.5
+     }
+   }
+   ```
+
+4. Check mesh quality: `checkMesh -allTopology`
+
+### Boundary Layers Collapse
+
+**Symptoms:**
+- <50% layer coverage
+- High skewness warnings
+- Thin, distorted cells near walls
+
+**Solutions:**
+1. **Reduce layers**: `"num_layers": 3`
+2. **Gentler ratio**: `"expansion_ratio": 1.15`
+3. **Coarser mesh**: Reduce `cells_per_diameter`
+4. **Manual control**: Specify `finalLayerThickness` directly
+
+### Unrealistic Results
+
+**Check:**
+1. **Mass conservation**: Inlet flow = Sum of outlet flows
+2. **Pressure levels**: Reasonable mmHg values
+3. **Velocity magnitudes**: <2 m/s for aorta
+4. **Residuals**: Decreasing steadily
+5. **Number of cycles**: Run 3-5 cycles minimum
+
+### Slow Convergence
+
+**Solutions:**
+1. Adjust PIMPLE correctors
+   ```json
+   "numerics": {
+     "correctors": {
+       "nOuterCorrectors": 5,
+       "nCorrectors": 3
+     }
+   }
+   ```
+
+2. Tighter tolerances may actually help
+   ```json
+   "residual_control": {
+     "p": 1e-7,
+     "U": 1e-7
+   }
+   ```
+
+3. Reduce timestep if Courant too high
+
+### Mesh Quality Issues
+
+**Run diagnostic:**
 ```bash
-# 1. Quick geometry check
-python run_patient.py patient1 --quick
-
-# 2. Run actual simulation
-python run_patient.py patient1 --config examples/config_laminar_clinical.json
-
-# 3. Resume if needed
-python run_patient.py patient1 --resume --step solver
+checkMesh -allTopology -allGeometry
 ```
+
+**Key metrics:**
+- maxNonOrtho: Should be <65°
+- maxBoundarySkewness: Should be <8
+- maxInternalSkewness: Should be <3
+
+**If quality poor:**
+1. Reduce surface refinement: `[1, 1]` instead of `[2, 3]`
+2. Increase feature angle: `60°` instead of `30°`
+3. Improve STL geometry (smoother surfaces)
+4. Use `robust` mesh settings from base.py
 
 ---
 
-## Modifying Examples
+## 📝 Example Configurations
 
-### Step 1: Copy example
-```bash
-cp examples/config_laminar_clinical.json cases_input/patient1/config.json
-```
+### Example 1: Simple Laminar Flow
 
-### Step 2: Edit key parameters
+**Use case:** Basic steady flow, no turbulence
+
 ```json
 {
-  "case_info": {
-    "patient_id": "patient1",  // Change this
-    "heart_rate": 75           // Adjust if needed
+  "physics": {
+    "model": "laminar",
+    "transport_properties": {"rho": 1060, "nu": 3.7736e-6}
+  },
+  "numerics": {"profile": "standard"},
+  "mesh": {
+    "cells_per_diameter": 12,
+    "boundary_layers": {"enabled": false}
+  },
+  "boundary_conditions": {
+    "inlet": {"type": "CONSTANT", "velocity": 0.5},
+    "outlets": {"type": "ZEROGRADIENT"}
+  },
+  "simulation_control": {"end_time": 10, "writeInterval": 1}
+}
+```
+
+### Example 2: RANS with Windkessel
+
+**Use case:** Turbulent flow, physiological outlets
+
+```json
+{
+  "physics": {
+    "model": "RAS",
+    "transport_properties": {"rho": 1060, "nu": 3.7736e-6},
+    "turbulence_intensity": 0.05
+  },
+  "numerics": {"profile": "standard"},
+  "mesh": {
+    "cells_per_diameter": 15,
+    "boundary_layers": {
+      "enabled": true,
+      "target_yplus": 1.0,
+      "num_layers": 5,
+      "expansion_ratio": 1.2
+    }
   },
   "boundary_conditions": {
     "inlet": {
-      "csv_file": "BPM75.csv"  // Match your flow data
+      "type": "TIMEVARYING",
+      "csv_file": "flow.csv",
+      "data_type": "flowrate"
     },
     "outlets": {
+      "type": "3EWINDKESSEL",
       "windkessel_settings": {
-        "systolic_pressure": 120,  // Patient-specific BP
-        "diastolic_pressure": 80
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80,
+        "tau": 1.8
       }
+    }
+  },
+  "simulation_control": {
+    "end_time": 5,
+    "writeInterval": 0.1,
+    "controlDict": {
+      "functions": ["wallShearStress", "yPlus"]
     }
   }
 }
 ```
 
-### Step 3: Run simulation
-```bash
-python run_patient.py patient1
+### Example 3: Convergence Study
+
+**Use case:** Mesh independence verification
+
+```json
+{
+  "numerics": {"profile": "accurate"},
+  "mesh": {
+    "cells_per_diameter": 20,
+    "boundary_layers": {
+      "target_yplus": 0.5,
+      "num_layers": 3,
+      "expansion_ratio": 1.5
+    }
+  }
+}
+```
+
+Run with: 12, 15, 18, 20 cells/diameter and compare results.
+
+---
+
+## 📚 Additional Resources
+
+### Documentation Files
+
+- **[config_full.json](config_full.json)** - Complete parameter reference
+- **[README_CONFIG.md](README_CONFIG.md)** - Detailed configuration guide
+- **[../TEST_SUITE_SUMMARY.md](../TEST_SUITE_SUMMARY.md)** - Test coverage report
+
+### Source Code References
+
+- **Config System**: `src/config/`
+- **Y+ Estimator**: `src/aortacfd_lib/yplus_estimator.py`
+- **Windkessel**: `src/aortacfd_lib/wk_setup.py`
+- **Boundary Conditions**: `src/aortacfd_lib/boundary_condition_setup.py`
+- **Mesh Setup**: `src/aortacfd_lib/mesh_setup.py`
+
+### Numerics Profiles
+
+- **robust**: `src/config/profiles/numerics/robust.py`
+- **standard**: `src/config/profiles/numerics/standard.py`
+- **accurate**: `src/config/profiles/numerics/accurate.py`
+
+---
+
+## 🎓 Best Practices
+
+### 1. Start Simple
+- Begin with `standard` profile
+- Use medium resolution (12-15 cells/diameter)
+- Enable basic boundary layers
+- Add complexity incrementally
+
+### 2. Validate Mesh
+- Always run `checkMesh` before simulation
+- Check layer quality (>80% success rate)
+- Verify maxBoundarySkewness < 8
+- Review mesh in ParaView
+
+### 3. Monitor Simulation
+- Watch residuals (should decrease)
+- Check Courant number (should be stable)
+- Verify mass conservation
+- Monitor peak/average values
+
+### 4. Post-Processing
+- Run 3-5 cardiac cycles for pulsatile flow
+- Time-average results over last cycle
+- Extract WSS, pressure distributions
+- Compare with literature values
+
+### 5. Documentation
+- Record all parameter choices
+- Document convergence criteria
+- Note any issues and solutions
+- Keep simulation log files
+
+---
+
+## ⚖️ Profile Selection Decision Tree
+
+```
+Start
+│
+├─ Is mesh quality poor? (skewness >10, non-ortho >70)
+│  └─ YES → Use "robust" profile
+│
+├─ Need validation/publication quality?
+│  └─ YES → Use "accurate" profile (requires fine mesh)
+│
+└─ Everything else → Use "standard" profile ⭐ (recommended)
 ```
 
 ---
 
-## Troubleshooting
+## 📞 Getting Help
 
-### Config validation failed
-```bash
-# Check JSON syntax
-python -c "import json; json.load(open('config.json'))"
+### Check These First:
+1. Mesh quality: `checkMesh -allTopology`
+2. Residuals: Are they decreasing?
+3. Mass balance: Inlet = Σ(outlets)?
+4. Boundary layers: >80% success?
 
-# Validate against schema (if available)
-python -c "from src.aortacfd_lib.utils.validation import validate_config; validate_config('config.json')"
-```
+### Common Error Messages:
 
-### Profile not found
-- Check `simulation_settings.solver_type` and `analysis_type`
-- Valid combinations: `laminar|rans|les` × `coarse|medium|fine`
-- Or use `--profile` flag to override
+**"Maximum number of iterations exceeded"**
+→ Reduce relaxation factors or max_co
 
-### Memory issues
-- Reduce `analysis_type` from `fine` to `medium`
-- Decrease `simulation_control.number_of_cycles`
-- Lower `run_settings.subdomains`
+**"Boundary layer collapse"**
+→ Reduce num_layers or increase expansion_ratio
 
----
+**"Negative initial temperature"**
+→ Check Windkessel pressure values (mmHg not Pa)
 
-## Additional Resources
-
-- **Main README:** [../README.md](../README.md)
-- **Profile Details:** See main README "Simulation Profiles & Architecture" section
-- **Workflow Steps:** Run `python run_patient.py --list-steps`
-- **Available Profiles:** Run `python -c "from src.patient_runner.core import PatientCaseRunner; PatientCaseRunner().display_profile_selection()"`
+**"Floating point exception"**
+→ Usually divergence; use robust profile
 
 ---
 
-## Example Comparison Table
+**Last Updated**: October 31, 2025
+**Version**: 2.0 (3-Profile System)
+**Maintained by**: AortaCFD Development Team
 
-| Example | Solver | Resolution | Cores | Runtime | Best For |
-|---------|--------|------------|-------|---------|----------|
-| minimal | Laminar | Medium (15) | Auto | 30-60 min | First-time users |
-| laminar_clinical | Laminar | Medium (15) | 4 | 30-60 min | Clinical analysis |
-| rans_turbulence | RANS | Medium (18) | 8 | 2-3 hours | Stenosis/CoA |
-| les_research | LES | Fine (25) | 16 | 5-7 hours | Research/Publications |
-
----
-
-**Need help?** Open an issue or see the main README troubleshooting section.
+For more help, see detailed guides in this directory or check test suite documentation.

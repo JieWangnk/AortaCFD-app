@@ -111,7 +111,11 @@ class WkSetup:
             times, flow_inlet = self._read_inlet_flow(inlet_csv_path, self.inlet_settings['data_type'], area_inlet)
             mean_Q_inlet = np.mean(flow_inlet)
         elif inlet_type in ['CONSTANT', 'PARABOLIC']:
-            # Calculate flow from either velocity or cardiac_output
+            # Calculate flow from either velocity, flowrate, or cardiac_output
+            # Note: flowrate is an alias for cardiac_output
+            if 'flowrate' in self.inlet_settings and 'cardiac_output' not in self.inlet_settings:
+                self.inlet_settings['cardiac_output'] = self.inlet_settings['flowrate']
+
             if 'cardiac_output' in self.inlet_settings:
                 # Cardiac output specified directly (L/min)
                 cardiac_output_Lmin = self.inlet_settings['cardiac_output']
@@ -137,7 +141,7 @@ class WkSetup:
                 mean_Q_inlet = mean_velocity * area_inlet
                 self.log.info(f"Constant inlet: velocity = {velocity:.3f} m/s, mean flow Q = {mean_Q_inlet*1e6:.2f} mL/s")
             else:
-                raise ValueError(f"CONSTANT/PARABOLIC inlet requires either 'velocity' or 'cardiac_output' parameter")
+                raise ValueError(f"CONSTANT/PARABOLIC inlet requires either 'velocity' (m/s), 'flowrate' (L/min), or 'cardiac_output' (L/min) parameter")
         else:
             raise ValueError(f"Unknown inlet type: {inlet_type}")
 
