@@ -23,14 +23,14 @@
   },
 
   "mesh": {
-    "cells_per_diameter": 4,
+    "cells_per_diameter": 2,
 
     "boundary_layers": {
       "enabled": true,
 
       "target_yplus": 1.0,
 
-      "num_layers": 10,
+      "num_layers": 5,
 
       "expansion_ratio": 1.2,
 
@@ -38,12 +38,12 @@
     },
 
     "surface_refinement": {
-      "levels": [1, 1]
+      "levels": [1, 2]
     },
 
     "SNAPPY_SETTINGS": {
       "parallel": true,
-      "nProcessors": 4
+      "nProcessors": 8
     }
   },
 
@@ -90,7 +90,7 @@
 
   "run_settings": {
     "solution_type": "parallel",
-    "subdomains": 4,
+    "subdomains": 8,
     "decomposition_method": "scotch"
   }
 }

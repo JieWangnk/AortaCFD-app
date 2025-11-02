@@ -26,7 +26,7 @@
     "cells_per_diameter": 16,
 
     "boundary_layers": {
-      "enabled": true,
+      "enabled": false,
 
       "num_layers": 3,             
       "expansion_ratio": 1.5,       
@@ -35,7 +35,7 @@
     },
 
     "surface_refinement": {
-      "levels": [1, 1]
+      "levels": [1, 2]
     },
 
     "SNAPPY_SETTINGS": {
