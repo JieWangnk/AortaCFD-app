@@ -2,31 +2,68 @@
 Mesh resolution constants for AortaCFD.
 
 Resolution Philosophy:
-    Users specify mesh resolution through ONE of two explicit parameters:
+    Users specify mesh resolution through ONE of these parameters:
 
     1. target_cell_size_mm: Absolute cell size in millimeters
        - Direct control for experienced users
        - Specify exact element size regardless of geometry
        - Example: target_cell_size_mm = 0.5
 
-    2. cells_per_diameter: Geometry-adaptive resolution
+    2. cells_per_diameter: Geometry-adaptive resolution (RECOMMENDED)
        - Cell size computed as: diameter / cells_per_diameter
        - Automatically scales to patient anatomy
-       - Example: cells_per_diameter = 12
+       - Guidelines: 10-12 (coarse), 15-20 (standard), 25-30 (fine)
+       - Example: cells_per_diameter = 20
 
-    3. Fallback (if neither specified):
+    3. Fallback (if none specified):
        - Uses 10 cells across reference diameter
        - Conservative default suitable for initial exploration
        - Warning issued to encourage explicit specification
-
-    NO PRESETS (coarse/medium/fine) - These hide actual resolution and
-    prevent mesh independence verification. Users must choose values
-    appropriate for their specific validation requirements.
 """
+
+# =============================================================================
+# MESH RESOLUTION GUIDELINES
+# =============================================================================
+# Recommended cells_per_diameter values (use these directly in config):
+#   10-12: Initial exploration, fast iteration (coarse)
+#   15-20: Standard simulation, balanced accuracy/cost (standard)
+#   25-30: High resolution, mesh-independent solutions (fine)
+#
+# Example config:
+#   "mesh": {
+#     "mesh_resolution": {
+#       "cells_per_diameter": 20
+#     }
+#   }
+
+# Minimum cells per diameter (validation threshold)
+MIN_CELLS_PER_DIAMETER = 10  # Below this, results may be unreliable
 
 # Default fallback: conservative starting point
 # Only used if user provides no resolution specification
 DEFAULT_CELLS_PER_DIAMETER = 10  # Conservative: resolves basic flow features
+
+# =============================================================================
+# SURFACE REFINEMENT LEVELS
+# =============================================================================
+# Integer surface_refinement_level (1, 2, or 3) replaces ambiguous level names
+# Each level subdivides the base cell size by a factor of 2:
+#   Level 1: No subdivision  → [0, 1] snappy levels (base cell size at surface)
+#   Level 2: One subdivision → [1, 2] snappy levels (2× finer at surface)
+#   Level 3: Two subdivisions → [2, 3] snappy levels (4× finer at surface)
+#
+# Cell count scaling at surface (relative to level 1):
+#   Level 1: 1× surface cells
+#   Level 2: 4× surface cells (2² = 4)
+#   Level 3: 16× surface cells (4² = 16)
+SURFACE_REFINEMENT_LEVELS = {
+    1: [0, 1],  # No subdivision: base cell size at surface
+    2: [1, 2],  # One subdivision: 2× finer at surface (DEFAULT)
+    3: [2, 3],  # Two subdivisions: 4× finer at surface
+}
+
+# Default surface refinement level
+DEFAULT_SURFACE_REFINEMENT_LEVEL = 2  # Level 2 = [1,2] = moderate refinement
 
 # BlockMesh size warning thresholds
 # We don't try to "fix" large meshes - just warn the user and let them decide

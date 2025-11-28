@@ -170,9 +170,9 @@ class BoundaryConditionSetup:
             return None
 
         # Get inlet geometry first (needed for cardiac_output calculation)
+        # STL files in constant/triSurface/ are PRE-SCALED to meters during case setup
         tri_surface_dir = os.path.join(self.case_dir, "constant", "triSurface")
         inlet_patch_name = self.geom_settings['inlet_keywords_ordered']
-        scale_factor = self.geom_settings.get('scale_factor', 1e-3)
 
         patch_processor = PatchProcessing(tri_surface_dir, inlet_patch_name)
 
@@ -186,8 +186,8 @@ class BoundaryConditionSetup:
             cardiac_output_Lmin = self.inlet_settings['cardiac_output']
             cardiac_output_m3s = cardiac_output_Lmin / 60.0 / 1000.0  # Convert L/min to m³/s
 
-            # Get inlet area
-            inlet_area = patch_processor.calculate_surface_area(scale_factor=scale_factor)
+            # Get inlet area (STLs are pre-scaled to meters, no scale_factor needed)
+            inlet_area = patch_processor.calculate_surface_area()
 
             # Calculate velocity
             velocity_magnitude = cardiac_output_m3s / inlet_area
@@ -215,9 +215,9 @@ class BoundaryConditionSetup:
             self.log.warning("PARABOLIC inlet type with fixedValue BC uses mean velocity. "
                            "For true parabolic profile, consider using groovyBC or codedFixedValue.")
 
-        # Get inlet normal direction from geometry
+        # Get inlet normal direction from geometry (STLs are pre-scaled, no scale_factor)
         try:
-            _, _, inlet_normal = patch_processor.calculate_inlet_center_radius(scale_factor=scale_factor)
+            _, _, inlet_normal = patch_processor.calculate_inlet_center_radius()
 
             # Check orientation setting
             orientation = self.inlet_settings.get('orientation', 'auto').lower()
@@ -233,11 +233,11 @@ class BoundaryConditionSetup:
 
                 for outlet_name in outlet_patches:
                     outlet_processor = PatchProcessing(tri_surface_dir, outlet_name)
-                    outlet_center, _, _ = outlet_processor.calculate_inlet_center_radius(scale_factor=scale_factor)
+                    outlet_center, _, _ = outlet_processor.calculate_inlet_center_radius()
                     outlet_centers.append(outlet_center)
 
                 if outlet_centers:
-                    inlet_center = patch_processor.calculate_inlet_center_radius(scale_factor=scale_factor)[0]
+                    inlet_center = patch_processor.calculate_inlet_center_radius()[0]
                     avg_outlet_center = np.mean(outlet_centers, axis=0)
                     flow_direction = avg_outlet_center - inlet_center
                     flow_direction = flow_direction / np.linalg.norm(flow_direction)

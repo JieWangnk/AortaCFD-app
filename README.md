@@ -354,74 +354,75 @@ Each example includes detailed inline comments and usage notes. See [examples/RE
 
 ### Overview
 
-AortaCFD provides multiple methods to control mesh resolution, ranging from simple presets to advanced custom sizing. The system uses a **6-level priority hierarchy** that balances ease-of-use with flexibility.
+AortaCFD uses a **geometry-adaptive mesh specification system** with a simple 3-priority hierarchy. The recommended approach is `cells_per_diameter`, which automatically scales resolution based on patient anatomy.
 
-### Quick Start: Use `resolution_level` (Recommended)
+### Quick Start: Use `cells_per_diameter` (Recommended)
 
-For most users, simply specify a resolution preset in your config:
+For most users, specify cells per diameter in your config:
 
 ```json
 {
   "mesh": {
-    "resolution_level": "medium"
+    "cells_per_diameter": 20,
+    "surface_refinement_level": 2,
+    "boundary_layers": {
+      "enabled": true,
+      "num_layers": 5,
+      "expansion_ratio": 1.2,
+      "final_layer_thickness": 0.3
+    }
   }
 }
 ```
 
-**Available Presets:**
+**Resolution Guidelines:**
 
-| Preset | Cell Size | Expected Cells | Runtime | Use Case |
-|--------|-----------|----------------|---------|----------|
-| `coarse` / `draft` | 2.0 mm | ~100K-300K | 5-15 min | Quick validation, geometry checks |
-| `medium` / `clinical` | 1.0 mm | ~500K-1.5M | 30-90 min | **Clinical analysis (DEFAULT)** |
-| `fine` / `publication` | 0.5 mm | ~2M-5M | 2-4 hours | High-resolution studies |
-| `ultra_fine` | 0.25 mm | ~10M+ | 6-12 hours | Mesh independence studies |
+| Category | cells/D | Typical Elements | Use Case |
+|----------|---------|------------------|----------|
+| **Coarse** | 10-12 | 200k-500k | Initial exploration, geometry checks |
+| **Standard** | 15-20 | 500k-2M | **Production simulations (RECOMMENDED)** |
+| **Fine** | 25-30 | 2M-5M | Mesh independence studies, publications |
 
-**Aliases:** You can use either technical names (`coarse`, `medium`, `fine`) or intuitive names (`draft`, `clinical`, `publication`).
+**Formula:** `cell_size = reference_diameter / cells_per_diameter`
 
-### Resolution Control Methods (Priority Order)
+**Example:** For a 20mm diameter aorta with `cells_per_diameter: 20`:
+- Base cell size = 20mm / 20 = 1.0mm
+
+### Resolution Control Methods (3-Priority System)
 
 The system checks these parameters in order and uses the **first one found**:
 
 ```
-Priority 1: resolution_level        (RECOMMENDED - simple presets)
+Priority 1: target_cell_size_mm     (Absolute control in mm)
     ↓
-Priority 2: target_cell_size_mm     (Direct specification in mm)
+Priority 2: cells_per_diameter      (Geometry-adaptive, RECOMMENDED)
     ↓
-Priority 3: blockmesh_resolution    (Cells across diameter)
-    ↓
-Priority 4: cells_per_diameter      (Same as #3, different naming)
-    ↓
-Priority 5: refinement_levels       (Legacy lookup table)
-    ↓
-Priority 6: Default fallback        (1.0mm if nothing specified)
+Priority 3: Default fallback        (10 cells/D - triggers warning)
 ```
 
 **⚠️ Best Practice:** Set **only ONE** parameter to avoid confusion. The system will warn if multiple are detected.
 
-### Method 1: resolution_level (Recommended)
+### Method 1: cells_per_diameter (Recommended)
 
-**Simplest and most common method:**
+**Geometry-adaptive sizing - automatically scales to patient anatomy:**
 
 ```json
 {
   "mesh": {
-    "resolution_level": "fine"
+    "cells_per_diameter": 20
   }
 }
 ```
 
-Maps directly to cell sizes defined in [src/aortacfd_lib/utils/mesh_constants.py](src/aortacfd_lib/utils/mesh_constants.py#L9-20).
-
 **Advantages:**
-- ✅ Simple and intuitive
-- ✅ Well-tested presets
-- ✅ Documented runtime estimates
-- ✅ Consistent across cases
+- ✅ Automatically adapts to patient anatomy (pediatric vs adult)
+- ✅ Consistent resolution across different vessel sizes
+- ✅ Simple integer specification
+- ✅ Well-tested for cardiovascular CFD
 
 ### Method 2: target_cell_size_mm
 
-**For custom cell sizes not covered by presets:**
+**For absolute control (mesh independence studies):**
 
 ```json
 {
@@ -433,71 +434,66 @@ Maps directly to cell sizes defined in [src/aortacfd_lib/utils/mesh_constants.py
 }
 ```
 
-**Use when:** You need a specific cell size (e.g., 0.8mm) between presets.
+**Use when:**
+- Matching specific literature values (e.g., "0.6mm elements")
+- Mesh independence studies requiring fixed cell sizes
+- Irregular inlet geometry where diameter-based sizing fails
 
-### Method 3: blockmesh_resolution
+### Surface Refinement Level
 
-**Geometry-based sizing (cells across vessel diameter):**
-
-```json
-{
-  "mesh": {
-    "mesh_resolution": {
-      "blockmesh_resolution": 15
-    }
-  }
-}
-```
-
-Cell size = `2 × reference_radius / blockmesh_resolution`
-
-**Example:** For a 25mm diameter vessel with `blockmesh_resolution: 15`:
-- Cell size = 2 × 12.5mm / 15 = 1.67mm
-
-**Requires:** Valid geometry with measurable vessel radius.
-
-### Method 4: cells_per_diameter
-
-**Alternative syntax for blockmesh_resolution:**
+Controls additional refinement at vessel walls:
 
 ```json
 {
   "mesh": {
-    "mesh_resolution": {
-      "cells_per_diameter": 20
-    }
+    "surface_refinement_level": 2
   }
 }
 ```
 
-Supports both scalar and dict formats:
-```json
-{
-  "cells_per_diameter": {
-    "branch": 20,
-    "inlet": 15
-  }
-}
-```
+| Level | Snappy Levels | Surface Cell Size | Use Case |
+|-------|---------------|-------------------|----------|
+| **1** | [0, 1] | base / 2 | Minimal refinement |
+| **2** | [1, 2] | base / 4 | **Default - recommended** |
+| **3** | [2, 3] | base / 8 | Fine resolution at walls |
 
-### Y+ Based Boundary Layer Control 🆕
+**Formula:** `surface_cell_size = base_cell_size / 2^level`
 
-For **RANS and LES** simulations, use automatic y+ based boundary layer sizing:
+### Boundary Layer Configuration
+
+Traditional OpenFOAM addLayersControls style:
 
 ```json
 {
   "mesh": {
-    "resolution_level": "fine",
-
     "boundary_layers": {
-      "target_yplus": 1.0,
-      "estimation_method": "auto"
-    },
+      "enabled": true,
+      "num_layers": 5,
+      "expansion_ratio": 1.2,
+      "final_layer_thickness": 0.3,
+      "min_thickness": 0.1
+    }
+  }
+}
+```
 
-    "SNAPPY_SETTINGS": {
-      "addLayer": 5,
-      "expansionRatio": 1.2,
-      "relativeSizes": false
+| Parameter | Description | Typical Values |
+|-----------|-------------|----------------|
+| `num_layers` | Number of prism layers | 3-5 (robust), 5-8 (fine) |
+| `expansion_ratio` | Growth ratio between layers | 1.15-1.25 |
+| `final_layer_thickness` | Outermost layer as fraction of cell | 0.2-0.4 |
+| `min_thickness` | Minimum layer (allows collapse) | 0.05-0.1 |
+
+### Y+ Based Boundary Layer Control (Optional)
+
+For **RANS and LES** simulations, you can use automatic y+ based boundary layer sizing:
+
+```json
+{
+  "mesh": {
+    "cells_per_diameter": 25,
+    "boundary_layers": {
+      "target_yplus": 1.0
     }
   }
 }
@@ -505,8 +501,8 @@ For **RANS and LES** simulations, use automatic y+ based boundary layer sizing:
 
 **How it works:**
 1. System estimates wall shear stress from flow correlations
-2. Calculates `finalLayerThickness = y+ × ν / u_τ` in absolute units (meters)
-3. Automatically sets `relativeSizes = false` (required for absolute sizing)
+2. Calculates first layer thickness based on target y+
+3. Overrides `final_layer_thickness` with calculated value
 
 **Target y+ values:**
 - **RANS k-ω SST (low-Re):** y+ ≈ 1.0 (resolves viscous sublayer)
@@ -527,9 +523,6 @@ Mesh generation (snappyHexMesh) and solver use **separate** parallelization:
       "nProcessors": 8
     }
   },
-  "computational": {
-    "max_processors": 8
-  },
   "run_settings": {
     "solution_type": "parallel",
     "subdomains": 8,
@@ -541,79 +534,68 @@ Mesh generation (snappyHexMesh) and solver use **separate** parallelization:
 **Key distinction:**
 - `mesh.SNAPPY_SETTINGS.nProcessors` → snappyHexMesh parallelization
 - `run_settings.subdomains` → Solver parallelization (decomposePar)
-- `computational.max_processors` → Global resource limit
-
-### Parameter Reference
-
-**Critical parameters in `SNAPPY_SETTINGS`:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `addLayer` | int | 5 | Number of boundary layers |
-| `expansionRatio` | float | 1.2 | Layer growth ratio (1.1-1.3 typical) |
-| `finalLayerThickness` | float | 0.3 | Relative (if `relativeSizes=true`) or absolute (meters) |
-| `minThickness` | float | 0.1 | Minimum layer thickness (prevents collapse) |
-| `relativeSizes` | bool | true | `true` = relative to cell size, `false` = absolute (meters) |
-| `resolveFeatureAngle` | float | 30 | Minimum angle to resolve features (≥30° recommended) |
-
-**⚠️ Important:** When using y+ calculator, `relativeSizes` **must be `false`** and `finalLayerThickness` is auto-calculated.
 
 ### Examples
 
-**Example 1: Simple clinical case**
+**Example 1: Standard production case**
 ```json
 {
   "mesh": {
-    "resolution_level": "medium"
+    "cells_per_diameter": 20,
+    "surface_refinement_level": 2,
+    "boundary_layers": {
+      "enabled": true,
+      "num_layers": 5,
+      "expansion_ratio": 1.2,
+      "final_layer_thickness": 0.3
+    }
   }
 }
 ```
-Result: 1.0mm cells, ~500K-1.5M cells, 30-90 min runtime
+Result: ~1mm cells for 20mm vessel, ~500K-2M cells
 
 **Example 2: RANS with y+ control**
 ```json
 {
   "mesh": {
-    "resolution_level": "fine",
+    "cells_per_diameter": 25,
+    "surface_refinement_level": 2,
     "boundary_layers": {
-      "target_yplus": 1.0,
-      "estimation_method": "auto"
-    },
-    "SNAPPY_SETTINGS": {
-      "addLayer": 5,
-      "expansionRatio": 1.2,
-      "relativeSizes": false
+      "enabled": true,
+      "num_layers": 5,
+      "target_yplus": 1.0
     }
   }
 }
 ```
-Result: 0.5mm cells + auto-calculated boundary layers for y+=1.0
+Result: Fine mesh with auto-calculated boundary layers for y+=1.0
 
-**Example 3: Custom high-resolution**
+**Example 3: Mesh independence study**
 ```json
 {
   "mesh": {
     "mesh_resolution": {
-      "target_cell_size_mm": 0.3
-    }
+      "target_cell_size_mm": 0.6
+    },
+    "surface_refinement_level": 2
   }
 }
 ```
-Result: 0.3mm cells (between fine and ultra_fine)
+Result: Fixed 0.6mm cells (for comparing with literature)
 
 ### Troubleshooting
 
-**Issue:** "Multiple mesh resolution parameters detected"
-**Solution:** Set only ONE parameter (prefer `resolution_level`)
+**Issue:** "Conflicting mesh resolution parameters"
+**Solution:** Set only ONE of `target_cell_size_mm` OR `cells_per_diameter`
 
-**Issue:** "nSurfaceLayers 0" in generated mesh
-**Solution:** Use `addLayer` not `nSurfaceLayers` in config
+**Issue:** Boundary layers not applied
+**Solution:** Use `num_layers` in `boundary_layers`, not `nSurfaceLayers` in SNAPPY_SETTINGS
 
-**Issue:** Y+ much different than target
-**Solution:** Check `relativeSizes = false` when using y+ calculator
+**Issue:** Surface refinement too aggressive
+**Solution:** Reduce `surface_refinement_level` from 3 to 2 or 1
 
-**Issue:** Mesh too coarse/fine
-**Solution:** Use next preset level or `target_cell_size_mm`
+**Issue:** Mesh too coarse for small branches
+**Solution:** Increase `cells_per_diameter` (e.g., 25-30)
 
 ---
 

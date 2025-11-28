@@ -112,38 +112,49 @@ class PatchProcessing:
 
         return translated_3d, points_2d, centroid #
 
-    def calculate_inlet_center_radius(self, scale_factor=1.0): # scale_factor is now optional
+    def calculate_inlet_center_radius(self):
         """
-        Computes center and an equivalent radius for the patch in its
-        original, unscaled units.
+        Computes center and an equivalent radius for the patch.
+
+        NOTE: STL files in constant/triSurface/ are PRE-SCALED to meters
+        during case setup. No scale_factor needed - values returned in meters.
+
+        Returns:
+            tuple: (centroid, radius, normal) all in meters
         """
-        unique_patch_points = np.unique(self.mesh_data.vectors.reshape(-1, 3), axis=0) #
+        unique_patch_points = np.unique(self.mesh_data.vectors.reshape(-1, 3), axis=0)
         # Check for sufficient points for analysis
         if len(unique_patch_points) < 3:
             raise ValueError(f"Insufficient points ({len(unique_patch_points)}) for geometry analysis")
 
-        avg_normal = self.compute_average_normal() #
-        # centroid is now in raw units (mm)
-        _, points_2d, centroid = self.project_points_onto_plane(unique_patch_points, avg_normal) #
-        
-        hull = ConvexHull(points_2d) #
-        area_2d = hull.volume #
-        perimeter_2d = hull.area #
+        avg_normal = self.compute_average_normal()
+        # centroid is in mesh units (meters, since STLs are pre-scaled)
+        _, points_2d, centroid = self.project_points_onto_plane(unique_patch_points, avg_normal)
 
-        final_centroid = centroid * scale_factor # This is now in mm
-        final_radius = (2.0 * area_2d / perimeter_2d) * scale_factor# This is now in mm
+        hull = ConvexHull(points_2d)
+        area_2d = hull.volume
+        perimeter_2d = hull.area
 
-        return final_centroid, final_radius, avg_normal #
+        # Equivalent radius from hydraulic diameter concept
+        radius = 2.0 * area_2d / perimeter_2d
 
-    def calculate_surface_area(self, scale_factor=1e-3): #
+        return centroid, radius, avg_normal
+
+    def calculate_surface_area(self):
         """
         Computes the total surface area of the patch by summing triangle areas.
+
+        NOTE: STL files in constant/triSurface/ are PRE-SCALED to meters
+        during case setup. No scale_factor needed - area returned in m².
+
+        Returns:
+            float: Surface area in m²
         """
-        vectors = self.mesh_data.vectors #
-        cross_products = np.cross(vectors[:, 1] - vectors[:, 0], vectors[:, 2] - vectors[:, 0]) #
-        triangle_areas = 0.5 * np.linalg.norm(cross_products, axis=1) #
-        total_area = np.sum(triangle_areas) * scale_factor**2 #
-        return total_area #
+        vectors = self.mesh_data.vectors
+        cross_products = np.cross(vectors[:, 1] - vectors[:, 0], vectors[:, 2] - vectors[:, 0])
+        triangle_areas = 0.5 * np.linalg.norm(cross_products, axis=1)
+        total_area = np.sum(triangle_areas)
+        return total_area
 
     def compute_rotation_vector(self, vector1, vector2):
         """

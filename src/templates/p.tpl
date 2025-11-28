@@ -42,23 +42,33 @@ boundaryField
         {% if outlet_type == "3EWINDKESSEL" %}
             {# ========== Option 1: Windkessel (Physiological) ========== #}
             {% if of_version >= 12 %}
-        // OpenFOAM 12 modularWKPressure boundary condition
-        // Windkessel model with compliance (physiological)
+        // OpenFOAM 12+ modularWKPressure boundary condition
+        // 3-Element Windkessel model (R-C-Z) with implicit coupling
         {% set wk_settings = outlet_settings.get('windkessel_settings', {}) %}
         {% set outlet_params = wk_settings.get('outlet_parameters', {}).get(outlet, {}) %}
         {% set outlet_pressure = outlet_initial_pressures.get(outlet, initial_pressure)|default(0) %}
+        {% set fluid_rho = outlet_settings.get('rho', 1060) %}
+        {% set coupling = wk_settings.get('coupling_mode', 'implicit') %}
         type            modularWKPressure;
         phi             phi;
-        order           {{ outlet_settings.get('order', 3) }};
-        R               {{ outlet_params.get('R', outlet_settings.get('R', 1000)) }};
-        C               {{ outlet_params.get('C', outlet_settings.get('C', 1e-6)) }};
-        Z               {{ outlet_params.get('Z', outlet_settings.get('Z', 100)) }};
+        U               U;
+        couplingMode    {{ coupling }};
+        order           {{ wk_settings.get('order', 3) }};
+        // Windkessel parameters (dynamic units: Pa·s/m³, m³/Pa)
+        R               {{ outlet_params.get('R', wk_settings.get('R', 1e9)) }};
+        C               {{ outlet_params.get('C', wk_settings.get('C', 1e-9)) }};
+        Z               {{ outlet_params.get('Z', wk_settings.get('Z', 1e8)) }};
+        // Fluid density for kinematic conversion
+        rho             {{ fluid_rho }};
+        // Initial/reference pressure [Pa] (dynamic)
         p0              {{ outlet_pressure }};
+        // State variables (initialized to reference)
         p_1             {{ outlet_pressure }};
         q_1             0;
         q_2             0;
         q_3             0;
-        value           uniform {{ outlet_pressure }};
+        // Initial value (kinematic pressure m²/s²)
+        value           uniform {{ (outlet_pressure / fluid_rho)|round(6) }};
             {% else %}
         // OpenFOAM 8 WKBC boundary condition
         type            WKBC;

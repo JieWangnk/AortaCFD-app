@@ -55,7 +55,13 @@ class WkSetup:
     Flow Split Options:
         - None: Auto Murray's law (Q_i ∝ r_i³) for all outlets
         - Percentage (e.g., 60): Main outlet (last) gets 60%, branches share 40% by Murray
-        - Dict: User-specified ratios for each outlet
+        - Dict: User-specified ratios for each outlet (can mix fixed % and "murray")
+
+    Direct RCZ Mode:
+        - If outlet_parameters contains direct R, C, Z values for all outlets,
+          skip coefficient calculation entirely and use those values directly.
+        - This allows users to specify Windkessel parameters from literature
+          or external calibration without needing clinical pressure data.
 
     References:
         - Westerhof et al., Med Biol Eng Comput 2009 (DC allocation)
@@ -85,18 +91,28 @@ class WkSetup:
     def execute(self):
         """Main method to compute Windkessel coefficients and store them in config."""
         self.log.info("=" * 80)
-        self.log.info("Calculating 3-Element Windkessel Coefficients (Clinical Method)")
+        self.log.info("Windkessel Boundary Condition Setup")
         self.log.info("=" * 80)
 
-        tri_surface_dir = os.path.join(self.case_dir, "constant", "triSurface")
-        scale_factor = self.geom_settings.get('scale_factor', 1e-3)
+        outlet_patches = self.geom_settings['outlet_keywords_ordered']
 
-        # Step 0: Extract geometry
+        # Check for direct RCZ mode first
+        if self._check_direct_rcz_mode(outlet_patches):
+            self.log.info("Using DIRECT RCZ mode - skipping coefficient calculation")
+            return
+
+        self.log.info("Calculating 3-Element Windkessel Coefficients (Clinical Method)")
+        self.log.info("-" * 80)
+
+        tri_surface_dir = os.path.join(self.case_dir, "constant", "triSurface")
+
+        # STL files in constant/triSurface/ are PRE-SCALED to meters during case setup
+        # No scale_factor needed - areas returned directly in m²
         inlet_patch_name = self.geom_settings['inlet_keywords_ordered']
-        area_inlet = PatchProcessing(tri_surface_dir, inlet_patch_name).calculate_surface_area(scale_factor=scale_factor)
+        area_inlet = PatchProcessing(tri_surface_dir, inlet_patch_name).calculate_surface_area()
 
         outlet_patches = self.geom_settings['outlet_keywords_ordered']
-        outlet_areas = {name: PatchProcessing(tri_surface_dir, name).calculate_surface_area(scale_factor=scale_factor)
+        outlet_areas = {name: PatchProcessing(tri_surface_dir, name).calculate_surface_area()
                        for name in outlet_patches}
 
         # Calculate outlet radii for Murray's law
@@ -170,20 +186,28 @@ class WkSetup:
             self.log.info(f"\nStep 2: Flow distribution (Murray's law: f_i = r³/Σr³)")
             flow_split_ratios = self._calculate_murray_flow_split(outlet_radii)
             self.wk_model_settings['flow_split'] = flow_split_ratios
+        elif isinstance(flow_split_ratios, dict):
+            # User provided dictionary - could be:
+            # 1. Complete ratios: {"outlet1": 0.2, "outlet2": 0.3, "outlet3": 0.5}
+            # 2. Percentages with murray: {"outlet1": 20, "outlet4": 50, "_rest": "murray"}
+            # 3. Mixed: {"outlet1": 20, "outlet4": 50} - remaining auto-distributed
+            self.log.info(f"\nStep 2: Flow distribution (Custom per-outlet specification)")
+            flow_split_ratios = self._parse_custom_flow_split(
+                flow_split_ratios,
+                outlet_patches,
+                outlet_radii
+            )
+            self.wk_model_settings['flow_split'] = flow_split_ratios
         else:
-            if not isinstance(flow_split_ratios, dict):
-                # Flow split is a percentage for branches
-                self.log.info(f"\nStep 2: Flow distribution (Branch percentage + area-based distribution - MATLAB method)")
-                flow_split_ratios = self._parse_flow_split_percentage(
-                    flow_split_ratios,
-                    outlet_patches,
-                    'area',  # MATLAB uses area-based, not Murray's law
-                    outlet_radii
-                )
-                self.wk_model_settings['flow_split'] = flow_split_ratios
-            else:
-                # User provided complete dictionary of ratios
-                self.log.info(f"\nStep 2: Flow distribution (User-specified ratios)")
+            # Flow split is a percentage for branches (MATLAB method)
+            self.log.info(f"\nStep 2: Flow distribution (Branch percentage + area-based distribution - MATLAB method)")
+            flow_split_ratios = self._parse_flow_split_percentage(
+                flow_split_ratios,
+                outlet_patches,
+                'area',  # MATLAB uses area-based, not Murray's law
+                outlet_radii
+            )
+            self.wk_model_settings['flow_split'] = flow_split_ratios
 
         # Calculate outlet flows
         num_outlets = len(outlet_patches)
@@ -332,6 +356,69 @@ class WkSetup:
             plot_path = os.path.join(reports_dir, "flow_distribution.png")
             self.plot_flow_distribution(times, flow_inlet, flow_split_ratios, plot_path)
 
+    def _check_direct_rcz_mode(self, outlet_patches: list) -> bool:
+        """
+        Check if user provided direct R, C, Z values for all outlets.
+
+        Direct RCZ mode is enabled when:
+        1. outlet_parameters contains entries for ALL outlets
+        2. Each entry has 'R', 'C', and 'Z' keys with numeric values
+
+        Example config for direct mode:
+            windkessel_settings:
+                outlet_parameters:
+                    outlet1:
+                        R: 1.5e9
+                        C: 1.0e-9
+                        Z: 1.5e8
+                    outlet2:
+                        R: 2.0e9
+                        C: 0.8e-9
+                        Z: 2.0e8
+
+        Returns:
+            True if direct RCZ mode should be used, False otherwise
+        """
+        outlet_params = self.wk_model_settings.get('outlet_parameters', {})
+
+        if not outlet_params:
+            return False
+
+        # Check if ALL outlets have R, C, Z specified
+        for outlet in outlet_patches:
+            if outlet not in outlet_params:
+                self.log.debug(f"Direct RCZ mode: missing outlet '{outlet}'")
+                return False
+
+            params = outlet_params[outlet]
+            if not isinstance(params, dict):
+                return False
+
+            # Check for required keys
+            for key in ['R', 'C', 'Z']:
+                if key not in params:
+                    self.log.debug(f"Direct RCZ mode: '{outlet}' missing '{key}'")
+                    return False
+
+                # Verify numeric value
+                try:
+                    float(params[key])
+                except (TypeError, ValueError):
+                    self.log.warning(f"Direct RCZ mode: '{outlet}.{key}' is not numeric")
+                    return False
+
+        # All outlets have valid R, C, Z - use direct mode
+        self.log.info("-" * 80)
+        self.log.info("Direct RCZ mode: Using user-specified Windkessel parameters")
+        self.log.info("-" * 80)
+
+        for outlet in outlet_patches:
+            params = outlet_params[outlet]
+            self.log.info(f"  {outlet}: R={params['R']:.2e}  C={params['C']:.2e}  Z={params['Z']:.2e}")
+
+        self.log.info("=" * 80)
+        return True
+
     def _calculate_murray_flow_split(self, outlet_radii: dict) -> dict:
         """
         Calculate flow split using Murray's law: f_i = r³ / Σr³
@@ -353,6 +440,132 @@ class WkSetup:
             self.log.info(f"    {name}: r={r_mm:.2f} mm → {ratio*100:.1f}%")
 
         return flow_split
+
+    def _parse_custom_flow_split(self, flow_split_config: dict, outlet_patches: list, outlet_radii: dict) -> dict:
+        """
+        Parse custom flow split configuration with flexible options.
+
+        Supports three modes:
+        1. Complete ratios (values sum to ~1.0):
+           {"outlet1": 0.2, "outlet2": 0.3, "outlet3": 0.5}
+
+        2. Percentages with Murray's law for remaining (values are %):
+           {"outlet1": 20, "outlet4": 50, "_rest": "murray"}
+           → outlet1 gets 20%, outlet4 gets 50%, outlets 2&3 share 30% by Murray's law
+
+        3. Fixed percentages only (values are %):
+           {"outlet1": 20, "outlet2": 20, "outlet3": 20, "outlet4": 40}
+           → Each outlet gets specified percentage
+
+        Detection logic:
+        - If all values are <= 1.0 and sum ≈ 1.0: treat as ratios (mode 1)
+        - If "_rest" key present: treat as percentages with Murray (mode 2)
+        - Otherwise: treat as percentages (mode 3)
+
+        Args:
+            flow_split_config: User-provided flow split dictionary
+            outlet_patches: List of outlet patch names
+            outlet_radii: Dictionary of outlet radii (m)
+
+        Returns:
+            Dictionary of flow split ratios (sum to 1.0)
+        """
+        result = {}
+
+        # Remove special keys
+        rest_mode = flow_split_config.pop('_rest', None)
+        distribution_method = flow_split_config.pop('_method', 'murray')  # 'murray' or 'area'
+
+        # Check if values look like ratios (all <= 1.0 and sum ≈ 1.0)
+        numeric_values = [v for v in flow_split_config.values() if isinstance(v, (int, float))]
+        all_small = all(v <= 1.0 for v in numeric_values)
+        sum_approx_one = abs(sum(numeric_values) - 1.0) < 0.01
+
+        if all_small and sum_approx_one and rest_mode is None:
+            # Mode 1: Complete ratios
+            self.log.info(f"  Mode: Complete flow ratios (sum ≈ 1.0)")
+            for outlet in outlet_patches:
+                if outlet in flow_split_config:
+                    result[outlet] = float(flow_split_config[outlet])
+                else:
+                    self.log.warning(f"  {outlet} not in flow_split, using 0")
+                    result[outlet] = 0.0
+
+            # Normalize to exactly 1.0
+            total = sum(result.values())
+            if total > 0:
+                result = {k: v / total for k, v in result.items()}
+
+        else:
+            # Mode 2 or 3: Percentages
+            fixed_outlets = {}
+            remaining_outlets = []
+            total_fixed_pct = 0.0
+
+            for outlet in outlet_patches:
+                if outlet in flow_split_config:
+                    pct = float(flow_split_config[outlet])
+                    fixed_outlets[outlet] = pct / 100.0  # Convert % to ratio
+                    total_fixed_pct += pct
+                else:
+                    remaining_outlets.append(outlet)
+
+            remaining_pct = 100.0 - total_fixed_pct
+
+            if remaining_pct < 0:
+                self.log.warning(f"  Total fixed percentages ({total_fixed_pct}%) > 100%. Normalizing.")
+                # Normalize fixed outlets
+                for outlet in fixed_outlets:
+                    fixed_outlets[outlet] = fixed_outlets[outlet] / (total_fixed_pct / 100.0)
+                remaining_pct = 0.0
+
+            # Add fixed outlets to result
+            result.update(fixed_outlets)
+
+            if remaining_outlets:
+                if rest_mode == 'murray' or (rest_mode is None and distribution_method == 'murray'):
+                    # Distribute remaining using Murray's law
+                    self.log.info(f"  Fixed outlets: {list(fixed_outlets.keys())} ({total_fixed_pct:.1f}%)")
+                    self.log.info(f"  Remaining outlets: {remaining_outlets} ({remaining_pct:.1f}%) - Murray's law")
+
+                    # Calculate Murray distribution for remaining outlets only
+                    remaining_radii = {name: outlet_radii[name] for name in remaining_outlets}
+                    r_cubed = {name: r**3 for name, r in remaining_radii.items()}
+                    total_r_cubed = sum(r_cubed.values())
+
+                    for outlet in remaining_outlets:
+                        murray_fraction = r_cubed[outlet] / total_r_cubed
+                        result[outlet] = murray_fraction * (remaining_pct / 100.0)
+                        r_mm = outlet_radii[outlet] * 1000
+                        self.log.info(f"    {outlet}: r={r_mm:.2f}mm → {result[outlet]*100:.1f}%")
+
+                elif rest_mode == 'area':
+                    # Distribute remaining by area
+                    self.log.info(f"  Fixed outlets: {list(fixed_outlets.keys())} ({total_fixed_pct:.1f}%)")
+                    self.log.info(f"  Remaining outlets: {remaining_outlets} ({remaining_pct:.1f}%) - Area ratio")
+
+                    remaining_areas = {name: np.pi * outlet_radii[name]**2 for name in remaining_outlets}
+                    total_area = sum(remaining_areas.values())
+
+                    for outlet in remaining_outlets:
+                        area_fraction = remaining_areas[outlet] / total_area
+                        result[outlet] = area_fraction * (remaining_pct / 100.0)
+                        A_mm2 = remaining_areas[outlet] * 1e6
+                        self.log.info(f"    {outlet}: A={A_mm2:.2f}mm² → {result[outlet]*100:.1f}%")
+
+                else:
+                    # Equal distribution (fallback)
+                    self.log.info(f"  Remaining outlets equally distributed")
+                    equal_share = (remaining_pct / 100.0) / len(remaining_outlets)
+                    for outlet in remaining_outlets:
+                        result[outlet] = equal_share
+
+        # Log final distribution
+        self.log.info(f"  Final flow distribution:")
+        for outlet in outlet_patches:
+            self.log.info(f"    {outlet}: {result[outlet]*100:.1f}%")
+
+        return result
 
     def _parse_flow_split_percentage(self, flow_split_value, outlet_patches, method='area', geometry_data=None):
         """

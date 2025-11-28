@@ -1,0 +1,523 @@
+"""
+Distance-to-Wall Inlet Profile Generator
+=========================================
+
+When 4D-MRI data is unavailable and the aortic root is highly irregular (e.g., due to
+valve leaflets), standard parabolic or elliptical Poiseuille profiles are inappropriate.
+This module implements a distance-to-wall-based synthetic profile that:
+- Enforces no-slip condition at walls
+- Preserves the measured flow rate Q(t)
+- Works with any irregular inlet shape
+
+Procedure (following OpenFOAM convention)
+-----------------------------------------
+1. Compute distance field d(x_i) from each inlet face centre to nearest wall edge
+2. Determine d_max (maximum distance across the patch)
+3. Define shape function f(d) satisfying f(0)=0 and f(d_max)=1
+4. Scale to match measured flow rate: U_0(t) = Q(t) / sum(f(d_i) * dA_i)
+5. Assign velocity: u(x_i, t) = U_0(t) * f(d(x_i)) * n_inlet
+
+Shape Function Options
+----------------------
+- Power law:     f(d) = (d/d_max)^n   [n=1: linear, n=2: quadratic, n=1/7: turbulent]
+- Poiseuille:    f(d) = 1 - (1 - d/d_max)^2   [equivalent to parabolic]
+- Hybrid jet:    Flat core + near-wall decay
+- Blunted:       Flat core + parabolic near-wall
+
+Output Format
+-------------
+Creates boundaryData/<inlet>/<time>/U files for use with timeVaryingMappedFixedValue BC.
+
+Author: Jie Wang
+Date: November 2025
+"""
+
+import os
+import shutil
+import subprocess
+import numpy as np
+from typing import Tuple, List, Optional
+from enum import Enum
+
+from .utils.logger import Logger
+from .utils.patch_processing import PatchProcessing
+
+
+class ShapeFunction(Enum):
+    """Available shape function types."""
+    POWER_LAW = "power_law"           # f(d) = (d/d_max)^n
+    POISEUILLE = "poiseuille"         # f(d) = 1 - (1 - d/d_max)^2
+    HYBRID_JET = "hybrid_jet"         # Flat core + wall decay
+    BLUNTED_PARABOLIC = "blunted"     # Flat core + parabolic wall
+
+
+class DistanceWallInletProfile:
+    """
+    Generate inlet velocity profiles based on distance-to-wall field.
+
+    This class computes velocity profiles for irregular inlet geometries where
+    standard circular/elliptical assumptions don't apply. The profile is derived
+    from the distance of each face centre to the nearest wall edge, ensuring
+    zero velocity at walls and correct total flow rate.
+
+    Parameters
+    ----------
+    config : dict
+        Configuration with inlet, geometry, and physics settings.
+    case_directory : str
+        Path to OpenFOAM case directory.
+
+    Example
+    -------
+    >>> config = {
+    ...     'inlet': {
+    ...         'csv_file': 'flow.csv',
+    ...         'data_type': 'flowrate',
+    ...         'profile': 'distance_wall',
+    ...         'exponent': 2.0  # Quadratic profile
+    ...     },
+    ...     'geometry': {'inlet_keywords_ordered': 'inlet'}
+    ... }
+    >>> generator = DistanceWallInletProfile(config, '/path/to/case')
+    >>> generator.run()
+
+    NOTE: STL files in constant/triSurface/ are PRE-SCALED to meters during case setup.
+    No scale_factor needed - all geometry values are in SI units (meters).
+    """
+
+    def __init__(self, config: dict, case_directory: str):
+        self.config = config
+        self.case_directory = case_directory
+        self.log = Logger("distance_wall_inlet").get_logger()
+
+        # Extract settings
+        self.inlet_settings = config.get('inlet', {})
+        self.geom_settings = config.get('geometry', {})
+        self.phys_settings = config.get('physics', {})
+
+        # Inlet identification
+        self.inlet_name = self.geom_settings.get('inlet_keywords_ordered', 'inlet')
+        self.inlet_data_file = self.inlet_settings.get('csv_file', 'flow.csv')
+        self.data_type = self.inlet_settings.get('data_type', 'flowrate').lower().strip()
+
+        # Shape function settings
+        shape_str = self.inlet_settings.get('shape_function', 'poiseuille').lower()
+        self.shape_function = self._parse_shape_function(shape_str)
+        self.exponent = float(self.inlet_settings.get('exponent', 2.0))
+        self.core_fraction = float(self.inlet_settings.get('core_fraction', 0.3))
+
+        # Orientation
+        self.orientation = self.inlet_settings.get('orientation', 'auto').lower().strip()
+
+        # Geometry data (computed during run)
+        self.inlet_normal = None
+        self.center = None
+        self.d_max = None
+        self.area = None
+        self.face_areas = None
+        self.cardiac_cycle = None
+
+        self.log.info("DistanceWallInletProfile initialized")
+        self.log.info(f"  Shape function: {self.shape_function.value}, exponent: {self.exponent}")
+
+    def _parse_shape_function(self, shape_str: str) -> ShapeFunction:
+        """Parse shape function string to enum."""
+        mapping = {
+            'power_law': ShapeFunction.POWER_LAW,
+            'power': ShapeFunction.POWER_LAW,
+            'linear': ShapeFunction.POWER_LAW,
+            'poiseuille': ShapeFunction.POISEUILLE,
+            'parabolic': ShapeFunction.POISEUILLE,
+            'hybrid': ShapeFunction.HYBRID_JET,
+            'hybrid_jet': ShapeFunction.HYBRID_JET,
+            'blunted': ShapeFunction.BLUNTED_PARABOLIC,
+            'blunted_parabolic': ShapeFunction.BLUNTED_PARABOLIC,
+        }
+        return mapping.get(shape_str, ShapeFunction.POISEUILLE)
+
+    def run(self) -> None:
+        """
+        Main execution method.
+
+        Steps:
+        1. Load inlet geometry and compute basic properties
+        2. Calculate distance-to-wall for each face centre
+        3. Read time-series flow data from CSV
+        4. For each timestep, compute velocity field and write to boundaryData
+        """
+        self.log.info("=" * 60)
+        self.log.info("Distance-to-Wall Inlet Profile Generation")
+        self.log.info("=" * 60)
+
+        # Step 1: Load inlet geometry
+        self._load_inlet_geometry()
+
+        # Step 2: Read mesh points from boundaryData
+        points_file = os.path.join(
+            self.case_directory, "constant", "boundaryData",
+            self.inlet_name, "points"
+        )
+        if not os.path.isfile(points_file):
+            raise FileNotFoundError(f"Points file not found: {points_file}")
+
+        n_points, points = self._read_points_file(points_file)
+        self.log.info(f"Read {n_points} face centres from boundaryData")
+
+        # Step 3: Calculate distance-to-wall for each point
+        distances = self._calculate_wall_distances(points)
+        self.d_max = np.max(distances)
+        self.log.info(f"Distance range: [0, {self.d_max:.6f}] m")
+
+        # Estimate face areas (assume uniform if not available)
+        self.face_areas = np.full(n_points, self.area / n_points)
+
+        # Step 4: Read CSV flow data
+        csv_path = os.path.join(
+            self.case_directory, "constant", "boundaryData",
+            self.inlet_name, self.inlet_data_file
+        )
+        if not os.path.isfile(csv_path):
+            raise FileNotFoundError(f"Inlet CSV not found: {csv_path}")
+
+        times, values, self.cardiac_cycle = self._read_csv_file(csv_path)
+        self.log.info(f"Read {len(times)} timesteps, cardiac cycle: {self.cardiac_cycle:.4f}s")
+
+        # Step 5: Clean old time directories
+        parent_dir = os.path.join(
+            self.case_directory, "constant", "boundaryData", self.inlet_name
+        )
+        self._clean_time_directories(parent_dir)
+
+        # Step 6: Generate velocity for each timestep
+        self.log.info("Generating velocity profiles...")
+        self._generate_time_data(parent_dir, times, values, n_points, distances)
+
+        self.log.info("=" * 60)
+        self.log.info("Distance-to-Wall Profile Generation Complete")
+        self.log.info("=" * 60)
+
+    def _load_inlet_geometry(self) -> None:
+        """Load inlet STL and calculate geometry properties.
+
+        NOTE: STL files are PRE-SCALED to meters during case setup.
+        No scale_factor needed - values returned directly in SI units.
+        """
+        tri_surface_dir = os.path.join(self.case_directory, "constant", "triSurface")
+
+        patch_proc = PatchProcessing(tri_surface_dir, self.inlet_name)
+        self.center, _, self.inlet_normal = patch_proc.calculate_inlet_center_radius()
+        self.area = patch_proc.calculate_surface_area()
+
+        self.log.info(f"Inlet centre: {self.center}")
+        self.log.info(f"Inlet area: {self.area:.6e} m²")
+        self.log.info(f"Inlet normal: {self.inlet_normal}")
+
+    def _calculate_wall_distances(self, points: np.ndarray) -> np.ndarray:
+        """
+        Calculate distance from each face centre to nearest wall edge.
+
+        This uses the inlet patch boundary (extracted from STL) as the "wall".
+        Each face centre's distance to this boundary defines its d value.
+
+        Parameters
+        ----------
+        points : np.ndarray
+            Face centre coordinates (N, 3).
+
+        Returns
+        -------
+        np.ndarray
+            Distance to wall for each point (N,).
+        """
+        n_points = len(points)
+        distances = np.zeros(n_points)
+
+        # Try to get boundary points from STL
+        wall_points = self._extract_inlet_boundary()
+
+        if wall_points is not None and len(wall_points) > 0:
+            self.log.info(f"Using {len(wall_points)} boundary points for distance calculation")
+            for i, pt in enumerate(points):
+                d = np.min(np.linalg.norm(wall_points - pt, axis=1))
+                distances[i] = d
+        else:
+            # Fallback: radial distance from centre
+            self.log.info("Using radial distance approximation")
+            distances_from_center = np.linalg.norm(points - self.center, axis=1)
+            max_radius = np.max(distances_from_center)
+            distances = max_radius - distances_from_center
+            distances = np.maximum(distances, 0)
+
+        return distances
+
+    def _extract_inlet_boundary(self) -> Optional[np.ndarray]:
+        """Extract boundary edge points from inlet STL.
+
+        NOTE: STL files are PRE-SCALED to meters during case setup.
+        No additional scaling needed.
+        """
+        try:
+            import trimesh
+            inlet_stl = os.path.join(
+                self.case_directory, "constant", "triSurface",
+                f"{self.inlet_name}.stl"
+            )
+            if not os.path.isfile(inlet_stl):
+                return None
+
+            # STL is already in meters, no scaling needed
+            mesh = trimesh.load(inlet_stl)
+
+            # Get boundary edges
+            outline = mesh.outline()
+            if hasattr(outline, 'vertices') and len(outline.vertices) > 0:
+                return outline.vertices
+            else:
+                # Fallback: use peripheral vertices
+                vertices = mesh.vertices
+                distances_from_center = np.linalg.norm(vertices - self.center, axis=1)
+                max_dist = np.max(distances_from_center)
+                threshold = 0.85 * max_dist
+                return vertices[distances_from_center > threshold]
+
+        except ImportError:
+            self.log.warning("trimesh not available, using radial approximation")
+            return None
+        except Exception as e:
+            self.log.warning(f"Could not extract boundary: {e}")
+            return None
+
+    def _compute_shape_factor(self, d: float) -> float:
+        """
+        Compute shape factor f(d) for given distance.
+
+        Shape function satisfies f(0) = 0 (at wall) and f(d_max) = 1 (at centre).
+
+        Parameters
+        ----------
+        d : float
+            Distance from point to wall.
+
+        Returns
+        -------
+        float
+            Shape factor in [0, 1].
+        """
+        if self.d_max <= 0:
+            return 1.0
+
+        d_norm = min(d / self.d_max, 1.0)
+
+        if self.shape_function == ShapeFunction.POWER_LAW:
+            # f(d) = (d/d_max)^n
+            return d_norm ** self.exponent
+
+        elif self.shape_function == ShapeFunction.POISEUILLE:
+            # f(d) = 1 - (1 - d/d_max)^2 = 1 - r_norm^2
+            r_norm = 1.0 - d_norm
+            return max(0, 1.0 - r_norm ** 2)
+
+        elif self.shape_function == ShapeFunction.HYBRID_JET:
+            # Flat core (f=1) for d > core_fraction * d_max
+            # Power decay near wall
+            core_dist = self.core_fraction * self.d_max
+            if d >= core_dist:
+                return 1.0
+            else:
+                return (d / core_dist) ** self.exponent
+
+        elif self.shape_function == ShapeFunction.BLUNTED_PARABOLIC:
+            # Flat core + parabolic near wall
+            core_dist = self.core_fraction * self.d_max
+            if d >= core_dist:
+                return 1.0
+            else:
+                local_r = 1.0 - (d / core_dist)
+                return max(0, 1.0 - local_r ** 2)
+
+        else:
+            # Default Poiseuille
+            r_norm = 1.0 - d_norm
+            return max(0, 1.0 - r_norm ** 2)
+
+    def _calculate_scaling_factor(
+        self,
+        distances: np.ndarray,
+        target_flow_rate: float
+    ) -> float:
+        """
+        Calculate U_0 to match target flow rate.
+
+        Q(t) = sum_i f(d_i) * U_0(t) * dA_i
+        => U_0(t) = Q(t) / sum_i (f(d_i) * dA_i)
+
+        Parameters
+        ----------
+        distances : np.ndarray
+            Distance to wall for each face.
+        target_flow_rate : float
+            Target volumetric flow rate (m³/s).
+
+        Returns
+        -------
+        float
+            Scaling velocity U_0.
+        """
+        shape_factors = np.array([self._compute_shape_factor(d) for d in distances])
+        integrated = np.sum(shape_factors * self.face_areas)
+
+        if integrated <= 0:
+            self.log.warning("Integrated shape*area is zero, using average velocity")
+            return abs(target_flow_rate) / self.area
+
+        return abs(target_flow_rate) / integrated
+
+    def _generate_time_data(
+        self,
+        parent_dir: str,
+        times: np.ndarray,
+        values: np.ndarray,
+        n_points: int,
+        distances: np.ndarray
+    ) -> None:
+        """Generate velocity data for each timestep."""
+        # Determine normal direction
+        normal = self.inlet_normal.copy()
+        if self.orientation == 'in' or (
+            self.orientation == 'auto' and self._should_flip_normal()
+        ):
+            normal = -normal
+            self.log.info("Using inward-pointing normal")
+
+        # Pre-compute shape factors
+        shape_factors = np.array([self._compute_shape_factor(d) for d in distances])
+
+        for i, t in enumerate(times):
+            val = values[i]
+
+            # Convert to flow rate (m³/s)
+            if self.data_type == 'velocity':
+                flow_rate = val * self.area
+            else:
+                # Assume flow rate input
+                # Check magnitude to detect units
+                if abs(val) > 1.0:
+                    # Likely L/min -> convert to m³/s
+                    flow_rate = val * 1e-3 / 60.0
+                else:
+                    # Already m³/s
+                    flow_rate = val
+
+            # Calculate U_0 for this timestep
+            U_0 = self._calculate_scaling_factor(distances, flow_rate)
+
+            # Generate velocities: u_i = U_0 * f(d_i) * n
+            velocities = []
+            for j in range(n_points):
+                speed = U_0 * shape_factors[j]
+                vel = speed * normal
+                velocities.append(vel)
+
+            # Write to file
+            time_dir = os.path.join(parent_dir, f"{t:.6f}")
+            os.makedirs(time_dir, exist_ok=True)
+            self._write_velocity_file(os.path.join(time_dir, "U"), velocities)
+
+            if i % max(1, len(times) // 10) == 0:
+                avg_vel = U_0 * np.mean(shape_factors)
+                self.log.info(f"  t={t:.4f}s: Q={flow_rate:.4e} m³/s, U_avg={avg_vel:.4f} m/s")
+
+    def _should_flip_normal(self) -> bool:
+        """Determine if normal needs flipping based on outlet positions.
+
+        NOTE: STL files are PRE-SCALED to meters, no scale_factor needed.
+        """
+        try:
+            tri_surface_dir = os.path.join(self.case_directory, "constant", "triSurface")
+            stl_files = [f for f in os.listdir(tri_surface_dir) if f.endswith('.stl')]
+            outlet_files = [f for f in stl_files if 'outlet' in f.lower()]
+
+            if not outlet_files:
+                return False
+
+            outlet_centers = []
+
+            for outlet_file in outlet_files:
+                outlet_name = outlet_file.replace('.stl', '')
+                try:
+                    proc = PatchProcessing(tri_surface_dir, outlet_name)
+                    center, _, _ = proc.calculate_inlet_center_radius()
+                    outlet_centers.append(center)
+                except Exception:
+                    continue
+
+            if not outlet_centers:
+                return False
+
+            avg_outlet = np.mean(outlet_centers, axis=0)
+            flow_dir = avg_outlet - self.center
+            flow_dir = flow_dir / np.linalg.norm(flow_dir)
+
+            return np.dot(self.inlet_normal, flow_dir) < 0
+
+        except Exception:
+            return False
+
+    def _read_csv_file(self, file_path: str) -> Tuple[np.ndarray, np.ndarray, float]:
+        """Read time-series data from CSV."""
+        with open(file_path, 'r') as f:
+            first_line = f.readline()
+            has_header = any(c.isalpha() for c in first_line)
+
+        skiprows = 1 if has_header else 0
+        data = np.genfromtxt(file_path, delimiter=',', skip_header=skiprows)
+
+        if data.ndim < 2 or data.shape[1] < 2:
+            raise ValueError("CSV must have at least 2 columns (time, value)")
+
+        times = data[:, 0]
+        values = data[:, 1]
+        cardiac_cycle = times[-1] - times[0]
+
+        return times, values, cardiac_cycle
+
+    def _read_points_file(self, file_path: str) -> Tuple[int, np.ndarray]:
+        """Read OpenFOAM points file."""
+        import re
+
+        with open(file_path, 'r') as f:
+            lines = [line.strip() for line in f if line.strip()]
+
+        n_points = int(lines[0])
+        points = []
+        start_idx = 2 if lines[1] == '(' else 1
+
+        for i in range(n_points):
+            line = re.sub(r'[()]', '', lines[i + start_idx])
+            xyz = [float(p) for p in line.split()]
+            points.append(xyz)
+
+        return n_points, np.array(points, dtype=float)
+
+    def _clean_time_directories(self, parent_dir: str) -> None:
+        """Remove old time directories."""
+        for item in os.listdir(parent_dir):
+            item_path = os.path.join(parent_dir, item)
+            if item.replace('.', '', 1).replace('-', '', 1).isdigit():
+                if os.path.islink(item_path):
+                    os.unlink(item_path)
+                elif os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+
+    def _write_velocity_file(self, file_path: str, velocities: List[np.ndarray]) -> None:
+        """Write velocity in OpenFOAM boundaryData format."""
+        with open(file_path, 'w') as f:
+            f.write(f"{len(velocities)}\n(\n")
+            for v in velocities:
+                f.write(f"({v[0]:.6e} {v[1]:.6e} {v[2]:.6e})\n")
+            f.write(")\n")
+
+
+def create_distance_wall_profile(config: dict, case_directory: str) -> DistanceWallInletProfile:
+    """Factory function to create profile generator."""
+    return DistanceWallInletProfile(config, case_directory)

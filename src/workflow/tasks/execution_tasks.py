@@ -6,7 +6,7 @@ from aortacfd_lib.utils.runner import run_command, CommandExecutionError
 from aortacfd_lib.utils.validation import MeshQualityChecker
 
 class ExecuteMeshingTask(Task):
-    """Runs the external meshing commands and scales the final mesh."""
+    """Runs the external meshing commands. STLs are pre-scaled to meters during case setup."""
 
     def execute(self, context: dict) -> bool:
         """This task contains the execution logic from your original run_mesh method."""
@@ -45,11 +45,10 @@ class ExecuteMeshingTask(Task):
             # Analyze mesh quality and provide alerts
             self._check_mesh_quality(case_dir)
 
-            logger.info("Scaling final mesh with transformPoints...")
-            scale = self.config['geometry']['scale_factor']
-
-            scale_arg = f"scale=({scale} {scale} {scale})"
-            run_command(self.config, ["transformPoints", f'"{scale_arg}"'], case_dir, "log.transformPoints")
+            # NOTE: transformPoints is NO LONGER NEEDED
+            # STL files are pre-scaled to meters during case setup (CreateCaseStructureTask)
+            # Mesh is generated directly in SI units (meters)
+            logger.info("Mesh is already in SI units (meters) - no post-mesh scaling needed")
 
         except CommandExecutionError as e:
             logger.error(f"Meshing failed: {e}")

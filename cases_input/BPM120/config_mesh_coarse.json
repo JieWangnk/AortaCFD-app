@@ -27,15 +27,13 @@
 
     "boundary_layers": {
       "enabled": true,
-
-      "target_yplus": 1.0,
-
+      "relative": true,
       "num_layers": 5,
 
       "expansion_ratio": 1.2,
 
-      "estimation_method": "auto"
-    },
+      "finalLayerThickness": 0.15
+      },
 
     "surface_refinement": {
       "levels": [1, 2]

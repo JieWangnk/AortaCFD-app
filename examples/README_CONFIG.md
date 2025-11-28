@@ -226,20 +226,38 @@ Mesh generation parameters.
 
 ```json
 "mesh": {
-  "cells_per_diameter": 15,  // Resolution
+  "mesh_resolution": {
+    "cells_per_diameter": 20   // RECOMMENDED: geometry-adaptive
+  },
+  "surface_refinement_level": 2,  // 1, 2, or 3
   "boundary_layers": {
     "enabled": true,
-    "target_yplus": 1.0,     // Auto-calculate thickness
     "num_layers": 5,
-    "expansion_ratio": 1.2
+    "expansion_ratio": 1.2,
+    "final_layer_thickness": 0.3
   }
 }
 ```
 
-**Resolution Guidelines**:
-- **Coarse**: 8-10 cells/diameter
-- **Medium**: 12-15 cells/diameter (recommended)
-- **Fine**: 18-20 cells/diameter
+**Resolution Guidelines** (see [MESH_SPECIFICATION_GUIDE.md](../docs/MESH_SPECIFICATION_GUIDE.md)):
+
+| Category | cells/D | Typical Elements | Use Case |
+|----------|---------|------------------|----------|
+| **Coarse** | 10-12 | 200k-500k | Initial exploration |
+| **Standard** | 15-20 | 500k-2M | Production (recommended) |
+| **Fine** | 25-30 | 2M-5M | Mesh independence studies |
+
+**Surface Refinement Levels**:
+- **Level 1**: Base cell / 2 at surface (minimal)
+- **Level 2**: Base cell / 4 at surface (DEFAULT)
+- **Level 3**: Base cell / 8 at surface (fine)
+
+**Alternative: Absolute cell size** (for mesh studies):
+```json
+"mesh_resolution": {
+  "target_cell_size_mm": 0.6  // Priority 1: overrides cells_per_diameter
+}
+```
 
 ### 5. **geometry** (Auto-discovered)
 Patch names from STL files.

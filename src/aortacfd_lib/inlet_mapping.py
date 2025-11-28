@@ -43,12 +43,13 @@ class InletMapping:
         self.log.info("Calculating inlet patch geometry...")
         tri_surface_dir = os.path.join(self.case_directory, "constant", "triSurface")
         stl_files = [f for f in os.listdir(tri_surface_dir) if f.endswith('.stl')]
-        
+
+        # STL files in constant/triSurface/ are PRE-SCALED to meters during case setup
+        # No scale_factor needed - values returned directly in SI units (meters)
         inlet_patch_processor = PatchProcessing(tri_surface_dir, self.inlet_name)
-        scale_factor = self.geom_settings.get('scale_factor', 1e-3)
-        self.center, self.radius, inlet_normal = inlet_patch_processor.calculate_inlet_center_radius(scale_factor=scale_factor)
-        self.area = inlet_patch_processor.calculate_surface_area(scale_factor=scale_factor)
-        self.log.info(f"Inlet center: {self.center}, Radius: {self.radius}, Area: {self.area:.6e} m²")
+        self.center, self.radius, inlet_normal = inlet_patch_processor.calculate_inlet_center_radius()
+        self.area = inlet_patch_processor.calculate_surface_area()
+        self.log.info(f"Inlet center: {self.center}, Radius: {self.radius:.6f} m, Area: {self.area:.6e} m²")
         
         # Automatic orientation detection
         if self.orientation == 'auto':
@@ -139,14 +140,14 @@ class InletMapping:
                 return False
             
             # Calculate average outlet centroid position
+            # STL files are pre-scaled to meters, no scale_factor needed
             outlet_centroids = []
-            scale_factor = self.geom_settings.get('scale_factor', 1e-3)
-            
+
             for outlet_file in outlet_files:
                 outlet_name = outlet_file.replace('.stl', '')
                 try:
                     outlet_processor = PatchProcessing(tri_surface_dir, outlet_name)
-                    outlet_center, _, _ = outlet_processor.calculate_inlet_center_radius(scale_factor=scale_factor)
+                    outlet_center, _, _ = outlet_processor.calculate_inlet_center_radius()
                     outlet_centroids.append(outlet_center)
                 except Exception as e:
                     self.log.warning(f"Could not process outlet {outlet_name}: {e}")

@@ -520,36 +520,83 @@ class PatientCaseRunner:
         # This allows users to write human-friendly configs that get mapped to OpenFOAM parameters
         mesh_config = case_config.get('mesh', {})
 
-        # Handle boundary_layers.enabled -> SNAPPY_SETTINGS.addLayers
+        # Handle boundary_layers settings - traditional OpenFOAM addLayersControls style
+        # Maps user-friendly config keys to SNAPPY_SETTINGS
         boundary_layers = mesh_config.get('boundary_layers', {})
+
+        # enabled -> addLayers
         if 'enabled' in boundary_layers:
             snappy_config['addLayers'] = boundary_layers['enabled']
             self.logger.info(f"🔧 Mapped mesh.boundary_layers.enabled={boundary_layers['enabled']} → SNAPPY_SETTINGS.addLayers")
 
-        # Handle boundary_layers.num_layers or n_surface_layers -> SNAPPY_SETTINGS.addLayer
-        # (note: singular 'addLayer' is the OpenFOAM key name for nSurfaceLayers)
+        # num_layers -> addLayer (nSurfaceLayers)
         num_layers = boundary_layers.get('num_layers') or boundary_layers.get('n_surface_layers')
         if num_layers is not None:
             snappy_config['addLayer'] = num_layers
             self.logger.info(f"🔧 Mapped mesh.boundary_layers.num_layers={num_layers} → SNAPPY_SETTINGS.addLayer (nSurfaceLayers)")
 
-        # Handle boundary_layers.expansion_ratio -> SNAPPY_SETTINGS.expansionRatio
-        if 'expansion_ratio' in boundary_layers:
-            snappy_config['expansionRatio'] = boundary_layers['expansion_ratio']
-            self.logger.info(f"🔧 Mapped mesh.boundary_layers.expansion_ratio={boundary_layers['expansion_ratio']} → SNAPPY_SETTINGS.expansionRatio")
+        # expansion_ratio -> expansionRatio (also accept camelCase)
+        expansion_ratio = boundary_layers.get('expansion_ratio') or boundary_layers.get('expansionRatio')
+        if expansion_ratio is not None:
+            snappy_config['expansionRatio'] = expansion_ratio
+            self.logger.info(f"🔧 Mapped mesh.boundary_layers.expansion_ratio={expansion_ratio} → SNAPPY_SETTINGS.expansionRatio")
 
-        # Handle boundary_layers.finalLayerThickness -> SNAPPY_SETTINGS.finalLayerThickness
-        # (EXPLICIT OVERRIDE - disables y+ automatic calculation)
-        if 'finalLayerThickness' in boundary_layers:
-            snappy_config['finalLayerThickness'] = boundary_layers['finalLayerThickness']
-            self.logger.warning(
-                f"🔧 MANUAL OVERRIDE: mesh.boundary_layers.finalLayerThickness={boundary_layers['finalLayerThickness']} mm "
-                f"→ Y+ estimation DISABLED (you control layer thickness directly)"
+        # final_layer_thickness -> finalLayerThickness (relative, when relativeSizes=true)
+        # Also accept camelCase 'finalLayerThickness' for backward compatibility
+        final_layer_thickness = boundary_layers.get('final_layer_thickness') or boundary_layers.get('finalLayerThickness')
+        if final_layer_thickness is not None:
+            snappy_config['finalLayerThickness'] = final_layer_thickness
+            snappy_config['relativeSizes'] = True  # Ensure relative sizing mode
+            self.logger.info(
+                f"🔧 Mapped mesh.boundary_layers.final_layer_thickness={final_layer_thickness} "
+                f"→ SNAPPY_SETTINGS.finalLayerThickness (relativeSizes=true)"
             )
 
-        # Handle surface_refinement.levels -> SNAPPY_SETTINGS.surfaceRefinementLevels
+        # min_thickness -> minThickness
+        if 'min_thickness' in boundary_layers:
+            snappy_config['minThickness'] = boundary_layers['min_thickness']
+            self.logger.info(f"🔧 Mapped mesh.boundary_layers.min_thickness={boundary_layers['min_thickness']} → SNAPPY_SETTINGS.minThickness")
+
+        # OPTIONAL: target_yplus triggers Y+ based calculation (overrides final_layer_thickness)
+        # Only activate if explicitly set in boundary_layers (not as _optional_target_yplus comment)
+        if 'target_yplus' in boundary_layers:
+            # Y+ estimation will be handled by mesh_setup.py _apply_yplus_layer_sizing()
+            self.logger.info(
+                f"🔧 mesh.boundary_layers.target_yplus={boundary_layers['target_yplus']} detected "
+                f"→ Y+ based layer sizing will override finalLayerThickness"
+            )
+
+        # Handle surface refinement configuration
+        # Priority 1: surface_refinement_level (integer 1, 2, or 3) - NEW SIMPLIFIED API
+        # Priority 2: surface_refinement.levels (legacy [min, max] format)
+        surface_refinement_level = mesh_config.get('surface_refinement_level')
         surface_refinement = mesh_config.get('surface_refinement', {})
-        if 'levels' in surface_refinement:
+
+        if surface_refinement_level is not None:
+            # NEW: Simple integer level (1, 2, or 3)
+            from aortacfd_lib.utils.mesh_constants import SURFACE_REFINEMENT_LEVELS, DEFAULT_SURFACE_REFINEMENT_LEVEL
+            try:
+                level = int(surface_refinement_level)
+                if level not in SURFACE_REFINEMENT_LEVELS:
+                    self.logger.warning(
+                        f"Invalid surface_refinement_level={level}. Valid: 1, 2, or 3. "
+                        f"Using default level {DEFAULT_SURFACE_REFINEMENT_LEVEL}."
+                    )
+                    level = DEFAULT_SURFACE_REFINEMENT_LEVEL
+                snappy_levels = SURFACE_REFINEMENT_LEVELS[level]
+                snappy_config['surfaceRefinementLevels'] = snappy_levels
+                cell_multiplier = 4 ** (level - 1)  # 1→1×, 2→4×, 3→16×
+                self.logger.info(
+                    f"🔧 surface_refinement_level={level} → snappy levels {snappy_levels} "
+                    f"({cell_multiplier}× surface cells vs level 1)"
+                )
+            except (ValueError, TypeError):
+                self.logger.warning(
+                    f"Invalid surface_refinement_level value: {surface_refinement_level}. "
+                    f"Expected integer 1, 2, or 3. Falling back to legacy format."
+                )
+        elif 'levels' in surface_refinement:
+            # LEGACY: [min, max] format for backward compatibility
             levels = surface_refinement['levels']
             if isinstance(levels, list) and len(levels) == 2:
                 snappy_config['surfaceRefinementLevels'] = levels

@@ -6,6 +6,9 @@ from .utils.logger import Logger
 from .utils.patch_processing import PatchProcessing
 from .utils.mesh_constants import (
     DEFAULT_CELLS_PER_DIAMETER,
+    MIN_CELLS_PER_DIAMETER,
+    SURFACE_REFINEMENT_LEVELS,
+    DEFAULT_SURFACE_REFINEMENT_LEVEL,
     compute_cell_size,
     check_blockmesh_size
 )
@@ -22,33 +25,21 @@ class GeometryAnalyzer:
     - Internal point detection for mesh domain
 
     Physical Units:
-        - Geometry: millimeters (mm) - clinical imaging standard
-        - OpenFOAM output: meters (m) - SI units for CFD
-        - Conversion: scale_factor (default 1e-3 for mm→m)
+        IMPORTANT: STL files in constant/triSurface/ are PRE-SCALED to meters.
+        Scaling happens during case setup (CreateCaseStructureTask), NOT here.
+        All geometry values (centroids, radii, areas) are in SI units (meters).
 
-    Mesh Sizing Strategy (6-Priority Hierarchy):
-        1. resolution_level: Simple presets (coarse/medium/fine) - RECOMMENDED
-           - coarse/draft: 2.0mm (~100K-300K cells, 5-15 min)
-           - medium/clinical: 1.0mm (~500K-1.5M cells, 30-90 min) ← START HERE
-           - fine/publication: 0.5mm (~2M-5M cells, 2-4 hours)
-           - ultra_fine: 0.25mm (~10M+ cells, 6-12 hours)
-        2. target_cell_size_mm: Direct specification in mm (advanced users)
-        3. blockmesh_resolution: Cells across diameter (geometry-based)
-        4. cells_per_diameter: Same as #3, different naming
-        5. refinement_levels: Legacy lookup table
-        6. Fallback: 1.0mm default (only if none of above set)
+        User-facing resolution parameters (target_cell_size_mm, cells_per_diameter)
+        are still in mm for convenience - internally converted to meters.
+
+    Mesh Sizing Strategy (3-Priority Hierarchy):
+        1. target_cell_size_mm: Direct specification in mm (absolute control)
+        2. cells_per_diameter: Cells across reference diameter (geometry-adaptive)
+        3. Fallback: 10 cells/diameter (triggers warning)
 
     RECOMMENDED WORKFLOW:
-        Set mesh.resolution_level = "medium" in your config for most cases.
-        Only use lower priorities if you need custom values not covered by presets.
-        See MESH_RESOLUTION_GUIDE.md for complete documentation.
-
-    Default Fallback (Priority 6):
-        - Value: 1.0mm (matches 'medium' profile for consistency)
-        - Only used when no resolution parameters are configured
-        - Triggers warning recommending explicit resolution_level configuration
-        - Adult aorta: 20mm diameter → 20 cells across (adequate for RANS)
-        - Small branches: ~5mm diameter → 5 cells (minimum for flow capture)
+        Use mesh.mesh_resolution.cells_per_diameter = 20 for geometry-adaptive sizing.
+        Or mesh.mesh_resolution.target_cell_size_mm for absolute size control.
 
     Args:
         config: Full configuration dictionary with 'geometry', 'mesh', 'physics' sections
@@ -74,32 +65,89 @@ class GeometryAnalyzer:
         self.tri_surface_path = os.path.join(self.case_dir, "constant", "triSurface")
 
         self.inlet_centroid = None
-        self.inlet_radius = None
+        self.inlet_radius = None  # in meters (STLs are pre-scaled)
         self.inlet_normal = None
         self.outlet_centroids = []
-        self.outlet_radii = []
-        self.reference_radius_mm = None
+        self.outlet_radii = []  # in meters (STLs are pre-scaled)
+        self.reference_radius_m = None  # in meters
+
+        # Process user-friendly config options into SNAPPY_SETTINGS
+        self._process_mesh_config_options()
         self._calculate_patch_properties()
+
+    def _process_mesh_config_options(self):
+        """
+        Process user-friendly mesh config options and merge into SNAPPY_SETTINGS.
+
+        Handles:
+        - surface_refinement_level (1, 2, 3) → surfaceRefinementLevels
+        - boundary_layers.* → addLayer, expansionRatio, finalLayerThickness, etc.
+
+        This ensures the simplified config API works regardless of how the case is run.
+        """
+        # Process surface_refinement_level
+        surface_refinement_level = self.mesh_settings.get('surface_refinement_level')
+        if surface_refinement_level is not None:
+            try:
+                level = int(surface_refinement_level)
+                if level in SURFACE_REFINEMENT_LEVELS:
+                    snappy_levels = SURFACE_REFINEMENT_LEVELS[level]
+                    self.snappy_settings['surfaceRefinementLevels'] = snappy_levels
+                    cell_multiplier = 4 ** (level - 1)
+                    self.log.info(
+                        f"surface_refinement_level={level} → snappy levels {snappy_levels} "
+                        f"({cell_multiplier}× surface cells vs level 1)"
+                    )
+                else:
+                    self.log.warning(
+                        f"Invalid surface_refinement_level={level}. Valid: 1, 2, or 3. "
+                        f"Using default level {DEFAULT_SURFACE_REFINEMENT_LEVEL}."
+                    )
+                    self.snappy_settings['surfaceRefinementLevels'] = SURFACE_REFINEMENT_LEVELS[DEFAULT_SURFACE_REFINEMENT_LEVEL]
+            except (ValueError, TypeError):
+                self.log.warning(f"Invalid surface_refinement_level: {surface_refinement_level}. Using defaults.")
+
+        # Process boundary_layers config (accept both snake_case and camelCase)
+        boundary_layers = self.mesh_settings.get('boundary_layers', {})
+
+        if 'enabled' in boundary_layers:
+            self.snappy_settings['addLayers'] = boundary_layers['enabled']
+
+        num_layers = boundary_layers.get('num_layers') or boundary_layers.get('nSurfaceLayers')
+        if num_layers is not None:
+            self.snappy_settings['addLayer'] = num_layers
+
+        expansion_ratio = boundary_layers.get('expansion_ratio') or boundary_layers.get('expansionRatio')
+        if expansion_ratio is not None:
+            self.snappy_settings['expansionRatio'] = expansion_ratio
+
+        final_layer_thickness = boundary_layers.get('final_layer_thickness') or boundary_layers.get('finalLayerThickness')
+        if final_layer_thickness is not None:
+            self.snappy_settings['finalLayerThickness'] = final_layer_thickness
+            self.snappy_settings['relativeSizes'] = True
+
+        min_thickness = boundary_layers.get('min_thickness') or boundary_layers.get('minThickness')
+        if min_thickness is not None:
+            self.snappy_settings['minThickness'] = min_thickness
 
     def _calculate_patch_properties(self):
         """
         Calculate geometric properties of inlet/outlet patches from STL files.
 
         Computes:
-            - Centroid coordinates (mm): geometric center of each patch
-            - Equivalent radius (mm): sqrt(area/π) for circular cross-section approximation
+            - Centroid coordinates (m): geometric center of each patch
+            - Equivalent radius (m): sqrt(area/π) for circular cross-section approximation
             - Normal vector (unit): surface normal direction for flow orientation
 
-        Units: All calculations in millimeters, converted to meters via scale_factor
+        Units: All values in meters (STLs are pre-scaled during case setup)
         """
         self.log.info("Analyzing inlet and outlet patch geometries...")
-        scale_factor = self.geom_settings.get('scale_factor', 1e-3)
-        
-        # Process Inlet
+
+        # Process Inlet - STLs are already in meters, no scale_factor needed
         inlet_processor = PatchProcessing(self.tri_surface_path, self.inlet_patch)
         self.inlet_centroid, self.inlet_radius, self.inlet_normal = inlet_processor.calculate_inlet_center_radius()
-        self.log.info(f"Inlet properties calculated - Center: {self.inlet_centroid}")
-        
+        self.log.info(f"Inlet properties calculated - Center: {self.inlet_centroid}, Radius: {self.inlet_radius:.6f} m")
+
         # Process all Outlets in a loop
         for outlet_name in self.outlet_patches:
             outlet_processor = PatchProcessing(self.tri_surface_path, outlet_name)
@@ -107,9 +155,10 @@ class GeometryAnalyzer:
             self.outlet_centroids.append(centroid)
             self.outlet_radii.append(radius)
 
-        self.reference_radius_mm = self._determine_reference_radius()
-        if self.reference_radius_mm is not None:
-            self.log.info(f"Reference branch radius for meshing: {self.reference_radius_mm:.3f} mm")
+        self.reference_radius_m = self._determine_reference_radius()
+        if self.reference_radius_m is not None:
+            # Display in mm for user convenience
+            self.log.info(f"Reference branch radius for meshing: {self.reference_radius_m*1000:.3f} mm ({self.reference_radius_m:.6f} m)")
         else:
             self.log.warning("Could not determine reference radius from geometry; falling back to default cell sizing.")
 
@@ -129,7 +178,7 @@ class GeometryAnalyzer:
             mesh in large vessels (adaptive refinement handles this automatically).
 
         Returns:
-            float: Reference radius in millimeters, or None if no valid geometry
+            float: Reference radius in meters, or None if no valid geometry
         """
         radii = []
         if self.inlet_radius and self.inlet_radius > 0:
@@ -175,29 +224,31 @@ class GeometryAnalyzer:
         return np.vstack(all_verts)
 
     def _extract_vertices_from_stl(self, stl_file_basename: str) -> np.ndarray:
-        """Extracts unique vertices from a single STL file (NO SCALING - keep in mm)."""
+        """Extracts unique vertices from a single STL file (already in meters)."""
         full_path = os.path.join(self.tri_surface_path, stl_file_basename)
         try:
             stl_mesh = np_stl_mesh.Mesh.from_file(full_path)
-            
-            # Keep vertices in original units (mm) to match STL files
-            # Scaling will be applied later with transformPoints
+
+            # STL files in constant/triSurface/ are PRE-SCALED to meters
+            # during case setup (CreateCaseStructureTask)
             return np.unique(stl_mesh.vectors.reshape(-1, 3), axis=0)
         except Exception as e:
             raise RuntimeError(f"Error processing STL file {full_path}: {e}") from e
 
     def _get_blockmesh_bounds(self, all_vertices: np.ndarray) -> dict:
-        """Calculates the expanded bounding box for blockMesh."""
+        """Calculates the expanded bounding box for blockMesh (in meters)."""
         min_coords = np.min(all_vertices, axis=0)
         max_coords = np.max(all_vertices, axis=0)
 
-        expansion_factor = self.snappy_settings.get("expansionFactor", 0.02)
+        expansion_factor = self.snappy_settings.get("expansionFactor", 0.01)
         ranges = max_coords - min_coords
 
         min_expanded = min_coords - (expansion_factor * ranges)
         max_expanded = max_coords + (expansion_factor * ranges)
 
-        self.log.info(f"BlockMesh bounds (mm, expanded): min({min_expanded}), max({max_expanded})")
+        # Display in both meters and mm for user clarity
+        self.log.info(f"BlockMesh bounds (m, expanded): min({min_expanded}), max({max_expanded})")
+        self.log.info(f"BlockMesh bounds (mm): min({min_expanded*1000}), max({max_expanded*1000})")
         return {"min": min_expanded, "max": max_expanded}
 
     def _coerce_positive(self, value, label: str):
@@ -252,13 +303,16 @@ class GeometryAnalyzer:
         - When you know the exact element size requirement from prior validation
 
         Returns:
-            (cell_size_mm, source_description) or (None, None)
+            (cell_size_m, source_description) or (None, None)
+            Note: User specifies in mm, returned in meters for internal use
         """
         target_mm = mesh_resolution.get('target_cell_size_mm')
         validated = self._coerce_positive(target_mm, "mesh.mesh_resolution.target_cell_size_mm")
 
         if validated is not None:
-            return validated, f"target_cell_size_mm={validated:.3f}mm (absolute, uniform background grid)"
+            # Convert mm to meters for internal use
+            cell_size_m = validated / 1000.0
+            return cell_size_m, f"target_cell_size_mm={validated:.3f}mm (absolute, uniform background grid)"
         return None, None
 
     def _cell_size_from_cells_per_diameter(self, mesh_resolution: dict) -> tuple:
@@ -269,6 +323,11 @@ class GeometryAnalyzer:
 
         Formula: cell_size = reference_diameter / cells_per_diameter
 
+        Recommended values:
+        - 10-12: Initial exploration, fast iteration
+        - 15-20: Standard simulation, balanced accuracy/cost
+        - 25-30: High resolution, mesh-independent solutions
+
         Use for:
         - Patient-specific simulations (auto-adapts to anatomy)
         - Consistent resolution across pediatric/adult cases
@@ -277,16 +336,25 @@ class GeometryAnalyzer:
         Requires: Valid reference geometry from STL analysis
 
         Returns:
-            (cell_size_mm, source_description) or (None, None)
+            (cell_size_m, source_description) or (None, None)
         """
         cells_per_diam_cfg = mesh_resolution.get('cells_per_diameter')
         cells_val = self._coerce_positive(cells_per_diam_cfg, "mesh.mesh_resolution.cells_per_diameter")
 
         if cells_val is not None:
-            if self.reference_radius_mm is not None and self.reference_radius_mm > 0:
-                D_ref = 2.0 * self.reference_radius_mm
-                cell_size = compute_cell_size(cells_val, D_ref)
-                return cell_size, f"cells_per_diameter={cells_val:.0f} (D_ref={D_ref:.2f}mm → {cell_size:.3f}mm)"
+            # Validate minimum cells per diameter
+            if cells_val < MIN_CELLS_PER_DIAMETER:
+                self.log.warning(
+                    f"cells_per_diameter={cells_val:.0f} is below minimum ({MIN_CELLS_PER_DIAMETER}). "
+                    f"Results may be unreliable. Consider using at least {MIN_CELLS_PER_DIAMETER} cells/diameter."
+                )
+
+            if self.reference_radius_m is not None and self.reference_radius_m > 0:
+                D_ref_m = 2.0 * self.reference_radius_m
+                D_ref_mm = D_ref_m * 1000  # For display
+                cell_size_m = D_ref_m / cells_val
+                cell_size_mm = cell_size_m * 1000  # For display
+                return cell_size_m, f"cells_per_diameter={cells_val:.0f} (D_ref={D_ref_mm:.2f}mm → {cell_size_mm:.3f}mm)"
             else:
                 self.log.error(
                     "cells_per_diameter requires valid reference geometry. "
@@ -306,109 +374,73 @@ class GeometryAnalyzer:
         target_cell_size_mm OR cells_per_diameter for any real simulation.
 
         Returns:
-            (cell_size_mm, source_description)
+            (cell_size_m, source_description)
         """
-        if self.reference_radius_mm is not None and self.reference_radius_mm > 0:
-            D_ref = 2.0 * self.reference_radius_mm
-            cell_size = compute_cell_size(DEFAULT_CELLS_PER_DIAMETER, D_ref)
+        if self.reference_radius_m is not None and self.reference_radius_m > 0:
+            D_ref_m = 2.0 * self.reference_radius_m
+            D_ref_mm = D_ref_m * 1000  # For display
+            cell_size_m = D_ref_m / DEFAULT_CELLS_PER_DIAMETER
+            cell_size_mm = cell_size_m * 1000  # For display
             self.log.warning(
                 "="*70 + "\n"
                 "⚠️  NO MESH RESOLUTION SPECIFIED - Using conservative fallback\n"
                 "="*70 + "\n"
-                f"Defaulting to {DEFAULT_CELLS_PER_DIAMETER} cells/diameter → {cell_size:.3f}mm\n\n"
+                f"Defaulting to {DEFAULT_CELLS_PER_DIAMETER} cells/diameter → {cell_size_mm:.3f}mm\n\n"
                 "This is suitable for INITIAL GEOMETRY CHECK only.\n\n"
                 "For production simulations, explicitly specify in config:\n"
-                "  Option 1 (geometry-adaptive):\n"
-                "    mesh.mesh_resolution.cells_per_diameter = 12  # or 15, 20, etc.\n\n"
+                "  Option 1 (RECOMMENDED - geometry-adaptive):\n"
+                "    mesh.mesh_resolution.cells_per_diameter = 20  # or 15, 25, 30, etc.\n"
+                "    Guidelines: 10-12 (coarse), 15-20 (standard), 25-30 (fine)\n\n"
                 "  Option 2 (absolute control):\n"
                 "    mesh.mesh_resolution.target_cell_size_mm = 0.8  # or other value\n\n"
                 "Choose based on your mesh independence study requirements.\n"
                 "="*70
             )
-            return cell_size, f"FALLBACK: {DEFAULT_CELLS_PER_DIAMETER} cells/D (D={D_ref:.2f}mm → {cell_size:.3f}mm)"
+            return cell_size_m, f"FALLBACK: {DEFAULT_CELLS_PER_DIAMETER} cells/D (D={D_ref_mm:.2f}mm → {cell_size_mm:.3f}mm)"
         else:
             # Last resort if geometry completely unavailable
             fallback_mm = 2.0
+            fallback_m = fallback_mm / 1000.0
             self.log.error(
                 "CRITICAL: Cannot compute resolution - no geometry and no user specification.\n"
                 f"Using arbitrary fallback: {fallback_mm}mm. Results are NOT reliable."
             )
-            return fallback_mm, f"CRITICAL FALLBACK: {fallback_mm}mm (no geometry, no user spec)"
+            return fallback_m, f"CRITICAL FALLBACK: {fallback_mm}mm (no geometry, no user spec)"
 
     def _validate_resolution_config(self, mesh_resolution: dict) -> None:
         """
-        Validate that only one resolution parameter is set.
+        Validate mesh resolution configuration.
 
-        Warns if multiple parameters detected, as this indicates configuration
-        confusion about which value will be used.
-
-        Also warns about deprecated parameters.
+        Warns if conflicting parameters are supplied.
+        Only two parameters are supported:
+        - target_cell_size_mm (Priority 1: absolute control)
+        - cells_per_diameter (Priority 2: geometry-adaptive)
         """
-        import warnings
+        has_target_mm = mesh_resolution.get('target_cell_size_mm') is not None
+        has_cells_per_d = mesh_resolution.get('cells_per_diameter') is not None
 
-        set_params = []
-
-        # Check what parameters are set
-        if mesh_resolution.get('target_cell_size_mm') is not None:
-            set_params.append(('target_cell_size_mm', 1))
-
-        if mesh_resolution.get('cells_per_diameter') is not None:
-            set_params.append(('cells_per_diameter', 2))
-
-        # Check for DEPRECATED parameters
-        deprecated_params = []
-        if mesh_resolution.get('resolution_level') is not None:
-            deprecated_params.append('resolution_level')
-        if mesh_resolution.get('blockmesh_resolution') is not None or mesh_resolution.get('blockMesh_resolution') is not None:
-            deprecated_params.append('blockmesh_resolution / blockMesh_resolution')
-
-        if deprecated_params:
+        # Warn if both parameters are set (conflict)
+        if has_target_mm and has_cells_per_d:
             self.log.warning(
-                f"\n"
-                f"⚠️  DEPRECATION WARNING: Old mesh resolution parameters detected\n"
-                f"─────────────────────────────────────────────────────────────────\n"
-                f"The following parameters are DEPRECATED and will be IGNORED:\n"
-                f"  {', '.join(deprecated_params)}\n"
-                f"\n"
-                f"These were removed in the new config system.\n"
-                f"Please use ONE of the following instead:\n"
-                f"  - 'cells_per_diameter' (recommended for patient-specific)\n"
-                f"  - 'target_cell_size_mm' (for mesh independence studies)\n"
-                f"\n"
-                f"Example:\n"
-                f'  "mesh": {{\n'
-                f'    "mesh_resolution": {{\n'
-                f'      "cells_per_diameter": 15\n'
-                f'    }}\n'
-                f'  }}\n'
-            )
-            warnings.warn(
-                f"Mesh resolution parameters {deprecated_params} are deprecated. "
-                f"Use 'cells_per_diameter' or 'target_cell_size_mm' instead.",
-                DeprecationWarning,
-                stacklevel=4
-            )
-
-        # Warn if multiple parameters set
-        if len(set_params) > 1:
-            params_str = ', '.join([f"{name} (priority {p})" for name, p in set_params])
-            highest_priority = min(set_params, key=lambda x: x[1])
-
-            self.log.warning(
-                f"Multiple mesh resolution parameters detected: {params_str}\n"
-                f"Only '{highest_priority[0]}' (priority {highest_priority[1]}) will be used.\n"
-                f"Recommendation: Set only ONE parameter:\n"
-                f"  - target_cell_size_mm (absolute control), OR\n"
-                f"  - cells_per_diameter (geometry-adaptive)"
+                "="*70 + "\n"
+                "⚠️  CONFLICTING MESH RESOLUTION PARAMETERS\n"
+                "="*70 + "\n"
+                f"Both target_cell_size_mm and cells_per_diameter are set.\n"
+                f"Using target_cell_size_mm={mesh_resolution['target_cell_size_mm']}mm (Priority 1)\n"
+                f"Ignoring cells_per_diameter={mesh_resolution['cells_per_diameter']}\n\n"
+                "Recommendation: Set only ONE parameter:\n"
+                "  - target_cell_size_mm (absolute control for mesh studies), OR\n"
+                "  - cells_per_diameter (geometry-adaptive, RECOMMENDED)\n"
+                "="*70
             )
 
     def _get_cell_size_strategies(self, mesh_resolution: dict):
         """
         Define cell size computation strategies in priority order.
 
-        SIMPLIFIED 3-PRIORITY SYSTEM:
+        3-PRIORITY SYSTEM:
             1. target_cell_size_mm: Absolute size in mm (user-specified)
-            2. cells_per_diameter: Geometry-adaptive (user-specified)
+            2. cells_per_diameter: Geometry-adaptive (RECOMMENDED)
             3. default_fallback: Conservative 10 cells/D (triggers warning)
 
         Returns list of (priority, method_name, method_function) tuples.
@@ -421,15 +453,15 @@ class GeometryAnalyzer:
 
     def _resolve_cell_size(self, mesh_resolution: dict) -> tuple:
         """
-        Resolve cell size using simplified 3-priority cascade.
+        Resolve cell size using 3-priority cascade.
 
         Priority order:
             1. target_cell_size_mm (explicit absolute)
-            2. cells_per_diameter (geometry-adaptive)
+            2. cells_per_diameter (geometry-adaptive, RECOMMENDED)
             3. default_fallback (10 cells/D, triggers warning)
 
         Returns:
-            (cell_size_mm: float, source: str, priority: int)
+            (cell_size_m: float, source: str, priority: int)
         """
         strategies = self._get_cell_size_strategies(mesh_resolution)
 
@@ -449,16 +481,16 @@ class GeometryAnalyzer:
         """
         Calculate blockMesh cell counts from user-specified resolution.
 
-        SIMPLIFIED RESOLUTION SPECIFICATION (3 priorities):
+        RESOLUTION SPECIFICATION (3 priorities):
 
         1. target_cell_size_mm (Priority 1)
            - Absolute control: mesh.mesh_resolution.target_cell_size_mm = 0.8
            - Use for: mesh independence studies, matching literature
            - Does NOT adapt to geometry
 
-        2. cells_per_diameter (Priority 2)
-           - Geometry-adaptive: mesh.mesh_resolution.cells_per_diameter = 12
-           - Use for: patient-specific simulations, consistent resolution
+        2. cells_per_diameter (Priority 2, RECOMMENDED)
+           - Geometry-adaptive: mesh.mesh_resolution.cells_per_diameter = 20
+           - Guidelines: 10-12 (coarse), 15-20 (standard), 25-30 (fine)
            - Adapts to patient anatomy automatically
 
         3. Default fallback (Priority 3)
@@ -466,11 +498,10 @@ class GeometryAnalyzer:
            - Triggers WARNING - not suitable for production
            - User should explicitly specify one of above
 
-        RECOMMENDATION: Always specify cells_per_diameter OR target_cell_size_mm.
-        Do NOT rely on fallback for any real simulation.
+        RECOMMENDATION: Use cells_per_diameter for geometry-adaptive sizing.
 
         Args:
-            bounds: BlockMesh bounding box {min: ndarray, max: ndarray} in mm
+            bounds: BlockMesh bounding box {min: ndarray, max: ndarray} in meters
 
         Returns:
             dict: Cell counts {x: int, y: int, z: int}
@@ -481,25 +512,27 @@ class GeometryAnalyzer:
         # Validate configuration (warn if multiple parameters set)
         self._validate_resolution_config(mesh_resolution)
 
-        # Resolve cell size using strategy cascade (encapsulated in separate method)
-        cell_size_mm, source, priority = self._resolve_cell_size(mesh_resolution)
+        # Resolve cell size using strategy cascade (returns meters)
+        cell_size_m, source, priority = self._resolve_cell_size(mesh_resolution)
+        cell_size_mm = cell_size_m * 1000  # For display
 
         # Validate result
-        if cell_size_mm <= 0:
+        if cell_size_m <= 0:
             raise ValueError(
                 f"Computed cell size must be positive, got {cell_size_mm}mm. "
                 f"Source: {source} (priority {priority})"
             )
 
-        # Calculate cell counts from resolved cell size
+        # Calculate cell counts from resolved cell size (both in meters)
         ranges = bounds['max'] - bounds['min']
-        bbox_volume_mm3 = ranges[0] * ranges[1] * ranges[2]
+        ranges_mm = ranges * 1000  # For display
+        bbox_volume_mm3 = ranges_mm[0] * ranges_mm[1] * ranges_mm[2]
 
         # Check if blockMesh will be too large (warn user, but proceed)
         size_check = check_blockmesh_size(cell_size_mm, bbox_volume_mm3)
 
         # Always use target resolution (no automatic changes)
-        num_cells = np.maximum(1, np.round(ranges / cell_size_mm)).astype(int)
+        num_cells = np.maximum(1, np.round(ranges / cell_size_m)).astype(int)
         total_bg_cells = num_cells[0] * num_cells[1] * num_cells[2]
 
         # ======================================================================
@@ -514,11 +547,11 @@ class GeometryAnalyzer:
         self.log.info(f"Priority: {priority}/3")
 
         # Geometry and cell size
-        if self.reference_radius_mm:
-            D_ref = 2.0 * self.reference_radius_mm
-            actual_cpd = D_ref / cell_size_mm
+        if self.reference_radius_m:
+            D_ref_mm = 2.0 * self.reference_radius_m * 1000
+            actual_cpd = D_ref_mm / cell_size_mm
             ref_strategy = self.geom_settings.get('reference_radius_strategy', 'min')
-            self.log.info(f"Reference diameter: {D_ref:.2f} mm ({ref_strategy} vessel)")
+            self.log.info(f"Reference diameter: {D_ref_mm:.2f} mm ({ref_strategy} vessel)")
             self.log.info(f"Cell size: {cell_size_mm:.3f} mm = {actual_cpd:.1f} cells/D")
         else:
             self.log.info(f"Cell size: {cell_size_mm:.3f} mm")
@@ -536,33 +569,41 @@ class GeometryAnalyzer:
 
         # Domain and grid
         self.log.info("")
-        self.log.info(f"Domain bbox: {ranges[0]:.1f} × {ranges[1]:.1f} × {ranges[2]:.1f} mm")
+        self.log.info(f"Domain bbox: {ranges_mm[0]:.1f} × {ranges_mm[1]:.1f} × {ranges_mm[2]:.1f} mm")
         self.log.info(f"Background grid: {num_cells[0]} × {num_cells[1]} × {num_cells[2]} = {total_bg_cells:,} cells")
 
         # Branch resolution validation
         if self.outlet_radii and len(self.outlet_radii) > 0:
             valid_radii = [r for r in self.outlet_radii if r and r > 0]
             if valid_radii:
-                min_branch_D = 2.0 * min(valid_radii)
-                max_branch_D = 2.0 * max(valid_radii)
-                cells_min = min_branch_D / cell_size_mm
-                cells_max = max_branch_D / cell_size_mm
+                min_branch_D_mm = 2.0 * min(valid_radii) * 1000
+                max_branch_D_mm = 2.0 * max(valid_radii) * 1000
+                cells_min = min_branch_D_mm / cell_size_mm
+                cells_max = max_branch_D_mm / cell_size_mm
 
                 self.log.info(f"Branch resolution range:")
-                self.log.info(f"  Smallest: D={min_branch_D:.2f}mm → {cells_min:.1f} cells")
-                self.log.info(f"  Largest:  D={max_branch_D:.2f}mm → {cells_max:.1f} cells")
+                self.log.info(f"  Smallest: D={min_branch_D_mm:.2f}mm → {cells_min:.1f} cells")
+                self.log.info(f"  Largest:  D={max_branch_D_mm:.2f}mm → {cells_max:.1f} cells")
 
                 # Validation
                 if cells_min < 6:
                     self.log.warning(
                         f"⚠️  Small branches under-resolved ({cells_min:.1f} < 6 cells)\n"
-                        f"   Recommendation: Use cells_per_diameter={int(min_branch_D/cell_size_mm * 6/cells_min)} "
-                        f"or target_cell_size_mm={min_branch_D/6:.3f}"
+                        f"   Recommendation: Use cells_per_diameter={int(min_branch_D_mm/cell_size_mm * 6/cells_min)} "
+                        f"or target_cell_size_mm={min_branch_D_mm/6:.3f}"
                     )
 
+        # Surface refinement level info
+        surface_ref_level = self.mesh_settings.get('surface_refinement_level', DEFAULT_SURFACE_REFINEMENT_LEVEL)
+        snappy_levels = self.snappy_settings.get('surfaceRefinementLevels', SURFACE_REFINEMENT_LEVELS.get(surface_ref_level, [1, 2]))
+        surface_cell_size_mm = cell_size_mm / (2 ** snappy_levels[1])  # After max refinement
+        self.log.info("")
+        self.log.info(f"Surface refinement level: {surface_ref_level} → snappy levels {snappy_levels}")
+        self.log.info(f"  Base cell size: {cell_size_mm:.3f} mm")
+        self.log.info(f"  Surface cell size: {surface_cell_size_mm:.3f} mm (after {snappy_levels[1]}× subdivision)")
+
         # Expected final mesh
-        refinement_levels = self.mesh_settings.get('SNAPPY_SETTINGS', {}).get('surfaceRefinementLevels', [1, 1])
-        max_ref_level = max(refinement_levels) if refinement_levels else 1
+        max_ref_level = max(snappy_levels) if snappy_levels else 1
         estimated_final = int(total_bg_cells * 0.25 * (1 + 0.3 * (8**max_ref_level - 1)))
         self.log.info(f"Expected final mesh: ~{estimated_final/1e6:.2f}M cells")
 
@@ -573,18 +614,18 @@ class GeometryAnalyzer:
     def _get_internal_point_for_snappy(self) -> np.ndarray:
         """
         Calculates a point guaranteed to be inside the fluid domain using a
-        robust, path-aligned normal vector.
+        robust, path-aligned normal vector. Returns point in meters.
         """
         if self.inlet_centroid is None or not self.outlet_centroids:
             raise ValueError("Inlet or outlet centroids have not been calculated.")
-            
-        # 1. Calculate the average position of all outlet centers (keep in mm)
+
+        # 1. Calculate the average position of all outlet centers (in meters)
         avg_outlet_centroid = np.mean(np.array(self.outlet_centroids), axis=0)
         inlet_centroid = self.inlet_centroid
-        
+
         # 2. Define a vector for the general direction of flow
         path_vector = avg_outlet_centroid - inlet_centroid
-        
+
         # 3. Align the geometric inlet normal with the path vector
         # The dot product tells us if they point in generally the same direction.
         if np.dot(self.inlet_normal, path_vector) < 0:
@@ -595,12 +636,12 @@ class GeometryAnalyzer:
         else:
             inward_normal = self.inlet_normal
             self.log.info("Inlet normal is already aligned inward along the aorta's path.")
-            
-        # 4. Move a small distance along this guaranteed inward normal (in mm)
+
+        # 4. Move a small distance along this guaranteed inward normal (in meters)
         offset_distance = self.inlet_radius * 0.1  # 10% of the radius
         internal_point = inlet_centroid + (offset_distance * inward_normal)
-        
-        self.log.info(f"Robust locationInMesh calculated: {internal_point}")
+
+        self.log.info(f"Robust locationInMesh calculated: {internal_point} (m)")
         return internal_point
 
     def _write_file_from_template(self, template_name: str, output_path: str, context: dict):
@@ -701,28 +742,32 @@ class GeometryAnalyzer:
             snappy_settings['relativeSizes'] = False  # Assume absolute units
             return  # Skip y+ calculation
 
-        # Get fluid properties with defaults
+        # Get fluid properties from physics.transport_properties (same as OpenFOAM uses)
         physics = self.config.get('physics', {})
+        transport_props = physics.get('transport_properties', {})
 
-        # Try blood_density first, fallback to defaults
-        density = physics.get('blood_density')
+        # Get rho (density) - used by OpenFOAM transportProperties
+        density = transport_props.get('rho')
         if density is None:
             density = 1060.0
             self.log.warning(
-                "physics.blood_density not found in config, using default: 1060 kg/m³"
+                "physics.transport_properties.rho not found, using default: 1060 kg/m³"
             )
 
-        # Try blood_viscosity first, fallback to defaults
-        viscosity = physics.get('blood_viscosity')
-        if viscosity is None:
-            viscosity = 0.004
+        # Get nu (kinematic viscosity) - used by OpenFOAM transportProperties
+        nu = transport_props.get('nu')
+        if nu is None:
+            nu = 3.7736e-6
             self.log.warning(
-                "physics.blood_viscosity not found in config, using default: 0.004 Pa·s"
+                "physics.transport_properties.nu not found, using default: 3.7736e-6 m²/s"
             )
+
+        # Calculate dynamic viscosity from nu and rho (mu = nu * rho)
+        viscosity = nu * density
 
         self.log.info(
-            f"Y+ calculator using fluid properties: "
-            f"ρ={density} kg/m³, μ={viscosity} Pa·s, ν={viscosity/density:.6e} m²/s"
+            f"Y+ calculator using fluid properties (from physics.transport_properties): "
+            f"ρ={density} kg/m³, ν={nu:.6e} m²/s, μ={viscosity:.6f} Pa·s"
         )
 
         # Get or estimate flow parameters
@@ -743,17 +788,18 @@ class GeometryAnalyzer:
         if estimation_method == 'auto':
             # Use typical aortic values or geometry-based estimates
             # Default: Use inlet diameter as characteristic length
-            char_length = (2.0 * self.inlet_radius / 1000.0) if self.inlet_radius else 0.025  # Convert mm to m
+            # inlet_radius is already in meters (STLs are pre-scaled)
+            char_length = (2.0 * self.inlet_radius) if self.inlet_radius else 0.025
 
             # Estimate velocity from typical cardiac output
             # Typical: ~5 L/min = 8.33e-5 m³/s, inlet area = π*r²
             if self.inlet_radius:
-                inlet_area_m2 = np.pi * (self.inlet_radius / 1000.0) ** 2
+                inlet_area_m2 = np.pi * self.inlet_radius ** 2  # Already in meters
                 typical_flow_m3s = 8.33e-5  # 5 L/min
                 char_velocity = typical_flow_m3s / inlet_area_m2
                 self.log.info(
                     f"Auto-estimated characteristic velocity: {char_velocity:.3f} m/s "
-                    f"(based on 5 L/min cardiac output and inlet radius {self.inlet_radius:.2f} mm)"
+                    f"(based on 5 L/min cardiac output and inlet radius {self.inlet_radius*1000:.2f} mm)"
                 )
             else:
                 char_velocity = 0.5  # Fallback: typical aortic velocity
@@ -788,35 +834,33 @@ class GeometryAnalyzer:
             expansion_ratio=expansion_ratio
         )
 
-        # CRITICAL UNIT CONVERSION:
+        # UNIT NOTE:
         # Y+ calculator returns thickness in METERS
-        # BUT the mesh is in MILLIMETERS during generation (STL in mm, blockMesh in mm)
-        # When relativeSizes=false, snappyHexMesh expects values in MESH UNITS (mm)
-        # Therefore: convert meters to millimeters
+        # Mesh is now in METERS (STLs pre-scaled during case setup)
+        # When relativeSizes=false, snappyHexMesh expects values in MESH UNITS (now meters)
 
         # IMPORTANT: Use firstLayerThickness (wall-adjacent layer) for y+ control
         # NOT finalLayerThickness (outermost layer)
         firstLayerThickness_meters = results['firstLayerThickness']
-        firstLayerThickness_mm = firstLayerThickness_meters * 1000.0
 
-        snappy_settings['firstLayerThickness'] = firstLayerThickness_mm
+        snappy_settings['firstLayerThickness'] = firstLayerThickness_meters
 
         # CRITICAL: Y+ calculator returns ABSOLUTE thickness
-        # Must override relativeSizes to false so snappyHexMesh treats values as absolute (in mm)
+        # Must override relativeSizes to false so snappyHexMesh treats values as absolute (in meters)
         if snappy_settings.get('relativeSizes', True):
             self.log.warning(
                 "Overriding relativeSizes from 'true' to 'false' - "
-                "Y+ calculator provides absolute layer thickness (converted to mm for mesh units)"
+                "Y+ calculator provides absolute layer thickness (in meters)"
             )
         snappy_settings['relativeSizes'] = False
 
-        # Also adjust minThickness to absolute units in millimeters if needed
+        # Also adjust minThickness to absolute units in meters if needed
         min_thick = snappy_settings.get('minThickness', 0.1)
         if min_thick > 0.01:  # Likely relative (e.g., 0.1 = 10%)
-            # Convert to small absolute value in millimeters (1 micron = 0.001 mm)
-            snappy_settings['minThickness'] = 0.001  # 1 micron in mm
+            # Convert to small absolute value in meters (1 micron = 1e-6 m)
+            snappy_settings['minThickness'] = 1e-6  # 1 micron in meters
             self.log.warning(
-                f"Adjusted minThickness from {min_thick} (relative) to {0.001:.3f} mm (absolute, 1 micron)"
+                f"Adjusted minThickness from {min_thick} (relative) to {1e-6:.6e} m (absolute, 1 micron)"
             )
 
         # Print detailed report
@@ -825,17 +869,17 @@ class GeometryAnalyzer:
         self.log.info("="*60)
         self.log.info(f"Target y+:                  {target_yplus:.2f}")
         self.log.info(f"Characteristic velocity:    {char_velocity:.3f} m/s")
-        self.log.info(f"Characteristic length:      {char_length*1000:.2f} mm")
+        self.log.info(f"Characteristic length:      {char_length*1000:.2f} mm ({char_length:.6f} m)")
         self.log.info(f"Reynolds number:            {results['reynolds_number']:.0f} ({results['flow_regime'].capitalize()})")
         self.log.info(f"Friction velocity (u_τ):    {results['friction_velocity']:.4f} m/s")
         self.log.info("-"*60)
-        self.log.info(f"Calculated firstLayerThickness: {firstLayerThickness_mm:.6f} mm (converted from {firstLayerThickness_meters:.6e} m)")
+        self.log.info(f"Calculated firstLayerThickness: {firstLayerThickness_meters*1000:.6f} mm ({firstLayerThickness_meters:.6e} m)")
         self.log.info(f"Number of layers:               {n_layers}")
         self.log.info(f"Expansion ratio:                {expansion_ratio}")
         self.log.info(f"Total BL thickness:             {results['total_layer_thickness']*1000:.4f} mm")
         self.log.info(f"Estimated y+:                   {results['estimated_yplus']:.2f}")
         self.log.info(f"Note: firstLayerThickness = wall-adjacent layer for y+ control")
-        self.log.info(f"      Values in mm (mesh units) for snappyHexMesh with relativeSizes=false")
+        self.log.info(f"      Mesh units are meters (STLs pre-scaled), relativeSizes=false")
         self.log.info("="*60)
 
         # Validate settings
