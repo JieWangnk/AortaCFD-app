@@ -23,17 +23,11 @@
       "_rho_comment": "Blood density in kg/m³ (typical: 1050-1060)",
 
       "nu": 3.7736e-6,
-      "_nu_comment": "Kinematic viscosity in m²/s = mu/rho (typical blood: 3.77e-6 m²/s)"
+      "_nu_comment": "Kinematic viscosity in m²/s = mu/rho (typical blood: 3.77e-6 m²/s). Dynamic viscosity mu = nu * rho = 0.004 Pa·s"
     },
 
     "turbulence_intensity": 0.05,
-    "_turbulence_intensity_comment": "Turbulence intensity for RANS/LES (typical: 0.05 = 5%)",
-
-    "blood_viscosity": 0.004,
-    "_blood_viscosity_comment": "Dynamic viscosity in Pa·s (optional, for Windkessel/Y+ calculations)",
-
-    "blood_density": 1060,
-    "_blood_density_comment": "Redundant with rho, kept for backward compatibility"
+    "_turbulence_intensity_comment": "Turbulence intensity for RANS/LES (typical: 0.05 = 5%)"
   },
 
   "numerics": {
@@ -98,69 +92,57 @@
   "mesh": {
     "_comment": "Mesh generation parameters",
 
-    "resolution_method": "cells_per_diameter",
-    "_resolution_method_options": ["cells_per_diameter", "target_cell_size"],
-    "_resolution_method_comment": "Method for specifying mesh resolution",
+    "mesh_resolution": {
+      "_comment": "Mesh resolution specification (use ONE of the following options)",
+      "_priority_order": "1. target_cell_size_mm, 2. cells_per_diameter, 3. fallback",
 
-    "cells_per_diameter": 15,
-    "_cells_per_diameter_comment": "Number of cells across vessel diameter (coarse: 8-10, medium: 12-15, fine: 18-20)",
-    "_cells_per_diameter_note": "Used when resolution_method='cells_per_diameter'",
+      "cells_per_diameter": 20,
+      "_cells_per_diameter_comment": "Cells across reference vessel diameter (RECOMMENDED)",
+      "_cells_per_diameter_guidelines": {
+        "coarse": "10-12 cells/diameter - initial exploration, fast iteration",
+        "standard": "15-20 cells/diameter - balanced accuracy/cost",
+        "fine": "25-30 cells/diameter - high resolution, mesh-independent solutions"
+      },
+      "_cells_per_diameter_formula": "cell_size = reference_diameter / cells_per_diameter",
+      "_cells_per_diameter_note": "Priority 2: Geometry-adaptive, automatically scales to patient anatomy",
 
-    "target_cell_size_mm": 1.5,
-    "_target_cell_size_comment": "Target cell size in mm (alternative to cells_per_diameter)",
-    "_target_cell_size_note": "Used when resolution_method='target_cell_size'",
-
-    "reference_diameter_mm": 25.0,
-    "_reference_diameter_comment": "Reference vessel diameter in mm (for cells_per_diameter calculation)",
+      "_target_cell_size_mm": 1.0,
+      "_target_cell_size_comment": "Absolute cell size in mm (highest priority)",
+      "_target_cell_size_note": "Priority 1: Use for mesh independence studies or matching literature"
+    },
 
     "boundary_layers": {
-      "_comment": "Boundary layer (inflation layer) settings",
+      "_comment": "Boundary layer (prism/inflation) settings - traditional OpenFOAM addLayersControls style",
+
       "enabled": true,
-
-      "method": "auto",
-      "_method_options": ["auto", "manual"],
-      "_method_comment": "auto: Calculate from Y+; manual: Specify thickness directly",
-
-      "target_yplus": 1.0,
-      "_target_yplus_comment": "Target Y+ value (RANS: 1-5, wall functions: 30-100)",
-      "_target_yplus_note": "Used when method='auto'",
+      "_enabled_comment": "Enable/disable boundary layer generation",
 
       "num_layers": 5,
-      "_num_layers_comment": "Number of boundary layers (robust: 3, typical: 5, fine: 8-10)",
+      "_num_layers_comment": "Number of prism layers (nSurfaceLayers). Robust: 3, Typical: 5, Fine: 8-10",
 
       "expansion_ratio": 1.2,
-      "_expansion_ratio_comment": "Growth rate between layers (typical: 1.15-1.25)",
+      "_expansion_ratio_comment": "Growth ratio between successive layers (typical: 1.15-1.25)",
 
-      "first_layer_thickness": 0.0001,
-      "_first_layer_thickness_comment": "First layer thickness in meters (used when method='manual')",
-      "_first_layer_thickness_note": "Only used if method='manual'",
+      "final_layer_thickness": 0.3,
+      "_final_layer_thickness_comment": "Final (outermost) layer thickness as fraction of local cell size (relativeSizes=true)",
 
-      "final_layer_thickness": 0.2,
-      "_final_layer_thickness_comment": "Relative final layer thickness (fraction of base cell size)",
+      "min_thickness": 0.1,
+      "_min_thickness_comment": "Minimum layer thickness as fraction of cell size. Allows graceful collapse in tight regions.",
 
-      "min_thickness": 0.05,
-      "_min_thickness_comment": "Minimum layer thickness (allows graceful collapse)",
+      "_optional_target_yplus": 1.0,
+      "_optional_target_yplus_comment": "OPTIONAL: If set, overrides final_layer_thickness with Y+ based calculation. Leave commented out to use final_layer_thickness directly.",
 
-      "estimation_params": {
-        "_comment": "Parameters for Y+ estimation (when method='auto')",
-        "characteristic_velocity": 0.5,
-        "_characteristic_velocity_comment": "Mean velocity for Y+ estimation (m/s)",
-
-        "characteristic_length": 0.025,
-        "_characteristic_length_comment": "Hydraulic diameter for Y+ estimation (m)",
-
-        "flow_regime": "auto",
-        "_flow_regime_options": ["auto", "laminar", "turbulent"],
-        "_flow_regime_comment": "Flow regime for Y+ estimation"
-      }
+      "_yplus_formula_reference": "First layer height: y = y+ * mu / (rho * u_tau), where u_tau = sqrt(tau_w / rho)"
     },
 
-    "surface_refinement": {
-      "_comment": "Surface refinement levels for geometry features",
-      "levels": [1, 2],
-      "_levels_comment": "Min and max refinement levels [min, max] (conservative: [1,2], fine: [2,3])",
-      "_levels_note": "Higher levels = finer mesh near surfaces"
+    "surface_refinement_level": 2,
+    "_surface_refinement_level_options": [1, 2, 3],
+    "_surface_refinement_level_description": {
+      "1": "No subdivision: base cell size at surface (1× surface cells)",
+      "2": "One subdivision: 2× finer at surface (4× surface cells) - DEFAULT",
+      "3": "Two subdivisions: 4× finer at surface (16× surface cells)"
     },
+    "_surface_refinement_level_note": "Each level subdivides surface cells by factor of 2. Level 3 yields 4× more surface cells than level 1.",
 
     "volume_refinement": {
       "_comment": "Optional volume refinement regions",
@@ -289,7 +271,26 @@
       },
 
       "windkessel_settings": {
-        "_comment": "3-element Windkessel model parameters",
+        "_comment": "3-element Windkessel model parameters (modularWKPressure + stabilizedWindkesselVelocity)",
+
+        "_MODE_1_clinical_calculation": {
+          "_description": "Calculate R, C, Z from clinical parameters (DEFAULT)",
+          "systolic_pressure": 120,
+          "diastolic_pressure": 80,
+          "venous_pressure": 5,
+          "tau": 1.8
+        },
+
+        "_MODE_2_direct_rcz": {
+          "_description": "Provide R, C, Z directly (skips all calculation)",
+          "_note": "If outlet_parameters has R, C, Z for ALL outlets, clinical calculation is skipped",
+          "outlet_parameters": {
+            "outlet1": {"R": 1.5e9, "C": 1.0e-9, "Z": 1.5e8},
+            "outlet2": {"R": 2.0e9, "C": 0.8e-9, "Z": 2.0e8},
+            "outlet3": {"R": 2.5e9, "C": 0.6e-9, "Z": 2.5e8},
+            "outlet4": {"R": 0.8e9, "C": 1.5e-9, "Z": 0.8e8}
+          }
+        },
 
         "systolic_pressure": 120,
         "_systolic_pressure_comment": "Systolic blood pressure in mmHg (typical adult: 110-130)",
@@ -322,19 +323,43 @@
 
         "flow_split": null,
         "_flow_split_comment": "Flow distribution (null = auto Murray's law)",
-        "_flow_split_manual": {
-          "outlet1": 0.15,
-          "outlet2": 0.15,
-          "outlet3": 0.10,
-          "outlet4": 0.60,
-          "_comment": "Manual flow split ratios (must sum to 1.0)"
+        "_flow_split_options": {
+          "_option_1_null": "null = automatic Murray's law for all outlets",
+          "_option_2_percentage": "40 = 40% to branches (area-based), 60% to main outlet",
+          "_option_3_ratios": {"outlet1": 0.15, "outlet2": 0.15, "outlet3": 0.10, "outlet4": 0.60},
+          "_option_3_note": "Ratios that sum to 1.0",
+          "_option_4_percentages": {"outlet1": 15, "outlet2": 15, "outlet3": 10, "outlet4": 60},
+          "_option_4_note": "Percentages (values > 1.0)",
+          "_option_5_partial_murray": {"outlet1": 20, "outlet4": 50, "_rest": "murray"},
+          "_option_5_note": "Fixed % for some outlets, Murray's law for rest"
         },
-        "_flow_split_percentage": 40,
-        "_flow_split_percentage_comment": "Or specify percentage for branches (main outlet gets remainder)",
+
+        "order": 3,
+        "_order_comment": "Time discretization order for modularWKPressure (1=Euler, 2=BDF2, 3=BDF3)",
+
+        "coupling_mode": "implicit",
+        "_coupling_mode_options": ["implicit", "explicit"],
+        "_coupling_mode_comment": "Implicit adds source terms to momentum (recommended for stability)",
+
+        "enable_stabilization": true,
+        "_enable_stabilization_comment": "Enable stabilizedWindkesselVelocity BC (prevents backflow divergence)",
+
+        "stabilization_type": "fluxBased",
+        "_stabilization_type_options": ["simple", "fluxBased", "traction"],
+        "_stabilization_type_comment": "fluxBased recommended for complex 3D geometries",
+
+        "beta": 0.9,
+        "_beta_comment": "Stabilization coefficient (0.5-0.7 weak, 0.8-0.9 balanced, 0.95-1.0 strong)",
+
+        "damping_factor": 1.0,
+        "_damping_factor_comment": "Additional damping for extreme cases (0.5-1.0, 1.0 = no extra damping)",
 
         "methodology": "murray_law_automatic",
         "_methodology_comment": "Windkessel calculation methodology (informational)"
-      }
+      },
+
+      "rho": 1060,
+      "_rho_comment": "Blood density in kg/m³ (for modularWKPressure kinematic conversion)"
     },
 
     "walls": {
@@ -491,7 +516,7 @@
     "1_required_files": "STL geometry files in cases_input/<case_name>/",
     "2_required_names": "inlet.stl, outlet*.stl, wall*.stl",
     "3_profile_selection": "Use 'robust' for difficult meshes, 'standard' for production, 'accurate' for validation",
-    "4_mesh_resolution": "Start with cells_per_diameter=12-15, adjust based on mesh quality",
+    "4_mesh_resolution": "Use cells_per_diameter: 10-12 (coarse), 15-20 (standard), 25-30 (fine)",
     "5_boundary_layers": "Use target_yplus=1-5 for RANS, 30-100 for wall functions",
     "6_windkessel": "Leave flow_split=null for automatic Murray's law distribution",
     "7_simulation_time": "Run at least 3-5 cardiac cycles for pulsatile flow",

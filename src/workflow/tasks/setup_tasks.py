@@ -1,5 +1,8 @@
 import os
 import shutil
+import numpy as np
+from stl import mesh as np_stl_mesh
+
 try:
     from ..base_task import Task, logger
     from ...aortacfd_lib.utils.runner import run_command, CommandExecutionError
@@ -40,8 +43,11 @@ except ImportError:
 
 class CreateCaseStructureTask(Task):
     """
-    Creates the case directory structure.
-    It will only delete the directory if 'clean_run' is true in the config.
+    Creates the case directory structure and copies/scales geometry files.
+
+    IMPORTANT: STL files are scaled from input units (typically mm) to SI units (meters)
+    during the copy process. This is the ONLY place scaling happens - all downstream
+    code reads already-scaled STLs in meters.
     """
     def execute(self, context: dict) -> bool:
         case_dir = context["case_directory"]
@@ -61,9 +67,9 @@ class CreateCaseStructureTask(Task):
 
         cad_folder = os.path.join("cases_input", self.config["geometry"]["case_name"])
 
-        # Validate geometry before copying
+        # Validate geometry before copying (validation still uses scale_factor for size checks)
         self.log.info("Validating geometry files...")
-        scale_factor = self.config.get('geometry', {}).get('scale_factor', 1.0)
+        scale_factor = self.config.get('geometry', {}).get('scale_factor', 0.001)
         validator = GeometryValidator(cad_folder, scale_factor=scale_factor)
         validation_result = validator.validate_all()
 
@@ -80,16 +86,57 @@ class CreateCaseStructureTask(Task):
 
         self.log.info("Geometry validation passed.")
 
-        # Copy files
+        # Copy and scale STL files (CENTRAL SCALING - only place scaling happens)
+        tri_surface_dir = os.path.join(case_dir, "constant", "triSurface")
+        self.log.info(f"Copying and scaling STL files (scale_factor={scale_factor})...")
+
         for f in os.listdir(cad_folder):
+            src_path = os.path.join(cad_folder, f)
+
             if f.endswith('.stl'):
-                shutil.copy(os.path.join(cad_folder, f), os.path.join(case_dir, "constant", "triSurface"))
+                # Scale STL during copy - this is the ONLY place scaling happens
+                dst_path = os.path.join(tri_surface_dir, f)
+                self._copy_and_scale_stl(src_path, dst_path, scale_factor)
+
             # Check for inlet CSV file (support both flattened and nested config structures)
             inlet_config = self.config.get('boundary_conditions', {}).get('inlet') or self.config.get('inlet', {})
             csv_file = inlet_config.get('csv_file') if isinstance(inlet_config, dict) else None
             if csv_file and f == csv_file:
-                 shutil.copy(os.path.join(cad_folder, f), os.path.join(case_dir, "constant", "boundaryData", inlet_patch_name))
+                shutil.copy(src_path, os.path.join(case_dir, "constant", "boundaryData", inlet_patch_name))
+
+        self.log.info(f"STL files scaled and copied to {tri_surface_dir} (now in meters)")
         return True
+
+    def _copy_and_scale_stl(self, src_path: str, dst_path: str, scale_factor: float):
+        """
+        Copy an STL file while applying scale factor to convert units.
+
+        This is the CENTRAL SCALING OPERATION. STL files are typically in mm
+        (from medical imaging), and we convert to meters for OpenFOAM.
+
+        Args:
+            src_path: Path to source STL file (in original units, e.g., mm)
+            dst_path: Path to destination STL file (will be in SI units, meters)
+            scale_factor: Conversion factor (e.g., 0.001 for mm -> m)
+        """
+        try:
+            # Load the STL mesh
+            stl_mesh = np_stl_mesh.Mesh.from_file(src_path)
+
+            # Scale all vertices
+            stl_mesh.vectors *= scale_factor
+
+            # Update the mesh normals after scaling
+            stl_mesh.update_normals()
+
+            # Save the scaled mesh
+            stl_mesh.save(dst_path)
+
+            self.log.debug(f"Scaled and saved: {os.path.basename(src_path)} -> {os.path.basename(dst_path)}")
+
+        except Exception as e:
+            self.log.error(f"Failed to scale STL {src_path}: {e}")
+            raise RuntimeError(f"Failed to scale STL file {src_path}: {e}")
 
 class GenerateMeshFilesTask(Task):
     """Generates blockMeshDict, snappyHexMeshDict, and surfaceFeaturesDict."""

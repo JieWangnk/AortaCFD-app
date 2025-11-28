@@ -277,9 +277,11 @@ def estimate_from_config(config: dict, target_yplus: float) -> Dict[str, float]:
     Returns:
         Estimation results dictionary
     """
-    # Extract fluid properties
-    density = config['physics']['blood_density']
-    viscosity = config['physics']['blood_viscosity']
+    # Extract fluid properties from physics.transport_properties (same as OpenFOAM uses)
+    transport_props = config.get('physics', {}).get('transport_properties', {})
+    density = transport_props.get('rho', 1060.0)
+    nu = transport_props.get('nu', 3.7736e-6)
+    viscosity = nu * density  # Dynamic viscosity = kinematic viscosity * density
 
     # Determine solver type
     solver_type = config.get('simulation_settings', {}).get('solver_type', 'laminar')

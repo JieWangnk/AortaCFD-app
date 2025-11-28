@@ -106,15 +106,15 @@ config = {
             "snap": True,
             "addLayers": True,
 
-            # ========== BOUNDARY LAYER SETTINGS (ULTRA-CONSERVATIVE) ==========
-            # Philosophy: "Quality over quantity" - grow layers to desired y+ WITHOUT collapse
-            # 3 layers is ROBUST for complex cardiovascular geometries
-            # Goal: Achieve target y+ with stable, non-collapsed layers
-            "addLayer": 3,                  # nSurfaceLayers (was 5) - ROBUST default
-            "expansionRatio": 1.15,         # Gentler growth (was 1.2) - prevents stretching
-            "finalLayerThickness": 0.2,     # Thinner/safer (was 0.3) - allows tight spaces
-            "minThickness": 0.05,           # Allow graceful collapse if needed
-            "relativeSizes": True,
+            # ========== BOUNDARY LAYER SETTINGS (TRADITIONAL OPENFOAM STYLE) ==========
+            # Uses relativeSizes=true with finalLayerThickness as fraction of local cell size
+            # This is the standard OpenFOAM approach - simple and predictable
+            # Y+ based sizing is OPTIONAL (only if mesh.boundary_layers.target_yplus is set)
+            "addLayer": 5,                  # nSurfaceLayers: typical for cardiovascular
+            "expansionRatio": 1.2,          # Growth ratio between layers (1.15-1.25 typical)
+            "finalLayerThickness": 0.3,     # Outermost layer as fraction of cell size
+            "minThickness": 0.1,            # Minimum layer thickness (allows graceful collapse)
+            "relativeSizes": True,          # Use relative sizing (fraction of cell size)
 
             # ========== LAYER ADDITION CONTROLS (MAXIMUM CONSERVATISM) ==========
             # CRITICAL: nSmoothSurfaceNormals is THE KEY to layer success
