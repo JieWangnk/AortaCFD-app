@@ -104,6 +104,11 @@ coarc_refine*
 *.env
 .env
 
+# GitHub tokens and secrets (NEVER commit these!)
+ghp_*
+github_pat_*
+*.token
+
 # Documentation build
 site/
 docs/
