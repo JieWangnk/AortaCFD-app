@@ -221,7 +221,23 @@ class InletMapping:
         rel = dist / self.radius
         return max(0.0, 1.0 - rel**2)
 
-    def womersley_profile(self, r, t, omega, alpha):
+    def womersley_shape_factor(self, r, t, omega, alpha):
+        """
+        Compute the Womersley velocity profile shape factor (normalized).
+
+        This returns a dimensionless shape factor that describes the radial
+        velocity distribution. The actual velocity is obtained by scaling
+        this by the target flow rate.
+
+        Args:
+            r: Radial distance from center (m)
+            t: Time (s)
+            omega: Angular frequency (rad/s)
+            alpha: Womersley number (dimensionless)
+
+        Returns:
+            float: Shape factor (dimensionless, typically 0-1 range)
+        """
         R = self.radius
         z = 1j**1.5 * alpha * r / R
         z0 = 1j**1.5 * alpha
@@ -229,40 +245,704 @@ class InletMapping:
         v_r_t = (1 - bessel_ratio) * np.exp(1j * omega * t)
         return np.real(v_r_t)
 
+    # =========================================================================
+    # DOPPLER + WOMERSLEY FFT RECONSTRUCTION
+    # =========================================================================
+    # Uses Doppler waveform as radius-averaged signal and reconstructs the
+    # unsteady inlet profile using analytical Womersley solution with Fourier
+    # decomposition. This captures entrance effects, temporal development,
+    # and the oscillatory nature of aortic flow.
+    # =========================================================================
+
+    def _compute_fourier_coefficients(self, times, values, n_harmonics=8):
+        """
+        Compute Fourier coefficients from Doppler/flow waveform using FFT.
+
+        The waveform is decomposed as:
+            V(t) = V₀ + Σₙ Re[Vₙ * e^(inωt)]
+
+        Args:
+            times: Time array (s)
+            values: Velocity or flow rate values
+            n_harmonics: Number of harmonics to use (default: 8)
+
+        Returns:
+            tuple: (V0, Vn_complex, omega_fundamental)
+                - V0: Mean (DC) component
+                - Vn_complex: Complex Fourier coefficients for harmonics 1..n
+                - omega_fundamental: Fundamental angular frequency (rad/s)
+        """
+        N = len(values)
+        T = times[-1] - times[0]  # Cardiac cycle period
+        omega_fundamental = 2 * np.pi / T
+
+        # Compute FFT
+        fft_result = np.fft.fft(values)
+
+        # DC component (mean)
+        V0 = np.real(fft_result[0]) / N
+
+        # Complex coefficients for harmonics 1 to n_harmonics
+        # FFT gives coefficients scaled by N, and we need factor of 2 for one-sided spectrum
+        Vn_complex = 2 * fft_result[1:n_harmonics + 1] / N
+
+        self.log.info(f"Fourier decomposition: {n_harmonics} harmonics, T={T:.4f}s, ω₀={omega_fundamental:.4f} rad/s")
+        self.log.debug(f"  V₀ (mean) = {V0:.6e}")
+        for n, Vn in enumerate(Vn_complex, 1):
+            self.log.debug(f"  V_{n} = {np.abs(Vn):.6e} ∠ {np.angle(Vn)*180/np.pi:.1f}°")
+
+        return V0, Vn_complex, omega_fundamental
+
+    def _womersley_profile_harmonic(self, r, n, omega_fundamental, Vn_complex, t):
+        """
+        Compute velocity contribution from a single Womersley harmonic.
+
+        For harmonic n, the radial velocity profile is:
+            uₙ(r,t) = Re[ Vₙ · Φₙ(r) · e^(inωt) ]
+
+        where:
+            Φₙ(r) = (1 - J₀(αₙ·i^(3/2)·r/R)) / (1 - J₀(αₙ·i^(3/2)))
+            αₙ = R·√(n·ω/ν)
+
+        Args:
+            r: Radial distance from center (m)
+            n: Harmonic number (1, 2, 3, ...)
+            omega_fundamental: Fundamental angular frequency (rad/s)
+            Vn_complex: Complex Fourier coefficient for this harmonic
+            t: Time (s)
+
+        Returns:
+            float: Velocity contribution from this harmonic (m/s)
+        """
+        R = self.radius
+        omega_n = n * omega_fundamental
+
+        # Womersley number for this harmonic
+        alpha_n = R * np.sqrt(omega_n / self.nu)
+
+        # Womersley shape function Φₙ(r)
+        z = 1j**1.5 * alpha_n * r / R
+        z0 = 1j**1.5 * alpha_n
+
+        # Handle the Bessel function ratio
+        J0_z = jv(0, z)
+        J0_z0 = jv(0, z0)
+
+        if np.abs(J0_z0) < 1e-15:
+            # Avoid division by zero for very high alpha
+            Phi_n = 0.0
+        else:
+            Phi_n = (1 - J0_z / J0_z0)
+
+        # Complete harmonic contribution: Vₙ · Φₙ(r) · e^(inωt)
+        u_n = Vn_complex * Phi_n * np.exp(1j * omega_n * t)
+
+        return np.real(u_n)
+
+    def _womersley_fft_velocity(self, r, t, V0, Vn_complex, omega_fundamental):
+        """
+        Compute complete Womersley velocity profile from Fourier decomposition.
+
+        Total velocity:
+            u(r,t) = u₀(r) + Σₙ uₙ(r,t)
+
+        where u₀(r) = 2·V₀·(1 - r²/R²) is the steady Poiseuille component
+        for the mean flow.
+
+        Args:
+            r: Radial distance from center (m)
+            t: Time (s)
+            V0: Mean (DC) velocity component
+            Vn_complex: Complex Fourier coefficients for harmonics
+            omega_fundamental: Fundamental angular frequency (rad/s)
+
+        Returns:
+            float: Total velocity at position r and time t (m/s)
+        """
+        R = self.radius
+
+        # Steady (Poiseuille) component for mean flow
+        # For mean velocity V0, the parabolic profile has centerline = 2*V0
+        r_ratio = r / R
+        if r_ratio > 1.0:
+            return 0.0
+
+        u_steady = 2.0 * V0 * (1 - r_ratio**2)
+
+        # Sum oscillatory components from each harmonic
+        u_oscillatory = 0.0
+        for n, Vn in enumerate(Vn_complex, 1):
+            u_oscillatory += self._womersley_profile_harmonic(r, n, omega_fundamental, Vn, t)
+
+        return u_steady + u_oscillatory
+
+    def _compute_womersley_fft_shape_factors(self, points, t, V0, Vn_complex, omega_fundamental):
+        """
+        Compute velocity values at all points using Womersley FFT reconstruction.
+
+        Unlike the simple Womersley which uses a single frequency, this method
+        uses the full Fourier decomposition of the Doppler waveform.
+
+        Args:
+            points: Array of face center coordinates
+            t: Current time (s)
+            V0: Mean (DC) velocity component
+            Vn_complex: Complex Fourier coefficients
+            omega_fundamental: Fundamental angular frequency (rad/s)
+
+        Returns:
+            numpy.ndarray: Velocity values at each point (m/s)
+        """
+        velocities = np.zeros(len(points))
+
+        for idx, pt in enumerate(points):
+            dist = self._get_distance_from_center(pt)
+
+            if dist <= self.radius:
+                velocities[idx] = self._womersley_fft_velocity(
+                    dist, t, V0, Vn_complex, omega_fundamental
+                )
+            else:
+                velocities[idx] = 0.0
+
+        return velocities
+
+    def _compute_womersley_fft_scale_factor(self, points, t, V0, Vn_complex, omega_fundamental, target_Q):
+        """
+        Compute scale factor to ensure flow rate conservation for Womersley FFT.
+
+        The Womersley FFT reconstruction inherently conserves flow rate if the
+        Doppler signal represents the true cross-sectional average. However,
+        we apply a correction factor to account for:
+        - Discrete sampling of face centers
+        - Non-uniform face areas
+        - Truncation of Fourier series
+
+        Args:
+            points: Array of face center coordinates
+            t: Current time (s)
+            V0, Vn_complex, omega_fundamental: Fourier parameters
+            target_Q: Target flow rate from CSV (m³/s)
+
+        Returns:
+            float: Scale factor to apply to velocities
+        """
+        # Compute raw velocities
+        raw_velocities = self._compute_womersley_fft_shape_factors(
+            points, t, V0, Vn_complex, omega_fundamental
+        )
+
+        # Estimate integrated flow rate
+        active_mask = np.abs(raw_velocities) > 1e-15
+        n_active = np.sum(active_mask)
+
+        if n_active == 0:
+            return 0.0
+
+        A_face = self.area / n_active
+        Q_raw = np.sum(raw_velocities[active_mask]) * A_face
+
+        if np.abs(Q_raw) < 1e-15:
+            return 0.0
+
+        # Scale factor
+        scale_factor = target_Q / Q_raw
+
+        return scale_factor
+
+    # =========================================================================
+    # WALL-DISTANCE BASED PROFILE FOR IRREGULAR INLETS
+    # =========================================================================
+    # For non-circular inlet geometries (e.g., irregular aortic roots), this
+    # method computes velocity based on distance to the nearest boundary.
+    # Inspired by OpenFOAM's powerLawVelocity boundary condition.
+    # Reference: OpenFOAM Issue #2322 - powerLawVelocity based on wall distance
+    # =========================================================================
+
+    def _compute_wall_distances(self, points, inlet_boundary_points=None):
+        """
+        Compute perpendicular distance from each face center to nearest inlet boundary.
+
+        For irregular cross-sections, this provides a generalized "radial" distance
+        that can be used to construct Poiseuille-like velocity profiles.
+
+        Args:
+            points: Array of face center coordinates (N x 3)
+            inlet_boundary_points: Optional array of boundary points. If None,
+                                   uses STL vertices from inlet patch.
+
+        Returns:
+            numpy.ndarray: Distance to nearest boundary for each point (m)
+        """
+        if inlet_boundary_points is None:
+            # Load boundary points from inlet STL
+            inlet_boundary_points = self._get_inlet_boundary_points()
+
+        distances = np.zeros(len(points))
+
+        for idx, pt in enumerate(points):
+            # Project point onto inlet plane (remove component along normal)
+            # For simplicity, use 2D distance in the inlet plane
+            pt_2d = pt[:2] if len(pt) >= 2 else pt
+
+            # Find minimum distance to any boundary point
+            min_dist = np.inf
+            for boundary_pt in inlet_boundary_points:
+                boundary_2d = boundary_pt[:2] if len(boundary_pt) >= 2 else boundary_pt
+                dist = np.linalg.norm(pt_2d - boundary_2d)
+                min_dist = min(min_dist, dist)
+
+            distances[idx] = min_dist
+
+        return distances
+
+    def _get_inlet_boundary_points(self):
+        """
+        Extract boundary vertices from inlet STL file.
+
+        Returns:
+            numpy.ndarray: Array of boundary point coordinates
+        """
+        try:
+            tri_surface_dir = os.path.join(self.case_directory, "constant", "triSurface")
+            inlet_stl_path = os.path.join(tri_surface_dir, f"{self.inlet_name}.stl")
+
+            # Use trimesh to load STL and extract boundary edges
+            import trimesh
+            mesh = trimesh.load(inlet_stl_path)
+
+            # Get unique vertices on the boundary (edges that appear only once)
+            edges = mesh.edges_unique
+            edge_counts = np.bincount(mesh.edges.flatten(), minlength=len(mesh.vertices))
+
+            # Boundary vertices are those with lower connectivity
+            # For a flat surface patch, boundary vertices are on the outer edge
+            boundary_mask = edge_counts < 6  # Heuristic: boundary vertices have fewer connections
+            boundary_vertices = mesh.vertices[boundary_mask]
+
+            if len(boundary_vertices) < 3:
+                # Fallback: use all vertices on the convex hull projection
+                from scipy.spatial import ConvexHull
+                vertices_2d = mesh.vertices[:, :2]
+                hull = ConvexHull(vertices_2d)
+                boundary_vertices = mesh.vertices[hull.vertices]
+
+            self.log.debug(f"Extracted {len(boundary_vertices)} boundary points from inlet STL")
+            return boundary_vertices
+
+        except Exception as e:
+            self.log.warning(f"Could not extract boundary from STL: {e}")
+            self.log.warning("Falling back to circular approximation")
+            # Fallback: generate circular boundary points
+            n_boundary = 36
+            theta = np.linspace(0, 2*np.pi, n_boundary, endpoint=False)
+            boundary_points = np.zeros((n_boundary, 3))
+            boundary_points[:, 0] = self.center[0] + self.radius * np.cos(theta)
+            boundary_points[:, 1] = self.center[1] + self.radius * np.sin(theta)
+            boundary_points[:, 2] = self.center[2]
+            return boundary_points
+
+    def _compute_wall_distance_shape_factors(self, points, profile_exponent=2.0):
+        """
+        Compute velocity shape factors based on wall distance.
+
+        Uses a generalized parabolic profile:
+            u(d) = u_max * (1 - (1 - d/d_max)^n)
+
+        where:
+            d = distance from point to nearest wall
+            d_max = maximum distance (characteristic length)
+            n = profile exponent (2 for parabolic, higher for flatter profiles)
+
+        For n=2, this approximates the Poiseuille profile for any cross-section.
+
+        Args:
+            points: Array of face center coordinates
+            profile_exponent: Exponent n in the profile formula (default: 2.0)
+
+        Returns:
+            numpy.ndarray: Shape factors for each point (dimensionless, 0-1)
+        """
+        # Compute wall distances
+        wall_distances = self._compute_wall_distances(points)
+
+        # Maximum distance (characteristic length scale)
+        d_max = np.max(wall_distances)
+
+        if d_max < 1e-15:
+            self.log.warning("Maximum wall distance is zero. Returning uniform profile.")
+            return np.ones(len(points))
+
+        # Normalized distance (0 at wall, 1 at center/max distance point)
+        d_normalized = wall_distances / d_max
+
+        # Shape factor: parabolic-like profile
+        # u/u_max = 1 - (1 - d/d_max)^n
+        # At wall (d=0): u = 0
+        # At center (d=d_max): u = u_max
+        shape_factors = 1.0 - (1.0 - d_normalized) ** profile_exponent
+
+        # Ensure no negative values
+        shape_factors = np.maximum(shape_factors, 0.0)
+
+        self.log.debug(f"Wall-distance profile: d_max={d_max:.6f}m, exponent={profile_exponent}")
+        self.log.debug(f"  Shape factor range: [{np.min(shape_factors):.4f}, {np.max(shape_factors):.4f}]")
+
+        return shape_factors
+
+    def _compute_elliptical_poiseuille_factors(self, points, semi_axis_a=None, semi_axis_b=None):
+        """
+        Compute velocity shape factors for elliptical Poiseuille flow.
+
+        For an elliptical cross-section with semi-axes a and b, the exact
+        velocity profile is:
+            u(x,y) = u_max * (1 - y²/b² - x²/a²)
+
+        where the coordinate system is centered at the ellipse center with
+        x along the major axis.
+
+        Args:
+            points: Array of face center coordinates
+            semi_axis_a: Semi-major axis (m). If None, estimated from geometry.
+            semi_axis_b: Semi-minor axis (m). If None, estimated from geometry.
+
+        Returns:
+            numpy.ndarray: Shape factors for each point (dimensionless, 0-1)
+        """
+        # Estimate semi-axes if not provided
+        if semi_axis_a is None or semi_axis_b is None:
+            semi_axis_a, semi_axis_b = self._estimate_ellipse_axes(points)
+
+        self.log.info(f"Elliptical Poiseuille: a={semi_axis_a*1000:.2f}mm, b={semi_axis_b*1000:.2f}mm")
+        self.log.info(f"  Aspect ratio: {semi_axis_a/semi_axis_b:.3f}")
+
+        shape_factors = np.zeros(len(points))
+
+        for idx, pt in enumerate(points):
+            # Transform to ellipse-centered coordinates
+            x = pt[0] - self.center[0]
+            y = pt[1] - self.center[1]
+
+            # Elliptical profile: 1 - (x/a)² - (y/b)²
+            ellipse_term = (x / semi_axis_a) ** 2 + (y / semi_axis_b) ** 2
+
+            if ellipse_term <= 1.0:
+                shape_factors[idx] = 1.0 - ellipse_term
+            else:
+                # Outside ellipse
+                shape_factors[idx] = 0.0
+
+        return shape_factors
+
+    def _estimate_ellipse_axes(self, points):
+        """
+        Estimate ellipse semi-axes from point distribution using PCA.
+
+        Args:
+            points: Array of face center coordinates
+
+        Returns:
+            tuple: (semi_axis_a, semi_axis_b) in meters
+        """
+        # Center the points
+        centered = points[:, :2] - self.center[:2]
+
+        # Use PCA to find principal axes
+        cov_matrix = np.cov(centered.T)
+        eigenvalues, eigenvectors = np.linalg.eigh(cov_matrix)
+
+        # Sort by eigenvalue (largest first)
+        sort_idx = np.argsort(eigenvalues)[::-1]
+        eigenvalues = eigenvalues[sort_idx]
+
+        # Semi-axes are proportional to sqrt of eigenvalues
+        # Scale factor based on actual extent of points
+        scale = 2.0  # Empirical factor for inlet patches
+        semi_axis_a = scale * np.sqrt(eigenvalues[0])
+        semi_axis_b = scale * np.sqrt(eigenvalues[1])
+
+        # Ensure a >= b
+        if semi_axis_b > semi_axis_a:
+            semi_axis_a, semi_axis_b = semi_axis_b, semi_axis_a
+
+        return semi_axis_a, semi_axis_b
+
+    def _compute_shape_factors(self, points, t, omega=None, alpha=None,
+                                V0=None, Vn_complex=None, omega_fundamental=None,
+                                profile_exponent=None):
+        """
+        Compute normalized shape factors for all points based on profile type.
+
+        Returns shape factors that integrate to a known value, allowing
+        proper scaling to match target flow rate.
+
+        Supported profiles:
+            - plug / plug_flow: Uniform velocity (shape = 1.0)
+            - parabolic: Circular Poiseuille (1 - r²/R²)
+            - womersley: Single-frequency pulsatile (Bessel functions)
+            - womersley_fft: Multi-harmonic Doppler reconstruction
+            - wall_distance: Distance-to-wall based (for irregular inlets)
+            - elliptical: Elliptical Poiseuille (1 - x²/a² - y²/b²)
+
+        Args:
+            points: Array of face center coordinates
+            t: Current time (for Womersley)
+            omega: Angular frequency (for simple Womersley)
+            alpha: Womersley number (for simple Womersley)
+            V0: Mean velocity (for womersley_fft)
+            Vn_complex: Fourier coefficients (for womersley_fft)
+            omega_fundamental: Fundamental frequency (for womersley_fft)
+            profile_exponent: Exponent for wall_distance profile (default: 2.0)
+
+        Returns:
+            numpy.ndarray: Shape factors for each point (dimensionless)
+        """
+        # For womersley_fft, use the dedicated method
+        if self.profile == 'womersley_fft':
+            return self._compute_womersley_fft_shape_factors(
+                points, t, V0, Vn_complex, omega_fundamental
+            )
+
+        # For wall_distance profile, use distance-based calculation
+        if self.profile == 'wall_distance':
+            exponent = profile_exponent if profile_exponent is not None else 2.0
+            return self._compute_wall_distance_shape_factors(points, exponent)
+
+        # For elliptical profile, use elliptical Poiseuille
+        if self.profile == 'elliptical':
+            return self._compute_elliptical_poiseuille_factors(points)
+
+        # Standard radial-distance based profiles
+        shape_factors = np.zeros(len(points))
+
+        for idx, pt in enumerate(points):
+            dist = self._get_distance_from_center(pt)
+
+            if dist <= self.radius:
+                if self.profile in ['plug', 'plug_flow']:
+                    # Plug flow: uniform shape factor
+                    shape_factors[idx] = 1.0
+
+                elif self.profile == 'parabolic':
+                    # Parabolic: 1 - (r/R)^2
+                    shape_factors[idx] = self.parabolic_factor(dist)
+
+                elif self.profile == 'womersley':
+                    # Womersley: time-dependent shape from Bessel functions
+                    shape_factors[idx] = self.womersley_shape_factor(dist, t, omega, alpha)
+
+                else:
+                    # Default to plug flow
+                    shape_factors[idx] = 1.0
+            else:
+                # Outside the inlet radius
+                shape_factors[idx] = 0.0
+
+        return shape_factors
+
+    def _scale_to_target_flowrate(self, shape_factors, target_flowrate, n_points):
+        """
+        Scale shape factors to produce velocities that integrate to target flow rate.
+
+        Uses mass conservation: Q = ∫ V·dA = Σ(V_i * A_face_i)
+
+        For uniformly distributed face centers:
+            A_face ≈ A_total / n_active_points
+
+        Args:
+            shape_factors: Normalized shape factors for each point
+            target_flowrate: Target volumetric flow rate (m³/s)
+            n_points: Total number of points
+
+        Returns:
+            numpy.ndarray: Scaled velocities (m/s)
+        """
+        # Count active points (inside inlet radius)
+        active_mask = shape_factors > 0
+        n_active = np.sum(active_mask)
+
+        if n_active == 0:
+            self.log.warning("No active points inside inlet radius!")
+            return np.zeros(len(shape_factors))
+
+        # Estimate face area per point (uniform distribution assumption)
+        # This is approximate - actual face areas from mesh would be more accurate
+        A_face = self.area / n_active
+
+        # Compute integrated flow with unit velocity scaling
+        # Q_unit = Σ(shape_i * A_face) for active points
+        Q_unit = np.sum(shape_factors[active_mask]) * A_face
+
+        if abs(Q_unit) < 1e-15:
+            # Avoid division by zero for zero flow
+            return np.zeros(len(shape_factors))
+
+        # Scale factor to achieve target flow rate
+        # V_actual = shape * scale_factor
+        # Q_target = scale_factor * Q_unit
+        scale_factor = target_flowrate / Q_unit
+
+        # Apply scaling
+        velocities = shape_factors * scale_factor
+
+        return velocities
+
     def _generate_time_data(self, parent_directory, time_array, csv_values, points, normal_vec):
+        """
+        Generate time-varying velocity data with proper flow rate conservation.
+
+        This method ensures that the integrated flow rate across the inlet
+        matches the target flow rate from the CSV file at each timestep.
+
+        Supported profile types:
+        - plug, plug_flow: Uniform velocity
+        - parabolic: Circular Poiseuille (1 - r²/R²)
+        - womersley: Single-frequency pulsatile
+        - womersley_fft: Multi-harmonic Doppler reconstruction
+        - wall_distance: Distance-to-wall based (irregular inlets)
+        - elliptical: Elliptical Poiseuille (1 - x²/a² - y²/b²)
+
+        Algorithm:
+        1. Compute normalized shape factors based on profile type
+        2. Scale velocities to match target flow rate
+        3. Apply flow direction (orientation)
+        4. Write OpenFOAM-compatible velocity files
+        """
+        # Precompute parameters based on profile type
+        omega = None
+        alpha = None
+        V0 = None
+        Vn_complex = None
+        omega_fundamental = None
+        n_harmonics = self.inlet_settings.get('n_harmonics', 8)
+        profile_exponent = self.inlet_settings.get('profile_exponent', 2.0)
+
         if self.profile == 'womersley':
+            # Simple single-frequency Womersley
             if not self.nu or self.nu <= 0:
                 raise ValueError("Womersley profile requires a positive kinematic viscosity (nu) in config.")
             omega = 2 * np.pi / self.cardiac_cycle
             alpha = self.radius * np.sqrt(omega / self.nu)
+            self.log.info(f"Womersley parameters: omega={omega:.4f} rad/s, alpha={alpha:.4f}")
 
-        for i in range(len(time_array)):
+        elif self.profile == 'womersley_fft':
+            # Multi-harmonic Womersley with Fourier decomposition
+            if not self.nu or self.nu <= 0:
+                raise ValueError("Womersley FFT profile requires a positive kinematic viscosity (nu) in config.")
+
+            # Convert flow rate to velocity for FFT if needed
+            if self.data_type == 'flowrate':
+                velocity_values = csv_values / self.area
+            else:
+                velocity_values = csv_values
+
+            # Compute Fourier coefficients from the waveform
+            V0, Vn_complex, omega_fundamental = self._compute_fourier_coefficients(
+                time_array, velocity_values, n_harmonics
+            )
+
+            # Log Womersley numbers for each harmonic
+            self.log.info(f"Womersley FFT profile with {n_harmonics} harmonics:")
+            for n in range(1, min(4, n_harmonics + 1)):  # Log first 3 harmonics
+                alpha_n = self.radius * np.sqrt(n * omega_fundamental / self.nu)
+                self.log.info(f"  Harmonic {n}: α={alpha_n:.2f}")
+
+        elif self.profile == 'wall_distance':
+            self.log.info(f"Wall-distance profile with exponent={profile_exponent}")
+            self.log.info("  Suitable for irregular (non-circular) inlet geometries")
+
+        elif self.profile == 'elliptical':
+            self.log.info("Elliptical Poiseuille profile")
+            self.log.info("  Semi-axes will be estimated from inlet geometry")
+
+        n_points = len(points)
+
+        # Track flow rate statistics for verification
+        max_error_percent = 0.0
+        total_timesteps = len(time_array)
+
+        self.log.info(f"Generating {total_timesteps} timesteps with flow rate conservation...")
+        self.log.info(f"Profile: {self.profile}, Data type: {self.data_type}")
+
+        for i in range(total_timesteps):
             t = time_array[i]
-            y_val = csv_values[i]
-            speed = self.parabolic_centerline_speed(y_val) if self.profile != 'plug' else self.plug_profile_speed(y_val)
+            csv_value = csv_values[i]
 
+            # Determine target flow rate in m³/s
+            if self.data_type == 'flowrate':
+                # CSV contains flow rate directly (assumed m³/s)
+                target_Q = csv_value
+            else:
+                # CSV contains velocity - convert to flow rate
+                # Q = V_avg * A
+                target_Q = csv_value * self.area
+
+            # Step 1: Compute shape factors for this timestep
+            if self.profile == 'womersley_fft':
+                # For womersley_fft, shape factors are actual velocities
+                shape_factors = self._compute_shape_factors(
+                    points, t, omega, alpha,
+                    V0=V0, Vn_complex=Vn_complex, omega_fundamental=omega_fundamental
+                )
+                # Apply flow conservation scaling
+                scale_factor = self._compute_womersley_fft_scale_factor(
+                    points, t, V0, Vn_complex, omega_fundamental, target_Q
+                )
+                velocity_magnitudes = shape_factors * scale_factor
+            else:
+                # For all other profiles (plug, parabolic, womersley, wall_distance, elliptical)
+                shape_factors = self._compute_shape_factors(
+                    points, t, omega, alpha,
+                    profile_exponent=profile_exponent
+                )
+                # Step 2: Scale to target flow rate
+                velocity_magnitudes = self._scale_to_target_flowrate(shape_factors, target_Q, n_points)
+
+            # Step 3: Apply direction and create velocity vectors
             velocities = []
-            for pt in points:
-                dist = self._get_distance_from_center(pt)
-                if dist <= self.radius:
-                    if self.profile in ['plug', 'plug_flow']:
-                        local_speed = speed
-                    elif self.profile == 'parabolic':
-                        shape_fac = self.parabolic_factor(dist)
-                        local_speed = speed * shape_fac
-                    elif self.profile == 'womersley':
-                        local_speed = self.womersley_profile(dist, t, omega, alpha)
-                    else:
-                        # Default to plug flow if profile not recognized
-                        local_speed = speed
-                    velocities.append(self._get_velocity_components(local_speed, normal_vec))
-                else:
-                    velocities.append((0.0, 0.0, 0.0))
+            for mag in velocity_magnitudes:
+                vel_vector = self._get_velocity_components(mag, normal_vec)
+                velocities.append(vel_vector)
 
+            # Step 4: Verify flow rate (for logging)
+            if abs(target_Q) > 1e-15:
+                computed_Q = self._verify_flowrate(velocity_magnitudes, n_points)
+                if abs(target_Q) > 1e-15:
+                    error_percent = abs(computed_Q - target_Q) / abs(target_Q) * 100
+                    max_error_percent = max(max_error_percent, error_percent)
+
+            # Step 5: Write to file
             time_dir_path = os.path.join(parent_directory, f"{t:.6f}")
             os.makedirs(time_dir_path, exist_ok=True)
             out_file_path = os.path.join(time_dir_path, "U")
-            self._write_openfoam_data_format(out_file_path, len(points), velocities)
+            self._write_openfoam_data_format(out_file_path, n_points, velocities)
+
+        # Log summary
+        self.log.info(f"Flow rate conservation complete. Max error: {max_error_percent:.4f}%")
+        if max_error_percent > 1.0:
+            self.log.warning(f"Flow rate error exceeds 1%. Consider checking mesh face distribution.")
+
+    def _verify_flowrate(self, velocity_magnitudes, n_points):
+        """
+        Verify the integrated flow rate from velocity magnitudes.
+
+        Args:
+            velocity_magnitudes: Array of velocity magnitudes (m/s)
+            n_points: Total number of points
+
+        Returns:
+            float: Computed flow rate (m³/s)
+        """
+        active_mask = velocity_magnitudes > 0
+        n_active = np.sum(active_mask)
+
+        if n_active == 0:
+            return 0.0
+
+        A_face = self.area / n_active
+        Q_computed = np.sum(velocity_magnitudes[active_mask]) * A_face
+
+        return Q_computed
 
     def _write_openfoam_data_format(self, file_name, n_points, velocities):
         with open(file_name, 'w') as file:

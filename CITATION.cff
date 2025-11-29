@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+title: "AortaCFD: Patient-Specific Aortic Blood Flow Simulation"
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - family-names: Wang
+    given-names: Jie
+    email: jie.wang-2@manchester.ac.uk
+    affiliation: University of Manchester
+repository-code: "https://github.com/JieWangnk/AortaCFD-app"
+url: "https://github.com/JieWangnk/AortaCFD-app"
+license: MIT
+version: "2.0"
+date-released: "2025-01-01"
+keywords:
+  - computational-fluid-dynamics
+  - cardiovascular
+  - aorta
+  - blood-flow
+  - openfoam
+  - patient-specific
+  - hemodynamics
+  - windkessel
+abstract: >-
+  AortaCFD is an end-to-end automated pipeline for patient-specific
+  cardiovascular CFD simulations using OpenFOAM 12. It streamlines
+  the complete workflow from geometry to results, featuring a modular
+  architecture with composable configuration fragments, pre-configured
+  simulation profiles (Laminar, RANS, LES), and advanced boundary
+  conditions including 3-element Windkessel models.

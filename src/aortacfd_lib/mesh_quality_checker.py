@@ -94,13 +94,16 @@ class MeshQualityChecker:
                 highly_skew_faces = int(highly_skew_match.group(1))
                 report['metrics']['highly_skew_faces'] = highly_skew_faces
 
-                if max_skew > 4.0:
-                    report['status'] = 'poor'
-                    report['alerts'].append(f"Very high skewness detected: {max_skew:.2f} (threshold: 4.0)")
-                    report['alerts'].append(f"{highly_skew_faces} highly skewed faces found")
-                elif max_skew > 2.0:
-                    report['status'] = 'warning' if report['status'] == 'good' else report['status']
-                    report['warnings'].append(f"High skewness: {max_skew:.2f} (recommend < 2.0)")
+            # Thresholds based on OpenFOAM best practices for curved geometry
+            # maxInternalSkewness default is 4, but <2 recommended for transitional flow
+            if max_skew > 4.0:
+                report['status'] = 'poor'
+                report['alerts'].append(f"Very high skewness detected: {max_skew:.2f} (threshold: 4.0)")
+                if 'highly_skew_faces' in report['metrics']:
+                    report['alerts'].append(f"{report['metrics']['highly_skew_faces']} highly skewed faces found")
+            elif max_skew > 2.0:
+                report['status'] = 'warning' if report['status'] == 'good' else report['status']
+                report['warnings'].append(f"High skewness: {max_skew:.2f} (recommend < 2.0 for curved geometry)")
 
     def _extract_aspect_ratio(self, content: str, report: dict):
         """Extract aspect ratio information."""

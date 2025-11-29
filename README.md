@@ -1137,7 +1137,10 @@ For questions or support:
 
 ## Acknowledgments
 
-Built with:
+**Technical Contributors:**
+- **Jie Wang** - OpenFOAM technical advice and critical revision
+
+**Built with:**
 - OpenFOAM 12 (OpenFOAM Foundation)
 - ParaView (Kitware)
 - Python 3.12
