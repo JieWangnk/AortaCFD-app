@@ -380,7 +380,7 @@ class DistanceWallInletProfile:
         n_points: int,
         distances: np.ndarray
     ) -> None:
-        """Generate velocity data for each timestep."""
+        """Generate velocity data for each timestep (optimized vectorized version)."""
         # Determine normal direction
         normal = self.inlet_normal.copy()
         if self.orientation == 'in' or (
@@ -389,43 +389,95 @@ class DistanceWallInletProfile:
             normal = -normal
             self.log.info("Using inward-pointing normal")
 
-        # Pre-compute shape factors
-        shape_factors = np.array([self._compute_shape_factor(d) for d in distances])
+        # Pre-compute shape factors (vectorized)
+        shape_factors = self._compute_shape_factors_vectorized(distances)
 
-        for i, t in enumerate(times):
-            val = values[i]
+        # Pre-compute the integrated shape*area (constant for all timesteps)
+        integrated_shape_area = np.sum(shape_factors * self.face_areas)
+        if integrated_shape_area <= 0:
+            self.log.warning("Integrated shape*area is zero, using uniform profile")
+            integrated_shape_area = self.area
+            shape_factors = np.ones(n_points)
 
-            # Convert to flow rate (m³/s)
-            if self.data_type == 'velocity':
-                flow_rate = val * self.area
+        # Convert all flow rates at once (vectorized)
+        if self.data_type == 'velocity':
+            flow_rates = values * self.area
+        else:
+            # Check if values are in L/min (magnitude > 1) or m³/s
+            if np.max(np.abs(values)) > 1.0:
+                flow_rates = values * 1e-3 / 60.0  # L/min -> m³/s
             else:
-                # Assume flow rate input
-                # Check magnitude to detect units
-                if abs(val) > 1.0:
-                    # Likely L/min -> convert to m³/s
-                    flow_rate = val * 1e-3 / 60.0
-                else:
-                    # Already m³/s
-                    flow_rate = val
+                flow_rates = values  # Already m³/s
 
-            # Calculate U_0 for this timestep
-            U_0 = self._calculate_scaling_factor(distances, flow_rate)
+        # Calculate all U_0 values at once
+        U_0_all = np.abs(flow_rates) / integrated_shape_area
 
-            # Generate velocities: u_i = U_0 * f(d_i) * n
-            velocities = []
-            for j in range(n_points):
-                speed = U_0 * shape_factors[j]
-                vel = speed * normal
-                velocities.append(vel)
+        # Pre-compute the velocity direction vectors (shape_factor * normal for each point)
+        # This is (n_points, 3) array
+        velocity_directions = np.outer(shape_factors, normal)
+
+        self.log.info(f"Writing {len(times)} timesteps...")
+
+        # Generate all timesteps
+        for i, t in enumerate(times):
+            U_0 = U_0_all[i]
+
+            # Vectorized velocity calculation: velocities = U_0 * shape_factors[:, None] * normal
+            velocities = U_0 * velocity_directions
 
             # Write to file
             time_dir = os.path.join(parent_dir, f"{t:.6f}")
             os.makedirs(time_dir, exist_ok=True)
-            self._write_velocity_file(os.path.join(time_dir, "U"), velocities)
+            self._write_velocity_file_fast(os.path.join(time_dir, "U"), velocities)
 
+            # Progress update every 10%
             if i % max(1, len(times) // 10) == 0:
                 avg_vel = U_0 * np.mean(shape_factors)
-                self.log.info(f"  t={t:.4f}s: Q={flow_rate:.4e} m³/s, U_avg={avg_vel:.4f} m/s")
+                self.log.info(f"  t={t:.4f}s: Q={flow_rates[i]:.4e} m³/s, U_avg={avg_vel:.4f} m/s")
+
+    def _compute_shape_factors_vectorized(self, distances: np.ndarray) -> np.ndarray:
+        """Vectorized computation of shape factors for all points."""
+        if self.d_max <= 0:
+            return np.ones(len(distances))
+
+        d_norm = np.minimum(distances / self.d_max, 1.0)
+
+        if self.shape_function == ShapeFunction.POWER_LAW:
+            return d_norm ** self.exponent
+
+        elif self.shape_function == ShapeFunction.POISEUILLE:
+            r_norm = 1.0 - d_norm
+            return np.maximum(0, 1.0 - r_norm ** 2)
+
+        elif self.shape_function == ShapeFunction.HYBRID_JET:
+            core_dist = self.core_fraction * self.d_max
+            result = np.ones(len(distances))
+            near_wall = distances < core_dist
+            result[near_wall] = (distances[near_wall] / core_dist) ** self.exponent
+            return result
+
+        elif self.shape_function == ShapeFunction.BLUNTED_PARABOLIC:
+            core_dist = self.core_fraction * self.d_max
+            result = np.ones(len(distances))
+            near_wall = distances < core_dist
+            local_r = 1.0 - (distances[near_wall] / core_dist)
+            result[near_wall] = np.maximum(0, 1.0 - local_r ** 2)
+            return result
+
+        else:
+            # Default Poiseuille
+            r_norm = 1.0 - d_norm
+            return np.maximum(0, 1.0 - r_norm ** 2)
+
+    def _write_velocity_file_fast(self, file_path: str, velocities: np.ndarray) -> None:
+        """Fast write velocity in OpenFOAM boundaryData format using numpy."""
+        n = len(velocities)
+        # Build the entire content as a single string for faster I/O
+        lines = [f"{n}", "("]
+        lines.extend(f"({v[0]:.6e} {v[1]:.6e} {v[2]:.6e})" for v in velocities)
+        lines.append(")")
+        with open(file_path, 'w') as f:
+            f.write('\n'.join(lines) + '\n')
 
     def _should_flip_normal(self) -> bool:
         """Determine if normal needs flipping based on outlet positions.

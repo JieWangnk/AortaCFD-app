@@ -194,7 +194,9 @@ class PrepareBoundaryDataTask(Task):
             os.remove(temp_points_file)
 
             # Check inlet type - only process CSV for time-varying inlets
-            inlet_type = self.config.get('inlet', {}).get('type', 'TIMEVARYING').upper()
+            # Support both flattened (inlet) and nested (boundary_conditions.inlet) config structures
+            inlet_config = self.config.get('boundary_conditions', {}).get('inlet') or self.config.get('inlet', {})
+            inlet_type = inlet_config.get('type', 'TIMEVARYING').upper()
 
             if inlet_type in ['TIMEVARYING', 'WOMERSLEY']:
                 # Process Inlet CSV and generate velocity files

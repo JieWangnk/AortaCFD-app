@@ -7,8 +7,7 @@ from .utils.patch_processing import PatchProcessing
 from .utils.mesh_constants import (
     DEFAULT_CELLS_PER_DIAMETER,
     MIN_CELLS_PER_DIAMETER,
-    SURFACE_REFINEMENT_LEVELS,
-    DEFAULT_SURFACE_REFINEMENT_LEVEL,
+    DEFAULT_SURFACE_REFINEMENT_LEVELS,
     compute_cell_size,
     check_blockmesh_size
 )
@@ -80,32 +79,18 @@ class GeometryAnalyzer:
         Process user-friendly mesh config options and merge into SNAPPY_SETTINGS.
 
         Handles:
-        - surface_refinement_level (1, 2, 3) → surfaceRefinementLevels
+        - surfaceRefinementLevels: [min, max] direct snappy levels
         - boundary_layers.* → addLayer, expansionRatio, finalLayerThickness, etc.
 
         This ensures the simplified config API works regardless of how the case is run.
         """
-        # Process surface_refinement_level
-        surface_refinement_level = self.mesh_settings.get('surface_refinement_level')
-        if surface_refinement_level is not None:
-            try:
-                level = int(surface_refinement_level)
-                if level in SURFACE_REFINEMENT_LEVELS:
-                    snappy_levels = SURFACE_REFINEMENT_LEVELS[level]
-                    self.snappy_settings['surfaceRefinementLevels'] = snappy_levels
-                    cell_multiplier = 4 ** (level - 1)
-                    self.log.info(
-                        f"surface_refinement_level={level} → snappy levels {snappy_levels} "
-                        f"({cell_multiplier}× surface cells vs level 1)"
-                    )
-                else:
-                    self.log.warning(
-                        f"Invalid surface_refinement_level={level}. Valid: 1, 2, or 3. "
-                        f"Using default level {DEFAULT_SURFACE_REFINEMENT_LEVEL}."
-                    )
-                    self.snappy_settings['surfaceRefinementLevels'] = SURFACE_REFINEMENT_LEVELS[DEFAULT_SURFACE_REFINEMENT_LEVEL]
-            except (ValueError, TypeError):
-                self.log.warning(f"Invalid surface_refinement_level: {surface_refinement_level}. Using defaults.")
+        # Set default surfaceRefinementLevels if not specified
+        if 'surfaceRefinementLevels' not in self.snappy_settings:
+            self.snappy_settings['surfaceRefinementLevels'] = DEFAULT_SURFACE_REFINEMENT_LEVELS
+            self.log.info(f"Using default surfaceRefinementLevels: {DEFAULT_SURFACE_REFINEMENT_LEVELS}")
+        else:
+            levels = self.snappy_settings['surfaceRefinementLevels']
+            self.log.info(f"surfaceRefinementLevels: {levels}")
 
         # Process boundary_layers config (accept both snake_case and camelCase)
         boundary_layers = self.mesh_settings.get('boundary_layers', {})
@@ -124,11 +109,15 @@ class GeometryAnalyzer:
         final_layer_thickness = boundary_layers.get('final_layer_thickness') or boundary_layers.get('finalLayerThickness')
         if final_layer_thickness is not None:
             self.snappy_settings['finalLayerThickness'] = final_layer_thickness
-            self.snappy_settings['relativeSizes'] = True
 
         min_thickness = boundary_layers.get('min_thickness') or boundary_layers.get('minThickness')
         if min_thickness is not None:
             self.snappy_settings['minThickness'] = min_thickness
+
+        # Handle relativeSizes option (default: true)
+        relative_sizes = boundary_layers.get('relativeSizes')
+        if relative_sizes is not None:
+            self.snappy_settings['relativeSizes'] = relative_sizes
 
     def _calculate_patch_properties(self):
         """
@@ -594,11 +583,10 @@ class GeometryAnalyzer:
                     )
 
         # Surface refinement level info
-        surface_ref_level = self.mesh_settings.get('surface_refinement_level', DEFAULT_SURFACE_REFINEMENT_LEVEL)
-        snappy_levels = self.snappy_settings.get('surfaceRefinementLevels', SURFACE_REFINEMENT_LEVELS.get(surface_ref_level, [1, 2]))
+        snappy_levels = self.snappy_settings.get('surfaceRefinementLevels', DEFAULT_SURFACE_REFINEMENT_LEVELS)
         surface_cell_size_mm = cell_size_mm / (2 ** snappy_levels[1])  # After max refinement
         self.log.info("")
-        self.log.info(f"Surface refinement level: {surface_ref_level} → snappy levels {snappy_levels}")
+        self.log.info(f"surfaceRefinementLevels: {snappy_levels}")
         self.log.info(f"  Base cell size: {cell_size_mm:.3f} mm")
         self.log.info(f"  Surface cell size: {surface_cell_size_mm:.3f} mm (after {snappy_levels[1]}× subdivision)")
 
@@ -659,253 +647,16 @@ class GeometryAnalyzer:
 
     def _write_snappyhexmesh_dict(self, internal_point: np.ndarray):
         """
-        Generate snappyHexMeshDict with optional y+ based boundary layer calculation.
-
-        If mesh.boundary_layers.target_yplus is specified in config, this will
-        automatically calculate the appropriate finalLayerThickness to achieve
-        the target y+ value using flow correlations.
+        Generate snappyHexMeshDict with boundary layer settings.
         """
-        # Check if y+ based layer sizing is requested
-        boundary_layer_config = self.mesh_settings.get('boundary_layers', {})
-        target_yplus = boundary_layer_config.get('target_yplus')
-
-        # Make a mutable copy of snappy_settings for potential y+ override
-        snappy_settings_with_yplus = dict(self.snappy_settings)
-
-        if target_yplus is not None:
-            self._apply_yplus_layer_sizing(target_yplus, boundary_layer_config, snappy_settings_with_yplus)
-            # Override the config with calculated values
-            modified_config = dict(self.config)
-            modified_config['mesh'] = dict(self.config['mesh'])
-            modified_config['mesh']['SNAPPY_SETTINGS'] = snappy_settings_with_yplus
-        else:
-            modified_config = self.config
-
         context = {
-            "config": modified_config,
+            "config": self.config,
             "patches": self.all_patches,
             "wall_patch": self.wall_patch,
             "internal_point": internal_point
         }
         self._write_file_from_template("snappyHexMeshDict.tpl", os.path.join(self.case_dir, "system", "snappyHexMeshDict"), context)
 
-    def _apply_yplus_layer_sizing(self, target_yplus: float, boundary_layer_config: dict, snappy_settings: dict):
-        """
-        Calculate and apply finalLayerThickness based on target y+ value.
-
-        OVERRIDE BEHAVIOR:
-        - If finalLayerThickness is explicitly set in boundary_layers or SNAPPY_SETTINGS,
-          y+ estimation is SKIPPED and the user value is used directly.
-        - If expansionRatio is explicitly set, it overrides the y+ calculation input.
-        - This allows manual control when y+ estimation is not desired.
-
-        Args:
-            target_yplus: Target y+ value (e.g., 1.0 for RANS)
-            boundary_layer_config: mesh.boundary_layers configuration
-            snappy_settings: SNAPPY_SETTINGS dict to modify (in-place)
-        """
-        from .yplus_estimator import YPlusEstimator
-
-        # CHECK FOR EXPLICIT OVERRIDES
-        # If user provides layer thickness explicitly in boundary_layers config,
-        # skip y+ calculation entirely and use their value.
-        # NOTE: We only check boundary_layer_config (user's explicit input),
-        # NOT snappy_settings (which may contain base config defaults)
-        #
-        # Support both OpenFOAM keywords:
-        # - firstLayerThickness (wall-adjacent layer, CORRECT for y+ control)
-        # - finalLayerThickness (outermost layer, legacy/compatibility)
-        explicit_first_thickness = boundary_layer_config.get('firstLayerThickness')
-        explicit_final_thickness = boundary_layer_config.get('finalLayerThickness')
-
-        if explicit_first_thickness is not None:
-            self.log.info("="*60)
-            self.log.info("MANUAL BOUNDARY LAYER CONTROL (Y+ Estimation SKIPPED)")
-            self.log.info("="*60)
-            self.log.info(f"Using explicit firstLayerThickness: {explicit_first_thickness} mm")
-            self.log.info(f"Target y+ ({target_yplus}) is for REFERENCE only - actual y+ will vary")
-            self.log.info(f"Note: firstLayerThickness = wall-adjacent layer (correct for y+ control)")
-            self.log.info("="*60)
-            snappy_settings['firstLayerThickness'] = explicit_first_thickness
-            snappy_settings['relativeSizes'] = False  # Assume absolute units
-            return  # Skip y+ calculation
-        elif explicit_final_thickness is not None:
-            self.log.info("="*60)
-            self.log.info("MANUAL BOUNDARY LAYER CONTROL (Y+ Estimation SKIPPED)")
-            self.log.info("="*60)
-            self.log.info(f"Using explicit finalLayerThickness: {explicit_final_thickness} mm")
-            self.log.info(f"Target y+ ({target_yplus}) is for REFERENCE only - actual y+ will vary")
-            self.log.warning(f"⚠️  finalLayerThickness = OUTERMOST layer (not wall-adjacent)")
-            self.log.warning(f"⚠️  For y+ control, use firstLayerThickness instead!")
-            self.log.info("="*60)
-            snappy_settings['finalLayerThickness'] = explicit_final_thickness
-            snappy_settings['relativeSizes'] = False  # Assume absolute units
-            return  # Skip y+ calculation
-
-        # Get fluid properties from physics.transport_properties (same as OpenFOAM uses)
-        physics = self.config.get('physics', {})
-        transport_props = physics.get('transport_properties', {})
-
-        # Get rho (density) - used by OpenFOAM transportProperties
-        density = transport_props.get('rho')
-        if density is None:
-            density = 1060.0
-            self.log.warning(
-                "physics.transport_properties.rho not found, using default: 1060 kg/m³"
-            )
-
-        # Get nu (kinematic viscosity) - used by OpenFOAM transportProperties
-        nu = transport_props.get('nu')
-        if nu is None:
-            nu = 3.7736e-6
-            self.log.warning(
-                "physics.transport_properties.nu not found, using default: 3.7736e-6 m²/s"
-            )
-
-        # Calculate dynamic viscosity from nu and rho (mu = nu * rho)
-        viscosity = nu * density
-
-        self.log.info(
-            f"Y+ calculator using fluid properties (from physics.transport_properties): "
-            f"ρ={density} kg/m³, ν={nu:.6e} m²/s, μ={viscosity:.6f} Pa·s"
-        )
-
-        # Get or estimate flow parameters
-        estimation_method = boundary_layer_config.get('estimation_method', 'auto')
-
-        # Use user-provided values if available, otherwise estimate
-        if estimation_method == 'user_provided':
-            char_velocity = boundary_layer_config.get('characteristic_velocity')
-            char_length = boundary_layer_config.get('characteristic_length')
-
-            if char_velocity is None or char_length is None:
-                self.log.error(
-                    "estimation_method='user_provided' requires both characteristic_velocity "
-                    "and characteristic_length. Falling back to auto estimation."
-                )
-                estimation_method = 'auto'
-
-        if estimation_method == 'auto':
-            # Use typical aortic values or geometry-based estimates
-            # Default: Use inlet diameter as characteristic length
-            # inlet_radius is already in meters (STLs are pre-scaled)
-            char_length = (2.0 * self.inlet_radius) if self.inlet_radius else 0.025
-
-            # Estimate velocity from typical cardiac output
-            # Typical: ~5 L/min = 8.33e-5 m³/s, inlet area = π*r²
-            if self.inlet_radius:
-                inlet_area_m2 = np.pi * self.inlet_radius ** 2  # Already in meters
-                typical_flow_m3s = 8.33e-5  # 5 L/min
-                char_velocity = typical_flow_m3s / inlet_area_m2
-                self.log.info(
-                    f"Auto-estimated characteristic velocity: {char_velocity:.3f} m/s "
-                    f"(based on 5 L/min cardiac output and inlet radius {self.inlet_radius*1000:.2f} mm)"
-                )
-            else:
-                char_velocity = 0.5  # Fallback: typical aortic velocity
-                self.log.warning("Using fallback velocity of 0.5 m/s (inlet radius unavailable)")
-
-            # Allow user override
-            if boundary_layer_config.get('characteristic_velocity') is not None:
-                char_velocity = boundary_layer_config['characteristic_velocity']
-                self.log.info(f"Using user-specified characteristic_velocity: {char_velocity} m/s")
-
-            if boundary_layer_config.get('characteristic_length') is not None:
-                char_length = boundary_layer_config['characteristic_length']
-                self.log.info(f"Using user-specified characteristic_length: {char_length} m")
-
-        # Get layer parameters
-        n_layers = snappy_settings.get('addLayer', 5)
-        expansion_ratio = snappy_settings.get('expansionRatio', 1.2)
-
-        # Create estimator
-        estimator = YPlusEstimator(
-            density=density,
-            viscosity=viscosity,
-            flow_regime='auto'
-        )
-
-        # Calculate first layer thickness
-        results = estimator.estimate_first_layer_thickness(
-            target_yplus=target_yplus,
-            mean_velocity=char_velocity,
-            characteristic_length=char_length,
-            n_layers=n_layers,
-            expansion_ratio=expansion_ratio
-        )
-
-        # UNIT NOTE:
-        # Y+ calculator returns thickness in METERS
-        # Mesh is now in METERS (STLs pre-scaled during case setup)
-        # When relativeSizes=false, snappyHexMesh expects values in MESH UNITS (now meters)
-
-        # IMPORTANT: Use firstLayerThickness (wall-adjacent layer) for y+ control
-        # NOT finalLayerThickness (outermost layer)
-        firstLayerThickness_meters = results['firstLayerThickness']
-
-        snappy_settings['firstLayerThickness'] = firstLayerThickness_meters
-
-        # CRITICAL: Y+ calculator returns ABSOLUTE thickness
-        # Must override relativeSizes to false so snappyHexMesh treats values as absolute (in meters)
-        if snappy_settings.get('relativeSizes', True):
-            self.log.warning(
-                "Overriding relativeSizes from 'true' to 'false' - "
-                "Y+ calculator provides absolute layer thickness (in meters)"
-            )
-        snappy_settings['relativeSizes'] = False
-
-        # Also adjust minThickness to absolute units in meters if needed
-        min_thick = snappy_settings.get('minThickness', 0.1)
-        if min_thick > 0.01:  # Likely relative (e.g., 0.1 = 10%)
-            # Convert to small absolute value in meters (1 micron = 1e-6 m)
-            snappy_settings['minThickness'] = 1e-6  # 1 micron in meters
-            self.log.warning(
-                f"Adjusted minThickness from {min_thick} (relative) to {1e-6:.6e} m (absolute, 1 micron)"
-            )
-
-        # Print detailed report
-        self.log.info("="*60)
-        self.log.info("Y+ BASED BOUNDARY LAYER CALCULATION")
-        self.log.info("="*60)
-        self.log.info(f"Target y+:                  {target_yplus:.2f}")
-        self.log.info(f"Characteristic velocity:    {char_velocity:.3f} m/s")
-        self.log.info(f"Characteristic length:      {char_length*1000:.2f} mm ({char_length:.6f} m)")
-        self.log.info(f"Reynolds number:            {results['reynolds_number']:.0f} ({results['flow_regime'].capitalize()})")
-        self.log.info(f"Friction velocity (u_τ):    {results['friction_velocity']:.4f} m/s")
-        self.log.info("-"*60)
-        self.log.info(f"Calculated firstLayerThickness: {firstLayerThickness_meters*1000:.6f} mm ({firstLayerThickness_meters:.6e} m)")
-        self.log.info(f"Number of layers:               {n_layers}")
-        self.log.info(f"Expansion ratio:                {expansion_ratio}")
-        self.log.info(f"Total BL thickness:             {results['total_layer_thickness']*1000:.4f} mm")
-        self.log.info(f"Estimated y+:                   {results['estimated_yplus']:.2f}")
-        self.log.info(f"Note: firstLayerThickness = wall-adjacent layer for y+ control")
-        self.log.info(f"      Mesh units are meters (STLs pre-scaled), relativeSizes=false")
-        self.log.info("="*60)
-
-        # Validate settings
-        solver_type = self.config.get('simulation_settings', {}).get('solver_type', 'laminar')
-        validation = estimator.validate_settings(
-            results['firstLayerThickness'],
-            results['total_layer_thickness'],
-            char_length,
-            solver_type,
-            results['reynolds_number']
-        )
-
-        if validation['warnings']:
-            self.log.warning("⚠️  Y+ Estimation Warnings:")
-            for warning in validation['warnings']:
-                self.log.warning(f"  - {warning}")
-
-        if validation['recommendations']:
-            self.log.info("💡 Recommendations:")
-            for rec in validation['recommendations']:
-                self.log.info(f"  - {rec}")
-
-        self.log.info("-"*60)
-        self.log.info("Note: Verify actual y+ using post-processing after simulation.")
-        self.log.info("="*60)
-            
     def _write_surfacefeatures_dict(self):
         context = {
             "patches": self.all_patches,

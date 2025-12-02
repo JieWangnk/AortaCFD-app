@@ -1,5 +1,21 @@
 """Numeric profiles for OpenFOAM discretization schemes and solver settings.
 
+IMPORTANT DISCLAIMER
+====================
+These profiles control NUMERICAL SCHEMES ONLY:
+  - fvSchemes (discretization)
+  - fvSolution (solvers, tolerances)
+  - Time stepping (Courant number, correctors)
+
+Presets do NOT and CANNOT guarantee:
+  - Solution accuracy (depends on mesh resolution, physics, BCs)
+  - Mesh independence (requires convergence study with Richardson extrapolation)
+  - Physical validity (requires validation against experiments/literature)
+  - Publication readiness (requires all of the above + proper documentation)
+
+A preset NEVER makes a CFD solution scientifically publishable.
+Only a properly conducted convergence study can.
+
 SIMPLIFIED 3-PROFILE SYSTEM
 ============================
 This module provides 3 universal profiles that work for ALL physics models
@@ -11,66 +27,69 @@ AVAILABLE PROFILES
 robust
 ------
 First-order schemes, maximum stability.
-USE FOR: Debugging, poor mesh quality, initial testing, coarse mesh convergence
+USE FOR: Debugging, poor mesh quality, initial testing, coarse mesh runs
 SCHEMES: Euler time, upwind convection
-TRADE-OFF: Stable but diffusive (not publication quality)
+TRADE-OFF: Stable but highly diffusive (damps physical gradients)
 COST: Low (1x baseline)
-PHYSICS: Laminar, RANS, LES (not recommended for final LES results)
+PHYSICS: Laminar, RANS, LES (high dissipation will damp resolved turbulence)
 
 standard
 --------
-Second-order bounded schemes, production quality.
-USE FOR: Production runs, clinical studies, most RANS simulations
+Second-order bounded schemes, balanced stability/diffusion.
+USE FOR: Production runs, clinical screening, most RANS simulations
 SCHEMES: backward time, linearUpwind convection
-TRADE-OFF: Good accuracy and stability balance
+TRADE-OFF: Reasonable accuracy with good stability
 COST: Moderate (1.5x baseline)
-PHYSICS: Laminar, RANS (recommended), LES (acceptable but "accurate" is better)
+PHYSICS: Laminar, RANS (recommended), LES (acceptable but higher dissipation)
 
 accurate
 --------
-Second-order low-diffusion schemes, publication quality.
-USE FOR: Publications, mesh independence studies, ALL LES simulations
+Second-order low-diffusion schemes, minimal numerical dissipation.
+USE FOR: Convergence studies, validation, LES requiring resolved turbulence
 SCHEMES: CrankNicolson 0.9 time, LUST convection (75% central + 25% upwind)
 TRADE-OFF: Minimal diffusion, requires good mesh, longer runtime
 COST: Higher (2-3x baseline)
 PHYSICS: Laminar, RANS, LES (REQUIRED for LES - LUST preserves turbulence)
+NOTE: "accurate" refers to low numerical diffusion, NOT solution accuracy.
+      Solution accuracy still requires mesh independence verification.
 
 PROFILE SELECTION GUIDE
 =======================
 
 ┌─────────────────────────────────────────────────────────────────────┐
-│ START: What is your objective?                                     │
+│ START: What numerical characteristics do you need?                 │
 └─────────────────────────────────────────────────────────────────────┘
                               │
         ┌─────────────────────┼─────────────────────┐
         │                     │                     │
         ▼                     ▼                     ▼
-   Debug/Test?         Production?          Publication?
-   Poor mesh?          Clinical?                 LES?
-        │                     │                     │
-        ▼                     ▼                     ▼
-     ROBUST              STANDARD               ACCURATE
-        │                     │                     │
+   Max stability?      Balanced?            Low diffusion?
+   Poor mesh?          Screening?           Convergence study?
+        │                     │                   LES?
+        ▼                     ▼                     │
+     ROBUST              STANDARD                   ▼
+        │                     │                 ACCURATE
    1st order           2nd order bounded     2nd order LUST
-   Max stability       Good balance          Min diffusion
+   Max stability       Balanced trade-off    Min diffusion
+
+IMPORTANT: None of these guarantee accuracy - that requires mesh convergence.
 
 PHYSICS-SPECIFIC RECOMMENDATIONS
 =================================
 
 Laminar:
-  - Debug:       robust
-  - Production:  standard
-  - Publication: accurate
+  - Debug:            robust
+  - Production:       standard
+  - Convergence study: accurate
 
 RANS (k-ω SST):
-  - Debug:       robust
-  - Production:  standard (recommended)
-  - Publication: accurate
+  - Debug:            robust
+  - Production:       standard (recommended)
+  - Convergence study: accurate
 
 LES (WALE):
-  - Debug:       standard (quick test only)
-  - Production:  accurate (REQUIRED - LUST preserves turbulence)
-  - Publication: accurate (same)
+  - Debug:            standard (quick test only)
+  - Production/Final: accurate (REQUIRED - LUST preserves turbulence)
 
 MESH QUALITY REQUIREMENTS
 ==========================
@@ -163,11 +182,11 @@ DEPRECATED_PROFILES = {
     },
     "publication": {
         "replacement": "accurate",
-        "reason": "Similar accuracy. LUST scheme in 'accurate' is better for all models."
+        "reason": "Misleading name removed. LUST scheme in 'accurate' has lower diffusion. Note: profile choice alone does not make results publication-ready - convergence study required."
     },
     "precise": {
         "replacement": "accurate",
-        "reason": "Consolidated high-accuracy profiles. Use 'accurate' for all publication work."
+        "reason": "Consolidated low-diffusion profiles. Note: 'accurate' refers to low numerical diffusion, not guaranteed solution accuracy."
     },
     "aggressive": {
         "replacement": "accurate",
@@ -177,30 +196,35 @@ DEPRECATED_PROFILES = {
 }
 
 # Profile metadata for quick reference
+# Note: These describe NUMERICAL characteristics, not solution accuracy
 PROFILE_METADATA = {
     "robust": {
         "order_of_accuracy": 1,
         "stability": "maximum",
+        "numerical_diffusion": "high (damps gradients)",
         "intended_use": "debugging, poor meshes, initial testing",
         "physics_models": ["laminar", "rans", "les"],
-        "best_for": "debug and coarse mesh convergence studies",
-        "not_recommended_for": "final results, publications (high numerical diffusion)"
+        "best_for": "debug runs and stability testing",
+        "limitations": "high numerical diffusion masks physics"
     },
     "standard": {
         "order_of_accuracy": 2,
         "stability": "good",
-        "intended_use": "production runs, clinical studies, most RANS",
+        "numerical_diffusion": "moderate",
+        "intended_use": "production runs, clinical screening, most RANS",
         "physics_models": ["laminar", "rans", "les"],
-        "best_for": "RANS production simulations",
+        "best_for": "balanced stability/diffusion trade-off",
         "mesh_requirements": "orthogonality > 60°, skewness < 3"
     },
     "accurate": {
         "order_of_accuracy": 2,
         "stability": "good (requires quality mesh)",
-        "intended_use": "publications, validation, mesh independence, ALL LES",
+        "numerical_diffusion": "low (preserves gradients)",
+        "intended_use": "convergence studies, validation, LES",
         "physics_models": ["laminar", "rans", "les"],
-        "best_for": "LES (LUST preserves turbulence), publications, validation studies",
-        "mesh_requirements": "orthogonality > 70°, skewness < 2, y+ < 1 for LES"
+        "best_for": "LES (LUST preserves turbulence), mesh independence studies",
+        "mesh_requirements": "orthogonality > 70°, skewness < 2, y+ < 1 for LES",
+        "note": "'accurate' = low diffusion schemes, NOT guaranteed solution accuracy"
     }
 }
 
@@ -324,15 +348,20 @@ def recommend_profile(mesh_quality: dict, physics_model: str = "rans", objective
             )
         return "accurate"
 
-    # Publication: use accurate
-    if objective == "publication":
+    # Convergence study / low diffusion needed: use accurate
+    if objective in ("publication", "convergence", "validation"):
         if ortho > 70 and skew < 2:
+            logger.info(
+                f"Recommending 'accurate' profile (low numerical diffusion). "
+                f"REMINDER: Profile choice does not guarantee solution accuracy - "
+                f"mesh independence study required."
+            )
             return "accurate"
         else:
             logger.warning(
-                f"Publication-quality requires good mesh (ortho>70°, skew<2). "
+                f"Low-diffusion schemes require good mesh (ortho>70°, skew<2). "
                 f"Current: ortho={ortho}°, skew={skew:.1f}. "
-                f"Recommending 'standard' but consider improving mesh for 'accurate'."
+                f"Recommending 'standard' - improve mesh before using 'accurate'."
             )
             return "standard"
 

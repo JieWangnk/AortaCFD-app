@@ -1,6 +1,10 @@
 {
+  "_comment": "TIMEVARYING inlet with wall_distance velocity profile",
+  "_description": "Distance-to-wall based profile for irregular inlet geometries (e.g., aortic root with valve leaflets)",
+
   "case_info": {
-    "patient_id": "BPM120_mesh_coarse"
+    "patient_id": "BPM120_timevarying_wall_distance",
+    "description": "Time-varying inlet with wall-distance profile"
   },
 
   "physics": {
@@ -8,35 +12,35 @@
     "transport_properties": {
       "rho": 1060,
       "nu": 3.7736e-6
-      }
+    }
   },
 
   "numerics": {
     "profile": "robust",
     "max_co": 1,
-    
     "correctors": {
-      "nOuterCorrectors": 3,
-      "nCorrectors": 2,
+      "nOuterCorrectors": 10,
+      "nCorrectors": 3,
       "nNonOrthogonalCorrectors": 2
     }
   },
 
   "mesh": {
-    "cells_per_diameter": 2,
-
+    "cells_per_diameter": 1.5,
     "boundary_layers": {
       "enabled": true,
       "num_layers": 5,
-      "expansion_ratio": 1.2,
-      "final_layer_thickness": 0.15,
-      "min_thickness": 0.05
+      "first_layer_thickness": 0.2,
+      "growth_rate": 1.1,
+      "relativeSizes": true
     },
-
     "SNAPPY_SETTINGS": {
+      "surfaceRefinementLevels": [2,3],
+      "featureLevel": 3,
+      "resolveFeatureAngle": 10,
+      "includedAngle": 180,
       "parallel": true,
-      "nProcessors": 2,
-      "surfaceRefinementLevels": [1, 2]
+      "nProcessors": 8
     }
   },
 
@@ -49,11 +53,12 @@
 
   "boundary_conditions": {
     "inlet": {
-      "type": "CONSTANT",
-      "flowrate": 4.7,
-      "profile": "plug",
-      "_comment": "4.75 L/min = 7.917e-05 m³/s for pediatric patient BPM120"
-
+      "type": "TIMEVARYING",
+      "csv_file": "BPM120.csv",
+      "data_type": "flowrate",
+      "profile": "wall_distance",
+      "exponent": 2.0,
+      "_comment": "exponent=2.0 gives parabolic-like shape. Use 1.0 for linear, 1/7 for turbulent."
     },
 
     "outlets": {
@@ -62,7 +67,6 @@
         "systolic_pressure": 120,
         "diastolic_pressure": 80,
         "venous_pressure": 0,
-
         "methodology": "murray_law_automatic",
         "tau": 1.0
       }
@@ -74,18 +78,14 @@
   },
 
   "simulation_control": {
-    "end_time": 5,
- 
-    "number_of_cycles": 1,
-
-    "writeInterval": 0.2
+    "end_time": 1.0,
+    "number_of_cycles": 2,
+    "writeInterval": 0.1
   },
 
   "run_settings": {
     "solution_type": "parallel",
-    "subdomains": 2,
+    "subdomains": 8,
     "decomposition_method": "scotch"
   }
 }
-
-

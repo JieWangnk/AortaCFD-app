@@ -56,14 +56,24 @@ config = {
             # Only use [2,3] for simple geometries or after verifying [1,2] works
             "surfaceRefinementLevels": [1, 2],
 
-            # ========== FEATURE RESOLUTION (CONSERVATIVE) ==========
-            # resolveFeatureAngle: 60° is ROBUST for aortas (30° was too aggressive)
-            # Higher angle = fewer features captured = smoother mesh
-            # 60° is the sweet spot for cardiovascular geometries
-            "resolveFeatureAngle": 60,
+            # ========== FEATURE EDGE DETECTION (surfaceFeatures) ==========
+            # includedAngle: Edge detection angle for surfaceFeatures command
+            # Features = edges where face angle < includedAngle
+            # 170° = detect edges with angle > 10° (180 - 170)
+            # Lower value = fewer edges detected (conservative)
+            # Higher value = more edges detected (aggressive)
+            "includedAngle": 170,
 
-            # Feature level: AUTO-CALCULATED in template to match max(surfaceRefinementLevels)
-            # This prevents over-refinement at edges
+            # ========== FEATURE RESOLUTION (snappyHexMesh) ==========
+            # resolveFeatureAngle: How aggressively to resolve geometry features
+            # Higher angle = fewer features captured = smoother mesh
+            # 30° is typical for cardiovascular geometries
+            "resolveFeatureAngle": 30,
+
+            # featureLevel: Refinement level for feature edges (single integer)
+            # AUTO-CALCULATED in template from max(surfaceRefinementLevels) if not set
+            # Set explicitly to override: "featureLevel": 2
+            # Controls refinement along sharp edges (inlet/outlet boundaries, vessel branches)
 
             # ========== QUALITY CONTROLS ==========
             "maxNonOrtho": 65,
@@ -83,15 +93,16 @@ config = {
             "nCellsBetweenLevels": 2,       # Smoother transitions (was 3)
 
             # ========== SNAPPING & QUALITY ITERATIONS ==========
-            "snapTolerance": 2.0,
-            "nSmoothPatch": 5,
-            "nSmoothScale": 4,
-            "nSolveIter": 250,
-            "nRelaxIter": 10,
-            "nFeatureSnapIter": 15,
-            "nSmoothInternal": 3,
-            "nSmoothDisplacement": 90,
-            "errorReduction": 0.75,
+            # Optimized for cardiovascular geometries (curved surfaces, branches)
+            "snapTolerance": 1.0,           # Snap tolerance as fraction of cell size
+            "nSmoothPatch": 3,              # Patch smoothing before snapping (3-5)
+            "nSmoothScale": 4,              # Mesh smoothing iterations
+            "nSolveIter": 10,               # Mesh displacement solver iterations (30-50 for aorta)
+            "nRelaxIter": 5,                # Snapping relaxation (low for curved surfaces)
+            "nFeatureSnapIter": 5,         # Feature edge snapping (moderate - high causes failures)
+            "nSmoothInternal": 3,           # Internal point smoothing
+            "nSmoothDisplacement": 50,      # Displacement smoothing (50-100)
+            "errorReduction": 0.75,         # Error reduction factor
 
             # ========== RELAXED QUALITY CONTROLS ==========
             "relaxed_maxNonOrtho": 75,  # More gradual transition between refinement levels
@@ -109,12 +120,11 @@ config = {
             # ========== BOUNDARY LAYER SETTINGS (TRADITIONAL OPENFOAM STYLE) ==========
             # Uses relativeSizes=true with finalLayerThickness as fraction of local cell size
             # This is the standard OpenFOAM approach - simple and predictable
-            # Y+ based sizing is OPTIONAL (only if mesh.boundary_layers.target_yplus is set)
             "addLayer": 5,                  # nSurfaceLayers: typical for cardiovascular
             "expansionRatio": 1.2,          # Growth ratio between layers (1.15-1.25 typical)
-            "finalLayerThickness": 0.3,     # Outermost layer as fraction of cell size
+            "finalLayerThickness": 0.3,     # Outermost layer as fraction of cell size (relativeSizes=true)
             "minThickness": 0.1,            # Minimum layer thickness (allows graceful collapse)
-            "relativeSizes": True,          # Use relative sizing (fraction of cell size)
+            "relativeSizes": True,          # true=fraction of cell size (default), false=absolute meters
 
             # ========== LAYER ADDITION CONTROLS (MAXIMUM CONSERVATISM) ==========
             # CRITICAL: nSmoothSurfaceNormals is THE KEY to layer success

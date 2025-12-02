@@ -48,10 +48,10 @@
 
     "correctors": {
       "_comment": "PIMPLE algorithm corrector settings",
-      "nOuterCorrectors": 3,
+      "nOuterCorrectors": 5,
       "_nOuterCorrectors_comment": "Outer correctors (robust: 3, standard: 2, accurate: 3)",
 
-      "nCorrectors": 3,
+      "nCorrectors": 2,
       "_nCorrectors_comment": "Inner pressure correctors (robust: 3, standard: 2, accurate: 3)",
 
       "nNonOrthogonalCorrectors": 2,
@@ -124,25 +124,18 @@
       "_expansion_ratio_comment": "Growth ratio between successive layers (typical: 1.15-1.25)",
 
       "final_layer_thickness": 0.3,
-      "_final_layer_thickness_comment": "Final (outermost) layer thickness as fraction of local cell size (relativeSizes=true)",
+      "_final_layer_thickness_comment": "Final (outermost) layer thickness as fraction of local cell size (when relativeSizes=true)",
 
       "min_thickness": 0.1,
       "_min_thickness_comment": "Minimum layer thickness as fraction of cell size. Allows graceful collapse in tight regions.",
 
-      "_optional_target_yplus": 1.0,
-      "_optional_target_yplus_comment": "OPTIONAL: If set, overrides final_layer_thickness with Y+ based calculation. Leave commented out to use final_layer_thickness directly.",
-
-      "_yplus_formula_reference": "First layer height: y = y+ * mu / (rho * u_tau), where u_tau = sqrt(tau_w / rho)"
+      "relativeSizes": true,
+      "_relativeSizes_comment": "If true, layer thicknesses are relative to local cell size. If false, thicknesses are absolute in meters.",
+      "_relativeSizes_options": {
+        "true": "Thicknesses as fraction of local cell size (DEFAULT, recommended)",
+        "false": "Thicknesses as absolute values in meters"
+      }
     },
-
-    "surface_refinement_level": 2,
-    "_surface_refinement_level_options": [1, 2, 3],
-    "_surface_refinement_level_description": {
-      "1": "No subdivision: base cell size at surface (1× surface cells)",
-      "2": "One subdivision: 2× finer at surface (4× surface cells) - DEFAULT",
-      "3": "Two subdivisions: 4× finer at surface (16× surface cells)"
-    },
-    "_surface_refinement_level_note": "Each level subdivides surface cells by factor of 2. Level 3 yields 4× more surface cells than level 1.",
 
     "volume_refinement": {
       "_comment": "Optional volume refinement regions",
@@ -159,15 +152,6 @@
           "_comment": "Refine aortic arch region"
         }
       ]
-    },
-
-    "feature_refinement": {
-      "_comment": "Feature edge refinement settings",
-      "resolve_feature_angle": 60,
-      "_resolve_feature_angle_comment": "Angle threshold for feature edges (conservative: 60°, aggressive: 30°)",
-
-      "feature_levels": [2, 2],
-      "_feature_levels_comment": "Refinement levels for feature edges [min, max]"
     },
 
     "quality_controls": {
@@ -189,7 +173,27 @@
       "_comment": "Advanced snappyHexMesh settings (most users don't need to modify)",
       "parallel": true,
       "nProcessors": 8,
-      "_parallel_comment": "Enable parallel meshing (recommended for large cases)"
+      "_parallel_comment": "Enable parallel meshing (recommended for large cases)",
+
+      "surfaceRefinementLevels": [1, 2],
+      "_surfaceRefinementLevels_comment": "Surface refinement levels [min, max] for snappyHexMesh",
+      "_surfaceRefinementLevels_options": {
+        "[0, 1]": "No subdivision: base cell size at surface",
+        "[1, 2]": "One subdivision: 2× finer at surface - DEFAULT",
+        "[2, 3]": "Two subdivisions: 4× finer at surface",
+        "[1, 3]": "Variable refinement: min 2×, max 4× finer"
+      },
+      "_surfaceRefinementLevels_note": "Each level subdivides cells by factor of 2. Cell count scales as 4^(max_level-1)",
+
+      "includedAngle": 170,
+      "_includedAngle_comment": "Feature edge detection angle (180-angle = feature threshold). 170 = detect edges >10°. Range: 120-170.",
+
+      "featureLevel": 2,
+      "_featureLevel_comment": "Feature edge refinement level (single integer). Auto-calculated from max(surfaceRefinementLevels) if not set.",
+      "_featureLevel_note": "Controls refinement along sharp edges (inlet/outlet boundaries, vessel branches).",
+
+      "resolveFeatureAngle": 30,
+      "_resolveFeatureAngle_comment": "snappyHexMesh feature resolution angle (degrees). Lower = more features captured. Range: 20-60."
     }
   },
 
