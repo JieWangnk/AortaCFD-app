@@ -26,20 +26,21 @@
   },
 
   "mesh": {
-    "cells_per_diameter": 10,
+    "cells_per_diameter": 1.5,
     "boundary_layers": {
       "enabled": true,
-      "target_yplus": 1.0,
-      "num_layers": 8,
-      "expansion_ratio": 1.2,
-      "estimation_method": "auto"
-    },
-    "surface_refinement": {
-      "levels": [1, 1]
+      "num_layers": 5,
+      "first_layer_thickness": 0.2,
+      "growth_rate": 1.1,
+      "relativeSizes": true
     },
     "SNAPPY_SETTINGS": {
+      "surfaceRefinementLevels": [2,3],
+      "featureLevel": 3,
+      "resolveFeatureAngle": 10,
+      "includedAngle": 180,
       "parallel": true,
-      "nProcessors": 4
+      "nProcessors": 8
     }
   },
 
@@ -52,27 +53,13 @@
 
   "boundary_conditions": {
     "inlet": {
-      "type": "TIMEVARYING",
-      "csv_file": "BPM120.csv",
+      "type": "CONSTANT",
+      "flowrate": 4.7,
+      "_type": "TIMEVARYING",
+      "_csv_file": "BPM120.csv",
       "data_type": "flowrate",
-
-      "_comment_profile": "Distance-to-wall profile options: distance_wall, power_law, poiseuille_distance, hybrid_jet, blunted",
-      "profile": "distance_wall",
-
-      "_comment_shape": "Shape function: poiseuille (default), power_law, hybrid_jet, blunted_parabolic",
-      "shape_function": "poiseuille",
-
-      "_comment_exponent": "Power law exponent n for shape function. Higher = flatter core, steeper wall gradient",
-      "exponent": 2.0,
-
-      "_comment_core": "Core fraction for hybrid/blunted profiles (0-1). Defines flat core region size.",
-      "core_fraction": 0.3,
-
-      "_comment_flow_rate": "Enable flow rate correction to ensure Q matches CSV exactly",
-      "enforce_flow_rate": true,
-
-      "_comment_orientation": "Orientation: 'auto' (detect from geometry), 'in' (into domain), 'out' (out of domain)",
-      "orientation": "auto"
+      "profile": "wall_distance",
+      "_comment": "4.75 L/min = 7.917e-05 m³/s for pediatric patient BPM120"
     },
 
     "outlets": {
@@ -99,7 +86,7 @@
 
   "run_settings": {
     "solution_type": "parallel",
-    "subdomains": 4,
+    "subdomains": 8,
     "decomposition_method": "scotch"
   }
 }

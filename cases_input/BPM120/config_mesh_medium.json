@@ -60,7 +60,6 @@
       "flowrate": 4.7,
       "profile": "plug",
       "_comment": "4.75 L/min = 7.917e-05 m³/s for pediatric patient BPM120"
-
     },
 
     "outlets": {

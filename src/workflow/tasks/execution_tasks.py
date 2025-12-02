@@ -24,7 +24,9 @@ class ExecuteMeshingTask(Task):
                 # Temporarily override decomposeParDict for parallel meshing
                 self._override_decompose_par_dict(case_dir, n_proc)
 
-                run_command(self.config, ["decomposePar", "-force"], case_dir, "log.decomposePar.preMesh")
+                # Use -noFields to only decompose geometry (mesh), not field data
+                # Field files (0/p, 0/U) expect post-snappyHexMesh patches, not blockMesh "world" patch
+                run_command(self.config, ["decomposePar", "-force", "-noFields"], case_dir, "log.decomposePar.preMesh")
 
                 run_command(
                     self.config,

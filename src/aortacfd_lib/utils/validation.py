@@ -779,12 +779,12 @@ class BoundaryConditionValidator:
             return normalized
 
     # Valid profiles
-    VALID_PROFILES = ['plug', 'parabolic', 'womersley']
+    VALID_PROFILES = ['plug', 'parabolic', 'womersley', 'wall_distance', 'elliptical']
 
     # Type-profile compatibility rules (strict enforcement)
     TYPE_PROFILE_RULES = {
-        'TIMEVARYING': ['plug', 'parabolic', 'womersley'],  # Any profile with time-varying data
-        'CONSTANT': ['plug', 'parabolic'],                  # Steady-state profiles only (plug or parabolic)
+        'TIMEVARYING': ['plug', 'parabolic', 'womersley', 'wall_distance', 'elliptical'],
+        'CONSTANT': ['plug', 'parabolic', 'wall_distance', 'elliptical'],
         'WOMERSLEY': ['womersley']                          # Must use womersley profile
     }
 
@@ -1078,13 +1078,27 @@ class BoundaryConditionValidator:
             # Read CSV file
             df = pd.read_csv(csv_path)
 
-            # Check required columns
-            if 'time' not in df.columns:
-                result.add_error("CSV file missing required 'time' column")
+            # Normalize column names to lowercase for case-insensitive matching
+            # Create mapping: original_name -> lowercase_name
+            column_name_map = {col: col.lower().strip() for col in df.columns}
+            lowercase_columns = list(column_name_map.values())
+
+            # Check required 'time' column (case-insensitive)
+            time_column = None
+            for orig_col, lower_col in column_name_map.items():
+                if lower_col == 'time':
+                    time_column = orig_col
+                    break
+
+            if time_column is None:
+                result.add_error(
+                    f"CSV file missing required 'time' column. "
+                    f"Found columns: {list(df.columns)}"
+                )
                 return result
 
             # Check for at least one data column (velocity, flowrate, or pressure)
-            # Normalize column names to handle flowRate, flow_rate, etc.
+            # Normalize column names to handle flowRate, flow_rate, Time, TIME, etc.
             normalized_columns = {col: self.normalize_data_type(col) for col in df.columns}
             data_columns = [col for col, norm in normalized_columns.items()
                           if norm and norm in self.VALID_DATA_TYPES]
@@ -1101,8 +1115,8 @@ class BoundaryConditionValidator:
                     f"Insufficient data points in CSV: {len(df)} (minimum: {self.MIN_TIME_POINTS})"
                 )
 
-            # Validate time column
-            time_result = self._validate_time_column(df['time'])
+            # Validate time column (use discovered column name for case-insensitivity)
+            time_result = self._validate_time_column(df[time_column])
             result.errors.extend(time_result.errors)
             result.warnings.extend(time_result.warnings)
             if not time_result.is_valid:

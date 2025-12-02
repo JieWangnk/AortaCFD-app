@@ -46,24 +46,25 @@ DEFAULT_CELLS_PER_DIAMETER = 10  # Conservative: resolves basic flow features
 # =============================================================================
 # SURFACE REFINEMENT LEVELS
 # =============================================================================
-# Integer surface_refinement_level (1, 2, or 3) replaces ambiguous level names
+# surfaceRefinementLevels: [min, max] snappy refinement levels
 # Each level subdivides the base cell size by a factor of 2:
-#   Level 1: No subdivision  → [0, 1] snappy levels (base cell size at surface)
-#   Level 2: One subdivision → [1, 2] snappy levels (2× finer at surface)
-#   Level 3: Two subdivisions → [2, 3] snappy levels (4× finer at surface)
+#   [0, 1]: Base cell size at surface
+#   [1, 2]: 2× finer at surface (DEFAULT)
+#   [2, 3]: 4× finer at surface
+#   [1, 3]: Variable refinement (min 2×, max 4× finer)
 #
-# Cell count scaling at surface (relative to level 1):
-#   Level 1: 1× surface cells
-#   Level 2: 4× surface cells (2² = 4)
-#   Level 3: 16× surface cells (4² = 16)
-SURFACE_REFINEMENT_LEVELS = {
-    1: [0, 1],  # No subdivision: base cell size at surface
-    2: [1, 2],  # One subdivision: 2× finer at surface (DEFAULT)
-    3: [2, 3],  # Two subdivisions: 4× finer at surface
-}
+# Cell count scaling at surface:
+#   max=1: 1× surface cells
+#   max=2: 4× surface cells (2² = 4)
+#   max=3: 16× surface cells (4² = 16)
+#
+# Example config:
+#   "SNAPPY_SETTINGS": {
+#     "surfaceRefinementLevels": [1, 2]
+#   }
 
-# Default surface refinement level
-DEFAULT_SURFACE_REFINEMENT_LEVEL = 2  # Level 2 = [1,2] = moderate refinement
+# Default surface refinement levels [min, max]
+DEFAULT_SURFACE_REFINEMENT_LEVELS = [1, 2]  # Moderate refinement
 
 # BlockMesh size warning thresholds
 # We don't try to "fix" large meshes - just warn the user and let them decide

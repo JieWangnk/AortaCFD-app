@@ -16,7 +16,11 @@ FoamFile
 
 dimensions      [0 2 -2 0 0 0 0];
 
-internalField   uniform {{ initial_pressure|default(0) }};
+{# IMPORTANT: OpenFOAM incompressible solvers use KINEMATIC pressure (m²/s²) #}
+{# initial_pressure is passed in Pa (dynamic), so we divide by rho to get kinematic #}
+{% set rho = outlet_settings.get('rho', 1060) if outlet_settings else 1060 %}
+{% set kinematic_pressure = (initial_pressure|default(0)) / rho %}
+internalField   uniform {{ kinematic_pressure|round(6) }};
 
 boundaryField
 {
@@ -43,32 +47,46 @@ boundaryField
             {# ========== Option 1: Windkessel (Physiological) ========== #}
             {% if of_version >= 12 %}
         // OpenFOAM 12+ modularWKPressure boundary condition
-        // 3-Element Windkessel model (R-C-Z) with implicit coupling
+        // 3-Element Windkessel model (R-C-Z) - ALL KINEMATIC UNITS
         {% set wk_settings = outlet_settings.get('windkessel_settings', {}) %}
         {% set outlet_params = wk_settings.get('outlet_parameters', {}).get(outlet, {}) %}
-        {% set outlet_pressure = outlet_initial_pressures.get(outlet, initial_pressure)|default(0) %}
+        {% set outlet_pressure_pa = outlet_initial_pressures.get(outlet, initial_pressure)|default(0) %}
         {% set fluid_rho = outlet_settings.get('rho', 1060) %}
         {% set coupling = wk_settings.get('coupling_mode', 'implicit') %}
+        {# Get dynamic (SI) parameters and convert to kinematic #}
+        {% set R_dyn = outlet_params.get('R', wk_settings.get('R', 1e9)) %}
+        {% set C_dyn = outlet_params.get('C', wk_settings.get('C', 1e-9)) %}
+        {% set Z_dyn = outlet_params.get('Z', wk_settings.get('Z', 1e8)) %}
+        {# Convert to kinematic: R_kin = R_dyn/rho, C_kin = C_dyn*rho, p_kin = p/rho #}
+        {% set R_kin = R_dyn / fluid_rho %}
+        {% set C_kin = C_dyn * fluid_rho %}
+        {% set Z_kin = Z_dyn / fluid_rho %}
+        {% set p_kin = outlet_pressure_pa / fluid_rho %}
+        {# Initialize q_1 to expected steady-state flow to prevent startup divergence #}
+        {% set q_init = outlet_params.get('q_init', 0) %}
         type            modularWKPressure;
         phi             phi;
         U               U;
         couplingMode    {{ coupling }};
         order           {{ wk_settings.get('order', 3) }};
-        // Windkessel parameters (dynamic units: Pa·s/m³, m³/Pa)
-        R               {{ outlet_params.get('R', wk_settings.get('R', 1e9)) }};
-        C               {{ outlet_params.get('C', wk_settings.get('C', 1e-9)) }};
-        Z               {{ outlet_params.get('Z', wk_settings.get('Z', 1e8)) }};
-        // Fluid density for kinematic conversion
+        // Windkessel parameters (KINEMATIC units)
+        // Conversion: R_kin = R_dyn/rho [s/m], C_kin = C_dyn*rho [m], p_kin = p/rho [m²/s²]
+        R               {{ R_kin }};    // s/m (= {{ R_dyn }} Pa·s/m³ / {{ fluid_rho }})
+        C               {{ C_kin }};    // m (= {{ C_dyn }} m³/Pa × {{ fluid_rho }})
+        Z               {{ Z_kin }};    // s/m (= {{ Z_dyn }} Pa·s/m³ / {{ fluid_rho }})
+        // Fluid density (reference only - not used in calculations)
         rho             {{ fluid_rho }};
-        // Initial/reference pressure [Pa] (dynamic)
-        p0              {{ outlet_pressure }};
-        // State variables (initialized to reference)
-        p_1             {{ outlet_pressure }};
-        q_1             0;
-        q_2             0;
-        q_3             0;
-        // Initial value (kinematic pressure m²/s²)
-        value           uniform {{ (outlet_pressure / fluid_rho)|round(6) }};
+        // Initial/reference pressure [m²/s²] (kinematic)
+        p0              {{ p_kin|round(6) }};
+        // State variables - initialized to steady-state values for smooth startup
+        // q_init is set to expected mean flow (from Murray's law) to prevent
+        // startup divergence caused by sudden flow imposition on zero-history WK state
+        p_1             {{ p_kin|round(6) }};
+        q_1             {{ q_init }};
+        q_2             {{ q_init }};
+        q_3             {{ q_init }};
+        // Initial field value [m²/s²] (kinematic)
+        value           uniform {{ p_kin|round(6) }};
             {% else %}
         // OpenFOAM 8 WKBC boundary condition
         type            WKBC;
@@ -79,9 +97,11 @@ boundaryField
         {% elif outlet_type == "fixedPressure" %}
             {# ========== Option 2: Fixed Pressure (Simple) ========== #}
         // Fixed pressure outlet - all outlets at same pressure
-        {% set pressure_pa = (outlet_settings.get('pressure_mmHg', 80) * 133.322)|int %}
+        // Note: Using kinematic pressure (m²/s²) = dynamic pressure (Pa) / rho
+        {% set pressure_pa = outlet_settings.get('pressure_mmHg', 80) * 133.322 %}
+        {% set pressure_kinematic = pressure_pa / rho %}
         type            fixedValue;
-        value           uniform {{ pressure_pa }};  // {{ outlet_settings.get('pressure_mmHg', 80) }} mmHg
+        value           uniform {{ pressure_kinematic|round(6) }};  // {{ outlet_settings.get('pressure_mmHg', 80) }} mmHg = {{ pressure_pa|round(0) }} Pa
 
         {% elif outlet_type == "resistance" %}
             {# ========== Option 3: Resistance (Advanced) ========== #}

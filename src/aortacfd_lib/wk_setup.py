@@ -336,25 +336,34 @@ class WkSetup:
 
         outlet_parameters = {}
         for i, name in enumerate(outlet_patches):
+            # Calculate initial flow for this outlet (prevents startup divergence)
+            # q_init = expected steady-state flow based on Murray's law split
+            q_init = mean_Q_outlets[i]  # m³/s
+
             outlet_parameters[name] = {
-                "R": float(R2[i]),  # OpenFOAM uses R2 as "R"
-                "C": float(C[i]),
-                "Z": float(R1[i])   # OpenFOAM uses R1 as "Z"
+                "R": float(R2[i]),      # OpenFOAM uses R2 as "R" (distal resistance)
+                "C": float(C[i]),       # Compliance
+                "Z": float(R1[i]),      # OpenFOAM uses R1 as "Z" (proximal/characteristic impedance)
+                "q_init": float(q_init) # Initial flow for WK state variables (prevents startup spike)
             }
-            self.log.info(f"{name:15s}: R(R2)={R2[i]:12.2e}  C={C[i]:12.2e}  Z(R1)={R1[i]:12.2e}")
+            self.log.info(f"{name:15s}: R(R2)={R2[i]:12.2e}  C={C[i]:12.2e}  Z(R1)={R1[i]:12.2e}  q_init={q_init*1e6:.2f} mL/s")
 
         self.wk_model_settings['outlet_parameters'] = outlet_parameters
         self.log.info("=" * 80)
         self.log.info("Windkessel calculation complete - coefficients stored in config")
         self.log.info("=" * 80)
 
-        # Generate flow distribution plot if inlet is time-varying
+        # Generate flow distribution plot
+        reports_dir = os.path.join(os.path.dirname(self.case_dir), "reports")
+        os.makedirs(reports_dir, exist_ok=True)
+        plot_path = os.path.join(reports_dir, "flow_distribution.png")
+
         if inlet_type in ['TIMEVARYING', 'WOMERSLEY']:
-            # Save plot to reports folder
-            reports_dir = os.path.join(os.path.dirname(self.case_dir), "reports")
-            os.makedirs(reports_dir, exist_ok=True)
-            plot_path = os.path.join(reports_dir, "flow_distribution.png")
-            self.plot_flow_distribution(times, flow_inlet, flow_split_ratios, plot_path)
+            # Time-varying plot with flow waveforms, pie/bar charts, and WK table
+            self.plot_flow_distribution(times, flow_inlet, flow_split_ratios, plot_path, outlet_parameters)
+        else:
+            # Steady-state plot with pie chart, bar chart, and WK parameters table
+            self.plot_flow_distribution_steady(mean_Q_inlet, flow_split_ratios, outlet_parameters, plot_path)
 
     def _check_direct_rcz_mode(self, outlet_patches: list) -> bool:
         """
@@ -705,18 +714,25 @@ class WkSetup:
 
         return times, flow_inlet
 
-    def plot_flow_distribution(self, times, flow_inlet, flow_splits, output_path):
+    def plot_flow_distribution(self, times, flow_inlet, flow_splits, output_path, outlet_parameters=None):
         """
-        Plot inlet and outlet flow rates over one cardiac cycle.
+        Plot inlet and outlet flow rates over one cardiac cycle with comprehensive analysis.
+
+        Creates a combined figure showing:
+        1. Time-series flow waveforms (top)
+        2. Mean flow pie chart and bar chart (middle)
+        3. Windkessel parameters table (bottom)
 
         Args:
             times: Time array (s)
             flow_inlet: Inlet flow rate array (m³/s)
             flow_splits: Dict of outlet flow fractions
             output_path: Path to save PNG file
+            outlet_parameters: Dict of WK parameters {outlet: {R, C, Z}} (optional)
         """
         try:
             import matplotlib.pyplot as plt
+            from matplotlib.gridspec import GridSpec
         except ImportError:
             self.log.warning("matplotlib not available, skipping flow plot")
             return
@@ -726,27 +742,283 @@ class WkSetup:
         for outlet, fraction in flow_splits.items():
             outlet_flows[outlet] = flow_inlet * fraction
 
-        # Create plot
-        fig, ax = plt.subplots(figsize=(10, 6))
+        # Mean values
+        mean_inlet_mL_s = np.mean(flow_inlet) * 1e6
+        mean_outlet_flows_mL_s = {outlet: np.mean(flow) * 1e6 for outlet, flow in outlet_flows.items()}
+
+        # Calculate cardiac cycle duration
+        cardiac_cycle_ms = (times[-1] - times[0]) * 1000
+
+        # Create figure with GridSpec for flexible layout
+        fig = plt.figure(figsize=(14, 14))
+        gs = GridSpec(3, 2, figure=fig, height_ratios=[1.2, 1, 1.2], hspace=0.35, wspace=0.3)
+
+        # Title
+        fig.suptitle('Windkessel Flow Distribution and Parameters\n(Time-Varying Analysis)',
+                     fontsize=16, fontweight='bold', y=0.98)
+
+        # === Subplot 1: Time-series flow waveforms (top, spans both columns) ===
+        ax1 = fig.add_subplot(gs[0, :])
 
         # Plot inlet
-        ax.plot(times * 1000, flow_inlet * 1e6, 'k-', linewidth=2, label='Inlet')
+        ax1.plot(times * 1000, flow_inlet * 1e6, 'k-', linewidth=2.5, label='Inlet')
 
-        # Plot outlets
-        colors = plt.cm.tab10(np.linspace(0, 1, len(outlet_flows)))
+        # Plot outlets with distinct colors
+        colors = plt.cm.Set2(np.linspace(0, 1, len(outlet_flows)))
         for (outlet, flow), color in zip(outlet_flows.items(), colors):
             fraction = flow_splits[outlet]
-            ax.plot(times * 1000, flow * 1e6, '--', linewidth=1.5,
-                   label=f'{outlet} ({fraction*100:.1f}%)', color=color)
+            ax1.plot(times * 1000, flow * 1e6, '--', linewidth=1.8,
+                    label=f'{outlet} ({fraction*100:.1f}%)', color=color)
 
-        ax.set_xlabel('Time (ms)', fontsize=12)
-        ax.set_ylabel('Flow Rate (mL/s)', fontsize=12)
-        ax.set_title('Inlet and Outlet Flow Rates (One Cardiac Cycle)', fontsize=14, fontweight='bold')
-        ax.grid(True, alpha=0.3)
-        ax.legend(loc='best', fontsize=10)
+        ax1.set_xlabel('Time (ms)', fontsize=11)
+        ax1.set_ylabel('Flow Rate (mL/s)', fontsize=11)
+        ax1.set_title(f'Flow Waveforms Over One Cardiac Cycle ({cardiac_cycle_ms:.0f} ms)',
+                     fontsize=12, fontweight='bold')
+        ax1.grid(True, alpha=0.3)
+        ax1.legend(loc='upper right', fontsize=9, ncol=2)
+        ax1.set_xlim([times[0]*1000, times[-1]*1000])
 
-        plt.tight_layout()
+        # Add mean flow annotation
+        ax1.axhline(y=mean_inlet_mL_s, color='gray', linestyle=':', alpha=0.7)
+        ax1.text(times[-1]*1000*0.02, mean_inlet_mL_s*1.05, f'Mean: {mean_inlet_mL_s:.1f} mL/s',
+                fontsize=9, color='gray')
+
+        # === Subplot 2: Pie chart (middle left) ===
+        ax2 = fig.add_subplot(gs[1, 0])
+        labels = list(flow_splits.keys())
+        sizes = [flow_splits[o] * 100 for o in labels]
+        pie_colors = plt.cm.Set3(np.linspace(0, 1, len(labels)))
+
+        wedges, texts, autotexts = ax2.pie(sizes, labels=labels, autopct='%1.1f%%',
+                                           colors=pie_colors, startangle=90,
+                                           textprops={'fontsize': 10})
+        ax2.set_title('Mean Flow Distribution (%)', fontsize=12, fontweight='bold')
+
+        # === Subplot 3: Bar chart (middle right) ===
+        ax3 = fig.add_subplot(gs[1, 1])
+        x_pos = np.arange(len(labels))
+        flows = [mean_outlet_flows_mL_s[o] for o in labels]
+
+        bars = ax3.bar(x_pos, flows, color=pie_colors, edgecolor='black', linewidth=1.2)
+
+        # Add value labels on bars
+        for bar, flow in zip(bars, flows):
+            height = bar.get_height()
+            ax3.annotate(f'{flow:.2f}\nmL/s',
+                        xy=(bar.get_x() + bar.get_width() / 2, height),
+                        xytext=(0, 3), textcoords="offset points",
+                        ha='center', va='bottom', fontsize=9)
+
+        ax3.set_xticks(x_pos)
+        ax3.set_xticklabels(labels, rotation=45, ha='right')
+        ax3.set_ylabel('Mean Flow Rate (mL/s)', fontsize=11)
+        ax3.set_title('Mean Outlet Flow Rates', fontsize=12, fontweight='bold')
+        ax3.axhline(y=mean_inlet_mL_s, color='red', linestyle='--', linewidth=2,
+                   label=f'Inlet: {mean_inlet_mL_s:.2f} mL/s')
+        ax3.legend(loc='upper right')
+        ax3.grid(True, axis='y', alpha=0.3)
+
+        # === Subplot 4: Windkessel parameters table (bottom, spans both columns) ===
+        ax4 = fig.add_subplot(gs[2, :])
+        ax4.axis('off')
+
+        # Unit conversion constants
+        MMHG_TO_PA = 133.322
+        ML_TO_M3 = 1e-6
+
+        # Build table data
+        table_data = []
+        headers = ['Outlet', 'Mean Flow\n(mL/s)', 'Flow\n(%)',
+                   'R (Pa·s/m³)', 'C (m³/Pa)', 'Z (Pa·s/m³)',
+                   'R\n(mmHg·s/mL)', 'C\n(mL/mmHg)', 'τ=RC\n(s)']
+
+        for outlet in labels:
+            params = outlet_parameters.get(outlet, {}) if outlet_parameters else {}
+            R = params.get('R', 0)
+            C = params.get('C', 0)
+            Z = params.get('Z', 0)
+
+            # Clinical units conversion
+            R_clinical = R / (MMHG_TO_PA / ML_TO_M3) if R else 0
+            C_clinical = C * (MMHG_TO_PA / ML_TO_M3) if C else 0
+            tau = R * C if R and C else 0
+
+            table_data.append([
+                outlet,
+                f'{mean_outlet_flows_mL_s[outlet]:.2f}',
+                f'{flow_splits[outlet]*100:.1f}',
+                f'{R:.2e}',
+                f'{C:.2e}',
+                f'{Z:.2e}',
+                f'{R_clinical:.3f}',
+                f'{C_clinical:.4f}',
+                f'{tau:.2f}'
+            ])
+
+        # Create table
+        table = ax4.table(cellText=table_data,
+                         colLabels=headers,
+                         cellLoc='center',
+                         loc='center',
+                         colColours=['lightblue'] * len(headers))
+
+        table.auto_set_font_size(False)
+        table.set_fontsize(9)
+        table.scale(1.2, 1.5)
+
+        # Style header row
+        for j in range(len(headers)):
+            table[(0, j)].set_fontsize(9)
+            table[(0, j)].set_text_props(weight='bold')
+
+        ax4.set_title('Windkessel Parameters Summary', fontsize=12, fontweight='bold', pad=20)
+
+        # Add summary text
+        total_mean_flow = sum(flows)
+        summary_text = (f'Mean Inlet Flow: {mean_inlet_mL_s:.2f} mL/s ({mean_inlet_mL_s*60/1000:.2f} L/min)\n'
+                       f'Mean Outlet Flow: {total_mean_flow:.2f} mL/s (Mass conservation: {total_mean_flow/mean_inlet_mL_s*100:.1f}%)\n'
+                       f'Cardiac Cycle: {cardiac_cycle_ms:.0f} ms')
+        fig.text(0.5, 0.02, summary_text, ha='center', fontsize=10,
+                bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.8))
+
         plt.savefig(output_path, dpi=150, bbox_inches='tight')
         plt.close()
 
-        self.log.info(f"Flow distribution plot saved to: {output_path}")
+        self.log.info(f"Flow distribution plot (time-varying) saved to: {output_path}")
+
+    def plot_flow_distribution_steady(self, mean_Q_inlet, flow_splits, outlet_parameters, output_path):
+        """
+        Plot flow distribution for steady-state (constant inlet) simulations.
+
+        Creates a combined figure showing:
+        1. Pie chart of flow distribution
+        2. Bar chart of flow rates
+        3. Table of Windkessel parameters
+
+        Args:
+            mean_Q_inlet: Mean inlet flow rate (m³/s)
+            flow_splits: Dict of outlet flow fractions
+            outlet_parameters: Dict of WK parameters {outlet: {R, C, Z}}
+            output_path: Path to save PNG file
+        """
+        try:
+            import matplotlib.pyplot as plt
+            from matplotlib.patches import FancyBboxPatch
+        except ImportError:
+            self.log.warning("matplotlib not available, skipping flow distribution plot")
+            return
+
+        # Calculate outlet flows in mL/s
+        outlet_flows_mL_s = {outlet: mean_Q_inlet * fraction * 1e6
+                            for outlet, fraction in flow_splits.items()}
+        inlet_flow_mL_s = mean_Q_inlet * 1e6
+
+        # Create figure with subplots
+        fig = plt.figure(figsize=(14, 10))
+
+        # Title
+        fig.suptitle('Windkessel Flow Distribution and Parameters\n(Steady-State Analysis)',
+                     fontsize=16, fontweight='bold', y=0.98)
+
+        # Subplot 1: Pie chart (top left)
+        ax1 = fig.add_subplot(2, 2, 1)
+        labels = list(flow_splits.keys())
+        sizes = [flow_splits[o] * 100 for o in labels]
+        colors = plt.cm.Set3(np.linspace(0, 1, len(labels)))
+
+        wedges, texts, autotexts = ax1.pie(sizes, labels=labels, autopct='%1.1f%%',
+                                           colors=colors, startangle=90,
+                                           textprops={'fontsize': 10})
+        ax1.set_title('Flow Distribution (%)', fontsize=12, fontweight='bold')
+
+        # Subplot 2: Bar chart (top right)
+        ax2 = fig.add_subplot(2, 2, 2)
+        x_pos = np.arange(len(labels))
+        flows = [outlet_flows_mL_s[o] for o in labels]
+
+        bars = ax2.bar(x_pos, flows, color=colors, edgecolor='black', linewidth=1.2)
+
+        # Add value labels on bars
+        for bar, flow, frac in zip(bars, flows, sizes):
+            height = bar.get_height()
+            ax2.annotate(f'{flow:.2f}\nmL/s',
+                        xy=(bar.get_x() + bar.get_width() / 2, height),
+                        xytext=(0, 3), textcoords="offset points",
+                        ha='center', va='bottom', fontsize=9)
+
+        ax2.set_xticks(x_pos)
+        ax2.set_xticklabels(labels, rotation=45, ha='right')
+        ax2.set_ylabel('Flow Rate (mL/s)', fontsize=11)
+        ax2.set_title('Outlet Flow Rates', fontsize=12, fontweight='bold')
+        ax2.axhline(y=inlet_flow_mL_s, color='red', linestyle='--', linewidth=2,
+                   label=f'Inlet: {inlet_flow_mL_s:.2f} mL/s')
+        ax2.legend(loc='upper right')
+        ax2.grid(True, axis='y', alpha=0.3)
+
+        # Subplot 3: Windkessel parameters table (bottom)
+        ax3 = fig.add_subplot(2, 1, 2)
+        ax3.axis('off')
+
+        # Unit conversion constants
+        MMHG_TO_PA = 133.322
+        ML_TO_M3 = 1e-6
+
+        # Build table data
+        table_data = []
+        headers = ['Outlet', 'Flow\n(mL/s)', 'Flow\n(%)',
+                   'R (Pa·s/m³)', 'C (m³/Pa)', 'Z (Pa·s/m³)',
+                   'R\n(mmHg·s/mL)', 'C\n(mL/mmHg)', 'τ=RC\n(s)']
+
+        for outlet in labels:
+            params = outlet_parameters.get(outlet, {})
+            R = params.get('R', 0)
+            C = params.get('C', 0)
+            Z = params.get('Z', 0)
+
+            # Clinical units conversion
+            R_clinical = R / (MMHG_TO_PA / ML_TO_M3) if R else 0
+            C_clinical = C * (MMHG_TO_PA / ML_TO_M3) if C else 0
+            tau = R * C if R and C else 0
+
+            table_data.append([
+                outlet,
+                f'{outlet_flows_mL_s[outlet]:.2f}',
+                f'{flow_splits[outlet]*100:.1f}',
+                f'{R:.2e}',
+                f'{C:.2e}',
+                f'{Z:.2e}',
+                f'{R_clinical:.3f}',
+                f'{C_clinical:.4f}',
+                f'{tau:.2f}'
+            ])
+
+        # Create table
+        table = ax3.table(cellText=table_data,
+                         colLabels=headers,
+                         cellLoc='center',
+                         loc='center',
+                         colColours=['lightblue'] * len(headers))
+
+        table.auto_set_font_size(False)
+        table.set_fontsize(9)
+        table.scale(1.2, 1.5)
+
+        # Style header row
+        for j in range(len(headers)):
+            table[(0, j)].set_fontsize(9)
+            table[(0, j)].set_text_props(weight='bold')
+
+        ax3.set_title('Windkessel Parameters Summary', fontsize=12, fontweight='bold', pad=20)
+
+        # Add summary text
+        total_flow = sum(flows)
+        summary_text = (f'Total Inlet Flow: {inlet_flow_mL_s:.2f} mL/s ({inlet_flow_mL_s*60/1000:.2f} L/min)\n'
+                       f'Total Outlet Flow: {total_flow:.2f} mL/s (Mass conservation: {total_flow/inlet_flow_mL_s*100:.1f}%)')
+        fig.text(0.5, 0.02, summary_text, ha='center', fontsize=10,
+                bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.8))
+
+        plt.tight_layout(rect=[0, 0.05, 1, 0.95])
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        plt.close()
+
+        self.log.info(f"Flow distribution plot (steady-state) saved to: {output_path}")

@@ -1,15 +1,26 @@
-"""Accurate numeric profile - High accuracy for all physics models (laminar, RANS, LES).
+"""Accurate numeric profile - Low numerical diffusion for all physics models.
+
+IMPORTANT DISCLAIMER
+====================
+"Accurate" refers to LOW NUMERICAL DIFFUSION (minimal artificial dissipation),
+NOT guaranteed solution accuracy. Solution accuracy depends on:
+  - Mesh resolution and quality (requires convergence study)
+  - Physics modeling choices (turbulence model, wall treatment)
+  - Boundary condition specification
+  - Temporal resolution
+
+A preset NEVER makes a CFD solution scientifically publishable.
+Only a properly conducted convergence study can.
 
 OpenFOAM 12 COMPATIBLE - Works with foamRun solver modules (incompressibleFluid, etc.)
 
 INTENDED USE
 ============
-- Publication-quality simulations
-- Validation and verification studies
-- Mesh independence demonstrations
-- Any case requiring high accuracy
+- Mesh independence / convergence studies
+- Validation against experimental data
+- LES simulations (LUST preserves resolved turbulence)
+- Cases where numerical diffusion must be minimized
 - All physics models: laminar, RANS k-ω SST, LES
-- OpenFOAM 12 modular solver architecture
 
 CHARACTERISTICS
 ===============
@@ -19,8 +30,8 @@ Gradients:           cellLimited Gauss linear 0.5 (tighter limiting than standar
 Laplacian:           Gauss linear limited corrected 0.33 (bounded non-orthogonal correction)
 Solver:              PIMPLE with many correctors (3 outer, 3 inner)
 Relaxation:          Light (U: 0.9, p: 0.5) - rely on correctors for stability
-Residual tolerance:  1e-8 (very tight, publication quality)
-Max Courant:         0.8 (smaller time steps for accuracy)
+Residual tolerance:  1e-8 (tight convergence per timestep)
+Max Courant:         0.8 (smaller time steps for temporal resolution)
 
 IMPROVEMENTS OVER STANDARD
 ===========================
@@ -48,11 +59,10 @@ IMPROVEMENTS OVER STANDARD
 TRADE-OFFS
 ==========
 ✅ Pros:
-   - Higher accuracy than standard (less numerical diffusion)
+   - Lower numerical diffusion than standard (preserves gradients)
    - Suitable for ALL physics models (laminar, RANS, LES)
-   - Publication-quality results
-   - Demonstrates mesh convergence
-   - Defensible numerical choices for papers
+   - REQUIRED for LES (LUST preserves resolved turbulence)
+   - Appropriate for mesh convergence studies
 
 ⚖️ Neutral:
    - Requires GOOD mesh quality (ortho > 70°, skewness < 2)
@@ -61,16 +71,19 @@ TRADE-OFFS
 ❌ Cons:
    - More expensive than standard
    - May not converge on poor-quality meshes (use standard or improve mesh)
-   - Not necessary for routine/screening simulations
+   - Low diffusion alone does NOT guarantee solution accuracy
+   - Still requires mesh independence verification
+
+IMPORTANT: This profile provides low-diffusion NUMERICS.
+It does NOT guarantee solution accuracy or publication readiness.
 
 WHEN TO USE
 ===========
 Use 'accurate' profile when:
-1. ✅ Publishing in journals or conferences
+1. ✅ Performing mesh independence studies (GCI analysis)
 2. ✅ Validating against experimental data
-3. ✅ Performing mesh independence studies
-4. ✅ LES simulations (all LES should use accurate)
-5. ✅ Final production runs for important cases
+3. ✅ LES simulations (LUST preserves resolved turbulence)
+4. ✅ Numerical diffusion must be minimized
 
 Use 'standard' profile when:
 1. 🔄 Initial testing or geometry exploration
@@ -78,7 +91,7 @@ Use 'standard' profile when:
 3. 🔄 Mesh quality is marginal (60° < ortho < 70°)
 4. 🔄 Computational budget is limited
 
-Use 'conservative' profile when:
+Use 'robust' profile when:
 1. ⚠️ Debugging convergence issues
 2. ⚠️ Very poor mesh quality
 3. ⚠️ Initial geometry validation
@@ -121,23 +134,25 @@ Verification & Validation:
   Roache, P.J. (1998). "Verification of Codes and Calculations."
   AIAA Journal, 36(5), 696-702. (Grid Convergence Index method)
 
-VALIDATION CHECKLIST
-====================
-When using 'accurate' profile for publication:
+CONVERGENCE STUDY REQUIREMENTS (MANDATORY FOR PUBLICATIONS)
+============================================================
+Using the 'accurate' profile is NECESSARY but NOT SUFFICIENT for publishable results.
+You MUST also perform:
 
-1. ✅ Mesh Independence Study:
-   - Run at 3 mesh levels (base, 1.5x refinement, 2x refinement)
-   - Calculate Grid Convergence Index (GCI)
+1. ✅ Mesh Independence Study (REQUIRED):
+   - Run at 3+ mesh levels (base, 1.5x refinement, 2x refinement)
+   - Calculate Grid Convergence Index (GCI) per Roache (1998)
    - Verify monotonic convergence
-   - Document observed order of accuracy (should be ~2)
+   - Document observed order of accuracy
+   - Report GCI uncertainty for all key quantities
 
-2. ✅ Temporal Convergence:
+2. ✅ Temporal Convergence (REQUIRED for transient):
    - Halve time-step (Co → Co/2)
    - Show < 1% change in key results
-   - Verify second-order temporal accuracy
+   - Document temporal convergence behavior
 
 3. ✅ Residual Monitoring:
-   - All residuals < 1e-8
+   - All residuals < 1e-8 per timestep
    - Mass conservation error < 0.01%
    - Document residual histories
 
@@ -146,25 +161,29 @@ When using 'accurate' profile for publication:
    - State: "CrankNicolson 0.9 time integration"
    - Cite relevant literature
 
-5. ✅ Comparison (if available):
-   - Experimental data
+5. ✅ Validation (if available):
+   - Experimental data comparison
    - Analytical solutions
    - Higher-fidelity simulations (DNS/LES for RANS validation)
 
+WITHOUT mesh independence verification, results are NOT publication-ready
+regardless of which numeric profile is used.
+
 EXAMPLE METHODS SECTION FOR PAPER
 ==================================
-"Simulations employed OpenFOAM v12 with second-order accurate
+"Simulations employed OpenFOAM v12 with second-order
 discretization schemes throughout. Time integration used the Crank-Nicolson
 scheme (α=0.9), providing implicit stability with reduced numerical diffusion
 compared to fully implicit methods. Convection terms employed the Linear
 Upwind Stabilised Transport (LUST) scheme, which blends 75% central
 differencing with 25% linearUpwind stabilization, maintaining second-order
-accuracy while ensuring boundedness. Pressure-velocity coupling utilized the
-PIMPLE algorithm with 3 outer correctors and 3 inner pressure correctors per
-time step. All equation residuals were converged to 10⁻⁸. Mesh independence
-was verified via Grid Convergence Index analysis on three successively refined
-meshes (refinement ratio r=√2), yielding estimated discretization errors of
-<2% for all reported quantities."
+formal accuracy while ensuring boundedness. Pressure-velocity coupling utilized
+the PIMPLE algorithm with 3 outer correctors and 3 inner pressure correctors
+per time step. All equation residuals were converged to 10⁻⁸ per timestep.
+Mesh independence was verified via Grid Convergence Index (GCI) analysis on
+three successively refined meshes (refinement ratio r=√2), yielding estimated
+discretization uncertainties of <X% for [specific quantities]. The observed
+order of convergence was Y, consistent with the formal accuracy of the schemes."
 
 COMPUTATIONAL COST
 ==================
@@ -173,18 +192,21 @@ Expect ~2-3x longer runtime compared to 'standard' profile:
 - More correctors: 3/3 vs 2/2 → +50% per time step
 - Smaller Co: 0.8 vs 1.0 → +25% more time steps
 
-Budget accordingly. For a standard case taking 1 hour on 'standard',
+Budget accordingly. For a case taking 1 hour on 'standard',
 expect 2-3 hours on 'accurate'.
 
-This is WORTH IT for:
-- Publications (necessary for credibility)
-- Validation studies (essential for accuracy)
-- Final production runs (justifies computational cost)
+WORTH IT for:
+- Mesh convergence studies (essential for low truncation error)
+- Validation against experiments (minimizes numerical artifacts)
+- LES simulations (LUST preserves resolved turbulence)
 
-Not worth it for:
+NOT WORTH IT for:
 - Initial geometry testing (use standard)
 - Multiple screening cases (use standard)
-- Parametric studies (use standard, then verify with accurate)
+- Poor mesh quality (fix mesh first)
+
+REMEMBER: Computational cost of 'accurate' profile is wasted if you
+don't also perform mesh independence verification.
 """
 
 from typing import Any, Dict
@@ -284,7 +306,7 @@ config: Dict[str, Any] = {
             "U": 1e-8,
             "k": 1e-8,
             "omega": 1e-8,
-            "_comment": "Very tight tolerances for publication quality"
+            "_comment": "Tight tolerances for converged solutions per timestep"
         }
     },
 
@@ -304,13 +326,17 @@ config: Dict[str, Any] = {
     # Metadata
     "_profile_metadata": {
         "name": "accurate",
-        "order_of_accuracy": 2,
+        "formal_order_of_accuracy": 2,
         "stability": "good (requires quality mesh)",
-        "intended_use": "publications, validation, mesh independence, LES, final production runs",
-        "recommended_for": "ALL physics models (laminar, RANS, LES) with good mesh quality",
+        "numerical_diffusion": "low (LUST preserves gradients)",
+        "intended_use": "convergence studies, validation, LES",
+        "recommended_for": "cases requiring minimal numerical diffusion",
         "not_recommended_for": "poor meshes, initial testing, screening simulations",
-        "expected_diffusion": "low (less than standard, more than pure central)",
         "mesh_requirements": "orthogonality > 70°, skewness < 2, y+ < 1 for LES",
+        "disclaimer": (
+            "'Accurate' refers to low numerical diffusion, NOT guaranteed solution accuracy. "
+            "Solution accuracy requires mesh independence verification (GCI analysis)."
+        ),
         "improvements_over_standard": [
             "CrankNicolson time integration (better phase accuracy)",
             "LUST convection (less diffusion than linearUpwind)",
@@ -324,21 +350,15 @@ config: Dict[str, Any] = {
             "Roache, P.J. (1998). Grid Convergence Index. AIAA Journal 36(5):696-702",
             "OpenFOAM User Guide v11+, Sections 4.4-4.5 (Numerical Schemes)"
         ],
-        "validation_checklist": [
+        "convergence_requirements": [
+            "MANDATORY: Mesh independence study (3+ levels, GCI analysis)",
+            "MANDATORY: Temporal convergence verification for transient cases",
             "Run checkMesh - resolve major warnings (ortho > 70°, skewness < 2)",
-            "Mesh independence: 3 levels, calculate GCI, verify 2nd order convergence",
-            "Temporal convergence: halve Δt, show < 1% change in key results",
-            "Residuals < 1e-8 for all variables (p, U, k, ω)",
+            "Residuals < 1e-8 for all variables (p, U, k, ω) per timestep",
             "Mass conservation error < 0.01%",
-            "Compare to experimental/analytical data if available",
-            "Document: LUST convection, CrankNicolson 0.9, GCI analysis"
+            "Compare to experimental/analytical data if available"
         ],
-        "computational_cost_multiplier": "2-3x vs standard profile",
-        "runtime_comparison": {
-            "standard_1h": "accurate_2-3h",
-            "standard_30min": "accurate_1-1.5h",
-            "standard_4h": "accurate_8-12h"
-        }
+        "computational_cost_multiplier": "2-3x vs standard profile"
     }
 }
 

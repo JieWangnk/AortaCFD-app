@@ -323,8 +323,6 @@ class PatientCaseRunner:
 
             if 'cells_per_diameter' in config['mesh']:
                 merged_config['mesh']['mesh_resolution']['cells_per_diameter'] = config['mesh']['cells_per_diameter']
-            if 'target_yplus' in config['mesh']:
-                merged_config['mesh']['mesh_resolution']['target_yplus'] = config['mesh']['target_yplus']
             if 'target_cell_size_mm' in config['mesh']:
                 merged_config['mesh']['mesh_resolution']['target_cell_size_mm'] = config['mesh']['target_cell_size_mm']
 
@@ -557,50 +555,26 @@ class PatientCaseRunner:
             snappy_config['minThickness'] = boundary_layers['min_thickness']
             self.logger.info(f"🔧 Mapped mesh.boundary_layers.min_thickness={boundary_layers['min_thickness']} → SNAPPY_SETTINGS.minThickness")
 
-        # OPTIONAL: target_yplus triggers Y+ based calculation (overrides final_layer_thickness)
-        # Only activate if explicitly set in boundary_layers (not as _optional_target_yplus comment)
-        if 'target_yplus' in boundary_layers:
-            # Y+ estimation will be handled by mesh_setup.py _apply_yplus_layer_sizing()
-            self.logger.info(
-                f"🔧 mesh.boundary_layers.target_yplus={boundary_layers['target_yplus']} detected "
-                f"→ Y+ based layer sizing will override finalLayerThickness"
-            )
+        # relativeSizes option (default: true)
+        if 'relativeSizes' in boundary_layers:
+            snappy_config['relativeSizes'] = boundary_layers['relativeSizes']
+            self.logger.info(f"🔧 Mapped mesh.boundary_layers.relativeSizes={boundary_layers['relativeSizes']} → SNAPPY_SETTINGS.relativeSizes")
 
         # Handle surface refinement configuration
-        # Priority 1: surface_refinement_level (integer 1, 2, or 3) - NEW SIMPLIFIED API
-        # Priority 2: surface_refinement.levels (legacy [min, max] format)
-        surface_refinement_level = mesh_config.get('surface_refinement_level')
+        # surfaceRefinementLevels: [min, max] direct snappy levels in SNAPPY_SETTINGS
+        # Also support legacy mesh.surface_refinement.levels for backward compatibility
         surface_refinement = mesh_config.get('surface_refinement', {})
 
-        if surface_refinement_level is not None:
-            # NEW: Simple integer level (1, 2, or 3)
-            from aortacfd_lib.utils.mesh_constants import SURFACE_REFINEMENT_LEVELS, DEFAULT_SURFACE_REFINEMENT_LEVEL
-            try:
-                level = int(surface_refinement_level)
-                if level not in SURFACE_REFINEMENT_LEVELS:
-                    self.logger.warning(
-                        f"Invalid surface_refinement_level={level}. Valid: 1, 2, or 3. "
-                        f"Using default level {DEFAULT_SURFACE_REFINEMENT_LEVEL}."
-                    )
-                    level = DEFAULT_SURFACE_REFINEMENT_LEVEL
-                snappy_levels = SURFACE_REFINEMENT_LEVELS[level]
-                snappy_config['surfaceRefinementLevels'] = snappy_levels
-                cell_multiplier = 4 ** (level - 1)  # 1→1×, 2→4×, 3→16×
-                self.logger.info(
-                    f"🔧 surface_refinement_level={level} → snappy levels {snappy_levels} "
-                    f"({cell_multiplier}× surface cells vs level 1)"
-                )
-            except (ValueError, TypeError):
-                self.logger.warning(
-                    f"Invalid surface_refinement_level value: {surface_refinement_level}. "
-                    f"Expected integer 1, 2, or 3. Falling back to legacy format."
-                )
+        if 'surfaceRefinementLevels' in snappy_config:
+            # Already set in SNAPPY_SETTINGS - use as-is
+            levels = snappy_config['surfaceRefinementLevels']
+            self.logger.info(f"surfaceRefinementLevels: {levels}")
         elif 'levels' in surface_refinement:
-            # LEGACY: [min, max] format for backward compatibility
+            # LEGACY: mesh.surface_refinement.levels for backward compatibility
             levels = surface_refinement['levels']
             if isinstance(levels, list) and len(levels) == 2:
                 snappy_config['surfaceRefinementLevels'] = levels
-                self.logger.info(f"🔧 Mapped mesh.surface_refinement.levels={levels} → SNAPPY_SETTINGS.surfaceRefinementLevels")
+                self.logger.info(f"Mapped mesh.surface_refinement.levels={levels} → SNAPPY_SETTINGS.surfaceRefinementLevels")
 
     def _resolve_profile_choice(self, simulation_settings: dict, options: dict, catalog: dict):
         """

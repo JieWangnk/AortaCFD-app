@@ -36,6 +36,10 @@
 # 1. Clone and setup
 git clone https://github.com/JieWangnk/AortaCFD-app.git
 cd AortaCFD-app
+
+# Install python3-venv if needed (Ubuntu/Debian)
+sudo apt install python3.12-venv
+
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -124,6 +128,9 @@ output/patient1/               # Results
 
 ### Setup
 ```bash
+# 0. Install python3-venv (required on Ubuntu/Debian)
+sudo apt install python3.12-venv
+
 # 1. Create virtual environment
 python3 -m venv venv
 source venv/bin/activate
@@ -364,12 +371,14 @@ For most users, specify cells per diameter in your config:
 {
   "mesh": {
     "cells_per_diameter": 20,
-    "surface_refinement_level": 2,
     "boundary_layers": {
       "enabled": true,
       "num_layers": 5,
       "expansion_ratio": 1.2,
       "final_layer_thickness": 0.3
+    },
+    "SNAPPY_SETTINGS": {
+      "surfaceRefinementLevels": [1, 2]
     }
   }
 }
@@ -439,25 +448,28 @@ Priority 3: Default fallback        (10 cells/D - triggers warning)
 - Mesh independence studies requiring fixed cell sizes
 - Irregular inlet geometry where diameter-based sizing fails
 
-### Surface Refinement Level
+### Surface Refinement Levels
 
-Controls additional refinement at vessel walls:
+Controls additional refinement at vessel walls using snappyHexMesh [min, max] levels:
 
 ```json
 {
   "mesh": {
-    "surface_refinement_level": 2
+    "SNAPPY_SETTINGS": {
+      "surfaceRefinementLevels": [1, 2]
+    }
   }
 }
 ```
 
-| Level | Snappy Levels | Surface Cell Size | Use Case |
-|-------|---------------|-------------------|----------|
-| **1** | [0, 1] | base / 2 | Minimal refinement |
-| **2** | [1, 2] | base / 4 | **Default - recommended** |
-| **3** | [2, 3] | base / 8 | Fine resolution at walls |
+| Levels | Surface Cell Size | Use Case |
+|--------|-------------------|----------|
+| **[0, 1]** | base / 2 | Minimal refinement |
+| **[1, 2]** | base / 4 | **Default - recommended** |
+| **[2, 3]** | base / 8 | Fine resolution at walls |
+| **[1, 3]** | base / 4 to base / 8 | Variable refinement |
 
-**Formula:** `surface_cell_size = base_cell_size / 2^level`
+**Formula:** `surface_cell_size = base_cell_size / 2^max_level`
 
 ### Boundary Layer Configuration
 
@@ -486,30 +498,26 @@ Traditional OpenFOAM addLayersControls style:
 
 ### Y+ Based Boundary Layer Control (Optional)
 
-For **RANS and LES** simulations, you can use automatic y+ based boundary layer sizing:
+**Layer thickness modes** (`relativeSizes`):
 
 ```json
 {
   "mesh": {
-    "cells_per_diameter": 25,
     "boundary_layers": {
-      "target_yplus": 1.0
+      "enabled": true,
+      "num_layers": 5,
+      "expansion_ratio": 1.2,
+      "final_layer_thickness": 0.3,
+      "relativeSizes": true
     }
   }
 }
 ```
 
-**How it works:**
-1. System estimates wall shear stress from flow correlations
-2. Calculates first layer thickness based on target y+
-3. Overrides `final_layer_thickness` with calculated value
-
-**Target y+ values:**
-- **RANS k-ω SST (low-Re):** y+ ≈ 1.0 (resolves viscous sublayer)
-- **LES wall-resolved:** y+ ≈ 0.5-1.0 (DNS-like near-wall)
-- **Wall functions:** y+ ≈ 30-100 (log-layer modeling)
-
-**See:** [examples/YPLUS_CALCULATOR_GUIDE.md](examples/YPLUS_CALCULATOR_GUIDE.md) for complete documentation.
+| `relativeSizes` | Thickness interpretation | Use case |
+|-----------------|-------------------------|----------|
+| **true** (default) | Fraction of local cell size | Most cases - automatic scaling |
+| **false** | Absolute value in meters | When precise layer thickness needed |
 
 ### Parallelization Settings
 
@@ -542,33 +550,38 @@ Mesh generation (snappyHexMesh) and solver use **separate** parallelization:
 {
   "mesh": {
     "cells_per_diameter": 20,
-    "surface_refinement_level": 2,
     "boundary_layers": {
       "enabled": true,
       "num_layers": 5,
       "expansion_ratio": 1.2,
       "final_layer_thickness": 0.3
+    },
+    "SNAPPY_SETTINGS": {
+      "surfaceRefinementLevels": [1, 2]
     }
   }
 }
 ```
 Result: ~1mm cells for 20mm vessel, ~500K-2M cells
 
-**Example 2: RANS with y+ control**
+**Example 2: Fine mesh with more layers**
 ```json
 {
   "mesh": {
     "cells_per_diameter": 25,
-    "surface_refinement_level": 2,
     "boundary_layers": {
       "enabled": true,
-      "num_layers": 5,
-      "target_yplus": 1.0
+      "num_layers": 8,
+      "expansion_ratio": 1.15,
+      "final_layer_thickness": 0.2
+    },
+    "SNAPPY_SETTINGS": {
+      "surfaceRefinementLevels": [1, 2]
     }
   }
 }
 ```
-Result: Fine mesh with auto-calculated boundary layers for y+=1.0
+Result: Fine mesh with 8 boundary layers for wall-resolved simulations
 
 **Example 3: Mesh independence study**
 ```json
@@ -577,7 +590,9 @@ Result: Fine mesh with auto-calculated boundary layers for y+=1.0
     "mesh_resolution": {
       "target_cell_size_mm": 0.6
     },
-    "surface_refinement_level": 2
+    "SNAPPY_SETTINGS": {
+      "surfaceRefinementLevels": [1, 2]
+    }
   }
 }
 ```
@@ -592,7 +607,7 @@ Result: Fixed 0.6mm cells (for comparing with literature)
 **Solution:** Use `num_layers` in `boundary_layers`, not `nSurfaceLayers` in SNAPPY_SETTINGS
 
 **Issue:** Surface refinement too aggressive
-**Solution:** Reduce `surface_refinement_level` from 3 to 2 or 1
+**Solution:** Reduce `surfaceRefinementLevels` from [2, 3] to [1, 2] or [0, 1]
 
 **Issue:** Mesh too coarse for small branches
 **Solution:** Increase `cells_per_diameter` (e.g., 25-30)

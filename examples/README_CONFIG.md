@@ -139,7 +139,9 @@ AortaCFD uses a **hierarchical configuration system** with a new **3-profile num
     "cells_per_diameter": 15,
     "boundary_layers": {
       "enabled": true,
-      "target_yplus": 1.0
+      "num_layers": 5,
+      "expansion_ratio": 1.2,
+      "final_layer_thickness": 0.3
     }
   },
 
@@ -229,12 +231,14 @@ Mesh generation parameters.
   "mesh_resolution": {
     "cells_per_diameter": 20   // RECOMMENDED: geometry-adaptive
   },
-  "surface_refinement_level": 2,  // 1, 2, or 3
   "boundary_layers": {
     "enabled": true,
     "num_layers": 5,
     "expansion_ratio": 1.2,
     "final_layer_thickness": 0.3
+  },
+  "SNAPPY_SETTINGS": {
+    "surfaceRefinementLevels": [1, 2]  // [min, max] snappy levels
   }
 }
 ```
@@ -247,10 +251,10 @@ Mesh generation parameters.
 | **Standard** | 15-20 | 500k-2M | Production (recommended) |
 | **Fine** | 25-30 | 2M-5M | Mesh independence studies |
 
-**Surface Refinement Levels**:
-- **Level 1**: Base cell / 2 at surface (minimal)
-- **Level 2**: Base cell / 4 at surface (DEFAULT)
-- **Level 3**: Base cell / 8 at surface (fine)
+**Surface Refinement Levels** (`surfaceRefinementLevels: [min, max]`):
+- **[0, 1]**: Base cell / 2 at surface (minimal)
+- **[1, 2]**: Base cell / 4 at surface (DEFAULT)
+- **[2, 3]**: Base cell / 8 at surface (fine)
 
 **Alternative: Absolute cell size** (for mesh studies):
 ```json
@@ -385,8 +389,9 @@ Parallel execution settings.
   "mesh": {
     "cells_per_diameter": 15,
     "boundary_layers": {
-      "target_yplus": 1.0,
-      "num_layers": 5
+      "num_layers": 5,
+      "expansion_ratio": 1.2,
+      "final_layer_thickness": 0.3
     }
   },
   "boundary_conditions": {
@@ -477,7 +482,7 @@ Parallel execution settings.
 
 **Solution**:
 1. Reduce `num_layers` (try 3)
-2. Increase `target_yplus` (try 5-10)
+2. Increase `final_layer_thickness` (try 0.4-0.5)
 3. Reduce `expansion_ratio` (try 1.15)
 4. Check mesh with `maxBoundarySkewness < 8`
 
