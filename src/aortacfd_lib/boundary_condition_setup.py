@@ -319,17 +319,14 @@ class BoundaryConditionSetup:
     def _calculate_initial_pressure(self):
         """
         Calculate initial pressure field based on outlet boundary conditions.
-        For Windkessel BC: Initialize to flow-weighted pressure accounting for resistance distribution.
-        For other BC: Initialize to 0 (gauge pressure).
 
-        NOTE: Empirical testing shows this provides NO measurable convergence improvement.
-        Convergence time remains ~10-15 cycles regardless of initialization method.
-        Kept for code correctness and physical meaningfulness, but don't expect performance gains.
-        See PRESSURE_INIT_POSTMORTEM.md for detailed analysis.
+        Supports multiple initialization methods via 'initial_pressure_method' setting:
+        - 'diastolic' (default): Use diastolic pressure - physically correct for start of cardiac cycle
+        - 'systolic': Use systolic pressure
+        - 'MAP': Use Mean Arterial Pressure = (systolic + diastolic) / 2
+        - 'zero': Use 0 Pa (gauge pressure)
 
-        This method accounts for the fact that outlets with:
-        - High flow fraction + Low resistance → Lower pressure needed
-        - Low flow fraction + High resistance → Higher pressure needed
+        For non-Windkessel BC: Always initialize to 0 (gauge pressure).
 
         Returns:
             tuple: (internal_field_pressure, outlet_pressures_dict)
@@ -346,61 +343,50 @@ class BoundaryConditionSetup:
             systolic = wk_settings.get('systolic_pressure', 120)  # Default adult normal
             diastolic = wk_settings.get('diastolic_pressure', 80)   # Default adult normal
 
-            # Calculate baseline MAP
-            MMHG_TO_PA = 133.322
-            MAP_mmHg = (systolic + diastolic) / 2.0
-            MAP_Pa = MAP_mmHg * MMHG_TO_PA
+            # Get initialization method (default: diastolic - simulation starts at end-diastole)
+            init_method = wk_settings.get('initial_pressure_method', 'diastolic').lower()
 
-            # Try to get flow splits and outlet parameters for better initialization
+            # Unit conversion
+            MMHG_TO_PA = 133.322
+
+            # Calculate pressure based on method
+            if init_method == 'diastolic':
+                p_init_mmHg = diastolic
+                method_desc = "diastolic (simulation starts at end-diastole)"
+            elif init_method == 'systolic':
+                p_init_mmHg = systolic
+                method_desc = "systolic"
+            elif init_method == 'map':
+                p_init_mmHg = (systolic + diastolic) / 2.0
+                method_desc = "MAP (Mean Arterial Pressure)"
+            elif init_method == 'zero':
+                p_init_mmHg = 0.0
+                method_desc = "zero (gauge pressure)"
+            else:
+                self.log.warning(f"Unknown initial_pressure_method '{init_method}', using 'diastolic'")
+                p_init_mmHg = diastolic
+                method_desc = "diastolic (default)"
+
+            p_init_Pa = p_init_mmHg * MMHG_TO_PA
+
+            # Try to get flow splits for outlet initialization
             flow_splits = wk_settings.get('flow_split', {})
             outlet_params = wk_settings.get('outlet_parameters', {})
 
-            # If we have resistance data, calculate flow-weighted pressure
-            if flow_splits and outlet_params and len(outlet_params) > 0:
-                try:
-                    # Calculate average resistance weighted by flow
-                    R_avg = 0.0
-                    total_fraction = 0.0
+            # Initialize all outlets to uniform pressure
+            outlet_pressures = {}
+            if flow_splits:
+                for outlet in flow_splits.keys():
+                    outlet_pressures[outlet] = p_init_Pa
+            elif outlet_params:
+                for outlet in outlet_params.keys():
+                    outlet_pressures[outlet] = p_init_Pa
 
-                    for outlet, fraction in flow_splits.items():
-                        if outlet in outlet_params:
-                            R = outlet_params[outlet].get('R', 0)
-                            R_avg += R * fraction
-                            total_fraction += fraction
+            self.log.info(f"Initial pressure field method: {method_desc}")
+            self.log.info(f"  Systolic: {systolic} mmHg, Diastolic: {diastolic} mmHg")
+            self.log.info(f"  Initial pressure: {p_init_mmHg:.1f} mmHg = {p_init_Pa:.0f} Pa")
 
-                    if total_fraction > 0:
-                        R_avg = R_avg / total_fraction
-
-                    # Initialize all outlets to uniform MAP to avoid initial pressure gradients
-                    # NOTE: Resistance-weighted initialization was causing timestep collapse due to
-                    # pressure-driven velocity spikes at t=0 (Co > 10). Uniform initialization is safer.
-                    outlet_pressures = {}
-                    for outlet in flow_splits.keys():
-                        outlet_pressures[outlet] = MAP_Pa
-
-                    # Use uniform MAP for internal field
-                    p_init = MAP_Pa
-
-                    self.log.info(f"Initializing pressure field to uniform MAP (avoids initial velocity spikes):")
-                    self.log.info(f"  Systolic: {systolic} mmHg, Diastolic: {diastolic} mmHg")
-                    self.log.info(f"  MAP = {MAP_mmHg:.1f} mmHg = {MAP_Pa:.0f} Pa")
-                    self.log.info(f"  All outlets and internal field initialized to: {MAP_Pa:.0f} Pa")
-                    self.log.info(f"  (Uniform to prevent pressure-driven acceleration at t=0)")
-
-                    return p_init, outlet_pressures
-
-                except Exception as e:
-                    self.log.warning(f"Could not calculate resistance-weighted pressure: {e}")
-                    self.log.info(f"Falling back to uniform MAP = {MAP_Pa:.0f} Pa")
-                    return MAP_Pa, {}
-            else:
-                # No resistance data available, use uniform MAP
-                self.log.info(f"Initializing pressure field to MAP for faster convergence:")
-                self.log.info(f"  Systolic: {systolic} mmHg, Diastolic: {diastolic} mmHg")
-                self.log.info(f"  MAP = {MAP_mmHg:.1f} mmHg = {MAP_Pa:.0f} Pa")
-                self.log.info(f"  (Resistance data not yet available for flow-weighted initialization)")
-
-                return MAP_Pa, {}
+            return p_init_Pa, outlet_pressures
         else:
             # For non-Windkessel cases (zeroGradient, fixedValue), use 0
             self.log.info(f"Outlet type '{outlet_type}': Initializing pressure to 0 Pa (gauge)")

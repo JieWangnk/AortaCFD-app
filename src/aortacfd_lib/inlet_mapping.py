@@ -254,6 +254,53 @@ class InletMapping:
     # and the oscillatory nature of aortic flow.
     # =========================================================================
 
+    def _estimate_required_harmonics(self, values: np.ndarray,
+                                       energy_threshold: float = 0.99) -> int:
+        """
+        Auto-detect required number of Womersley harmonics based on spectral energy.
+
+        Uses FFT to determine how many harmonics are needed to capture a given
+        fraction of the signal's energy (variance).
+
+        Args:
+            values: Flow/velocity waveform values
+            energy_threshold: Fraction of total energy to capture (default: 99%)
+
+        Returns:
+            int: Recommended number of harmonics (minimum 4, maximum N/2)
+
+        Status: UNDER DEVELOPMENT - Feature may change
+        """
+        N = len(values)
+        max_harmonics = min(N // 2 - 1, 50)  # Cap at 50 or Nyquist
+
+        # Compute FFT
+        fft_result = np.fft.fft(values)
+
+        # Power spectrum (energy per harmonic)
+        power = np.abs(fft_result[:N//2])**2
+
+        # Total energy (excluding DC)
+        total_energy = np.sum(power[1:])
+
+        if total_energy < 1e-15:
+            return 8  # Default for constant signal
+
+        # Cumulative energy
+        cumulative_energy = np.cumsum(power[1:])
+        normalized_energy = cumulative_energy / total_energy
+
+        # Find number of harmonics for threshold
+        n_required = np.searchsorted(normalized_energy, energy_threshold) + 1
+
+        # Bounds: minimum 4, maximum from signal length
+        n_required = max(4, min(n_required, max_harmonics))
+
+        self.log.info(f"Auto-detected Womersley harmonics: {n_required} "
+                      f"(captures {energy_threshold*100:.0f}% of signal energy)")
+
+        return n_required
+
     def _compute_fourier_coefficients(self, times, values, n_harmonics=8):
         """
         Compute Fourier coefficients from Doppler/flow waveform using FFT.
@@ -264,7 +311,7 @@ class InletMapping:
         Args:
             times: Time array (s)
             values: Velocity or flow rate values
-            n_harmonics: Number of harmonics to use (default: 8)
+            n_harmonics: Number of harmonics to use (default: 8, or 'auto')
 
         Returns:
             tuple: (V0, Vn_complex, omega_fundamental)
@@ -744,10 +791,12 @@ class InletMapping:
         """
         Scale shape factors to produce velocities that integrate to target flow rate.
 
-        Uses mass conservation: Q = ∫ V·dA = Σ(V_i * A_face_i)
+        For standard profiles (parabolic, plug), uses ANALYTICAL integration to avoid
+        mesh distribution artifacts. For non-standard profiles, uses mesh-based summation.
 
-        For uniformly distributed face centers:
-            A_face ≈ A_total / n_active_points
+        Analytical integrals for circular inlet (radius R, area A = πR²):
+        - Parabolic: Q = U_max * A/2  =>  U_max = 2*Q/A = 2*U_avg
+        - Plug:      Q = U_max * A    =>  U_max = Q/A = U_avg
 
         Args:
             shape_factors: Normalized shape factors for each point
@@ -765,27 +814,46 @@ class InletMapping:
             self.log.warning("No active points inside inlet radius!")
             return np.zeros(len(shape_factors))
 
-        # Estimate face area per point (uniform distribution assumption)
-        # This is approximate - actual face areas from mesh would be more accurate
-        A_face = self.area / n_active
+        # Use analytical scaling for standard profiles to avoid mesh distribution artifacts
+        # Mesh face centers are often NOT uniformly distributed by area, which causes
+        # incorrect velocity scaling when using discrete summation.
+        if self.profile == 'parabolic':
+            # Parabolic (Poiseuille): u(r) = U_max * (1 - r²/R²)
+            # Analytical integral: Q = U_max * πR² / 2 = U_max * A / 2
+            # => U_max = 2 * Q / A = 2 * U_avg
+            U_max = 2.0 * abs(target_flowrate) / self.area
+            velocities = shape_factors * U_max
+            return velocities
 
-        # Compute integrated flow with unit velocity scaling
-        # Q_unit = Σ(shape_i * A_face) for active points
-        Q_unit = np.sum(shape_factors[active_mask]) * A_face
+        elif self.profile in ['plug', 'plug_flow']:
+            # Plug flow: u = U_max (uniform)
+            # Analytical integral: Q = U_max * A
+            # => U_max = Q / A = U_avg
+            U_max = abs(target_flowrate) / self.area
+            velocities = shape_factors * U_max
+            return velocities
 
-        if abs(Q_unit) < 1e-15:
-            # Avoid division by zero for zero flow
-            return np.zeros(len(shape_factors))
+        else:
+            # For non-standard profiles (womersley, wall_distance, elliptical, etc.),
+            # use mesh-based integration as these don't have simple analytical forms
+            # Estimate face area per point (uniform distribution assumption)
+            A_face = self.area / n_active
 
-        # Scale factor to achieve target flow rate
-        # V_actual = shape * scale_factor
-        # Q_target = scale_factor * Q_unit
-        scale_factor = target_flowrate / Q_unit
+            # Compute integrated flow with unit velocity scaling
+            # Q_unit = Σ(shape_i * A_face) for active points
+            Q_unit = np.sum(shape_factors[active_mask]) * A_face
 
-        # Apply scaling
-        velocities = shape_factors * scale_factor
+            if abs(Q_unit) < 1e-15:
+                # Avoid division by zero for zero flow
+                return np.zeros(len(shape_factors))
 
-        return velocities
+            # Scale factor to achieve target flow rate
+            scale_factor = abs(target_flowrate) / Q_unit
+
+            # Apply scaling
+            velocities = shape_factors * scale_factor
+
+            return velocities
 
     def _generate_time_data(self, parent_directory, time_array, csv_values, points, normal_vec):
         """
@@ -814,7 +882,7 @@ class InletMapping:
         V0 = None
         Vn_complex = None
         omega_fundamental = None
-        n_harmonics = self.inlet_settings.get('n_harmonics', 8)
+        n_harmonics_setting = self.inlet_settings.get('n_harmonics', 8)
         profile_exponent = self.inlet_settings.get('profile_exponent', 2.0)
 
         if self.profile == 'womersley':
@@ -835,6 +903,15 @@ class InletMapping:
                 velocity_values = csv_values / self.area
             else:
                 velocity_values = csv_values
+
+            # Determine number of harmonics (auto-detect or user-specified)
+            if n_harmonics_setting == 'auto' or n_harmonics_setting == -1:
+                # Auto-detect based on spectral energy content
+                # Status: UNDER DEVELOPMENT
+                energy_threshold = self.inlet_settings.get('energy_threshold', 0.99)
+                n_harmonics = self._estimate_required_harmonics(velocity_values, energy_threshold)
+            else:
+                n_harmonics = int(n_harmonics_setting)
 
             # Compute Fourier coefficients from the waveform
             V0, Vn_complex, omega_fundamental = self._compute_fourier_coefficients(
