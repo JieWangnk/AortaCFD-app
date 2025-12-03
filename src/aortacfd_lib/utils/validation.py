@@ -1298,6 +1298,15 @@ class BoundaryConditionValidator:
                     f"Pulse pressure ({pulse_pressure} mmHg) is very high. Typical range: 30-50 mmHg"
                 )
 
+        # Validate initial_pressure_method if specified
+        init_method = wk_settings.get('initial_pressure_method', 'diastolic').lower()
+        valid_methods = ['diastolic', 'systolic', 'map', 'zero']
+        if init_method not in valid_methods:
+            result.add_error(
+                f"Invalid initial_pressure_method '{init_method}'. "
+                f"Valid options: {', '.join(valid_methods)}"
+            )
+
         # For manual methodology, validate C, R_proximal, R_distal
         if methodology == 'manual':
             for param in ['C_compliance', 'R_proximal', 'R_distal']:

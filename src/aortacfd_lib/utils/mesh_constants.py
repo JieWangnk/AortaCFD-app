@@ -66,6 +66,34 @@ DEFAULT_CELLS_PER_DIAMETER = 10  # Conservative: resolves basic flow features
 # Default surface refinement levels [min, max]
 DEFAULT_SURFACE_REFINEMENT_LEVELS = [1, 2]  # Moderate refinement
 
+# =============================================================================
+# BOUNDARY LAYER DEFAULTS
+# =============================================================================
+# Based on cardiovascular CFD best practices (SimVascular, OpenFOAM literature)
+# Target: y+ ≈ 1-5 for wall-resolved simulations (accurate WSS prediction)
+#
+# Reference: For aortic blood flow at typical conditions:
+#   - Wall shear stress: 1-3 Pa
+#   - First cell height: 1-10 µm recommended
+#   - Growth ratio: 1.1-1.3 (lower = smoother transition)
+#   - Number of layers: 10-15 (captures boundary layer development)
+
+DEFAULT_BOUNDARY_LAYER_SETTINGS = {
+    'enabled': True,
+    'num_layers': 10,              # Increased from 5-8 to 10 (SimVascular standard)
+    'expansion_ratio': 1.2,        # Growth ratio between layers
+    'final_layer_thickness': 0.3,  # Relative to undistorted cell
+    'min_thickness': 0.1,          # Minimum layer thickness
+    'relativeSizes': True,         # Sizes relative to base cell
+}
+
+# Quality tiers for boundary layer coverage
+# Percentage of wall surface covered by prism layers
+BL_COVERAGE_EXCELLENT = 95.0  # Target for publication quality
+BL_COVERAGE_GOOD = 90.0       # Acceptable for production
+BL_COVERAGE_FAIR = 80.0       # May miss some regions
+BL_COVERAGE_POOR = 70.0       # Significant gaps - investigate
+
 # BlockMesh size warning thresholds
 # We don't try to "fix" large meshes - just warn the user and let them decide
 MAX_BLOCKMESH_CELLS_WARNING = 10_000_000  # 10M cells - inform user it's large

@@ -1,7 +1,7 @@
 # AortaCFD Configuration Guide
 
-**Updated**: October 31, 2025
-**Version**: 2.0 (3-Profile System)
+**Updated**: December 3, 2025
+**Version**: 2.1 (Enhanced Inlet Profiles & Mesh Quality)
 
 ---
 
@@ -233,7 +233,7 @@ Mesh generation parameters.
   },
   "boundary_layers": {
     "enabled": true,
-    "num_layers": 5,
+    "num_layers": 10,            // SimVascular standard (was 5)
     "expansion_ratio": 1.2,
     "final_layer_thickness": 0.3
   },
@@ -298,7 +298,26 @@ Inlet, outlet, and wall boundary conditions.
 "inlet": {
   "type": "TIMEVARYING",
   "csv_file": "patient_flow.csv",
-  "data_type": "flowrate"  // or "velocity"
+  "data_type": "flowrate",  // or "velocity"
+  "profile": "parabolic"    // plug, parabolic, elliptical, wall_distance, womersley
+}
+```
+
+**Inlet Profile Options (NEW v2.1)**:
+| Profile | Description | Use Case |
+|---------|-------------|----------|
+| `plug` | Uniform velocity | Simple/turbulent inlet |
+| `parabolic` | Poiseuille (U_max = 2*U_avg) | Circular laminar inlet (recommended) |
+| `elliptical` | Elliptical Poiseuille | Non-circular but regular inlets |
+| `wall_distance` | Distance-to-wall based | Irregular inlets (aortic root with valve leaflets) |
+| `womersley` | Pulsatile with viscous effects | High-fidelity pulsatile studies |
+
+**C. Womersley Profile with Auto Harmonics**
+```json
+"inlet": {
+  "type": "WOMERSLEY",
+  "csv_file": "patient_flow.csv",
+  "n_harmonics": "auto"  // FFT-based spectral energy detection (99% threshold)
 }
 ```
 
@@ -328,10 +347,19 @@ Inlet, outlet, and wall boundary conditions.
     "diastolic_pressure": 80,     // mmHg
     "venous_pressure": 5,         // mmHg
     "tau": 1.8,                   // seconds
-    "flow_split": null            // Auto Murray's law
+    "flow_split": null,           // Auto Murray's law
+    "initial_pressure_method": "diastolic"  // NEW: diastolic/systolic/MAP/zero
   }
 }
 ```
+
+**Initial Pressure Method (NEW v2.1)**:
+| Method | Description |
+|--------|-------------|
+| `diastolic` | Start at diastolic pressure (DEFAULT, recommended) |
+| `systolic` | Start at systolic pressure (if simulation starts at peak systole) |
+| `MAP` | Start at mean arterial pressure = (SBP + 2*DBP) / 3 |
+| `zero` | Start at zero pressure (debugging only) |
 
 ### 7. **simulation_control** (Required)
 Time control and output settings.
@@ -418,6 +446,55 @@ Parallel execution settings.
   "mesh": {"cells_per_diameter": 20},
   // Run with 12, 15, 18, 20 cells/diameter
 }
+```
+
+---
+
+## 🔬 Mesh Quality Utilities (NEW v2.1 - UNDER DEVELOPMENT)
+
+AortaCFD now includes advanced mesh quality validation tools in `src/aortacfd_lib/utils/mesh_quality.py`.
+
+### Mesh Quality Tier System
+
+The mesh quality analyzer classifies meshes into tiers based on multiple metrics:
+
+| Tier | Max Skewness | Max Non-Ortho | Max Aspect Ratio | Status |
+|------|-------------|---------------|------------------|--------|
+| **EXCELLENT** | < 1.5 | < 55° | < 20 | Production ready |
+| **GOOD** | < 2.5 | < 65° | < 30 | Acceptable for most cases |
+| **FAIR** | < 4.0 | < 70° | < 50 | May need robust profile |
+| **POOR** | < 6.0 | < 75° | < 100 | Requires mesh improvement |
+| **CRITICAL** | ≥ 6.0 | ≥ 75° | ≥ 100 | Simulation will likely fail |
+
+### Grid Convergence Index (GCI)
+
+For mesh independence studies, use Richardson extrapolation:
+
+```python
+from aortacfd_lib.utils.mesh_quality import GridConvergenceIndex
+
+gci = GridConvergenceIndex()
+result = gci.calculate(
+    phi_values=[1.234, 1.256, 1.289],  # Results from fine, medium, coarse
+    cell_counts=[2000000, 800000, 300000]  # Cell counts
+)
+print(f"GCI_fine: {result['gci_fine']:.2%}")  # e.g., 1.5%
+print(f"Extrapolated value: {result['phi_extrapolated']:.4f}")
+```
+
+### Mass Balance Checker
+
+Verify flow conservation at boundaries:
+
+```python
+from aortacfd_lib.utils.mesh_quality import MassBalanceChecker
+
+checker = MassBalanceChecker()
+result = checker.check(
+    inlet_flow=100.0,  # mL/s
+    outlet_flows={'outlet1': 15.0, 'outlet2': 15.0, 'outlet3': 10.0, 'outlet4': 60.0}
+)
+print(f"Mass balanced: {result['is_balanced']}")  # True if < 1% imbalance
 ```
 
 ---
@@ -528,16 +605,36 @@ Parallel execution settings.
 ## ✅ Best Practices
 
 1. **Start Simple**: Use `standard` profile with moderate resolution
-2. **Validate Mesh**: Always run `checkMesh` before simulation
-3. **Check Conservation**: Monitor mass flow rate at inlet/outlets
+2. **Validate Mesh**: Always run `checkMesh` before simulation (use tier system for guidance)
+3. **Check Conservation**: Monitor mass flow rate at inlet/outlets (use MassBalanceChecker)
 4. **Use Windkessel**: More physiologically realistic than fixed pressure
 5. **Run Multiple Cycles**: 3-5 cycles for pulsatile flow
 6. **Monitor Residuals**: Should decrease steadily
 7. **Validate Results**: Compare with literature/clinical data
 8. **Document Changes**: Keep notes on parameter adjustments
+9. **Use Parabolic Profile**: For circular laminar inlets, `profile: "parabolic"` gives correct U_max = 2*U_avg
+10. **Boundary Layers**: Use 10 layers (SimVascular standard) with 1.2 expansion ratio
+11. **Mesh Independence**: Run GCI study with 3 mesh levels before final results
 
 ---
 
-**Last Updated**: October 31, 2025
+**Last Updated**: December 3, 2025
 **Maintained by**: AortaCFD Development Team
 **Questions?**: Check test suite or open an issue
+
+---
+
+## 📝 Version History
+
+### v2.1 (December 2025)
+- **Enhanced Inlet Profiles**: Added `elliptical`, `wall_distance` profiles for irregular inlet geometries
+- **Womersley Auto-Harmonics**: `n_harmonics: "auto"` uses FFT-based spectral energy detection
+- **Initial Pressure Method**: New Windkessel option for simulation initialization
+- **Boundary Layer Defaults**: Updated to 10 layers (SimVascular standard)
+- **Mesh Quality Utilities**: NEW `mesh_quality.py` with tier system, GCI calculator, mass balance checker
+- **Parabolic Velocity Fix**: Corrected scaling to use analytical U_max = 2*Q/A
+
+### v2.0 (October 2025)
+- 3-Profile numerics system (robust/standard/accurate)
+- Complete Windkessel configuration options
+- Enhanced mesh resolution controls

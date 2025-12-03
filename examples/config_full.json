@@ -1,7 +1,7 @@
 {
   "_comment": "COMPREHENSIVE AORTACFD CONFIGURATION - ALL PARAMETERS",
-  "_version": "2.0",
-  "_date": "2025-10-31",
+  "_version": "2.1",
+  "_date": "2025-12-03",
   "_description": "Complete configuration file demonstrating all available parameters for the 3-profile system (robust/standard/accurate)",
 
   "case_info": {
@@ -117,11 +117,11 @@
       "enabled": true,
       "_enabled_comment": "Enable/disable boundary layer generation",
 
-      "num_layers": 5,
-      "_num_layers_comment": "Number of prism layers (nSurfaceLayers). Robust: 3, Typical: 5, Fine: 8-10",
+      "num_layers": 10,
+      "_num_layers_comment": "Number of prism layers (nSurfaceLayers). Standard: 10 (SimVascular default), Minimum: 5, Fine: 12-15",
 
       "expansion_ratio": 1.2,
-      "_expansion_ratio_comment": "Growth ratio between successive layers (typical: 1.15-1.25)",
+      "_expansion_ratio_comment": "Growth ratio between successive layers (typical: 1.15-1.25, SimVascular default: 1.2)",
 
       "final_layer_thickness": 0.3,
       "_final_layer_thickness_comment": "Final (outermost) layer thickness as fraction of local cell size (when relativeSizes=true)",
@@ -243,14 +243,33 @@
 
         "data_type": "velocity",
         "_data_type_options": ["velocity", "flowrate"],
-        "_data_type_comment": "Type of data in CSV (velocity: m/s, flowrate: mL/s)"
+        "_data_type_comment": "Type of data in CSV (velocity: m/s, flowrate: mL/s)",
+
+        "profile": "parabolic",
+        "_profile_options": ["plug", "parabolic", "elliptical", "wall_distance", "womersley"],
+        "_profile_descriptions": {
+          "plug": "Uniform velocity (constant across inlet)",
+          "parabolic": "Poiseuille flow (U_max = 2*U_avg, assumes circular inlet)",
+          "elliptical": "Elliptical Poiseuille (auto-fits ellipse to inlet geometry)",
+          "wall_distance": "Distance-to-wall based profile (for irregular inlets like aortic root with valve leaflets)",
+          "womersley": "Womersley pulsatile profile (includes viscous effects)"
+        },
+
+        "exponent": 2.0,
+        "_exponent_comment": "For wall_distance profile: 2.0 = parabolic-like, 1.0 = linear, 1/7 = turbulent"
+      },
+
+      "_WOMERSLEY_parameters": {
+        "n_harmonics": "auto",
+        "_n_harmonics_options": ["auto", 4, 8, 16, 32],
+        "_n_harmonics_comment": "Number of Fourier harmonics for Womersley profile. 'auto' = FFT-based spectral energy detection (99% threshold)"
       },
 
       "_current_config": {
         "csv_file": "BPM120.csv",
         "data_type": "flowrate",
-        "profile": "plug",
-        "_profile_comment": "Flow profile shape (plug, parabolic, womersley)"
+        "profile": "parabolic",
+        "_profile_comment": "Flow profile shape - parabolic recommended for laminar aortic flow"
       }
     },
 
@@ -359,7 +378,16 @@
         "_damping_factor_comment": "Additional damping for extreme cases (0.5-1.0, 1.0 = no extra damping)",
 
         "methodology": "murray_law_automatic",
-        "_methodology_comment": "Windkessel calculation methodology (informational)"
+        "_methodology_comment": "Windkessel calculation methodology (informational)",
+
+        "initial_pressure_method": "diastolic",
+        "_initial_pressure_method_options": ["diastolic", "systolic", "MAP", "zero"],
+        "_initial_pressure_method_descriptions": {
+          "diastolic": "Start at diastolic pressure (DEFAULT, recommended for start-of-cycle initialization)",
+          "systolic": "Start at systolic pressure (use if simulation starts at peak systole)",
+          "MAP": "Start at mean arterial pressure = (SBP + 2*DBP) / 3",
+          "zero": "Start at zero pressure (not physiological, for debugging only)"
+        }
       },
 
       "rho": 1060,
@@ -513,6 +541,39 @@
       "momentum_predictor": true,
       "consistent": false,
       "turbOnFinalIterOnly": true
+    },
+
+    "mesh_quality_validation": {
+      "_comment": "UNDER DEVELOPMENT: Mesh quality validation utilities (src/aortacfd_lib/utils/mesh_quality.py)",
+      "_status": "experimental",
+
+      "_quality_tiers": {
+        "EXCELLENT": "All metrics within strict tolerances - production ready",
+        "GOOD": "Minor issues - acceptable for most simulations",
+        "FAIR": "Some concerns - may need robust profile",
+        "POOR": "Significant issues - requires mesh improvement",
+        "CRITICAL": "Major problems - simulation will likely fail"
+      },
+
+      "_threshold_definitions": {
+        "max_skewness": {"EXCELLENT": 1.5, "GOOD": 2.5, "FAIR": 4.0, "POOR": 6.0},
+        "max_non_orthogonality": {"EXCELLENT": 55.0, "GOOD": 65.0, "FAIR": 70.0, "POOR": 75.0},
+        "max_aspect_ratio": {"EXCELLENT": 20.0, "GOOD": 30.0, "FAIR": 50.0, "POOR": 100.0}
+      },
+
+      "_grid_convergence_index": {
+        "_comment": "Richardson extrapolation for mesh independence studies",
+        "refinement_ratio": 1.3,
+        "_refinement_ratio_comment": "Cell count ratio between meshes (typical: 1.3-2.0)",
+        "safety_factor": 1.25,
+        "_safety_factor_comment": "GCI safety factor (1.25 for 3+ meshes, 3.0 for 2 meshes)"
+      },
+
+      "_mass_balance_check": {
+        "_comment": "Flow conservation verification",
+        "tolerance": 0.01,
+        "_tolerance_comment": "Maximum allowable mass imbalance (1% default)"
+      }
     }
   },
 
@@ -521,10 +582,12 @@
     "2_required_names": "inlet.stl, outlet*.stl, wall*.stl",
     "3_profile_selection": "Use 'robust' for difficult meshes, 'standard' for production, 'accurate' for validation",
     "4_mesh_resolution": "Use cells_per_diameter: 10-12 (coarse), 15-20 (standard), 25-30 (fine)",
-    "5_boundary_layers": "Use target_yplus=1-5 for RANS, 30-100 for wall functions",
+    "5_boundary_layers": "Use 10 layers (SimVascular standard), 1.2 expansion ratio. Increase to 12-15 for fine resolution",
     "6_windkessel": "Leave flow_split=null for automatic Murray's law distribution",
     "7_simulation_time": "Run at least 3-5 cardiac cycles for pulsatile flow",
-    "8_parallel": "Use 4-8 cores for medium cases, more for large geometries"
+    "8_parallel": "Use 4-8 cores for medium cases, more for large geometries",
+    "9_inlet_profile": "Use 'parabolic' for circular inlets, 'wall_distance' for irregular inlets (e.g., aortic root)",
+    "10_womersley": "Use n_harmonics='auto' for automatic spectral energy-based harmonic selection"
   },
 
   "_parameter_hierarchy": {
