@@ -39,6 +39,12 @@ import numpy as np
 from typing import Tuple, List, Optional
 from enum import Enum
 
+try:
+    from scipy.spatial import cKDTree
+    HAS_SCIPY = True
+except ImportError:
+    HAS_SCIPY = False
+
 from .utils.logger import Logger
 from .utils.patch_processing import PatchProcessing
 
@@ -137,7 +143,7 @@ class DistanceWallInletProfile:
 
     def run(self) -> None:
         """
-        Main execution method.
+        Main execution method for TIME-VARYING inlet.
 
         Steps:
         1. Load inlet geometry and compute basic properties
@@ -196,6 +202,113 @@ class DistanceWallInletProfile:
         self.log.info("Distance-to-Wall Profile Generation Complete")
         self.log.info("=" * 60)
 
+    def run_constant(self, flow_rate_m3s: float) -> None:
+        """
+        Generate wall-distance profile for CONSTANT inlet (single timestep at t=0).
+
+        This method creates boundaryData for use with timeVaryingMappedFixedValue BC,
+        but with a single constant timestep. This allows CONSTANT inlets to use
+        non-uniform profiles like wall_distance.
+
+        Parameters
+        ----------
+        flow_rate_m3s : float
+            Constant flow rate in m³/s. If negative, flow direction will be
+            determined automatically based on outlet positions.
+
+        Steps:
+        1. Load inlet geometry
+        2. Calculate distance-to-wall for each face centre
+        3. Compute shape factors and scale to target flow rate
+        4. Write single timestep (t=0) to boundaryData
+        """
+        self.log.info("=" * 60)
+        self.log.info("Distance-to-Wall Profile (CONSTANT inlet)")
+        self.log.info("=" * 60)
+
+        # Step 1: Load inlet geometry
+        self._load_inlet_geometry()
+
+        # Step 2: Read mesh points from boundaryData
+        points_file = os.path.join(
+            self.case_directory, "constant", "boundaryData",
+            self.inlet_name, "points"
+        )
+        if not os.path.isfile(points_file):
+            raise FileNotFoundError(f"Points file not found: {points_file}")
+
+        n_points, points = self._read_points_file(points_file)
+        self.log.info(f"Read {n_points} face centres from boundaryData")
+
+        # Step 3: Calculate distance-to-wall for each point
+        distances = self._calculate_wall_distances(points)
+        self.d_max = np.max(distances)
+        self.log.info(f"Distance range: [0, {self.d_max:.6f}] m")
+
+        # Estimate face areas (assume uniform if not available)
+        self.face_areas = np.full(n_points, self.area / n_points)
+
+        # Step 4: Clean old time directories
+        parent_dir = os.path.join(
+            self.case_directory, "constant", "boundaryData", self.inlet_name
+        )
+        self._clean_time_directories(parent_dir)
+
+        # Step 5: Generate single timestep at t=0
+        self.log.info(f"Generating constant wall-distance profile...")
+        self.log.info(f"  Target flow rate: {flow_rate_m3s:.6e} m³/s ({abs(flow_rate_m3s)*60*1000:.2f} L/min)")
+
+        # Generate velocity data for t=0
+        self._generate_constant_data(parent_dir, flow_rate_m3s, n_points, distances)
+
+        self.log.info("=" * 60)
+        self.log.info("Constant Wall-Distance Profile Generation Complete")
+        self.log.info("=" * 60)
+
+    def _generate_constant_data(
+        self,
+        parent_dir: str,
+        flow_rate_m3s: float,
+        n_points: int,
+        distances: np.ndarray
+    ) -> None:
+        """Generate velocity data for constant inlet (single timestep at t=0)."""
+        # Determine normal direction
+        normal = self.inlet_normal.copy()
+        if self.orientation == 'in' or (
+            self.orientation == 'auto' and self._should_flip_normal()
+        ):
+            normal = -normal
+            self.log.info("Using inward-pointing normal")
+
+        # Pre-compute shape factors (vectorized)
+        shape_factors = self._compute_shape_factors_vectorized(distances)
+
+        # Pre-compute the integrated shape*area
+        integrated_shape_area = np.sum(shape_factors * self.face_areas)
+        if integrated_shape_area <= 0:
+            self.log.warning("Integrated shape*area is zero, using uniform profile")
+            integrated_shape_area = self.area
+            shape_factors = np.ones(n_points)
+
+        # Calculate U_0 to match target flow rate
+        U_0 = abs(flow_rate_m3s) / integrated_shape_area
+
+        # Calculate velocities: U_0 * shape_factors * normal
+        velocity_directions = np.outer(shape_factors, normal)
+        velocities = U_0 * velocity_directions
+
+        # Statistics
+        avg_vel = U_0 * np.mean(shape_factors)
+        max_vel = U_0 * np.max(shape_factors)
+        self.log.info(f"  U_avg: {avg_vel:.4f} m/s, U_max: {max_vel:.4f} m/s")
+
+        # Write to t=0 directory
+        time_dir = os.path.join(parent_dir, "0.000000")
+        os.makedirs(time_dir, exist_ok=True)
+        self._write_velocity_file_fast(os.path.join(time_dir, "U"), velocities)
+        self.log.info(f"  Wrote velocity data to {time_dir}/U")
+
     def _load_inlet_geometry(self) -> None:
         """Load inlet STL and calculate geometry properties.
 
@@ -230,16 +343,25 @@ class DistanceWallInletProfile:
             Distance to wall for each point (N,).
         """
         n_points = len(points)
-        distances = np.zeros(n_points)
 
         # Try to get boundary points from STL
         wall_points = self._extract_inlet_boundary()
 
         if wall_points is not None and len(wall_points) > 0:
             self.log.info(f"Using {len(wall_points)} boundary points for distance calculation")
-            for i, pt in enumerate(points):
-                d = np.min(np.linalg.norm(wall_points - pt, axis=1))
-                distances[i] = d
+
+            # Use KDTree for fast nearest-neighbor lookup: O(N log M) instead of O(N*M)
+            if HAS_SCIPY:
+                tree = cKDTree(wall_points)
+                distances, _ = tree.query(points, k=1)
+                self.log.debug(f"KDTree distance calculation completed for {n_points} points")
+            else:
+                # Fallback to vectorized numpy (still faster than pure loop)
+                self.log.warning("scipy not available, using vectorized fallback (slower)")
+                distances = np.array([
+                    np.min(np.linalg.norm(wall_points - pt, axis=1))
+                    for pt in points
+                ])
         else:
             # Fallback: radial distance from centre
             self.log.info("Using radial distance approximation")

@@ -36,8 +36,18 @@ boundaryField
         offset          (0 0 0);
         setAverage      false;
         {% elif inlet_settings.type == "CONSTANT" or inlet_settings.type == "PARABOLIC" %}
+        {% set inlet_profile = inlet_settings.get('profile', 'plug').lower() %}
+        {% if inlet_profile in ['wall_distance', 'elliptical'] %}
+        // CONSTANT inlet with non-uniform {{ inlet_profile }} profile
+        // Uses boundaryData from distance-wall profile generator
+        type            timeVaryingMappedFixedValue;
+        offset          (0 0 0);
+        setAverage      false;
+        {% else %}
+        // CONSTANT inlet with uniform {{ inlet_profile }} profile
         type            fixedValue;
         value           uniform {{ inlet_velocity_vector }};
+        {% endif %}
         {% else %}
         type            fixedValue;
         value           uniform (0 0 0);
@@ -46,43 +56,53 @@ boundaryField
 
     // The outlets are created dynamically based on the JSON settings
     {% set outlet_type = outlet_settings.get('type', '3EWINDKESSEL') %}
+    {% set wk_settings = outlet_settings.get('windkessel_settings', {}) %}
+    {% set enable_stabilization = wk_settings.get('enable_stabilization', false) %}
+    {% set stabilization_type = wk_settings.get('stabilization_type', 'simple') %}
+    {% set beta = wk_settings.get('beta', 0.5) %}
+    {% set damping_factor = wk_settings.get('damping_factor', 1.0) %}
     {% for outlet in outlet_patches %}
     {{ outlet }}
     {
-        {% if outlet_type == "3EWINDKESSEL" %}
-        {% set wk_settings = outlet_settings.get('windkessel_settings', {}) %}
-        {% set stab_type = wk_settings.get('stabilization_type', 'fluxBased') %}
-        {% set enable_stab = wk_settings.get('enable_stabilization', true) %}
-        {% if enable_stab %}
-        // Stabilized Windkessel velocity BC (prevents backflow divergence)
-        // Stabilization types: simple, fluxBased (recommended), traction
-        type                stabilizedWindkesselVelocity;
-        stabilizationType   {{ stab_type }};
-        beta                {{ wk_settings.get('beta', 0.9) }};
-        dampingFactor       {{ wk_settings.get('damping_factor', 1.0) }};
-        {% if stab_type == 'traction' %}
-        rho                 {{ outlet_settings.get('rho', 1060) }};
-        {% endif %}
+        {% if outlet_type == "3EWINDKESSEL" and enable_stabilization %}
+        // Stabilized Windkessel velocity BC - modularWKPressure library
+        // Backflow stabilization methods (damping formula: V_out = (1 - damping) * V_backflow):
+        //   simple:    damping = beta           (DEFAULT, most robust, ignores dampingFactor)
+        //   fluxBased: damping = beta × dampingFactor  (FVM-consistent, uses phi field)
+        //   traction:  damping = beta × dampingFactor  (physics-based, Moghadam 2011)
+        // Robustness: simple > fluxBased ≈ traction (for same effective damping)
+        type            stabilizedWindkesselVelocity;
         enableStabilization true;
-        value               uniform (0 0 0);
-        {% else %}
-        // No stabilization - use standard pressure-velocity coupling
-        type                pressureInletOutletVelocity;
-        value               uniform (0 0 0);
-        {% endif %}
+        stabilizationType {{ stabilization_type }};
+        beta            {{ beta }};
+        dampingFactor   {{ damping_factor }};
+        value           uniform (0 0 0);
+
+        {% elif outlet_type == "3EWINDKESSEL" %}
+        // Windkessel outlet: Use inletOutlet for basic backflow handling
+        // - When flow is outward (normal): zeroGradient (extrapolate from interior)
+        // - When flow is inward (backflow): apply inletValue to prevent divergence
+        // For enhanced stability, set enable_stabilization: true in config
+        type            inletOutlet;
+        inletValue      uniform (0 0 0);  // Zero velocity during backflow
+        value           uniform (0 0 0);
 
         {% elif outlet_type == "fixedPressure" %}
-        // Fixed pressure: velocity adjusts naturally
+        // Fixed pressure: use pressureInletOutletVelocity for better coupling
         type            pressureInletOutletVelocity;
         value           uniform (0 0 0);
 
         {% elif outlet_type == "resistance" %}
         // Resistance: velocity determined by flow rate
-        type            zeroGradient;
+        type            inletOutlet;
+        inletValue      uniform (0 0 0);
+        value           uniform (0 0 0);
 
         {% else %}
-        // Default: zero gradient velocity
-        type            zeroGradient;
+        // Default: inletOutlet for safety
+        type            inletOutlet;
+        inletValue      uniform (0 0 0);
+        value           uniform (0 0 0);
         {% endif %}
     }
     {% endfor %}
