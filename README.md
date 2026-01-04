@@ -1,12 +1,12 @@
 # AortaCFD: Patient-Specific Aortic Blood Flow Simulation
 
 ![Python Version](https://img.shields.io/badge/python-3.12-blue.svg)
-![Tests](https://img.shields.io/badge/tests-18%20passing-success.svg)
+![Tests](https://img.shields.io/badge/tests-172%20passing-success.svg)
 ![Coverage](https://img.shields.io/badge/coverage-TBD-lightgrey.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![OpenFOAM](https://img.shields.io/badge/OpenFOAM-12-orange.svg)
 
-**AortaCFD** is an end-to-end automated pipeline for patient-specific cardiovascular CFD simulations using OpenFOAM 12. It streamlines the complete workflow from geometry to results, featuring a modular architecture with composable configuration fragments, pre-configured simulation profiles (Laminar, RANS, LES), and advanced boundary conditions including 3-element Windkessel (3EWK) models with automatic parameter calculation.
+**AortaCFD** is an end-to-end automated pipeline for patient-specific cardiovascular CFD simulations using OpenFOAM 12. It streamlines the complete workflow from geometry to results, featuring a simplified 3-profile numerics system (robust/standard/accurate), physics model selection (laminar/RANS/LES), and advanced boundary conditions including 3-element Windkessel (3EWK) models with automatic parameter calculation.
 
 ---
 
@@ -19,9 +19,9 @@
   - [Basic Commands](#basic-commands)
   - [Workflow Steps](#workflow-steps)
   - [Configuration](#configuration)
+- [Numerics Profiles](#numerics-profiles)
 - [Boundary Conditions](#boundary-conditions)
 - [Post-Processing](#post-processing)
-- [Reconstruction & Performance](#reconstruction--performance)
 - [Testing](#testing)
 - [Project Structure](#project-structure)
 - [Troubleshooting](#troubleshooting)
@@ -54,39 +54,40 @@ source ~/.bashrc
 # 3. Install Windkessel BC (for 3EWK outlets)
 ./scripts/install_windkessel_of12.sh
 
-# 4. Run example simulation (automated quick-start)
-./run_example.sh               # Complete demonstration with patient1
+# 4. List available patient cases
+python run_patient.py --list
 
-# OR run manually with different profiles:
-python run_patient.py patient1 --quick                    # Fast (sim_laminar_coarse, 5-15 min)
-python run_patient.py patient1                            # Medium quality (30-90 min)
-python run_patient.py patient1 --profile sim_laminar_fine # High quality (2-4 hours)
-python run_patient.py patient1 --profile sim_rans_medium  # RANS turbulence (2-3 hours)
+# 5. Run a simulation
+python run_patient.py 0014_H_AO_COA                    # SimVascular pediatric case
+python run_patient.py BPM120                            # Published pediatric case
+python run_patient.py PAT002                            # Cape Town collaborator case
 
-# 5. View results
-paraview output/patient1/run_*/openfoam/openfoam.foam
+# 6. View results
+paraview output/<patient_id>/run_*/openfoam/openfoam.foam
 ```
+
+**Available Patient Cases:**
+- `0014_H_AO_COA` - Pediatric aortic coarctation from SimVascular VMR
+- `BPM120` - Published pediatric case (Wang et al.)
+- `PAT002` - Adult aortic case from Cape Town collaborator
 
 **File Structure:**
 ```
-cases_input/patient1/          # Patient input data
+cases_input/<patient_id>/      # Patient input data
 ├── config.json                # Simulation configuration
 ├── inlet.stl                  # Inlet geometry
 ├── outlet*.stl                # Outlet geometries (outlet1, outlet2, ...)
 ├── wall_aorta.stl             # Vessel wall
-└── BPM75.csv                  # Flow data (optional, for time-varying inlet)
+└── flow_data.csv              # Flow data (optional, for time-varying inlet)
 
-output/patient1/               # Results
+output/<patient_id>/           # Results
 └── run_YYYYMMDD_HHMMSS/
     ├── openfoam/              # OpenFOAM case
     │   ├── 0/                 # Initial/boundary conditions
     │   ├── constant/          # Mesh, physical properties
     │   ├── system/            # Solver dictionaries
-    │   ├── logs/              # Simulation logs
-    │   └── processor*/        # Decomposed parallel data (or time dirs if reconstructed)
-    ├── images/                # Post-processing visualizations
+    │   └── logs/              # Simulation logs
     ├── results/               # Extracted results
-    ├── logs/                  # Workflow logs
     └── summary.json           # Run metadata
 ```
 
@@ -95,26 +96,24 @@ output/patient1/               # Results
 ## Features
 
 ### Core Capabilities
-- ✅ **End-to-End Automation** - From geometry to results with single command
-- ✅ **Composable Configuration** - Fragment-based architecture for mesh resolution, solver recipes, and turbulence models
-- ✅ **Pre-configured Profiles** - 8 simulation profiles (Laminar/RANS/LES × Coarse/Medium/Fine)
-- ✅ **Advanced Boundary Conditions** - 3-element Windkessel (3EWK) with automatic parameter calculation
-- ✅ **Multiple Inlet Profiles** - Time-varying, constant, parabolic, Womersley
-- ✅ **Automated Mesh Generation** - snappyHexMesh with boundary layers and quality control
-- ✅ **Y+ Based Boundary Layers** 🆕 - Automatic first layer thickness calculation from target y+ value
+- **End-to-End Automation** - From geometry to results with single command
+- **3-Profile Numerics System** - Simple selection: `robust`, `standard`, or `accurate`
+- **Physics Model Selection** - Laminar, RANS (k-ω SST), or LES (WALE)
+- **Advanced Boundary Conditions** - 3-element Windkessel (3EWK) with automatic parameter calculation
+- **Multiple Inlet Profiles** - Time-varying, constant, parabolic, Womersley, wall-distance
+- **Automated Mesh Generation** - snappyHexMesh with boundary layers and quality control
 
 ### Workflow & Execution
-- ✅ **Modular Architecture** - Task-based workflow system with step-by-step control
-- ✅ **Parallel Execution** - Multi-core meshing and solver with smart processor allocation
-- ✅ **Resume Support** - Continue from existing runs with `--resume` flag
-- ✅ **Flexible Steps** - Run individual workflow steps (case/mesh/boundary/solver/reconstruct/post)
-- ✅ **OpenFOAM 12 Native** - Uses `foamRun -solver incompressibleFluid`
+- **Modular Architecture** - Task-based workflow system with step-by-step control
+- **Parallel Execution** - Multi-core meshing and solver with smart processor allocation
+- **Resume Support** - Continue from existing runs with `--resume` flag
+- **Flexible Steps** - Run individual workflow steps (case/mesh/boundary/solver/reconstruct/post)
+- **OpenFOAM 12 Native** - Uses `foamRun -solver incompressibleFluid`
 
 ### Analysis & Visualization
-- ✅ **Post-Processing** - Automated ParaView visualization with decomposed/reconstructed case detection
-- ✅ **Simulation Reports** - Automated documentation generation with profile metadata
-- ✅ **Windkessel Analysis** - Automatic parameter calculation with multiple PWV methods
-- ✅ **Comprehensive Testing** - Automated test suite with mesh resolution validation
+- **Post-Processing** - Automated ParaView visualization
+- **Windkessel Analysis** - Automatic parameter calculation with Murray's law
+- **Comprehensive Testing** - 172+ automated tests
 
 ---
 
@@ -153,79 +152,180 @@ pip install -r requirements.txt
 # List available patients
 python run_patient.py --list
 
-# Run complete workflow (default: sim_laminar_medium profile)
-python run_patient.py patient1
-
-# Quick test run (uses sim_laminar_coarse profile)
-python run_patient.py patient1 --quick
-
-# Use specific simulation profile (overrides profile in config.json)
-python run_patient.py patient1 --profile sim_rans_medium
-python run_patient.py patient1 --profile sim_les_fine
-# Note: --profile ONLY changes solver/mesh/numerics, ALL config.json settings are preserved!
-
-# Resume from most recent run
-python run_patient.py patient1 --resume
-
-# Custom configuration file
-python run_patient.py patient1 --config /path/to/config.json
-
 # List available workflow steps
 python run_patient.py --list-steps
 
-# List available profiles
-python -c "from src.patient_runner.core import PatientCaseRunner; PatientCaseRunner().display_profile_selection()"
+# Run complete workflow (creates new timestamped run)
+python run_patient.py BPM120
+
+# Run with specific config file
+python run_patient.py BPM120 --config config_mesh_fine.json
+
+# Resume from most recent run
+python run_patient.py BPM120 --resume
 ```
+
+### Working with Existing Output Cases
+
+A powerful feature of AortaCFD is the ability to run workflow steps on **existing output directories**. This is useful for:
+- Re-running the solver after parameter changes
+- Reconstructing parallel cases
+- Updating boundary conditions without regenerating mesh
+- Post-processing completed simulations
+
+```bash
+# Point directly to an existing output case using --update (preserves mesh!)
+python run_patient.py BPM120 --update output/BPM120/run_20251220_093653 --step solver
+
+# Or use --case-dir for full control
+python run_patient.py 0014_H_AO_COA --case-dir output/0014_H_AO_COA/testing_3M_laminar --step reconstruct
+
+# Common workflow: update BCs and re-run solver on existing mesh
+python run_patient.py BPM120 --update output/BPM120/run_20251220_093653 --step boundary --step solver
+
+# Reconstruct a parallel case that finished on HPC
+python run_patient.py PAT002 --case-dir output/PAT002/run_20251218_142530 --step reconstruct
+
+# Run post-processing on completed simulation
+python run_patient.py BPM120 --case-dir output/BPM120/run_20251220_093653 --step post
+```
+
+**Key difference between `--update` and `--case-dir`:**
+- `--update PATH`: Preserves mesh, regenerates boundary conditions and configs from current config.json
+- `--case-dir PATH`: Uses case directory as-is, only runs specified steps
 
 ### Workflow Steps
 
 AortaCFD provides granular control over the simulation pipeline:
 
 ```bash
-# Run specific workflow steps
-python run_patient.py patient1 --step mesh              # Only meshing
-python run_patient.py patient1 --step solver            # Only solver
-python run_patient.py patient1 --step reconstruct       # Reconstruct decomposed case
-python run_patient.py patient1 --step post              # Post-processing
+# Run specific workflow steps (new run)
+python run_patient.py BPM120 --step mesh              # Only meshing
+python run_patient.py BPM120 --step solver            # Only solver
+python run_patient.py BPM120 --step reconstruct       # Reconstruct decomposed case
+python run_patient.py BPM120 --step post              # Post-processing
 
-# Multiple steps
-python run_patient.py patient1 --step case --step mesh --step boundary
+# Multiple steps in sequence
+python run_patient.py BPM120 --step case --step mesh --step boundary
+
+# Combine with --output to work on existing case
+python run_patient.py BPM120 --output output/BPM120/run_20251220_093653 --step boundary --step solver
 ```
 
 **Available Steps:**
-1. **case** - Create case structure and configuration files
-2. **mesh** - Generate mesh (blockMesh, surfaceFeatures, snappyHexMesh)
-3. **boundary** - Setup boundary conditions and flow data
-4. **solver** - Run CFD solver (pimpleFoam/foamRun)
-5. **reconstruct** - Reconstruct parallel case from processor directories
-6. **post** - Execute post-processing
-7. **all** - Complete workflow (default)
+| Step | Description | When to Use |
+|------|-------------|-------------|
+| **case** | Create case structure and configuration files | New simulation setup |
+| **mesh** | Generate mesh (blockMesh, surfaceFeatures, snappyHexMesh) | Mesh generation/regeneration |
+| **boundary** | Setup boundary conditions and flow data | Update BCs without re-meshing |
+| **regenerate-numerics** | Regenerate fvSchemes/fvSolution with mesh-adaptive adjustments | After mesh quality check |
+| **solver** | Run CFD solver (foamRun) | Run/continue simulation |
+| **reconstruct** | Reconstruct parallel case from processor directories | Post-HPC processing |
+| **post** | Execute post-processing | Generate results/visualizations |
+| **all** | Complete workflow (default) | Fresh simulation |
+
+### Common Use Cases
+
+**1. Fresh simulation from scratch:**
+```bash
+python run_patient.py BPM120
+```
+
+**2. Test different mesh resolutions:**
+```bash
+python run_patient.py BPM120 --config config_mesh_coarse.json
+python run_patient.py BPM120 --config config_mesh_fine.json
+```
+
+**3. Re-run solver after editing fvSolution or boundary conditions:**
+```bash
+# Edit the files in output/BPM120/run_*/openfoam/system/ or 0/
+python run_patient.py BPM120 --case-dir output/BPM120/run_20251220_093653 --step solver
+```
+
+**4. Reconstruct HPC results locally:**
+```bash
+# After copying results from HPC
+python run_patient.py BPM120 --case-dir output/BPM120/hpc_run --step reconstruct --step post
+```
+
+**5. Update Windkessel parameters and re-run:**
+```bash
+# Edit 0/p to change R, C, Z values, then:
+python run_patient.py BPM120 --case-dir output/BPM120/run_20251220_093653 --step solver
+```
+
+**6. Continue from last saved timestep:**
+```bash
+# Modify controlDict to set startFrom latestTime, then:
+python run_patient.py BPM120 --case-dir output/BPM120/run_20251220_093653 --step solver
+```
+
+**7. Generate mesh only (for manual solver runs on HPC):**
+```bash
+python run_patient.py BPM120 --step case --step mesh --step boundary
+# Then copy output/BPM120/run_*/openfoam to HPC
+```
+
+**8. Update case with new config but keep existing mesh:**
+```bash
+# After modifying config.json (e.g., changed BC settings):
+python run_patient.py BPM120 --update output/BPM120/run_20251220_093653
+# This regenerates 0/, system/ but preserves constant/polyMesh
+```
+
+**9. Quick mesh test with coarse settings:**
+```bash
+python run_patient.py BPM120 --quick --step case --step mesh
+# Creates coarse mesh for geometry validation
+```
+
+**10. Run with comma-separated steps (alternative syntax):**
+```bash
+python run_patient.py BPM120 --steps case,mesh,boundary
+# Equivalent to: --step case --step mesh --step boundary
+```
 
 ### Configuration
 
-AortaCFD uses a unified `config.json` format that combines case-specific settings with simulation profiles. The configuration system features:
+AortaCFD uses a unified `config.json` format. The configuration system features:
 
-- **Profile-based setup**: Use `--profile` flag to override default profiles
-- **Fragment composition**: Mix and match mesh resolution, solver recipes, and turbulence models
-- **Smart defaults**: Minimal config required - system provides sensible defaults
-- **Override hierarchy**: CLI flags > config.json > profile defaults > base defaults
+- **3-Profile Numerics**: Select `robust`, `standard`, or `accurate`
+- **Physics Model**: Choose `laminar`, `rans`, or `les`
+- **Smart Defaults**: Minimal config required - system provides sensible defaults
 
-**Minimal config.json (RECOMMENDED for beginners):**
+**Minimal config.json:**
 
 ```json
 {
   "case_info": {
-    "patient_id": "patient1",
+    "patient_id": "my_patient",
     "description": "Patient-specific aortic simulation"
   },
-  "simulation_settings": {
-    "solver_type": "laminar",
-    "analysis_type": "medium"
+  "physics": {
+    "model": "laminar",
+    "transport_properties": {
+      "rho": 1060,
+      "nu": 3.7736e-6
+    }
+  },
+  "numerics": {
+    "profile": "standard"
+  },
+  "mesh": {
+    "cells_per_diameter": 15
+  },
+  "geometry": {
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": ["outlet1", "outlet2"],
+    "wall_keywords_ordered": "wall_aorta",
+    "scale_factor": 0.001
   },
   "boundary_conditions": {
     "inlet": {
-      "type": "TIMEVARYING",
-      "csv_file": "BPM75.csv"
+      "type": "CONSTANT",
+      "cardiac_output": 5.0,
+      "profile": "parabolic"
     },
     "outlets": {
       "type": "3EWINDKESSEL",
@@ -233,152 +333,101 @@ AortaCFD uses a unified `config.json` format that combines case-specific setting
         "systolic_pressure": 120,
         "diastolic_pressure": 80
       }
-    }
-  }
-}
-```
-
-**Profile Selection Methods:**
-
-1. **Via config.json** (shown above): `simulation_settings.solver_type` + `analysis_type`
-2. **Via CLI flag**: `--profile sim_rans_medium` (overrides profile selection only)
-3. **Via quick flag**: `--quick` (uses `sim_laminar_coarse`)
-4. **Auto-selection**: Omit both → defaults to `sim_laminar_medium`
-
-**⚠️ Important:** The `--profile` flag ONLY changes profile-specific settings (solver type, mesh resolution, numerical schemes). **ALL your config.json settings are preserved** (physics, boundary conditions, computational resources, etc.). Your config.json always has the highest priority. See [examples/profile_override_example.md](examples/profile_override_example.md) for detailed explanation.
-
-**Available Simulation Profiles:**
-
-| Profile | Solver | Analysis Level | Mesh Resolution | Runtime | Use Case |
-|---------|--------|----------------|-----------------|---------|----------|
-| `sim_laminar_coarse` | Laminar | Coarse | 10 (priority) | 5-10 min | Quick checks, geometry validation |
-| `sim_laminar_medium` | Laminar | Medium | 15 (priority) | 30-60 min | **Clinical analysis (DEFAULT)** |
-| `sim_laminar_fine` | Laminar | Fine | 20 (priority) | 2-4 hours | High-resolution laminar studies |
-| `sim_rans_coarse` | RANS k-ω SST | Coarse | 16 (priority) | 1-2 hours | Fast turbulence screening |
-| `sim_rans_medium` | RANS k-ω SST | Medium | 18 (priority) | 2-3 hours | Accurate turbulence simulations |
-| `sim_rans_fine` | RANS k-ω SST | Fine | 22 (priority) | 3-5 hours | Research-grade turbulence |
-| `sim_les_medium` | LES WALE | Medium | 20 (priority) | 3-5 hours | Transitional flow LES |
-| `sim_les_fine` | LES WALE | Fine | 25 (priority) | 5-7 hours | High-fidelity LES simulations |
-
-**Note:** Mesh resolution uses priority-based refinement (higher = finer mesh). Each profile includes appropriate solver recipes (robust/balanced/aggressive) and numerical schemes.
-
-**Advanced configuration (all options):**
-
-```json
-{
-  "case_info": {
-    "patient_id": "patient1",
-    "description": "Patient-specific aortic simulation",
-    "reference": "Publication reference (optional)"
-  },
-  "simulation_settings": {
-    "solver_type": "rans",
-    "analysis_type": "medium"
-  },
-  "physics": {
-    "blood_density": 1060,
-    "blood_viscosity": 0.004
-  },
-  "geometry": {
-    "scale_factor": 0.001,
-    "rotation": true,
-    "target_normal": [0, 0, 1],
-    "inlet_keywords_ordered": "inlet",
-    "outlet_keywords_ordered": ["outlet1", "outlet2", "outlet3"],
-    "wall_keywords_ordered": "wall_aorta"
-  },
-  "computational": {
-    "parallel": true,
-    "max_processors": 8
-  },
-  "mesh": {
-    "SNAPPY_SETTINGS": {
-      "parallel": true,
-      "nProcessors": 8
-    }
-  },
-  "run_settings": {
-    "solution_type": "parallel",
-    "subdomains": 8,
-    "decomposition_method": "scotch"
-  },
-  "boundary_conditions": {
-    "inlet": {
-      "type": "TIMEVARYING",
-      "csv_file": "BPM75.csv",
-      "data_type": "flowRate",
-      "profile": "plug",
-      "orientation": "out"
-    },
-    "outlets": {
-      "type": "3EWINDKESSEL",
-      "windkessel_settings": {
-        "systolic_pressure": 120,
-        "diastolic_pressure": 80,
-        "venous_pressure": 0,
-        "flow_split": 40,
-        "flow_split_method": "murray",
-        "pwv_method": "empirical",
-        "tau": 1.8
-      }
     },
     "walls": {
       "type": "no_slip"
     }
   },
   "simulation_control": {
-    "number_of_cycles": 5,
-    "end_time": "auto",
-    "writeInterval": 0.01
+    "end_time": 1.0,
+    "writeInterval": 0.1
+  },
+  "run_settings": {
+    "solution_type": "parallel",
+    "subdomains": 8
   }
 }
 ```
 
-**Configuration Architecture:**
-
-The system uses a layered configuration approach:
-1. **Base config** ([src/config/base.py](src/config/base.py)) - Default OpenFOAM settings
-2. **Profile config** ([src/config/profiles/](src/config/profiles/)) - Profile-specific settings
-3. **Fragment composition** - Mesh resolution + solver recipe fragments
-4. **Case config** (`config.json`) - Patient-specific overrides
-
-Priority: `config.json` > Fragments > Profile > Base
-
 **Configuration Examples:**
 
 See the [examples/](examples/) directory for complete configuration examples:
-- [config_minimal.json](examples/config_minimal.json) - Minimal required parameters (⭐ start here)
-- [config_laminar_medium_example.json](examples/config_laminar_medium_example.json) - Laminar medium resolution example
-- [config_rans_turbulence.json](examples/config_rans_turbulence.json) - RANS turbulence modeling example
-- [config_les_fine_example.json](examples/config_les_fine_example.json) - LES fine resolution example
-- [config_full_example.json](examples/config_full_example.json) - Complete parameter reference
+- [config_minimal.json](examples/config_minimal.json) - Bare minimum required parameters
+- [config_standard.json](examples/config_standard.json) - Recommended clinical configuration
+- [config_full.json](examples/config_full.json) - Complete parameter reference with all options
 
-Each example includes detailed inline comments and usage notes. See [examples/README.md](examples/README.md) for detailed documentation.
+---
+
+## Numerics Profiles
+
+AortaCFD uses a simplified **3-profile numerics system** that works with ALL physics models (laminar, RANS, LES):
+
+### Profile Overview
+
+| Profile | Order | Stability | Use Case |
+|---------|-------|-----------|----------|
+| **robust** | 1st | Maximum | Debugging, poor meshes, initial testing |
+| **standard** | 2nd | Good | Production runs, clinical studies (DEFAULT) |
+| **accurate** | 2nd | Good* | Convergence studies, validation, LES |
+
+*Requires good mesh quality (orthogonality > 70°, skewness < 2)
+
+### Profile Details
+
+**`robust`** - Maximum Stability
+- Time: Euler (1st order)
+- Convection: Gauss upwind (1st order, bounded)
+- Use when: Debugging, poor mesh quality, initial testing
+- Trade-off: Highly diffusive (damps gradients)
+
+**`standard`** - Balanced (RECOMMENDED)
+- Time: backward (2nd order implicit)
+- Convection: Gauss linearUpwind (2nd order, bounded)
+- Use when: Production runs, clinical studies, most RANS
+- Trade-off: Good accuracy with stability
+
+**`accurate`** - Low Diffusion
+- Time: CrankNicolson 0.9 (2nd order)
+- Convection: Gauss LUST (75% central + 25% upwind)
+- Use when: Mesh independence studies, validation, LES
+- Requirements: Good mesh quality, ~2-3x longer runtime
+
+### Physics Models
+
+Combine any numerics profile with any physics model:
+
+```json
+{
+  "physics": {
+    "model": "laminar"    // or "rans" or "les"
+  },
+  "numerics": {
+    "profile": "standard" // or "robust" or "accurate"
+  }
+}
+```
+
+| Physics Model | Description | Typical Use |
+|--------------|-------------|-------------|
+| `laminar` | No turbulence model | Re < 2300, healthy aorta |
+| `rans` | k-ω SST turbulence | Stenosis, Re > 2300 |
+| `les` | WALE subgrid model | High-fidelity unsteady flows |
 
 ---
 
 ## Mesh Resolution Guide
 
-### Overview
-
-AortaCFD uses a **geometry-adaptive mesh specification system** with a simple 3-priority hierarchy. The recommended approach is `cells_per_diameter`, which automatically scales resolution based on patient anatomy.
-
-### Quick Start: Use `cells_per_diameter` (Recommended)
-
-For most users, specify cells per diameter in your config:
+### Recommended: `cells_per_diameter`
 
 ```json
 {
   "mesh": {
-    "cells_per_diameter": 20,
+    "cells_per_diameter": 15,
     "boundary_layers": {
       "enabled": true,
       "num_layers": 5,
       "expansion_ratio": 1.2,
       "final_layer_thickness": 0.3
-    },
-    "SNAPPY_SETTINGS": {
-      "surfaceRefinementLevels": [1, 2]
     }
   }
 }
@@ -392,393 +441,39 @@ For most users, specify cells per diameter in your config:
 | **Standard** | 15-20 | 500k-2M | **Production simulations (RECOMMENDED)** |
 | **Fine** | 25-30 | 2M-5M | Mesh independence studies, publications |
 
-**Formula:** `cell_size = reference_diameter / cells_per_diameter`
-
-**Example:** For a 20mm diameter aorta with `cells_per_diameter: 20`:
-- Base cell size = 20mm / 20 = 1.0mm
-
-### Resolution Control Methods (3-Priority System)
-
-The system checks these parameters in order and uses the **first one found**:
-
-```
-Priority 1: target_cell_size_mm     (Absolute control in mm)
-    ↓
-Priority 2: cells_per_diameter      (Geometry-adaptive, RECOMMENDED)
-    ↓
-Priority 3: Default fallback        (10 cells/D - triggers warning)
-```
-
-**⚠️ Best Practice:** Set **only ONE** parameter to avoid confusion. The system will warn if multiple are detected.
-
-### Method 1: cells_per_diameter (Recommended)
-
-**Geometry-adaptive sizing - automatically scales to patient anatomy:**
-
-```json
-{
-  "mesh": {
-    "cells_per_diameter": 20
-  }
-}
-```
-
-**Advantages:**
-- ✅ Automatically adapts to patient anatomy (pediatric vs adult)
-- ✅ Consistent resolution across different vessel sizes
-- ✅ Simple integer specification
-- ✅ Well-tested for cardiovascular CFD
-
-### Method 2: target_cell_size_mm
-
-**For absolute control (mesh independence studies):**
-
-```json
-{
-  "mesh": {
-    "mesh_resolution": {
-      "target_cell_size_mm": 0.8
-    }
-  }
-}
-```
-
-**Use when:**
-- Matching specific literature values (e.g., "0.6mm elements")
-- Mesh independence studies requiring fixed cell sizes
-- Irregular inlet geometry where diameter-based sizing fails
-
-### Surface Refinement Levels
-
-Controls additional refinement at vessel walls using snappyHexMesh [min, max] levels:
-
-```json
-{
-  "mesh": {
-    "SNAPPY_SETTINGS": {
-      "surfaceRefinementLevels": [1, 2]
-    }
-  }
-}
-```
-
-| Levels | Surface Cell Size | Use Case |
-|--------|-------------------|----------|
-| **[0, 1]** | base / 2 | Minimal refinement |
-| **[1, 2]** | base / 4 | **Default - recommended** |
-| **[2, 3]** | base / 8 | Fine resolution at walls |
-| **[1, 3]** | base / 4 to base / 8 | Variable refinement |
-
-**Formula:** `surface_cell_size = base_cell_size / 2^max_level`
-
-### Boundary Layer Configuration
-
-Traditional OpenFOAM addLayersControls style:
-
-```json
-{
-  "mesh": {
-    "boundary_layers": {
-      "enabled": true,
-      "num_layers": 5,
-      "expansion_ratio": 1.2,
-      "final_layer_thickness": 0.3,
-      "min_thickness": 0.1
-    }
-  }
-}
-```
-
-| Parameter | Description | Typical Values |
-|-----------|-------------|----------------|
-| `num_layers` | Number of prism layers | 3-5 (robust), 5-8 (fine) |
-| `expansion_ratio` | Growth ratio between layers | 1.15-1.25 |
-| `final_layer_thickness` | Outermost layer as fraction of cell | 0.2-0.4 |
-| `min_thickness` | Minimum layer (allows collapse) | 0.05-0.1 |
-
-### Y+ Based Boundary Layer Control (Optional)
-
-**Layer thickness modes** (`relativeSizes`):
-
-```json
-{
-  "mesh": {
-    "boundary_layers": {
-      "enabled": true,
-      "num_layers": 5,
-      "expansion_ratio": 1.2,
-      "final_layer_thickness": 0.3,
-      "relativeSizes": true
-    }
-  }
-}
-```
-
-| `relativeSizes` | Thickness interpretation | Use case |
-|-----------------|-------------------------|----------|
-| **true** (default) | Fraction of local cell size | Most cases - automatic scaling |
-| **false** | Absolute value in meters | When precise layer thickness needed |
-
-### Parallelization Settings
-
-Mesh generation (snappyHexMesh) and solver use **separate** parallelization:
-
-```json
-{
-  "mesh": {
-    "SNAPPY_SETTINGS": {
-      "parallel": true,
-      "nProcessors": 8
-    }
-  },
-  "run_settings": {
-    "solution_type": "parallel",
-    "subdomains": 8,
-    "decomposition_method": "scotch"
-  }
-}
-```
-
-**Key distinction:**
-- `mesh.SNAPPY_SETTINGS.nProcessors` → snappyHexMesh parallelization
-- `run_settings.subdomains` → Solver parallelization (decomposePar)
-
-### Examples
-
-**Example 1: Standard production case**
-```json
-{
-  "mesh": {
-    "cells_per_diameter": 20,
-    "boundary_layers": {
-      "enabled": true,
-      "num_layers": 5,
-      "expansion_ratio": 1.2,
-      "final_layer_thickness": 0.3
-    },
-    "SNAPPY_SETTINGS": {
-      "surfaceRefinementLevels": [1, 2]
-    }
-  }
-}
-```
-Result: ~1mm cells for 20mm vessel, ~500K-2M cells
-
-**Example 2: Fine mesh with more layers**
-```json
-{
-  "mesh": {
-    "cells_per_diameter": 25,
-    "boundary_layers": {
-      "enabled": true,
-      "num_layers": 8,
-      "expansion_ratio": 1.15,
-      "final_layer_thickness": 0.2
-    },
-    "SNAPPY_SETTINGS": {
-      "surfaceRefinementLevels": [1, 2]
-    }
-  }
-}
-```
-Result: Fine mesh with 8 boundary layers for wall-resolved simulations
-
-**Example 3: Mesh independence study**
-```json
-{
-  "mesh": {
-    "mesh_resolution": {
-      "target_cell_size_mm": 0.6
-    },
-    "SNAPPY_SETTINGS": {
-      "surfaceRefinementLevels": [1, 2]
-    }
-  }
-}
-```
-Result: Fixed 0.6mm cells (for comparing with literature)
-
-### Troubleshooting
-
-**Issue:** "Conflicting mesh resolution parameters"
-**Solution:** Set only ONE of `target_cell_size_mm` OR `cells_per_diameter`
-
-**Issue:** Boundary layers not applied
-**Solution:** Use `num_layers` in `boundary_layers`, not `nSurfaceLayers` in SNAPPY_SETTINGS
-
-**Issue:** Surface refinement too aggressive
-**Solution:** Reduce `surfaceRefinementLevels` from [2, 3] to [1, 2] or [0, 1]
-
-**Issue:** Mesh too coarse for small branches
-**Solution:** Increase `cells_per_diameter` (e.g., 25-30)
-
----
-
-## Simulation Profiles & Architecture
-
-### Profile System Overview
-
-AortaCFD uses a **composable profile architecture** that separates concerns into orthogonal fragments:
-
-1. **Spatial Resolution** - Mesh refinement priorities (coarse=10, medium=15, fine=20, etc.)
-2. **Solver Recipe** - PIMPLE control (robust/balanced/aggressive)
-3. **Turbulence Model** - Laminar, RANS k-ω SST, LES WALE
-
-Each simulation profile (`sim_*`) is a pre-configured combination of these fragments, automatically merged at runtime.
-
-### Profile Details
-
-#### Laminar Profiles
-
-**`sim_laminar_coarse`** - Quick Validation
-- **Solver:** Laminar
-- **Resolution:** Priority 10 (coarse)
-- **Recipe:** Robust (stable, first-order)
-- **Max CFL:** 0.5
-- **Runtime:** 5-10 minutes
-- **Use for:** Geometry checks, workflow testing, BC validation
-
-**`sim_laminar_medium`** - Clinical Standard (DEFAULT)
-- **Solver:** Laminar
-- **Resolution:** Priority 15 (medium)
-- **Recipe:** Balanced (second-order, 2 outer correctors)
-- **Max CFL:** 0.8
-- **Runtime:** 30-60 minutes
-- **Use for:** Clinical decision support, routine analysis, healthy aorta flows (Re < 2300)
-
-**`sim_laminar_fine`** - High Resolution
-- **Solver:** Laminar
-- **Resolution:** Priority 20 (fine)
-- **Recipe:** Aggressive (pure second-order, 3 outer correctors)
-- **Max CFL:** 1.0
-- **Runtime:** 2-4 hours
-- **Use for:** Publication-quality laminar studies, mesh independence studies
-
-#### RANS Profiles (k-ω SST Turbulence)
-
-**`sim_rans_coarse`** - Turbulence Screening
-- **Solver:** RANS k-ω SST
-- **Resolution:** Priority 16 (coarse+)
-- **Recipe:** Robust
-- **Max CFL:** 0.7
-- **Runtime:** 1-2 hours
-- **Use for:** Fast turbulence screening, exploratory studies
-
-**`sim_rans_medium`** - Accurate Turbulence
-- **Solver:** RANS k-ω SST
-- **Resolution:** Priority 18 (medium+)
-- **Recipe:** Balanced
-- **Max CFL:** 0.8
-- **Runtime:** 2-3 hours
-- **Use for:** Stenotic flows, post-coarctation analysis, transitional Re (2300-4000)
-
-**`sim_rans_fine`** - Research Grade
-- **Solver:** RANS k-ω SST
-- **Resolution:** Priority 22 (fine+)
-- **Recipe:** Aggressive
-- **Max CFL:** 1.0
-- **Runtime:** 3-5 hours
-- **Use for:** Publication turbulence studies, detailed WSS analysis
-- **Variant:** `publication` (25 priority, aggressive recipe)
-
-#### LES Profiles (WALE Subgrid Model)
-
-**`sim_les_medium`** - Transitional LES
-- **Solver:** LES WALE
-- **Resolution:** Priority 20 (fine)
-- **Recipe:** Balanced
-- **Max CFL:** 0.5
-- **Runtime:** 3-5 hours
-- **Use for:** Transitional flow studies, vortex dynamics
-
-**`sim_les_fine`** - High-Fidelity LES
-- **Solver:** LES WALE
-- **Resolution:** Priority 25 (ultra-fine)
-- **Recipe:** Aggressive
-- **Max CFL:** 0.5
-- **Runtime:** 5-7 hours
-- **Use for:** Research requiring temporal accuracy, unsteady flow structures
-- **Requirements:** 32+ GB RAM, 10+ cardiac cycles for convergence
-
-### Quick Selection Guide
-
-| Application | Profile | Runtime | Notes |
-|-------------|---------|---------|-------|
-| Geometry check | `sim_laminar_coarse` | 5-10 min | Use `--quick` flag |
-| Clinical analysis | `sim_laminar_medium` | 30-60 min | **DEFAULT** - Start here |
-| Stenosis/CoA | `sim_rans_medium` | 2-3 hours | Turbulence modeling |
-| Publication (laminar) | `sim_laminar_fine` | 2-4 hours | High resolution |
-| Publication (turbulent) | `sim_rans_fine` | 3-5 hours | With variants |
-| Vortex dynamics | `sim_les_fine` | 5-7 hours | Temporal accuracy |
-
-**Decision tree:**
-1. **Is there turbulence?** (stenosis, Re > 2300) → Use RANS
-2. **Need unsteady structures?** → Use LES
-3. **Otherwise** → Use Laminar
-4. **Then choose resolution:** coarse (test), medium (clinical), fine (publication)
-
 ---
 
 ## Boundary Conditions
 
 ### Inlet Types
 
-**1. TIMEVARYING** - Time series from CSV (default)
-```json
-{
-  "inlet": {
-    "type": "TIMEVARYING",
-    "csv_file": "BPM75.csv",
-    "data_type": "flowRate",  // or "velocity"
-    "profile": "plug"         // or "parabolic", "womersley"
-  }
-}
-```
-
-**2. CONSTANT** - Steady uniform velocity
+**1. CONSTANT** - Steady uniform or parabolic flow
 ```json
 {
   "inlet": {
     "type": "CONSTANT",
-    "velocity": 0.5          // m/s
-    // OR
-    "cardiac_output": 5.0    // L/min (auto-calculates velocity)
+    "cardiac_output": 5.0,
+    "profile": "parabolic"
   }
 }
 ```
 
-**3. PARABOLIC** - Steady Poiseuille profile
-```json
-{
-  "inlet": {
-    "type": "PARABOLIC",
-    "velocity": 1.0          // centerline velocity
-  }
-}
-```
-
-**4. WOMERSLEY** - Pulsatile analytic profile
+**2. TIMEVARYING** - Time series from CSV
 ```json
 {
   "inlet": {
     "type": "TIMEVARYING",
-    "csv_file": "flow.csv",
-    "profile": "womersley"
+    "csv_file": "flow_data.csv",
+    "data_type": "flowrate",
+    "profile": "parabolic"
   }
 }
 ```
 
+**Profile Options:** `plug`, `parabolic`, `womersley`, `wall_distance`, `elliptical`
+
 ### 3-Element Windkessel (3EWK) Outlets
 
-**Methodology:**
-1. MAP Calculation: MAP = DP + (SP-DP)/3
-2. Flow Distribution: Murray's law (r³), area-based, or custom
-3. Total Resistance: R_total = (MAP - P_v) / Q̄
-4. Proximal Resistance: R1 = ρ·c/A (from PWV)
-5. Distal Resistance: R2 = R_total - R1
-6. Compliance: C = τ / R2
-
-**Configuration:**
 ```json
 {
   "outlets": {
@@ -787,25 +482,51 @@ Each simulation profile (`sim_*`) is a pre-configured combination of these fragm
       "systolic_pressure": 120,
       "diastolic_pressure": 80,
       "venous_pressure": 0,
-      "flow_split": 40,           // % or ratio dict
-      "flow_split_method": "murray",  // "murray", "area", "equal"
-      "pwv_method": "empirical",
-      "tau": 1.8
+      "methodology": "murray_law_automatic",
+      "tau": 1.0,
+
+      "enable_stabilization": true,
+      "stabilization_type": "simple",
+      "beta": 0.5,
+      "damping_factor": 1.0
     }
   }
 }
 ```
 
-**Flow Split Methods:**
-- **murray** - Murray's Law (radius³ proportional)
-- **area** - Cross-sectional area proportional
-- **equal** - Equal distribution
-- **custom** - User-defined ratios (dict)
+**Automatic Parameter Calculation:**
+1. MAP = DP + (SP-DP)/3
+2. Flow Distribution: Murray's law (r³)
+3. Total Resistance: R_total = (MAP - P_v) / Q̄
+4. Proximal Resistance: R1 = ρ·c/A (from PWV)
+5. Distal Resistance: R2 = R_total - R1
+6. Compliance: C = τ / R2
 
-**Flow Split with Percentage:**
-When `flow_split` is a number (e.g., 40):
-- First N-1 outlets share 40% using specified method
-- Last outlet gets remaining 60%
+### Backflow Stabilization
+
+For pulsatile simulations with Windkessel BCs, backflow stabilization prevents divergence during diastole. Three methods are available:
+
+| Method | Formula | Default β | Robustness | Notes |
+|--------|---------|-----------|------------|-------|
+| `simple` | `damping = beta` | 0.9 | **Highest** | Uses only beta, ignores dampingFactor |
+| `fluxBased` | `damping = beta × dampingFactor` | 0.7 | Medium | FVM-consistent, uses phi field |
+| `traction` | `damping = beta × dampingFactor` | 0.3 | Medium | Physics-based (Moghadam 2011) |
+
+**Effective damping:** `V_out = (1 - damping) × V_backflow`
+
+**Recommendations:**
+- **Standard cases:** `simple` with `beta=0.5` (50% backflow reduction)
+- **Challenging geometries:** `simple` with `beta=1.0` (full backflow suppression)
+- **Research/validation:** `traction` with `beta=0.5`, `damping_factor=1.0`
+
+**Example for difficult cases (50% flow split, complex geometry):**
+```json
+{
+  "enable_stabilization": true,
+  "stabilization_type": "simple",
+  "beta": 1.0
+}
+```
 
 ---
 
@@ -813,172 +534,50 @@ When `flow_split` is a number (e.g., 40):
 
 ### Automated Visualization
 
-Post-processing generates screenshots and animations automatically:
-
 ```bash
 # Navigate to case directory
-cd output/patient1/run_*/openfoam
+cd output/BPM120/run_*/openfoam
 
-# Generate visualizations (auto-detects Reconstructed/Decomposed)
-pvbatch ../../../../src/aortacfd_lib/post_processor.py
-
-# Time step options
-pvbatch ../../../../src/aortacfd_lib/post_processor.py . last  # Last time step only
-pvbatch ../../../../src/aortacfd_lib/post_processor.py . peak  # Peak systole (max velocity)
-pvbatch ../../../../src/aortacfd_lib/post_processor.py . all   # All time steps (default)
+# View in ParaView
+paraview openfoam.foam
 ```
 
 ### Output Structure
 
 ```
-output/patient1/run_*/
+output/<patient_id>/run_*/
 ├── openfoam/                  # OpenFOAM case files
 │   ├── 0/                     # Initial conditions
 │   ├── constant/              # Mesh, properties
 │   ├── system/                # Control dictionaries
-│   ├── 0.001/, 0.002/, ...   # Time directories (if reconstructed)
-│   ├── processor0/, ...       # Processor dirs (if decomposed)
-│   └── f.foam                 # ParaView file
-└── images/                    # Post-processing outputs (NEW LOCATION)
-    ├── Velocity_*.png
-    ├── Pressure_*.png
-    ├── WSS_*.png
-    ├── Velocity.avi           # Animations (if all time steps)
-    ├── Pressure.avi
-    ├── WSS.avi
-    └── postProcessing.log
+│   ├── processor*/            # Parallel decomposition
+│   └── openfoam.foam          # ParaView file
+├── results/                   # Extracted results
+└── summary.json               # Run metadata
 ```
-
-### Auto-Detection
-
-The post-processor automatically detects whether your case is:
-- **Reconstructed** - Time directories exist (0.001/, 0.002/, etc.)
-- **Decomposed** - Only processor directories exist (processor0/, processor1/, etc.)
-
----
-
-## Mesh Convergence Studies
-
-### Automated Grid Convergence Index (GCI) Analysis
-
-AortaCFD includes a **fully automated mesh convergence study** mode for rigorous uncertainty quantification using Richardson extrapolation and GCI methodology.
-
-**Features:**
-- ✅ Generates 3 systematically refined meshes (coarse/medium/fine)
-- ✅ Automatic solution mapping via `mapFields` between levels
-- ✅ Richardson extrapolation for mesh-independent solution
-- ✅ Grid Convergence Index (GCI) computation
-- ✅ Publication-ready convergence report
-
-**Quick Start:**
-```bash
-# Run complete convergence study (fully automated)
-./run_convergence_study.sh patient1
-
-# Custom refinement ratio (default: √2)
-./run_convergence_study.sh patient1 --ratio 2.0
-
-# Custom base resolution
-./run_convergence_study.sh patient1 --base-cpd 12
-```
-
-**Output:**
-```
-output/mesh_convergence/<patient>_<timestamp>/
-├── coarse/         # 10 cells/diameter
-├── medium/         # 14 cells/diameter
-├── fine/           # 20 cells/diameter
-├── convergence_report.md      # Publication-ready report
-└── convergence_data.json      # Raw numerical data
-```
-
-**Report includes:**
-- Mesh statistics (cell count, representative spacing h)
-- Convergence metrics (observed order p, GCI values)
-- Richardson extrapolated "exact" values
-- Recommendations (converged, acceptable, refinement needed)
-
-**Example Report Output:**
-| Quantity | Coarse | Medium | Fine | Extrapolated | GCI_fine | Status |
-|----------|--------|--------|------|--------------|----------|--------|
-| Pressure Drop | 12.458 Pa | 11.923 Pa | 11.745 Pa | 11.685 Pa | 1.8% | ✅ Converged |
-| Avg WSS | 1.523 Pa | 1.487 Pa | 1.472 Pa | 1.465 Pa | 2.4% | ✅ Converged |
-
-**Typical Runtime:** ~6 hours (8-core workstation, laminar)
-
-See [docs/MESH_CONVERGENCE_GUIDE.md](docs/MESH_CONVERGENCE_GUIDE.md) for complete documentation, theory, and publication guidelines.
-
----
-
-## Reconstruction & Performance
-
-### Skip Reconstruction Feature
-
-Parallel simulations can skip the blocking `reconstructPar` step for **21% faster workflows**:
-
-**Enable in config:**
-```json
-{
-  "run_settings": {
-    "solution_type": "parallel",
-    "subdomains": 4,
-    "skip_reconstruction": true  // Skip blocking reconstruction
-  }
-}
-```
-
-**Benefits:**
-- **Faster workflow**: Solver completes → Workflow finishes immediately
-- **Disk efficient**: Decomposed cases use less space
-- **Flexible**: Reconstruct only when needed
-- **Compatible**: ParaView reads decomposed cases directly
-
-**Usage:**
-
-```bash
-# 1. Run simulation (skips reconstruction)
-python run_patient.py patient1
-# Output: processor0/, processor1/, processor2/, processor3/
-
-# 2. Post-process decomposed case (works directly)
-cd output/patient1/run_*/openfoam
-pvbatch ../../../../src/aortacfd_lib/post_processor.py . last
-
-# 3. Reconstruct later if needed (for external tools)
-python run_patient.py patient1 --step reconstruct
-# OR: cd output/patient1/run_*/openfoam && reconstructPar
-```
-
-**Performance Comparison (Patient1 RANS Medium, 4 cores):**
-
-| Configuration | Solver | Reconstruction | Total | Savings |
-|--------------|--------|----------------|-------|---------|
-| **skip_reconstruction=false** | 45 min | 12 min | **57 min** | - |
-| **skip_reconstruction=true** | 45 min | 0 min | **45 min** | **21%** |
 
 ---
 
 ## Testing
 
-AortaCFD includes automated tests for core functionality:
+AortaCFD includes 172+ automated tests:
 
 ```bash
 # Run all tests
 ./venv/bin/pytest tests/ -v
 
-# Unit tests (mesh resolution, inlet mapping, etc.)
-./venv/bin/pytest tests/unit/ -v
-
-# Integration tests (complete workflow validation)
-./venv/bin/pytest tests/integration/ -v
-
 # With coverage report
-./venv/bin/pytest --cov=src --cov-report=html
+./venv/bin/pytest tests/ --cov=src --cov-report=html
 ```
 
-**Current Test Suite:**
-- Mesh resolution parameter hierarchy (18 tests)
-- Additional tests under development
+**Test Coverage:**
+- Configuration system and profile loading
+- Boundary condition setup (inlet/outlet/walls)
+- Windkessel parameter calculations
+- Murray's law flow distribution
+- Wall distance profile analysis
+- Y+ estimation
+- Mesh resolution hierarchy
 
 ---
 
@@ -988,77 +587,43 @@ AortaCFD includes automated tests for core functionality:
 AortaCFD-app/
 ├── src/                       # Core application source
 │   ├── aortacfd_lib/         # CFD computational library
-│   │   ├── mesh_setup.py             # Mesh generation (blockMesh, snappyHexMesh)
+│   │   ├── mesh_setup.py             # Mesh generation
 │   │   ├── boundary_condition_setup.py  # BC file generation
 │   │   ├── inlet_mapping.py          # Inlet profile mapping
 │   │   ├── wk_setup.py               # Windkessel BC setup
-│   │   ├── windkessel_analyzer.py    # Automatic WK parameter calculation
-│   │   ├── post_processor.py         # ParaView post-processing
-│   │   ├── simulation_reporter.py    # Report generation
-│   │   ├── simulation_report_generator.py  # Report templates
-│   │   └── utils/                    # Utilities (logger, validation, security)
+│   │   └── utils/                    # Utilities
 │   ├── workflow/             # Task-based workflow system
-│   │   ├── manager.py                # Workflow orchestrator (recipes)
-│   │   ├── base_task.py              # Base task class
-│   │   └── tasks/
-│   │       ├── setup_tasks.py        # Setup tasks (case, mesh, BC, solver config)
-│   │       └── execution_tasks.py    # Execution tasks (mesh, solver, post)
-│   ├── config/               # Composable configuration system
-│   │   ├── builder.py                # Config builder with merge logic
+│   │   ├── manager.py                # Workflow orchestrator
+│   │   └── tasks/                    # Setup and execution tasks
+│   ├── config/               # Configuration system
+│   │   ├── builder.py                # Config builder
 │   │   ├── base.py                   # Base OpenFOAM 12 config
-│   │   └── profiles/                 # Simulation profiles
-│   │       ├── profile_builder.py    # Fragment composition engine
-│   │       ├── fragments/            # Reusable config fragments
-│   │       │   ├── resolution.py     # Mesh resolution fragments
-│   │       │   ├── solver_recipe.py  # PIMPLE control fragments
-│   │       │   └── turbulence.py     # Turbulence model fragments
-│   │       ├── sim_laminar_*.py      # Laminar profiles (coarse/medium/fine)
-│   │       ├── sim_rans_*.py         # RANS k-ω SST profiles
-│   │       └── sim_les_*.py          # LES WALE profiles
+│   │   ├── numerics_builder.py       # Numerics profile builder
+│   │   └── profiles/numerics/        # 3 numerics profiles
+│   │       ├── robust.py             # Maximum stability
+│   │       ├── standard.py           # Balanced (default)
+│   │       └── accurate.py           # Low diffusion
 │   ├── patient_runner/       # CLI and patient case management
 │   │   ├── cli.py                    # Command-line interface
-│   │   ├── core.py                   # PatientCaseRunner (orchestration)
+│   │   ├── core.py                   # PatientCaseRunner
 │   │   └── steps.py                  # Workflow step definitions
-│   └── templates/            # Jinja2 templates for OpenFOAM dictionaries
+│   └── templates/            # Jinja2 templates for OpenFOAM
 ├── cases_input/              # Patient input data
-│   ├── patient1/             # Example: Healthy adult aorta
-│   ├── patient2/             # Example: Complex geometry
-│   └── BPM120/               # Example: Pediatric coarctation (published)
-├── output/                   # Simulation results (timestamped runs)
-├── tests/                    # Test suite
-│   ├── unit/                 # Unit tests (mesh resolution, inlet mapping)
-│   └── integration/          # Integration tests (full workflows)
+│   ├── 0014_H_AO_COA/        # SimVascular pediatric case
+│   ├── BPM120/               # Published pediatric case
+│   └── PAT002/               # Cape Town collaborator case
+├── output/                   # Simulation results
+├── tests/                    # Test suite (172+ tests)
+├── examples/                 # Configuration examples
+│   ├── config_minimal.json   # Bare minimum config
+│   ├── config_standard.json  # Recommended config
+│   └── config_full.json      # Complete reference
+├── docs/                     # Documentation
 ├── scripts/                  # Utility scripts
-│   └── install_windkessel_of12.sh  # WK BC installation
-├── run_patient.py            # Main patient runner entry point
-├── run_example.sh            # Automated example workflow
+├── run_patient.py            # Main entry point
 ├── README.md                 # This file
-├── CHANGELOG.md              # Version history
-├── CITATION.cff              # Citation metadata
 └── requirements.txt          # Python dependencies
 ```
-
-**Key Architecture Components:**
-
-1. **Composable Configuration** ([src/config/](src/config/))
-   - Fragment-based system for mixing mesh resolution, solver recipes, turbulence
-   - Profile catalog with 8 pre-configured profiles
-   - Deep-merge priority system: CLI > Config > Fragments > Profile > Base
-
-2. **Workflow System** ([src/workflow/](src/workflow/))
-   - Task-based execution with recipes (setup:dict, run:mesh, run:solver, etc.)
-   - Context passing between tasks
-   - Clean separation of setup vs execution
-
-3. **Patient Runner** ([src/patient_runner/](src/patient_runner/))
-   - Case validation and configuration loading
-   - Profile resolution (CLI, config, fallbacks)
-   - Resume support and step-by-step execution
-
-4. **CFD Library** ([src/aortacfd_lib/](src/aortacfd_lib/))
-   - OpenFOAM 12 integration
-   - Automatic Windkessel parameter calculation
-   - Post-processing with case type detection
 
 ---
 
@@ -1068,44 +633,26 @@ AortaCFD-app/
 
 **1. "externally-managed-environment" error**
 - Always use virtual environment: `python3 -m venv venv && source venv/bin/activate`
-- Never use `--break-system-packages`
 
 **2. Mesh quality issues**
 ```bash
-cd output/patient1/run_*/openfoam
+cd output/<patient_id>/run_*/openfoam
 checkMesh
 # Expected: non-orthogonality < 70°, skewness < 4
 ```
 
-**3. No processor directories found**
-- Case may already be reconstructed
-- Check: `ls output/patient1/run_*/openfoam/`
+**3. Divergence or instability**
+- Use `"profile": "robust"` in numerics
+- Reduce `cells_per_diameter` for initial testing
+- Check mesh quality with `checkMesh`
 
-**4. Post-processing fails**
-- Ensure ParaView/pvbatch is installed
-- Check `caseType='auto'` in post_processor.py
-
-**5. Windkessel BC errors**
+**4. Windkessel BC errors**
 - Install custom BC: `./scripts/install_windkessel_of12.sh`
 - Verify OpenFOAM 12 environment loaded
 
-**6. Flow split ratios don't sum to 1.0**
-- Use `flow_split_method` with percentage
-- Or provide custom ratios dict summing to 1.0
-
-### Validation
-
-```bash
-# Check mesh quality
-cd output/patient1/run_*/openfoam
-checkMesh
-
-# Run CFD validation tests
-./venv/bin/pytest test_cfd_validation.py -v -s
-
-# Validate configuration
-python -c "from src.aortacfd_lib.utils.validation import validate_config; validate_config('cases_input/patient1/config.json')"
-```
+**5. Missing config.json**
+- Use `--config` to specify alternate config file
+- Check for `config*.json` files in patient directory
 
 ---
 
@@ -1117,7 +664,7 @@ Contributions welcome! Please:
 3. Add tests for new features
 4. Submit a pull request
 
-Report issues at: https://github.com/yourusername/AortaCFD-app/issues
+Report issues at: https://github.com/JieWangnk/AortaCFD-app/issues
 
 ---
 
@@ -1134,9 +681,9 @@ If you use AortaCFD in your research, please cite:
 ```bibtex
 @software{aortacfd2025,
   title={AortaCFD: Patient-Specific Aortic Blood Flow Simulation},
-  author={Your Name},
+  author={Wang, Jie},
   year={2025},
-  url={https://github.com/yourusername/AortaCFD-app}
+  url={https://github.com/JieWangnk/AortaCFD-app}
 }
 ```
 
@@ -1146,7 +693,7 @@ If you use AortaCFD in your research, please cite:
 
 For questions or support:
 - Email: jie.wang-2@manchester.ac.uk
-- Issues: https://github.com/yourusername/AortaCFD-app/issues
+- Issues: https://github.com/JieWangnk/AortaCFD-app/issues
 
 ---
 
@@ -1163,32 +710,4 @@ For questions or support:
 
 ---
 
-**Last Updated:** 2025-10-20
-
----
-
-## Key Updates (v2.0)
-
-### Architecture Improvements
-- **Composable Configuration System**: Fragment-based architecture for orthogonal mixing of mesh resolution, solver recipes, and turbulence models
-- **8 Pre-configured Profiles**: Laminar/RANS/LES × Coarse/Medium/Fine with automatic parameter tuning
-- **Smart Profile Resolution**: Multiple selection methods (CLI, config, auto-fallback) with helpful error messages
-- **Priority-based Mesh Refinement**: Intuitive priority values (10-25) replace complex cell size calculations
-
-### Workflow Enhancements
-- **Resume Support**: `--resume` flag continues from most recent run directory
-- **Flexible Step Execution**: Run individual workflow steps (case/mesh/boundary/solver/reconstruct/post)
-- **Automatic Case Detection**: Post-processor detects decomposed vs reconstructed cases
-- **Improved Logging**: Comprehensive logging with profile metadata and configuration tracking
-
-### Configuration System
-- **Unified config.json Format**: Single file for all case settings
-- **Deep-merge Priority**: CLI flags > config.json > fragments > profile > base
-- **Automatic WK Calculation**: Windkessel parameters computed from systolic/diastolic pressures
-- **Profile Metadata**: Complete tracking of applied configurations for reproducibility
-
-### Developer Experience
-- **Clean Architecture**: Clear separation of concerns (config/workflow/runner/lib)
-- **Comprehensive Testing**: 18+ unit tests for mesh resolution hierarchy
-- **Better Error Messages**: Helpful guidance when profiles or steps fail
-- **Profile Catalog Display**: Interactive profile selection helper
+**Last Updated:** 2025-12-22

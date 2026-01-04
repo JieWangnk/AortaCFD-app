@@ -52,9 +52,11 @@ class TestMethodologyProfileTable:
         assert profile['ddtSchemes']['default'] == 'Euler', \
             "Robust profile should use Euler time integration"
 
-        # Correctors - should be robust (3 outer correctors)
-        assert profile['solvers']['PIMPLE']['nOuterCorrectors'] == 3, \
-            "Robust profile should use 3 outer correctors for stability"
+        # Correctors - should be high with convergence-based exit (20 max outer correctors)
+        assert profile['solvers']['PIMPLE']['nOuterCorrectors'] == 20, \
+            "Robust profile should use 20 max outer correctors (convergence-based exit)"
+        assert 'outerCorrectorResidualControl' in profile['solvers']['PIMPLE'], \
+            "Robust profile must have outerCorrectorResidualControl for early exit"
 
         # Max Courant number
         assert profile['time_stepping']['max_co'] == 0.5, \
@@ -76,9 +78,11 @@ class TestMethodologyProfileTable:
         assert profile['ddtSchemes']['default'] == 'backward', \
             "Standard profile should use backward time integration"
 
-        # Correctors - moderate (2 outer correctors)
-        assert profile['solvers']['PIMPLE']['nOuterCorrectors'] == 2, \
-            "Standard profile should use 2 outer correctors"
+        # Correctors - moderate max with convergence-based exit (30 max outer correctors)
+        assert profile['solvers']['PIMPLE']['nOuterCorrectors'] == 30, \
+            "Standard profile should use 30 max outer correctors (convergence-based exit)"
+        assert 'outerCorrectorResidualControl' in profile['solvers']['PIMPLE'], \
+            "Standard profile must have outerCorrectorResidualControl for early exit"
 
         # Max Courant number
         assert profile['time_stepping']['max_co'] == 1.0, \
@@ -105,8 +109,8 @@ class TestMethodologyProfileTable:
         assert profile['solvers']['residualControl']['p'] <= 1e-7, \
             "Accurate profile should have tight residual tolerances (≤1e-7)"
 
-        # Order of accuracy
-        assert profile['_profile_metadata']['order_of_accuracy'] == 2, \
+        # Order of accuracy (accurate profile uses formal_order_of_accuracy)
+        assert profile['_profile_metadata']['formal_order_of_accuracy'] == 2, \
             "Accurate profile should be second-order accurate"
 
 
@@ -234,7 +238,7 @@ class TestMethodologyNumericalSchemes:
             f"Profile '{profile_name}' should use '{expected_gradient}' for gradients"
 
     @pytest.mark.parametrize("profile_name,expected_laplacian", [
-        ('robust', 'Gauss linear corrected'),
+        ('robust', 'Gauss linear limited corrected'),
         ('standard', 'Gauss linear corrected'),
     ])
     def test_laplacian_schemes(self, profile_name, expected_laplacian):

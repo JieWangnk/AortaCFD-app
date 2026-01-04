@@ -80,8 +80,8 @@ class FvSchemesWriter:
             adapter = MeshAdaptiveSolverSettings()
             adapter.analyze_checkmesh_log(str(checkmesh_log))
 
-            # Get profile name
-            profile_name = self.config.get('numerics', {}).get('profile', 'standard')
+            # Get profile name (case-insensitive)
+            profile_name = self.config.get('numerics', {}).get('profile', 'standard').lower()
 
             # Adjust schemes
             adjusted_schemes = adapter.adjust_fvschemes_for_mesh(base_schemes, profile_name)

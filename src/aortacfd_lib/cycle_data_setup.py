@@ -21,7 +21,8 @@ class CycleDataSetup:
         self.cardiac_period = cardiac_cycle
         
         # Get other necessary parameters from the config object
-        inlet_settings = self.config['inlet']
+        # Support both config structures: boundary_conditions.inlet or inlet
+        inlet_settings = self.config.get('boundary_conditions', {}).get('inlet') or self.config.get('inlet', {})
         geom_settings = self.config['geometry']
         sim_control_settings = self.config.get('simulation_control', {})
 

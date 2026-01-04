@@ -749,7 +749,7 @@ class BoundaryConditionValidator:
     VALID_INLET_TYPES = ['TIMEVARYING', 'CONSTANT', 'WOMERSLEY']
 
     # Valid outlet types
-    VALID_OUTLET_TYPES = ['ZEROGRADIENT', 'FIXEDVALUE', '3EWINDKESSEL', 'RCRLUMPED']
+    VALID_OUTLET_TYPES = ['ZEROGRADIENT', 'FIXEDVALUE', '2EWINDKESSEL', '3EWINDKESSEL', 'RCRLUMPED']
 
     # Valid data types for inlet (normalized to lowercase)
     VALID_DATA_TYPES = ['velocity', 'flowrate', 'pressure']
@@ -1300,11 +1300,19 @@ class BoundaryConditionValidator:
 
         # Validate initial_pressure_method if specified
         init_method = wk_settings.get('initial_pressure_method', 'diastolic').lower()
-        valid_methods = ['diastolic', 'systolic', 'map', 'zero']
+        # Note: 'windkessel' is deprecated but still accepted (will fallback to diastolic with warning)
+        valid_methods = ['diastolic', 'systolic', 'map', 'mean', 'arithmetic', 'windkessel', 'zero']
+        deprecated_methods = ['windkessel']
         if init_method not in valid_methods:
             result.add_error(
                 f"Invalid initial_pressure_method '{init_method}'. "
                 f"Valid options: {', '.join(valid_methods)}"
+            )
+        elif init_method in deprecated_methods:
+            result.add_warning(
+                f"initial_pressure_method '{init_method}' is DEPRECATED. "
+                "Non-uniform pressure creates velocity spikes. "
+                "Recommended: 'diastolic' (per Pfaller et al. 2021)"
             )
 
         # For manual methodology, validate C, R_proximal, R_distal
@@ -1351,20 +1359,23 @@ class BoundaryConditionValidator:
                 "Constant inlet with zero-gradient outlets may lead to stability issues. "
                 "Consider using pressure outlets or Windkessel."
             )
-        elif inlet_type == 'CONSTANT' and 'WINDKESSEL' in outlet_type:
+        elif inlet_type == 'CONSTANT' and outlet_type == '2EWINDKESSEL':
+            # 2-element Windkessel (R-C, Z=0) is appropriate for CONSTANT inlet
+            self.logger.debug("Constant inlet with 2-element Windkessel (R-C) - appropriate configuration")
+        elif inlet_type == 'CONSTANT' and outlet_type == '3EWINDKESSEL':
             result.add_warning(
                 "Constant inlet with 3-Element Windkessel outlets: at steady state (DC), "
                 "the capacitor C is open-circuit and the model collapses to pure resistance R_total = R1 + R2. "
                 "R1 (characteristic impedance) only matters for transients/waves. "
                 "\n\n"
-                "RECOMMENDED: Use simple resistance outlets for mean hemodynamics:\n"
-                "  R_i = (MAP - P_v) / Q̄_i\n"
-                "where MAP = DP + (SP-DP)/3, P_v ≈ 0-5 mmHg, Q̄_i from Murray's law (r³) or area split.\n"
-                "This is exactly what RCR reduces to at steady state.\n"
+                "RECOMMENDED: Use 2-element Windkessel (2EWINDKESSEL) for constant inlet:\n"
+                "  - Set outlets.type: '2EWINDKESSEL' in config\n"
+                "  - This uses R = R_total, C = tau/R, Z = 0 (no characteristic impedance)\n"
+                "  - Auto-detection is also available when inlet is CONSTANT\n"
                 "\n"
-                "Manual workarounds (not implemented): "
-                "(1) implement fixed pressure BC at outlets near MAP, or "
-                "(2) create synthetic sinusoidal CSV (60-70 bpm) to add mild pulsation."
+                "Alternative: Use simple resistance outlets for mean hemodynamics:\n"
+                "  R_i = (MAP - P_v) / Q̄_i\n"
+                "where MAP = DP + (SP-DP)/3, P_v ≈ 0-5 mmHg, Q̄_i from Murray's law (r³) or area split."
             )
 
         return result

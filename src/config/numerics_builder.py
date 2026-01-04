@@ -87,8 +87,8 @@ class NumericsBuilder:
         if not isinstance(physics_config, dict):
             raise TypeError(f"config['physics'] must be a dict, got {type(physics_config).__name__}")
 
-        # Default to standard profile if not specified
-        profile_name = numerics_config.get('profile', 'standard')
+        # Default to standard profile if not specified (case-insensitive)
+        profile_name = numerics_config.get('profile', 'standard').lower()
 
         # Load base profile
         self.logger.info(f"Loading numeric profile: {profile_name}")
@@ -250,7 +250,7 @@ class NumericsBuilder:
             physics: Physics configuration
             profile_name: Name of selected profile
         """
-        model = physics.get('model', 'laminar')
+        model = physics.get('model', 'laminar').lower()  # Case-insensitive
 
         # Check convection scheme compatibility
         u_scheme = numerics['divSchemes'].get('div(phi,U)', '')
@@ -403,6 +403,10 @@ def recommend_numerics_profile(mesh_quality: dict, objective: str = 'production'
     """
     ortho = mesh_quality.get('orthogonality', 0)
     skew = mesh_quality.get('skewness', 10)
+
+    # Normalize inputs to lowercase for case-insensitive comparison
+    objective = objective.lower() if objective else 'production'
+    physics_model = physics_model.lower() if physics_model else 'laminar'
 
     # Debug mode - always conservative
     if objective == 'debug':

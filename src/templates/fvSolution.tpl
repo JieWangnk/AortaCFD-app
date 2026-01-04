@@ -62,7 +62,14 @@ PIMPLE
     nOuterCorrectors {{ fvSolution.get('PIMPLE', {}).get('nOuterCorrectors', 1) }};
     nCorrectors     {{ fvSolution.get('PIMPLE', {}).get('nCorrectors', 2) }};
     nNonOrthogonalCorrectors {{ fvSolution.get('PIMPLE', {}).get('nNonOrthogonalCorrectors', 0) }};
-    pRefPoint       (-0.013 -0.034 0.001);
+    {% set pref = fvSolution.get('PIMPLE', {}).get('pRefPoint', None) %}
+    {% if pref %}
+    pRefPoint       ({{ pref[0] }} {{ pref[1] }} {{ pref[2] }});
+    {% else %}
+    // Note: pRefPoint should be calculated from mesh bounding box
+    // If simulation diverges, ensure this point is inside the domain
+    pRefCell        0;  // Use cell 0 as reference (safer default)
+    {% endif %}
     pRefValue       0;
 
     // Corrector convergence criteria for inner PIMPLE loop
@@ -71,6 +78,7 @@ PIMPLE
     correctorResidualControl
     {
         {% for field_name, field_value in corr_res_ctrl.items() %}
+        {% if not field_name.startswith('_') %}
         {% if '(' in field_name or '|' in field_name %}"{{ field_name }}"{% else %}{{ field_name }}{% endif %}
         {
             {% if field_value is mapping %}
@@ -81,6 +89,7 @@ PIMPLE
             relTol          0;
             {% endif %}
         }
+        {% endif %}
         {% endfor %}
     }
     {% else %}
@@ -104,6 +113,7 @@ PIMPLE
     outerCorrectorResidualControl
     {
         {% for field_name, field_value in outer_res_ctrl.items() %}
+        {% if not field_name.startswith('_') %}
         {% if '(' in field_name or '|' in field_name %}"{{ field_name }}"{% else %}{{ field_name }}{% endif %}
         {
             {% if field_value is mapping %}
@@ -114,6 +124,7 @@ PIMPLE
             relTol          0;
             {% endif %}
         }
+        {% endif %}
         {% endfor %}
     }
     {% else %}

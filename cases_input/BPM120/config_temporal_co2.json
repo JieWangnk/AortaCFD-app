@@ -1,0 +1,63 @@
+{
+  "case_info": {
+    "patient_id": "BPM120",
+    "description": "Temporal convergence study - Co=2.0 (paper Table 5)",
+    "study_type": "temporal_convergence"
+  },
+
+  "physics": {
+    "model": "rans",
+    "rans_model": "kOmegaSST",
+    "transport_properties": {
+      "rho": 1060,
+      "nu": 3.7736e-6
+    }
+  },
+
+  "numerics": {
+    "profile": "standard",
+    "max_co": 2.0,
+    "_comment": "Temporal study: Co=2.0 (larger time steps)"
+  },
+
+  "geometry": {
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": ["outlet1", "outlet2", "outlet3", "outlet4"],
+    "wall_keywords_ordered": "wall_aorta",
+    "scale_factor": 0.001
+  },
+
+  "boundary_conditions": {
+    "inlet": {
+      "type": "TIMEVARYING",
+      "csv_file": "BPM120.csv",
+      "data_type": "flowrate",
+      "profile": "parabolic"
+    },
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80,
+        "venous_pressure": 0,
+        "methodology": "murray_law_automatic",
+        "tau": 1.0
+      }
+    },
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+
+  "simulation_control": {
+    "cardiac_cycle_period": 0.5,
+    "number_of_cycles": 3,
+    "writeInterval": 0.05
+  },
+
+  "run_settings": {
+    "solution_type": "parallel",
+    "subdomains": 8,
+    "decomposition_method": "scotch"
+  }
+}

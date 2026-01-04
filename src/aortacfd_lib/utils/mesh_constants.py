@@ -1,40 +1,57 @@
 """
 Mesh resolution constants for AortaCFD.
 
-Resolution Philosophy:
-    Users specify mesh resolution through ONE of these parameters:
+Resolution Philosophy (v2.0 - OpenFOAM 12+):
+===========================================
 
-    1. target_cell_size_mm: Absolute cell size in millimeters
-       - Direct control for experienced users
-       - Specify exact element size regardless of geometry
-       - Example: target_cell_size_mm = 0.5
+PRIMARY METHOD: cells_across_span (RECOMMENDED)
+    Uses OpenFOAM 12's insideSpan mode with closeness data from wall_aorta.stl
+    to guarantee minimum cells across vessel diameter at EVERY cross-section.
 
-    2. cells_per_diameter: Geometry-adaptive resolution (RECOMMENDED)
-       - Cell size computed as: diameter / cells_per_diameter
-       - Automatically scales to patient anatomy
-       - Guidelines: 10-12 (coarse), 15-20 (standard), 25-30 (fine)
-       - Example: cells_per_diameter = 20
+    Config:
+        "mesh": {
+            "SNAPPY_SETTINGS": {
+                "span_refinement_enabled": true,
+                "cells_across_span": 20
+            }
+        }
 
-    3. Fallback (if none specified):
-       - Uses 10 cells across reference diameter
-       - Conservative default suitable for initial exploration
-       - Warning issued to encourage explicit specification
+    Guidelines:
+        - 15-20: Standard simulation (default: 20)
+        - 25-30: High resolution, mesh-independent solutions
+        - 10-15: Coarse, initial exploration
+
+    Advantages:
+        - Geometry-adaptive: automatically handles varying diameters
+        - Guaranteed resolution: ensures minimum cells everywhere
+        - Robust: works for coarctations, aneurysms, small branches
+
+LEGACY METHODS (deprecated, for backward compatibility):
+    - cells_per_diameter: Old method based on reference diameter
+    - target_cell_size_mm: Absolute cell size specification
+
+    These methods control blockMesh base cell size but don't guarantee
+    resolution in narrow regions. Use cells_across_span instead.
 """
 
 # =============================================================================
-# MESH RESOLUTION GUIDELINES
+# MESH RESOLUTION GUIDELINES (v2.0)
 # =============================================================================
-# Recommended cells_per_diameter values (use these directly in config):
-#   10-12: Initial exploration, fast iteration (coarse)
-#   15-20: Standard simulation, balanced accuracy/cost (standard)
-#   25-30: High resolution, mesh-independent solutions (fine)
+# RECOMMENDED: Use cells_across_span for guaranteed resolution
 #
 # Example config:
 #   "mesh": {
-#     "mesh_resolution": {
-#       "cells_per_diameter": 20
+#     "SNAPPY_SETTINGS": {
+#       "span_refinement_enabled": true,
+#       "cells_across_span": 20
 #     }
 #   }
+#
+# LEGACY: cells_per_diameter (deprecated)
+# Recommended cells_per_diameter values (if not using span refinement):
+#   10-12: Initial exploration, fast iteration (coarse)
+#   15-20: Standard simulation, balanced accuracy/cost (standard)
+#   25-30: High resolution, mesh-independent solutions (fine)
 
 # Minimum cells per diameter (validation threshold)
 MIN_CELLS_PER_DIAMETER = 10  # Below this, results may be unreliable

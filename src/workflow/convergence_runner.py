@@ -290,9 +290,9 @@ class MeshConvergenceRunner:
         - Inlet: CONSTANT flow rate (no time variation)
         - Outlets: Fixed pressure (simplest for convergence)
         """
-        # Compute mean flow rate if time-varying inlet exists
+        # Compute mean flow rate if time-varying inlet exists (case-insensitive)
         inlet_bc = config['boundary_conditions']['inlet']
-        if inlet_bc.get('type') == 'TIMEVARYING':
+        if inlet_bc.get('type', '').upper() == 'TIMEVARYING':
             self.logger.info("⚙️  Converting time-varying inlet → CONSTANT (steady state)")
 
             # Use cardiac output to estimate mean flow

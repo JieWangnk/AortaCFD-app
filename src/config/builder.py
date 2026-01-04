@@ -5,6 +5,8 @@ import collections.abc
 import importlib
 import logging
 
+from .mesh_quality_presets import get_mesh_preset, get_available_presets
+
 def deep_merge(destination: dict, source: dict) -> dict:
     """Recursively merges the source dictionary into the destination dictionary."""
     for key, value in source.items():
@@ -48,6 +50,9 @@ class ConfigBuilder:
 
         # Check for explicit mesh specification
         self._warn_if_no_explicit_mesh(case_specific_config, sim_profile_name)
+
+        # Apply mesh quality preset if specified
+        final_config = self._apply_mesh_quality_preset(final_config)
 
         # OpenFOAM 12 specific settings
         final_config = self._apply_openfoam_12_settings(final_config)
@@ -114,6 +119,9 @@ class ConfigBuilder:
 
         # Check for explicit mesh specification (pass original case_config for direct check)
         self._warn_if_no_explicit_mesh(case_config, sim_profile_name)
+
+        # Apply mesh quality preset if specified
+        final_config = self._apply_mesh_quality_preset(final_config)
 
         # OpenFOAM 12 specific settings
         final_config = self._apply_openfoam_12_settings(final_config)
@@ -401,3 +409,60 @@ class ConfigBuilder:
                 self.logger.warning(
                     f"⚠️  simulation_control.end_time must be positive, got: {end_time}"
                 )
+
+    def _apply_mesh_quality_preset(self, config: dict) -> dict:
+        """
+        Apply mesh quality preset if specified in config.
+
+        The preset provides base SNAPPY_SETTINGS values, which are then
+        overridden by any user-specified values in config.mesh.SNAPPY_SETTINGS.
+
+        Merge order (later overrides earlier):
+        1. base.py defaults
+        2. Preset values (if quality_preset specified)
+        3. User config values
+
+        Args:
+            config: Configuration dictionary (already merged with base + profile)
+
+        Returns:
+            Configuration with preset values applied
+        """
+        mesh_config = config.get('mesh', {})
+        preset_name = mesh_config.get('quality_preset')
+
+        if not preset_name:
+            return config
+
+        # Validate preset name
+        available = get_available_presets()
+        if preset_name not in available:
+            self.logger.warning(
+                f"⚠️  Unknown mesh quality preset: '{preset_name}'. "
+                f"Valid options: {available}. Using defaults."
+            )
+            return config
+
+        # Get preset values
+        preset_values = get_mesh_preset(preset_name)
+
+        # Get current SNAPPY_SETTINGS (from base.py defaults)
+        current_snappy = mesh_config.get('SNAPPY_SETTINGS', {})
+
+        # Store user-specified overrides (values explicitly set in case config)
+        # These should take precedence over preset values
+        user_overrides = current_snappy.copy()
+
+        # Apply preset values as the new base
+        # Then re-apply user overrides on top
+        merged_snappy = preset_values.copy()
+        merged_snappy.update(user_overrides)
+
+        # Update config
+        if 'mesh' not in config:
+            config['mesh'] = {}
+        config['mesh']['SNAPPY_SETTINGS'] = merged_snappy
+
+        self.logger.info(f"📐 Applied mesh quality preset: '{preset_name}'")
+
+        return config

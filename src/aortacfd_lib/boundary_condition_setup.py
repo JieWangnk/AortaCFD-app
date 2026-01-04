@@ -72,12 +72,15 @@ class BoundaryConditionSetup:
         context['header'] = self.version_adapter.get_foam_file_header("volScalarField", "p")
         self._write_file_from_template("p.tpl", os.path.join(zero_dir, "p"), context)
 
-        if self.physics_settings['simulation_type'] in ["RAS", "LES"]:
+        # Case-insensitive simulation type comparison
+        sim_type = self.physics_settings.get('simulation_type', '').upper()
+
+        if sim_type in ["RAS", "LES"]:
             context['header'] = self.version_adapter.get_foam_file_header("volScalarField", "nut")
             self._write_file_from_template("nut.tpl", os.path.join(zero_dir, "nut"), context)
-            
+
         # Add RANS-specific fields (k, omega)
-        if self.physics_settings['simulation_type'] == "RAS":
+        if sim_type == "RAS":
             # Calculate turbulence parameters
             turbulence_params = self._calculate_turbulence_parameters()
             context.update(turbulence_params)
@@ -96,10 +99,11 @@ class BoundaryConditionSetup:
         Only calculate Murray's law for Windkessel cases.
         """
         outlet_settings = self.outlet_settings.copy()
-        
-        # Only process Windkessel cases
-        if outlet_settings.get('type') != '3EWINDKESSEL':
-            self.log.info(f"Using outlet type: {outlet_settings.get('type', 'ZEROGRADIENT')}")
+
+        # Only process Windkessel cases (case-insensitive)
+        outlet_type = outlet_settings.get('type', 'ZEROGRADIENT').upper()
+        if outlet_type not in ['2EWINDKESSEL', '3EWINDKESSEL']:
+            self.log.info(f"Using outlet type: {outlet_type}")
             return outlet_settings
             
         # Check if this is a Windkessel case without predefined flow_split
@@ -321,21 +325,49 @@ class BoundaryConditionSetup:
         Calculate initial pressure field based on outlet boundary conditions.
 
         Supports multiple initialization methods via 'initial_pressure_method' setting:
-        - 'diastolic' (default): Use diastolic pressure - physically correct for start of cardiac cycle
-        - 'systolic': Use systolic pressure
-        - 'MAP': Use Mean Arterial Pressure = (systolic + diastolic) / 2
-        - 'zero': Use 0 Pa (gauge pressure)
+
+        - 'diastolic' (default): End-diastolic pressure - physically correct if simulation
+          starts at end-diastole (most common and recommended)
+
+        - 'systolic': Peak systolic pressure
+
+        - 'map': Mean Arterial Pressure using physiologically correct formula:
+          MAP = DBP + (1/3) × (SBP - DBP) = (2×DBP + SBP) / 3
+          Accounts for diastole being ~2/3 of cardiac cycle.
+          Reference: Klabunde (2011) Cardiovascular Physiology Concepts
+
+        - 'mean' or 'arithmetic': Simple arithmetic mean (SBP + DBP) / 2
+          Less accurate than MAP but sometimes used in literature
+
+        - 'zero': Gauge pressure (0 Pa) - for non-physiological simulations
+
+        DEPRECATED (not recommended):
+        - 'windkessel': P = Q_mean × R_total - AVOID: Creates non-uniform pressure
+          gradients causing velocity spikes and numerical instability.
 
         For non-Windkessel BC: Always initialize to 0 (gauge pressure).
+
+        IMPORTANT - Why uniform diastolic pressure is recommended:
+            Per Pfaller et al. (2021), uniform pressure initialization is critical
+            for numerical stability. Non-uniform pressures create large gradients
+            that cause velocity spikes as the solver equilibrates the pressure field.
+            The exact pressure value matters less than spatial uniformity - flow
+            converges in 1-2 cardiac cycles regardless of initial pressure.
 
         Returns:
             tuple: (internal_field_pressure, outlet_pressures_dict)
                 - internal_field_pressure: Uniform pressure for internal field (Pa)
                 - outlet_pressures_dict: Dictionary mapping outlet names to pressures (Pa)
-        """
-        outlet_type = self.outlet_settings.get('type', 'zeroGradient')
 
-        if outlet_type == '3EWINDKESSEL':
+        References:
+            - Pfaller MR, et al. On the Periodicity of Cardiovascular Fluid
+              Dynamics Simulations. Ann Biomed Eng. 2021.
+            - Klabunde RE. Cardiovascular Physiology Concepts. 2nd ed. 2011.
+            - Westerhof N, et al. The arterial Windkessel. Med Biol Eng Comput. 2009.
+        """
+        outlet_type = self.outlet_settings.get('type', 'zeroGradient').upper()  # Case-insensitive
+
+        if outlet_type in ['2EWINDKESSEL', '3EWINDKESSEL']:
             # Get Windkessel pressure settings
             wk_settings = self.outlet_settings.get('windkessel_settings', {})
 
@@ -350,18 +382,48 @@ class BoundaryConditionSetup:
             MMHG_TO_PA = 133.322
 
             # Calculate pressure based on method
+            # Reference: Klabunde (2011) Cardiovascular Physiology Concepts
+            pulse_pressure = systolic - diastolic
+
             if init_method == 'diastolic':
+                # End-diastolic pressure - physically correct if simulation starts at end-diastole
                 p_init_mmHg = diastolic
                 method_desc = "diastolic (simulation starts at end-diastole)"
+
             elif init_method == 'systolic':
                 p_init_mmHg = systolic
-                method_desc = "systolic"
+                method_desc = "systolic (peak pressure)"
+
             elif init_method == 'map':
+                # Correct MAP formula: diastole is ~2/3 of cardiac cycle
+                # MAP = DBP + (1/3) × (SBP - DBP) = (2×DBP + SBP) / 3
+                p_init_mmHg = diastolic + (1.0 / 3.0) * pulse_pressure
+                method_desc = f"MAP = DBP + PP/3 = {diastolic} + {pulse_pressure}/3"
+
+            elif init_method == 'mean' or init_method == 'arithmetic':
+                # Simple arithmetic mean (less accurate but sometimes used)
                 p_init_mmHg = (systolic + diastolic) / 2.0
-                method_desc = "MAP (Mean Arterial Pressure)"
+                method_desc = "arithmetic mean (SBP + DBP) / 2"
+
+            elif init_method == 'windkessel':
+                # DEPRECATED: This method creates non-uniform pressure gradients
+                # that cause velocity spikes and numerical instability.
+                # Per Pfaller et al. (2021), uniform diastolic pressure is recommended.
+                self.log.warning(
+                    "DEPRECATED: 'windkessel' initialization method is not recommended. "
+                    "Non-uniform pressure initialization creates large gradients causing "
+                    "velocity spikes and numerical instability. Using 'diastolic' instead. "
+                    "Reference: Pfaller et al. (2021) On the Periodicity of Cardiovascular "
+                    "Fluid Dynamics Simulations."
+                )
+                # Fall back to diastolic (recommended approach)
+                p_init_mmHg = diastolic
+                method_desc = "diastolic (windkessel method deprecated)"
+
             elif init_method == 'zero':
                 p_init_mmHg = 0.0
                 method_desc = "zero (gauge pressure)"
+
             else:
                 self.log.warning(f"Unknown initial_pressure_method '{init_method}', using 'diastolic'")
                 p_init_mmHg = diastolic

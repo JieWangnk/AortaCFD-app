@@ -49,7 +49,7 @@ class YPlusEstimator:
         self.rho = density
         self.mu = viscosity
         self.nu = viscosity / density  # Kinematic viscosity
-        self.flow_regime = flow_regime
+        self.flow_regime = flow_regime.lower() if flow_regime else 'auto'  # Case-insensitive
 
     def estimate_first_layer_thickness(
         self,

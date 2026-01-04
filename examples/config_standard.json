@@ -34,12 +34,7 @@
   },
 
   "mesh": {
-    "cells_per_diameter": 15,
-    "_resolution_guide": {
-      "coarse": "10-12 cells/D - quick tests",
-      "standard": "15-20 cells/D - production (RECOMMENDED)",
-      "fine": "25-30 cells/D - mesh independence studies"
-    },
+    "_comment": "v2.0: cells_across_span is now the primary mesh resolution method",
     "boundary_layers": {
       "enabled": true,
       "num_layers": 5,
@@ -50,7 +45,22 @@
     "SNAPPY_SETTINGS": {
       "parallel": true,
       "nProcessors": 8,
-      "surfaceRefinementLevels": [1, 2]
+      "surfaceRefinementLevels": [1, 2],
+      "_comment": "Span-based refinement (OpenFOAM 12+) - guarantees cells across diameter",
+      "span_refinement_enabled": true,
+      "cells_across_span": 20,
+      "span_refinement_level": 2,
+      "_span_refinement_level_warning": "USE 1 or 2 ONLY - level 3 with cells_across_span>10 causes mesh failure!",
+      "_cells_across_span_guide": {
+        "coarse": "10-15 cells - quick tests",
+        "standard": "15-20 cells - production (RECOMMENDED)",
+        "fine": "25-30 cells - mesh independence studies"
+      },
+      "_DOE_validated": {
+        "nSmoothThickness": 10,
+        "maxFaceThicknessRatio": 0.5,
+        "_comment": "DOE study confirmed: LOWER values are better for these parameters"
+      }
     }
   },
 

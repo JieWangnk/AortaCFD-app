@@ -38,6 +38,30 @@ class MeshQualityTier(Enum):
 
 
 @dataclass
+class BoundaryLayerMetrics:
+    """
+    Container for boundary layer coverage metrics from snappyHexMesh log.
+
+    CF-Mesh insight: "Accuracy of flow prediction is greatly affected by
+    the resolution of the boundary layer and its quality."
+
+    Attributes:
+        coverage_percent: Percentage of wall area covered by boundary layers
+        layers_added: Number of layers successfully added
+        layers_requested: Number of layers requested in config
+        collapsed_faces: Number of faces where layers collapsed
+        patch_name: Name of the wall patch
+
+    Status: UNDER DEVELOPMENT
+    """
+    coverage_percent: float = 0.0
+    layers_added: int = 0
+    layers_requested: int = 0
+    collapsed_faces: int = 0
+    patch_name: str = ""
+
+
+@dataclass
 class MeshQualityMetrics:
     """
     Container for mesh quality metrics from checkMesh.
@@ -46,16 +70,20 @@ class MeshQualityMetrics:
         max_skewness: Maximum cell skewness (0 = perfect, >4 = poor)
         max_non_orthogonality: Maximum face non-orthogonality in degrees
         max_aspect_ratio: Maximum cell aspect ratio
+        max_volume_ratio: Maximum volume ratio between adjacent cells
+                          (CF-Mesh: MOST CRITICAL for convergence)
         num_cells: Total number of cells
         num_faces: Total number of faces
         num_points: Total number of points
         bounding_box: Mesh bounding box dimensions
+        layer_metrics: Boundary layer coverage metrics (optional)
 
     Status: UNDER DEVELOPMENT
     """
     max_skewness: float = 0.0
     max_non_orthogonality: float = 0.0
     max_aspect_ratio: float = 0.0
+    max_volume_ratio: float = 0.0  # CF-Mesh priority #1 for convergence
     avg_non_orthogonality: float = 0.0
     num_cells: int = 0
     num_faces: int = 0
@@ -64,6 +92,7 @@ class MeshQualityMetrics:
     mesh_ok: bool = True
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
+    layer_metrics: Optional[BoundaryLayerMetrics] = None
 
 
 @dataclass
@@ -101,27 +130,32 @@ class MeshQualityAnalyzer:
     """
 
     # Quality thresholds based on cardiovascular CFD best practices
-    # Reference: OpenFOAM User Guide, SimVascular documentation
+    # Reference: OpenFOAM User Guide, SimVascular documentation, CF-Mesh insights
+    # Priority order (CF-Mesh): 1. Volume ratio, 2. Non-ortho, 3. Skewness
     THRESHOLDS = {
         MeshQualityTier.EXCELLENT: {
             'max_skewness': 1.5,
             'max_non_orthogonality': 55.0,
             'max_aspect_ratio': 20.0,
+            'max_volume_ratio': 10.0,    # Very smooth transitions
         },
         MeshQualityTier.GOOD: {
             'max_skewness': 2.5,
             'max_non_orthogonality': 65.0,
             'max_aspect_ratio': 30.0,
+            'max_volume_ratio': 20.0,    # Good transitions
         },
         MeshQualityTier.FAIR: {
             'max_skewness': 4.0,
             'max_non_orthogonality': 70.0,
             'max_aspect_ratio': 50.0,
+            'max_volume_ratio': 50.0,    # Acceptable
         },
         MeshQualityTier.POOR: {
             'max_skewness': 6.0,
             'max_non_orthogonality': 75.0,
             'max_aspect_ratio': 100.0,
+            'max_volume_ratio': 100.0,   # CF-Mesh: "secret killer" above this
         },
         # CRITICAL: anything worse than POOR thresholds
     }
@@ -220,6 +254,12 @@ class MeshQualityAnalyzer:
         if match:
             metrics.max_aspect_ratio = float(match.group(1))
 
+        # Parse max volume ratio (CF-Mesh priority #1 for convergence)
+        # OpenFOAM outputs: "Max volume ratio = X.XX OK" or similar
+        match = re.search(r'Max volume ratio\s*=\s*([\d.e+-]+)', output)
+        if match:
+            metrics.max_volume_ratio = float(match.group(1))
+
         # Check for mesh errors
         if 'FAILED' in output or 'Mesh has invalid' in output:
             metrics.mesh_ok = False
@@ -235,9 +275,99 @@ class MeshQualityAnalyzer:
 
         return metrics
 
+    def parse_snappy_layer_coverage(self, log_path: str) -> Optional[BoundaryLayerMetrics]:
+        """
+        Parse boundary layer coverage from snappyHexMesh log.
+
+        CF-Mesh insight: Boundary layer quality is CRITICAL for WSS accuracy.
+        Coverage < 90% indicates potential issues.
+
+        Args:
+            log_path: Path to log.snappyHexMesh file
+
+        Returns:
+            BoundaryLayerMetrics or None if parsing failed
+
+        Status: UNDER DEVELOPMENT
+        """
+        if not os.path.exists(log_path):
+            self.log.warning(f"snappyHexMesh log not found: {log_path}")
+            return None
+
+        try:
+            with open(log_path, 'r') as f:
+                content = f.read()
+        except Exception as e:
+            self.log.error(f"Failed to read snappyHexMesh log: {e}")
+            return None
+
+        metrics = BoundaryLayerMetrics()
+
+        # Parse layer coverage patterns from snappyHexMesh output
+        # Example: "Added 5 layers on patch wall_aorta"
+        # Example: "Extruded 95.2% of patch wall_aorta"
+        # Example: "For patch wall_aorta: layer addition: 234567 faces (98.5%)"
+
+        # Try to find coverage percentage
+        coverage_patterns = [
+            r'Extruded\s+([\d.]+)%\s+of\s+patch\s+(\w+)',
+            r'layer addition.*?\(([\d.]+)%\)',
+            r'Adding layers.*?([\d.]+)%',
+            r'patch\s+(\w+).*?coverage.*?([\d.]+)%',
+        ]
+
+        for pattern in coverage_patterns:
+            match = re.search(pattern, content, re.IGNORECASE)
+            if match:
+                groups = match.groups()
+                if len(groups) >= 1:
+                    try:
+                        # Coverage might be in different group positions
+                        for g in groups:
+                            try:
+                                val = float(g)
+                                if 0 <= val <= 100:
+                                    metrics.coverage_percent = val
+                                    break
+                            except ValueError:
+                                metrics.patch_name = g
+                    except (ValueError, TypeError):
+                        pass
+                break
+
+        # Parse number of layers added
+        # Example: "Adding 5 layers to patch wall_aorta"
+        layers_match = re.search(r'(?:Adding|Added)\s+(\d+)\s+layers', content, re.IGNORECASE)
+        if layers_match:
+            metrics.layers_added = int(layers_match.group(1))
+
+        # Parse collapsed faces
+        # Example: "Layer collapse at 1234 faces"
+        collapsed_match = re.search(r'collapse.*?(\d+)\s+faces', content, re.IGNORECASE)
+        if collapsed_match:
+            metrics.collapsed_faces = int(collapsed_match.group(1))
+
+        # If we found any metrics, return them
+        if metrics.coverage_percent > 0 or metrics.layers_added > 0:
+            return metrics
+
+        # Try alternative parsing for coverage from final statistics
+        # Look for "nSurfaceLayers" in output
+        final_stats_match = re.search(
+            r'Final mesh.*?(\d+)\s+cells.*?(\d+)\s+faces',
+            content, re.DOTALL | re.IGNORECASE
+        )
+
+        return metrics if metrics.coverage_percent > 0 else None
+
     def get_quality_tier(self, metrics: MeshQualityMetrics) -> MeshQualityTier:
         """
         Classify mesh quality into tier based on metrics.
+
+        Priority order (CF-Mesh insight):
+        1. Volume ratio - MOST CRITICAL for convergence
+        2. Non-orthogonality - affects Laplacian term
+        3. Skewness - affects convection/gradient terms
 
         Args:
             metrics: MeshQualityMetrics from checkMesh
@@ -255,9 +385,16 @@ class MeshQualityAnalyzer:
                      MeshQualityTier.FAIR, MeshQualityTier.POOR]:
             thresholds = self.THRESHOLDS[tier]
 
+            # Volume ratio check (only if parsed - may be 0 if not in output)
+            volume_ratio_ok = (
+                metrics.max_volume_ratio == 0.0 or  # Not parsed
+                metrics.max_volume_ratio <= thresholds['max_volume_ratio']
+            )
+
             if (metrics.max_skewness <= thresholds['max_skewness'] and
                 metrics.max_non_orthogonality <= thresholds['max_non_orthogonality'] and
-                metrics.max_aspect_ratio <= thresholds['max_aspect_ratio']):
+                metrics.max_aspect_ratio <= thresholds['max_aspect_ratio'] and
+                volume_ratio_ok):
                 return tier
 
         return MeshQualityTier.CRITICAL
@@ -613,6 +750,143 @@ class GridConvergenceIndex:
         report.append("=" * 60)
 
         return "\n".join(report)
+
+
+class IterativeBoundaryLayerImprover:
+    """
+    Iterative boundary layer coverage improvement for snappyHexMesh.
+
+    This class provides methods to:
+    1. Parse layer coverage from snappyHexMesh log
+    2. Calculate improved parameters for retry attempts
+    3. Track retry history
+
+    The actual meshing execution is handled by ExecuteMeshingTask in execution_tasks.py.
+    """
+
+    def __init__(self, case_directory: str):
+        """
+        Initialize iterative boundary layer improver.
+
+        Args:
+            case_directory: Path to OpenFOAM case directory
+        """
+        self.case_dir = case_directory
+        self.log = Logger("layer_improver").get_logger()
+        self.analyzer = MeshQualityAnalyzer(case_directory)
+        self.history: List[Dict] = []
+
+    def get_current_coverage(self) -> Optional[float]:
+        """
+        Get current boundary layer coverage from snappyHexMesh log.
+
+        Returns:
+            Coverage percentage (0-100) or None if not available
+        """
+        log_path = os.path.join(self.case_dir, "log.snappyHexMesh")
+        layer_metrics = self.analyzer.parse_snappy_layer_coverage(log_path)
+
+        if layer_metrics:
+            return layer_metrics.coverage_percent
+        return None
+
+    def calculate_improved_params(
+        self,
+        current_params: Dict[str, any],
+        coverage_percent: float,
+        iteration: int
+    ) -> Dict[str, any]:
+        """
+        Calculate improved snappyHexMesh parameters for next retry.
+
+        Progressive escalation: each retry increases iteration counts by 25%.
+
+        Args:
+            current_params: Current SNAPPY_SETTINGS dict
+            coverage_percent: Current layer coverage percentage
+            iteration: Current retry iteration (1-based)
+
+        Returns:
+            Dictionary of updated SNAPPY_SETTINGS parameters
+        """
+        improved_params = current_params.copy()
+
+        # Progressive escalation factor: 1.25, 1.50, 1.75...
+        escalation_factor = 1.0 + (iteration * 0.25)
+
+        # Key parameters for boundary layer improvement
+        layer_params = {
+            'nSmoothSurfaceNormals': current_params.get('nSmoothSurfaceNormals', 15),
+            'nLayerIter': current_params.get('nLayerIter', 50),
+            'addLayers_nRelaxIter': current_params.get('addLayers_nRelaxIter', 8),
+            'nSmoothThickness': current_params.get('nSmoothThickness', 10),
+        }
+
+        for param, base_value in layer_params.items():
+            scaled_value = int(base_value * escalation_factor)
+            improved_params[param] = scaled_value
+
+        # Additional adjustments for very low coverage (< 60%)
+        if coverage_percent < 60:
+            improved_params['maxThicknessToMedialRatio'] = min(
+                0.6, current_params.get('maxThicknessToMedialRatio', 0.3) + (iteration * 0.1)
+            )
+            improved_params['featureAngle'] = max(
+                90, current_params.get('featureAngle', 130) - (iteration * 10)
+            )
+            # May need fewer layers to achieve coverage
+            if iteration >= 2:
+                current_layers = current_params.get('addLayer', 7)
+                improved_params['addLayer'] = max(4, current_layers - 1)
+                self.log.warning(
+                    f"Reducing nSurfaceLayers to {improved_params['addLayer']} "
+                    "to improve coverage"
+                )
+
+        return improved_params
+
+    def create_retry_summary(self) -> str:
+        """
+        Create a summary of all retry attempts for logging.
+
+        Returns:
+            Formatted string summarizing the improvement history
+        """
+        if not self.history:
+            return "No layer improvement attempts recorded."
+
+        lines = []
+        lines.append("=" * 60)
+        lines.append("BOUNDARY LAYER RETRY HISTORY")
+        lines.append("=" * 60)
+
+        for i, attempt in enumerate(self.history):
+            lines.append(f"\nAttempt {i + 1}:")
+            coverage = attempt.get('coverage', 0.0)
+            if coverage > 0:
+                lines.append(f"  Coverage: {coverage:.1f}%")
+            else:
+                lines.append("  Coverage: N/A")
+            lines.append(f"  Status: {attempt.get('status', 'unknown')}")
+
+            params_changed = attempt.get('params_changed', {})
+            if params_changed:
+                lines.append("  Parameters adjusted:")
+                for param, value in params_changed.items():
+                    lines.append(f"    {param}: {value}")
+
+        if self.history:
+            final = self.history[-1]
+            lines.append("")
+            lines.append(f"Final status: {final.get('status', 'unknown')}")
+            final_coverage = final.get('coverage', 0.0)
+            if final_coverage > 0:
+                lines.append(f"Final coverage: {final_coverage:.1f}%")
+
+        lines.append("")
+        lines.append("=" * 60)
+
+        return "\n".join(lines)
 
 
 class MassBalanceChecker:

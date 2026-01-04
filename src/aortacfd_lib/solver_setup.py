@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from .utils.logger import Logger
@@ -30,8 +31,9 @@ class FvSolutionWriter:
         If mesh-adaptive system is enabled and checkMesh log exists,
         solver settings will be automatically adjusted for mesh quality.
         """
-        # Get fvSolution from config
-        fvSolution = self.config['fvSolution']
+        # Get fvSolution from config (deep copy to avoid modifying original)
+        import copy
+        fvSolution = copy.deepcopy(self.config['fvSolution'])
 
         # Apply mesh-adaptive adjustments if enabled
         mesh_adaptive_enabled = self.config.get('numerics', {}).get('mesh_adaptive', True)
@@ -42,6 +44,15 @@ class FvSolutionWriter:
             # Print quality report if mesh was analyzed
             if quality_report and quality_report.get('tier'):
                 self._print_quality_report(quality_report)
+
+        # Compute pRefPoint from mesh bounding box if not already set
+        if 'PIMPLE' not in fvSolution:
+            fvSolution['PIMPLE'] = {}
+        if 'pRefPoint' not in fvSolution['PIMPLE']:
+            pref = self._compute_pRefPoint_from_mesh()
+            if pref:
+                fvSolution['PIMPLE']['pRefPoint'] = pref
+                self.log.info(f"Auto-computed pRefPoint from mesh: {pref}")
 
         # This single method replaces all the previous private _get... methods.
         template = self.jinja_env.get_template("fvSolution.tpl")
@@ -84,8 +95,8 @@ class FvSolutionWriter:
             adapter = MeshAdaptiveSolverSettings()
             adapter.analyze_checkmesh_log(str(checkmesh_log))
 
-            # Get profile name
-            profile_name = self.config.get('numerics', {}).get('profile', 'standard')
+            # Get profile name (case-insensitive)
+            profile_name = self.config.get('numerics', {}).get('profile', 'standard').lower()
 
             # Adjust fvSolution
             adjusted_fvsolution = adapter.adjust_fvsolution_for_mesh(base_fvsolution, profile_name)
@@ -182,3 +193,59 @@ class FvSolutionWriter:
                 self.log.info(f"  {rec}")
 
         self.log.info("="*70)
+
+    def _compute_pRefPoint_from_mesh(self) -> tuple:
+        """
+        Compute a valid pRefPoint from snappyHexMeshDict's locationInMesh.
+
+        First tries to parse locationInMesh from snappyHexMeshDict (guaranteed inside mesh),
+        then falls back to bounding box center (not reliable for complex geometries).
+
+        Returns:
+            Tuple (x, y, z) of pRefPoint coordinates, or None if unavailable
+        """
+        # First try: Parse locationInMesh from snappyHexMeshDict (preferred - guaranteed inside mesh)
+        snappy_dict = Path(self.case_dir) / "system" / "snappyHexMeshDict"
+        if snappy_dict.exists():
+            try:
+                with open(snappy_dict, 'r') as f:
+                    content = f.read()
+
+                # Parse locationInMesh (x y z)
+                loc_pattern = r'locationInMesh\s*\(\s*([-\d.e+]+)\s+([-\d.e+]+)\s+([-\d.e+]+)\s*\)'
+                match = re.search(loc_pattern, content)
+
+                if match:
+                    x, y, z = float(match.group(1)), float(match.group(2)), float(match.group(3))
+                    self.log.info(f"Using locationInMesh from snappyHexMeshDict as pRefPoint: ({x:.5f}, {y:.5f}, {z:.5f})")
+                    return (x, y, z)
+            except Exception as e:
+                self.log.debug(f"Could not parse snappyHexMeshDict: {e}")
+
+        # Fallback: Parse bounding box center from checkMesh log (less reliable)
+        checkmesh_log = Path(self.case_dir) / "logs" / "log.checkMesh"
+        if checkmesh_log.exists():
+            try:
+                with open(checkmesh_log, 'r') as f:
+                    content = f.read()
+
+                # Parse bounding box: "Overall domain bounding box (x1 y1 z1) (x2 y2 z2)"
+                bbox_pattern = r'Overall domain bounding box \(([-\d.e+]+)\s+([-\d.e+]+)\s+([-\d.e+]+)\)\s+\(([-\d.e+]+)\s+([-\d.e+]+)\s+([-\d.e+]+)\)'
+                match = re.search(bbox_pattern, content)
+
+                if match:
+                    x1, y1, z1 = float(match.group(1)), float(match.group(2)), float(match.group(3))
+                    x2, y2, z2 = float(match.group(4)), float(match.group(5)), float(match.group(6))
+
+                    # Compute center of bounding box (WARNING: may be outside geometry for complex shapes)
+                    center_x = (x1 + x2) / 2
+                    center_y = (y1 + y2) / 2
+                    center_z = (z1 + z2) / 2
+
+                    self.log.warning(f"Using bounding box center as pRefPoint: ({center_x:.5f}, {center_y:.5f}, {center_z:.5f}) - may be outside geometry!")
+                    return (center_x, center_y, center_z)
+            except Exception as e:
+                self.log.warning(f"Error parsing checkMesh log: {e}")
+
+        self.log.debug("Could not determine pRefPoint from mesh files")
+        return None

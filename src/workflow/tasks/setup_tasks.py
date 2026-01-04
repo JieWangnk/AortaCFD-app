@@ -109,12 +109,7 @@ class CreateCaseStructureTask(Task):
                 # Scale STL during copy - this is the ONLY place scaling happens
                 dst_path = os.path.join(tri_surface_dir, f)
                 self._copy_and_scale_stl(src_path, dst_path, scale_factor)
-
-            # Check for inlet CSV file (support both flattened and nested config structures)
-            inlet_config = self.config.get('boundary_conditions', {}).get('inlet') or self.config.get('inlet', {})
-            csv_file = inlet_config.get('csv_file') if isinstance(inlet_config, dict) else None
-            if csv_file and f == csv_file:
-                shutil.copy(src_path, os.path.join(case_dir, "constant", "boundaryData", inlet_patch_name))
+            # Note: Inlet CSV file is now copied in PrepareBoundaryDataTask (setup:bc step)
 
         self.log.info(f"STL files scaled and copied to {tri_surface_dir} (now in meters)")
         return True
@@ -202,6 +197,22 @@ class PrepareBoundaryDataTask(Task):
             formatter.format_coordinates()
 
             boundary_data_inlet_dir = os.path.join(case_dir, "constant", "boundaryData", inlet_patch_name)
+
+            # Clean up old timestep directories (0.*, 0, etc.) to ensure fresh boundary data
+            if os.path.exists(boundary_data_inlet_dir):
+                for item in os.listdir(boundary_data_inlet_dir):
+                    item_path = os.path.join(boundary_data_inlet_dir, item)
+                    # Remove timestep directories (start with digit) but keep points file
+                    if item[0].isdigit():
+                        if os.path.islink(item_path):
+                            # Handle symbolic links (from multi-cycle setup)
+                            os.unlink(item_path)
+                            self.log.debug(f"Removed old timestep symlink: {item}")
+                        elif os.path.isdir(item_path):
+                            shutil.rmtree(item_path)
+                            self.log.debug(f"Removed old timestep directory: {item}")
+                self.log.info("Cleaned up old boundaryData timestep directories")
+
             shutil.move(os.path.join(case_dir, "points"), os.path.join(boundary_data_inlet_dir, "points"))
             os.remove(temp_points_file)
 
@@ -211,6 +222,20 @@ class PrepareBoundaryDataTask(Task):
             inlet_type = inlet_config.get('type', 'TIMEVARYING').upper()
 
             if inlet_type in ['TIMEVARYING', 'WOMERSLEY']:
+                # Copy inlet CSV file to boundaryData directory if not already present
+                csv_file = inlet_config.get('csv_file')
+                if csv_file:
+                    csv_dest = os.path.join(boundary_data_inlet_dir, csv_file)
+                    if not os.path.exists(csv_dest):
+                        # Try to find CSV in patient case directory
+                        csv_src = self._find_inlet_csv(csv_file, case_dir)
+                        if csv_src:
+                            shutil.copy(csv_src, csv_dest)
+                            self.log.info(f"Copied inlet CSV file: {csv_file} -> {boundary_data_inlet_dir}")
+                        else:
+                            self.log.error(f"Inlet CSV file '{csv_file}' not found in patient case directory")
+                            raise FileNotFoundError(f"Inlet CSV file not found: {csv_file}")
+
                 # Process Inlet CSV and generate velocity files
                 self.log.info(f"Processing time-varying inlet boundary condition ({inlet_type})...")
                 inlet_mapper = InletMapping(config=self.config, case_directory=case_dir)
@@ -250,8 +275,9 @@ class PrepareBoundaryDataTask(Task):
                 else:
                     self.log.info(f"Inlet type is {inlet_type} with {inlet_profile} profile (uniform). Using fixedValue BC.")
 
-            # Set up Windkessel if needed
-            if self.config.get("outlets", {}).get("type") == "3EWINDKESSEL":
+            # Set up Windkessel if needed (case-insensitive) - supports both 2-element and 3-element
+            outlet_type = self.config.get("outlets", {}).get("type", "").upper()
+            if outlet_type in ["2EWINDKESSEL", "3EWINDKESSEL"]:
                 self.log.info("Calculating and writing Windkessel properties...")
                 tri_surface_dir = os.path.join(case_dir, "constant", "triSurface")
                 stl_files = os.listdir(tri_surface_dir)
@@ -332,6 +358,60 @@ class PrepareBoundaryDataTask(Task):
         else:
             self.log.debug("No .obj files found to clean up.")
 
+    def _find_inlet_csv(self, csv_filename: str, case_dir: str = None) -> str:
+        """
+        Find the inlet CSV file in the patient case directory.
+
+        Searches in order:
+        1. Case directory (where CSV files are copied for sensitivity studies)
+        2. Same directory as config file (cases_input/PATIENT_ID/)
+        3. Config's cad_folder if specified
+
+        Args:
+            csv_filename: Name of the CSV file (e.g., 'BPM120.csv')
+            case_dir: The case directory path (optional)
+
+        Returns:
+            str: Full path to the CSV file, or None if not found
+        """
+        # First, try the case directory (where CSV files are copied for sensitivity studies)
+        if case_dir:
+            # Check directly in case directory
+            csv_path = os.path.join(case_dir, csv_filename)
+            if os.path.exists(csv_path):
+                self.log.debug(f"Found inlet CSV in case directory: {csv_path}")
+                return csv_path
+            # Also check parent directory (for nested openfoam/ structure)
+            case_parent = os.path.dirname(case_dir)
+            csv_path = os.path.join(case_parent, csv_filename)
+            if os.path.exists(csv_path):
+                self.log.debug(f"Found inlet CSV in case parent directory: {csv_path}")
+                return csv_path
+
+        # Get the config file path from the config
+        config_path = self.config.get('_config_file_path')
+
+        if config_path:
+            # Look in the same directory as the config file
+            config_dir = os.path.dirname(config_path)
+            csv_path = os.path.join(config_dir, csv_filename)
+            if os.path.exists(csv_path):
+                self.log.debug(f"Found inlet CSV at: {csv_path}")
+                return csv_path
+
+        # Try cad_folder if specified
+        cad_folder = self.config.get('geometry', {}).get('cad_folder')
+        if cad_folder and os.path.isdir(cad_folder):
+            csv_path = os.path.join(cad_folder, csv_filename)
+            if os.path.exists(csv_path):
+                self.log.debug(f"Found inlet CSV in cad_folder: {csv_path}")
+                return csv_path
+
+        # Not found
+        self.log.warning(f"Could not find inlet CSV file '{csv_filename}'")
+        return None
+
+
 class GenerateBCFilesTask(Task):
     """Generates the 0/U, 0/p, and other initial condition field files."""
     def execute(self, context: dict) -> bool:
@@ -343,7 +423,10 @@ class GenerateBCFilesTask(Task):
         if os.path.exists(zero_dir):
             for item in os.listdir(zero_dir):
                 item_path = os.path.join(zero_dir, item)
-                if os.path.isfile(item_path):
+                if os.path.islink(item_path):
+                    os.unlink(item_path)
+                    logger.debug(f"Removed stale field symlink: {item}")
+                elif os.path.isfile(item_path):
                     os.remove(item_path)
                     logger.debug(f"Removed stale field file: {item}")
                 elif os.path.isdir(item_path) and item != "uniform":
@@ -567,8 +650,8 @@ class GenerateWindkesselReportTask(Task):
     Only runs if 3EWINDKESSEL outlets are configured.
     """
     def execute(self, context: dict) -> bool:
-        # Check if Windkessel BC is used
-        bc_type = self.config.get('boundary_conditions', {}).get('outlets', {}).get('type', '')
+        # Check if Windkessel BC is used (case-insensitive)
+        bc_type = self.config.get('boundary_conditions', {}).get('outlets', {}).get('type', '').upper()
 
         if bc_type != '3EWINDKESSEL':
             logger.info("Skipping Windkessel analysis (not using 3EWINDKESSEL BC)")

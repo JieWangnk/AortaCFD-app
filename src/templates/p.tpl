@@ -43,11 +43,13 @@ boundaryField
     {% for outlet in outlet_patches %}
     {{ outlet }}
     {
-        {% if outlet_type == "3EWINDKESSEL" %}
+        {% if outlet_type == "3EWINDKESSEL" or outlet_type == "2EWINDKESSEL" %}
             {# ========== Option 1: Windkessel (Physiological) ========== #}
+            {# 3-Element: R-C-Z model for pulsatile flow #}
+            {# 2-Element: R-C model (Z=0) for steady/CONSTANT flow #}
             {% if of_version >= 12 %}
         // OpenFOAM 12+ modularWKPressure boundary condition
-        // 3-Element Windkessel model (R-C-Z) - ALL KINEMATIC UNITS
+        // Windkessel model - 3-Element (R-C-Z) or 2-Element (R-C, Z=0) - ALL KINEMATIC UNITS
         {% set wk_settings = outlet_settings.get('windkessel_settings', {}) %}
         {% set outlet_params = wk_settings.get('outlet_parameters', {}).get(outlet, {}) %}
         {% set outlet_pressure_pa = outlet_initial_pressures.get(outlet, initial_pressure)|default(0) %}

@@ -97,7 +97,8 @@ class DistanceWallInletProfile:
         self.log = Logger("distance_wall_inlet").get_logger()
 
         # Extract settings
-        self.inlet_settings = config.get('inlet', {})
+        # Support both config structures: boundary_conditions.inlet or inlet
+        self.inlet_settings = config.get('boundary_conditions', {}).get('inlet') or config.get('inlet', {})
         self.geom_settings = config.get('geometry', {})
         self.phys_settings = config.get('physics', {})
 
@@ -107,7 +108,8 @@ class DistanceWallInletProfile:
         self.data_type = self.inlet_settings.get('data_type', 'flowrate').lower().strip()
 
         # Shape function settings
-        shape_str = self.inlet_settings.get('shape_function', 'poiseuille').lower()
+        # Default to power_law so that 'exponent' parameter is actually used
+        shape_str = self.inlet_settings.get('shape_function', 'power_law').lower()
         self.shape_function = self._parse_shape_function(shape_str)
         self.exponent = float(self.inlet_settings.get('exponent', 2.0))
         self.core_fraction = float(self.inlet_settings.get('core_fraction', 0.3))
@@ -377,9 +379,14 @@ class DistanceWallInletProfile:
 
         NOTE: STL files are PRE-SCALED to meters during case setup.
         No additional scaling needed.
+
+        Returns vertices that lie on the boundary (open edges) of the mesh.
+        Boundary edges are edges that belong to only one triangle face.
         """
         try:
             import trimesh
+            from collections import Counter
+
             inlet_stl = os.path.join(
                 self.case_directory, "constant", "triSurface",
                 f"{self.inlet_name}.stl"
@@ -390,12 +397,30 @@ class DistanceWallInletProfile:
             # STL is already in meters, no scaling needed
             mesh = trimesh.load(inlet_stl)
 
-            # Get boundary edges
-            outline = mesh.outline()
-            if hasattr(outline, 'vertices') and len(outline.vertices) > 0:
-                return outline.vertices
+            # Find boundary edges (edges that appear only once = open boundary)
+            # Each face contributes 3 edges
+            edges = []
+            for face in mesh.faces:
+                edges.append(tuple(sorted([face[0], face[1]])))
+                edges.append(tuple(sorted([face[1], face[2]])))
+                edges.append(tuple(sorted([face[2], face[0]])))
+
+            edge_counts = Counter(edges)
+            boundary_edges = [e for e, count in edge_counts.items() if count == 1]
+
+            if boundary_edges:
+                # Get unique boundary vertex indices
+                boundary_vertex_indices = set()
+                for e in boundary_edges:
+                    boundary_vertex_indices.add(e[0])
+                    boundary_vertex_indices.add(e[1])
+
+                boundary_vertices = mesh.vertices[list(boundary_vertex_indices)]
+                self.log.debug(f"Found {len(boundary_vertices)} boundary vertices from {len(boundary_edges)} boundary edges")
+                return boundary_vertices
             else:
-                # Fallback: use peripheral vertices
+                # Fallback: use peripheral vertices (mesh may be closed/watertight)
+                self.log.warning("No boundary edges found, using peripheral vertex fallback")
                 vertices = mesh.vertices
                 distances_from_center = np.linalg.norm(vertices - self.center, axis=1)
                 max_dist = np.max(distances_from_center)
