@@ -110,10 +110,20 @@ config: Dict[str, Any] = {
     # Solver settings
     "solvers": {
         "PIMPLE": {
-            "nOuterCorrectors": 5,
+            "nOuterCorrectors": 50,
             "nCorrectors": 3,
             "nNonOrthogonalCorrectors": 3,
-            "_comment": "MAXIMUM correctors for stability on poor/skewed meshes (mesh-adaptive system will adjust further)"
+            "_comment": (
+                "HIGH nOuterCorrectors (50) with convergence-based early exit. "
+                "Per OpenFOAM Wiki: 'Set nOuterCorrectors to high value (~50) and control with residual control.' "
+                "Provides safety margin for pulsatile Windkessel simulations during peak systole."
+            ),
+            "outerCorrectorResidualControl": {
+                "p": {"tolerance": 1e-3, "relTol": 0},
+                "U": {"tolerance": 1e-3, "relTol": 0},
+                "(k|epsilon|omega)": {"tolerance": 1e-3, "relTol": 0},
+                "_comment": "Relaxed tolerances (1e-3) for early exit - stability over tight convergence"
+            }
         },
         "relaxationFactors": {
             "fields": {
@@ -140,9 +150,10 @@ config: Dict[str, Any] = {
     # Time stepping
     "time_stepping": {
         "max_co": 0.5,
-        "max_delta_t": 0.001,
+        "initial_delta_t": 1e-6,  # Safe startup timestep to avoid Courant spike
+        "max_delta_t": 1e-4,      # Conservative max timestep for stability
         "adjustable_time_step": True,
-        "_comment": "Small time steps for stability with Euler scheme"
+        "_comment": "Conservative initial time step (1e-6s) for cardiovascular CFD stability"
     },
 
     # Metadata

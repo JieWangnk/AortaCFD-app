@@ -8,16 +8,28 @@ from .utils.logger import Logger
 
 class WkSetup:
     """
-    Computes 3-element Windkessel coefficients (R1, R2, C) for all outlets
-    using clinical MAP-based methodology.
+    Computes Windkessel coefficients for all outlets using clinical MAP-based methodology.
+
+    Supports both 2-element and 3-element Windkessel models:
+
+    2-ELEMENT WINDKESSEL (R-C model, Z=0):
+        - Appropriate for CONSTANT inlet (steady flow, no wave propagation)
+        - R = R_total = (MAP - P_venous) / mean_flow
+        - C = tau / R (compliance from decay time)
+        - Z = 0 (no characteristic impedance)
+
+    3-ELEMENT WINDKESSEL (R-C-Z model):
+        - Appropriate for TIMEVARYING inlet (pulsatile flow with wave reflection)
+        - R1 (proximal) = ρ·c/A (characteristic impedance from PWV)
+        - R2 (distal) = R_total - R1
+        - C = tau / R2 (compliance from diastolic decay)
 
     Method: Clinical Windkessel (Westerhof et al. 2009)
     1. MAP = DP + (SP-DP)/3
     2. Flow distribution: Murray's law (r³) with optional main outlet percentage
     3. R_total = (MAP - P_venous) / mean_flow
-    4. R1 (proximal) = ρ·c/A (characteristic impedance from PWV)
-    5. R2 (distal) = R_total - R1
-    6. C (compliance) = tau / R2 (from diastolic decay time constant)
+    4. For 3-element: R1 = ρ·c/A, R2 = R_total - R1, C = tau/R2
+    5. For 2-element: R = R_total, C = tau/R, Z = 0
 
     PHYSICAL UNITS (SI):
         Input Parameters:
@@ -101,7 +113,27 @@ class WkSetup:
             self.log.info("Using DIRECT RCZ mode - skipping coefficient calculation")
             return
 
-        self.log.info("Calculating 3-Element Windkessel Coefficients (Clinical Method)")
+        # Determine whether to use 2-element or 3-element Windkessel
+        inlet_type = self.inlet_settings.get('type', 'TIMEVARYING').upper()
+        outlet_type = self.outlet_settings.get('type', '3EWINDKESSEL').upper()
+
+        # Auto-select 2-element for CONSTANT inlet if user hasn't explicitly chosen
+        auto_select = self.wk_model_settings.get('auto_select_model', True)
+        if outlet_type == '2EWINDKESSEL':
+            use_2element = True
+        elif inlet_type in ['CONSTANT', 'PARABOLIC'] and outlet_type == '3EWINDKESSEL' and auto_select:
+            use_2element = True
+            self.log.info("CONSTANT inlet detected: Auto-selecting 2-element Windkessel (Z=0)")
+            self.log.info("  Reason: Characteristic impedance (Z) models wave propagation,")
+            self.log.info("          which is not physically relevant for steady-state flow.")
+            self.log.info("  To force 3-element, set 'auto_select_model': false in windkessel_settings")
+        else:
+            use_2element = False
+
+        if use_2element:
+            self.log.info("Calculating 2-Element Windkessel Coefficients (R-C Model, Z=0)")
+        else:
+            self.log.info("Calculating 3-Element Windkessel Coefficients (Clinical Method)")
         self.log.info("-" * 80)
 
         tri_surface_dir = os.path.join(self.case_dir, "constant", "triSurface")
@@ -166,15 +198,19 @@ class WkSetup:
         DP = self.wk_model_settings.get("diastolic_pressure", 80)  # mmHg
         P_venous = self.wk_model_settings.get("venous_pressure", 0)  # mmHg (0-5 typical)
 
-        # Use MATLAB formula: MAP = (SP + DP) / 2 (simple average)
-        MAP = (SP + DP) / 2.0  # Mean arterial pressure (mmHg)
+        # Physiological MAP formula: MAP = DP + (SP-DP)/3 = (2*DP + SP)/3
+        # Accounts for diastole being ~2/3 of cardiac cycle
+        # Reference: Klabunde (2011) Cardiovascular Physiology Concepts
+        pulse_pressure = SP - DP
+        MAP = DP + (1.0 / 3.0) * pulse_pressure  # Mean arterial pressure (mmHg)
         MAP_Pa = MAP * self.MMHG_TO_PA  # Convert to Pa
         P_venous_Pa = P_venous * self.MMHG_TO_PA
 
         self.log.info(f"Step 1: Pressure targets")
         self.log.info(f"  Systolic pressure (SP): {SP} mmHg")
         self.log.info(f"  Diastolic pressure (DP): {DP} mmHg")
-        self.log.info(f"  Mean arterial pressure (MAP): {MAP:.1f} mmHg ({MAP_Pa:.0f} Pa) [MATLAB formula: (SP+DP)/2]")
+        self.log.info(f"  Pulse pressure (PP): {pulse_pressure} mmHg")
+        self.log.info(f"  Mean arterial pressure (MAP): {MAP:.1f} mmHg ({MAP_Pa:.0f} Pa) [MAP = DP + PP/3]")
         self.log.info(f"  Venous pressure (P_v): {P_venous} mmHg")
         self.log.info(f"  Driving pressure (MAP - P_v): {MAP - P_venous:.1f} mmHg")
 
@@ -231,73 +267,89 @@ class WkSetup:
             R_total_mmHg = R_total[i] / (self.MMHG_TO_PA * 1e6)
             self.log.info(f"  {outlet}: R_total = {R_total[i]:.2e} Pa·s/m³ ({R_total_mmHg:.1f} mmHg·s/mL)")
 
-        # Step 4: Proximal resistance R1 (characteristic impedance)
-        self.log.info(f"\nStep 4: Proximal resistance R1 = ρ·c/A (characteristic impedance)")
-
-        # Get density - support both 'blood_density' and 'rho' keys
-        rho = self.config['physics'].get('blood_density', self.config['physics'].get('rho', 1060))  # kg/m³
-        pwv_method = self.wk_model_settings.get('pwv_method', 'matlab')  # Default to MATLAB formula
-        pwv_value = self.wk_model_settings.get('pwv', None)  # m/s, if specified
-
-        # MATLAB PWV formula parameters
-        pwv_a = self.wk_model_settings.get('pwv_a', 13.3)
-        pwv_b = self.wk_model_settings.get('pwv_b', 0.3)
-
+        # Initialize R1 (proximal/characteristic impedance) and R2 (distal resistance)
         R1 = np.zeros(num_outlets)
-
-        for i, outlet in enumerate(outlet_patches):
-            A_i = outlet_areas[outlet]
-            A_mm2 = A_i * 1e6  # Convert m² to mm²
-
-            # Determine pulse wave velocity (PWV)
-            if pwv_value is not None:
-                # User-specified PWV
-                c_i = pwv_value
-                method = "user-specified"
-            elif pwv_method == 'matlab':
-                # MATLAB formula: c = a / (2*sqrt(A_mm²/π))^b
-                c_i = pwv_a / (2 * np.sqrt(A_mm2 / np.pi)) ** pwv_b
-                method = f"MATLAB formula: {pwv_a}/(2√(A/π))^{pwv_b}"
-            elif pwv_method == 'empirical':
-                # Empirical PWV from diameter (typical aortic values)
-                # Arch: 4-6 m/s, Thoracic: 5-7 m/s, Abdominal: 6-8 m/s
-                # Use simple formula based on area
-                diameter_mm = 2 * outlet_radii[outlet] * 1000
-                if diameter_mm > 15:
-                    c_i = 5.0  # Large vessels (arch/thoracic)
-                elif diameter_mm > 8:
-                    c_i = 6.0  # Medium vessels (abdominal)
-                else:
-                    c_i = 7.0  # Smaller vessels (branches)
-                method = "empirical"
-            else:
-                # Fallback: use fraction of R_total
-                R1[i] = 0.15 * R_total[i]
-                self.log.info(f"  {outlet}: R1 = {R1[i]:.2e} Pa·s/m³ (15% of R_total)")
-                continue
-
-            # Calculate characteristic impedance
-            R1[i] = rho * c_i / A_i
-
-            R1_mmHg = R1[i] / (self.MMHG_TO_PA * 1e6)
-            self.log.info(f"  {outlet}: A={A_mm2:.2f}mm², PWV = {c_i:.2f} m/s ({method}) → R1 = {R1[i]:.2e} Pa·s/m³ ({R1_mmHg:.1f} mmHg·s/mL)")
-
-        # Step 5: Distal resistance R2
-        self.log.info(f"\nStep 5: Distal resistance R2 = R_total - R1")
         R2 = np.zeros(num_outlets)
 
-        for i, outlet in enumerate(outlet_patches):
-            R2[i] = R_total[i] - R1[i]
-            if R2[i] < 0:
-                self.log.warning(f"  {outlet}: R2 < 0, setting R1 = 0.1*R_total")
-                R1[i] = 0.1 * R_total[i]
-                R2[i] = 0.9 * R_total[i]
+        if use_2element:
+            # 2-ELEMENT WINDKESSEL: R = R_total, Z = 0
+            self.log.info(f"\nStep 4: 2-Element Model - R = R_total, Z = 0 (no characteristic impedance)")
+            for i, outlet in enumerate(outlet_patches):
+                R1[i] = 0.0  # No proximal impedance for 2-element
+                R2[i] = R_total[i]  # Full resistance
+                R_mmHg = R2[i] / (self.MMHG_TO_PA * 1e6)
+                self.log.info(f"  {outlet}: R = {R2[i]:.2e} Pa·s/m³ ({R_mmHg:.1f} mmHg·s/mL), Z = 0")
 
-            R2_mmHg = R2[i] / (self.MMHG_TO_PA * 1e6)
-            self.log.info(f"  {outlet}: R2 = {R2[i]:.2e} Pa·s/m³ ({R2_mmHg:.1f} mmHg·s/mL)")
+            self.log.info(f"\nStep 5: Skipped (2-element model has no R1/R2 split)")
+        else:
+            # 3-ELEMENT WINDKESSEL: Calculate R1 from characteristic impedance
+            # Step 4: Proximal resistance R1 (characteristic impedance)
+            self.log.info(f"\nStep 4: Proximal resistance R1 = ρ·c/A (characteristic impedance)")
+
+            # Get density - support both 'blood_density' and 'rho' keys
+            rho = self.config['physics'].get('blood_density', self.config['physics'].get('rho', 1060))  # kg/m³
+            pwv_method = self.wk_model_settings.get('pwv_method', 'matlab')  # Default to MATLAB formula
+            pwv_value = self.wk_model_settings.get('pwv', None)  # m/s, if specified
+
+            # MATLAB PWV formula parameters
+            pwv_a = self.wk_model_settings.get('pwv_a', 13.3)
+            pwv_b = self.wk_model_settings.get('pwv_b', 0.3)
+
+            for i, outlet in enumerate(outlet_patches):
+                A_i = outlet_areas[outlet]
+                A_mm2 = A_i * 1e6  # Convert m² to mm²
+
+                # Determine pulse wave velocity (PWV)
+                if pwv_value is not None:
+                    # User-specified PWV
+                    c_i = pwv_value
+                    method = "user-specified"
+                elif pwv_method == 'matlab':
+                    # MATLAB formula: c = a / (2*sqrt(A_mm²/π))^b
+                    c_i = pwv_a / (2 * np.sqrt(A_mm2 / np.pi)) ** pwv_b
+                    method = f"MATLAB formula: {pwv_a}/(2√(A/π))^{pwv_b}"
+                elif pwv_method == 'empirical':
+                    # Empirical PWV from diameter (typical aortic values)
+                    # Arch: 4-6 m/s, Thoracic: 5-7 m/s, Abdominal: 6-8 m/s
+                    # Use simple formula based on area
+                    diameter_mm = 2 * outlet_radii[outlet] * 1000
+                    if diameter_mm > 15:
+                        c_i = 5.0  # Large vessels (arch/thoracic)
+                    elif diameter_mm > 8:
+                        c_i = 6.0  # Medium vessels (abdominal)
+                    else:
+                        c_i = 7.0  # Smaller vessels (branches)
+                    method = "empirical"
+                else:
+                    # Fallback: use fraction of R_total
+                    R1[i] = 0.15 * R_total[i]
+                    self.log.info(f"  {outlet}: R1 = {R1[i]:.2e} Pa·s/m³ (15% of R_total)")
+                    continue
+
+                # Calculate characteristic impedance
+                R1[i] = rho * c_i / A_i
+
+                R1_mmHg = R1[i] / (self.MMHG_TO_PA * 1e6)
+                self.log.info(f"  {outlet}: A={A_mm2:.2f}mm², PWV = {c_i:.2f} m/s ({method}) → R1 = {R1[i]:.2e} Pa·s/m³ ({R1_mmHg:.1f} mmHg·s/mL)")
+
+            # Step 5: Distal resistance R2
+            self.log.info(f"\nStep 5: Distal resistance R2 = R_total - R1")
+
+            for i, outlet in enumerate(outlet_patches):
+                R2[i] = R_total[i] - R1[i]
+                if R2[i] < 0:
+                    self.log.warning(f"  {outlet}: R2 < 0, setting R1 = 0.1*R_total")
+                    R1[i] = 0.1 * R_total[i]
+                    R2[i] = 0.9 * R_total[i]
+
+                R2_mmHg = R2[i] / (self.MMHG_TO_PA * 1e6)
+                self.log.info(f"  {outlet}: R2 = {R2[i]:.2e} Pa·s/m³ ({R2_mmHg:.1f} mmHg·s/mL)")
 
         # Step 6: Compliance C
-        self.log.info(f"\nStep 6: Compliance C = tau / R_total (from diastolic decay)")
+        if use_2element:
+            self.log.info(f"\nStep 6: Compliance C = tau / R (2-element formula)")
+        else:
+            self.log.info(f"\nStep 6: Compliance C = tau / R2 (3-element formula)")
 
         tau_systemic = self.wk_model_settings.get('tau', 1.92)  # seconds, MATLAB default: 1.92
         C_distribution = self.wk_model_settings.get('compliance_distribution', 'uniform')  # MATLAB uses uniform
@@ -331,7 +383,8 @@ class WkSetup:
 
         # Store calculated WK coefficients
         self.log.info(f"\n" + "=" * 80)
-        self.log.info("SUMMARY: Windkessel Parameters (OpenFOAM units: Pa·s/m³, m³/Pa)")
+        model_name = "2-Element (R-C, Z=0)" if use_2element else "3-Element (R-C-Z)"
+        self.log.info(f"SUMMARY: {model_name} Windkessel Parameters (OpenFOAM units: Pa·s/m³, m³/Pa)")
         self.log.info("=" * 80)
 
         outlet_parameters = {}
@@ -341,12 +394,15 @@ class WkSetup:
             q_init = mean_Q_outlets[i]  # m³/s
 
             outlet_parameters[name] = {
-                "R": float(R2[i]),      # OpenFOAM uses R2 as "R" (distal resistance)
+                "R": float(R2[i]),      # For 2E: R_total; For 3E: R2 (distal resistance)
                 "C": float(C[i]),       # Compliance
-                "Z": float(R1[i]),      # OpenFOAM uses R1 as "Z" (proximal/characteristic impedance)
+                "Z": float(R1[i]),      # For 2E: 0; For 3E: R1 (characteristic impedance)
                 "q_init": float(q_init) # Initial flow for WK state variables (prevents startup spike)
             }
-            self.log.info(f"{name:15s}: R(R2)={R2[i]:12.2e}  C={C[i]:12.2e}  Z(R1)={R1[i]:12.2e}  q_init={q_init*1e6:.2f} mL/s")
+            if use_2element:
+                self.log.info(f"{name:15s}: R={R2[i]:12.2e}  C={C[i]:12.2e}  Z=0  q_init={q_init*1e6:.2f} mL/s")
+            else:
+                self.log.info(f"{name:15s}: R(R2)={R2[i]:12.2e}  C={C[i]:12.2e}  Z(R1)={R1[i]:12.2e}  q_init={q_init*1e6:.2f} mL/s")
 
         self.wk_model_settings['outlet_parameters'] = outlet_parameters
         self.log.info("=" * 80)

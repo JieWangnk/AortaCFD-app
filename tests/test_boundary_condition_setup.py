@@ -303,9 +303,9 @@ class TestInitialPressureCalculations:
         bc_setup = BoundaryConditionSetup(config, self.case_dir)
         initial_p, outlet_pressures = bc_setup._calculate_initial_pressure()
 
-        # Initial pressure should be based on MAP
-        # MAP = (120 + 80) / 2 = 100 mmHg = 100 * 133.322 Pa
-        expected_p = 100 * 133.322
+        # Initial pressure should be based on diastolic pressure (default method)
+        # Diastolic = 80 mmHg = 80 * 133.322 Pa
+        expected_p = 80 * 133.322
         assert initial_p == pytest.approx(expected_p, rel=1e-4)
 
 

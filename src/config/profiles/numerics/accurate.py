@@ -1,212 +1,88 @@
-"""Accurate numeric profile - Low numerical diffusion for all physics models.
-
-IMPORTANT DISCLAIMER
-====================
-"Accurate" refers to LOW NUMERICAL DIFFUSION (minimal artificial dissipation),
-NOT guaranteed solution accuracy. Solution accuracy depends on:
-  - Mesh resolution and quality (requires convergence study)
-  - Physics modeling choices (turbulence model, wall treatment)
-  - Boundary condition specification
-  - Temporal resolution
-
-A preset NEVER makes a CFD solution scientifically publishable.
-Only a properly conducted convergence study can.
-
-OpenFOAM 12 COMPATIBLE - Works with foamRun solver modules (incompressibleFluid, etc.)
+"""Accurate numeric profile - Second-order with low numerical diffusion.
 
 INTENDED USE
 ============
-- Mesh independence / convergence studies
+- Mesh independence / convergence studies (GCI analysis)
 - Validation against experimental data
-- LES simulations (LUST preserves resolved turbulence)
-- Cases where numerical diffusion must be minimized
-- All physics models: laminar, RANS k-ω SST, LES
+- Cases requiring lower diffusion than standard profile
+- Good mesh quality (ortho > 65°, skewness < 3)
 
 CHARACTERISTICS
 ===============
-Time Integration:    CrankNicolson 0.9 (2nd order, implicit-explicit blend)
-Convection:          Gauss LUST grad(U) (hybrid: 75% central + 25% upwind, low diffusion)
-Gradients:           cellLimited Gauss linear 0.5 (tighter limiting than standard)
-Laplacian:           Gauss linear limited corrected 0.33 (bounded non-orthogonal correction)
-Solver:              PIMPLE with many correctors (3 outer, 3 inner)
-Relaxation:          Light (U: 0.9, p: 0.5) - rely on correctors for stability
-Residual tolerance:  1e-8 (tight convergence per timestep)
-Max Courant:         0.8 (smaller time steps for temporal resolution)
+Time Integration:    backward (2nd order implicit)
+Convection:          Gauss linearUpwind grad(U) (2nd order, low diffusion)
+Gradients:           cellLimited Gauss linear 1.0 (standard limiting)
+Laplacian:           Gauss linear corrected (full non-orthogonal correction)
+Solver:              PIMPLE with convergence-based exit
+Relaxation:          Moderate (p: 0.3, U: 0.7)
+Residual tolerance:  1e-7 (tighter than standard)
+Max Courant:         1.0 (adaptive time-stepping)
 
-IMPROVEMENTS OVER STANDARD
-===========================
-1. **Time Integration**: CrankNicolson 0.9 (2nd order) vs backward (2nd order)
-   - CN has better phase accuracy for wave propagation
-   - CN 0.9 coefficient balances accuracy (implicit-explicit blend) with stability
+COMPARISON TO OTHER PROFILES
+=============================
 
-2. **Convection**: LUST vs linearUpwind
-   - LUST = 75% central + 25% upwind blend
-   - Less numerical diffusion than pure linearUpwind
-   - Still bounded for stability
+vs standard:
+- Lower diffusion: linearUpwind vs limitedLinearV (TVD)
+- Full correction: corrected vs limited corrected 0.5
+- Tighter tolerances: 1e-7 vs 1e-6
+- Requires better mesh quality
 
-3. **Tighter Tolerances**: 1e-8 vs 1e-6
-   - Ensures converged solutions
-   - Essential for mesh independence studies
-
-4. **More Correctors**: 3/3 vs 2/2 (outer/inner)
-   - Better pressure-velocity coupling
-   - More accurate mass conservation
-
-5. **Limited Laplacian**: Coefficient 0.33
-   - Better handling of non-orthogonal meshes
-   - Prevents overshoot on imperfect meshes
+vs precise:
+- More stable: backward vs CrankNicolson, linearUpwind vs LUST
+- Less mesh-sensitive: works on ortho > 65° vs ortho > 70°
+- Faster computation: ~1.5x vs 2-3x baseline
 
 TRADE-OFFS
 ==========
-✅ Pros:
-   - Lower numerical diffusion than standard (preserves gradients)
-   - Suitable for ALL physics models (laminar, RANS, LES)
-   - REQUIRED for LES (LUST preserves resolved turbulence)
-   - Appropriate for mesh convergence studies
+Pros:
+   - Second-order with lower diffusion than standard
+   - More stable than precise profile
+   - Good for mesh convergence studies
+   - Works on typical good-quality meshes
 
-⚖️ Neutral:
-   - Requires GOOD mesh quality (ortho > 70°, skewness < 2)
-   - ~2-3x longer runtime than standard (tighter tolerances, more correctors)
+Neutral:
+   - Requires good mesh quality (ortho > 65°, skewness < 3)
+   - ~1.5x runtime vs standard
 
-❌ Cons:
-   - More expensive than standard
-   - May not converge on poor-quality meshes (use standard or improve mesh)
-   - Low diffusion alone does NOT guarantee solution accuracy
-   - Still requires mesh independence verification
-
-IMPORTANT: This profile provides low-diffusion NUMERICS.
-It does NOT guarantee solution accuracy or publication readiness.
+Cons:
+   - Not as low-diffusion as precise (for LES, use precise)
+   - May show oscillations on poor meshes (use standard)
 
 WHEN TO USE
 ===========
 Use 'accurate' profile when:
-1. ✅ Performing mesh independence studies (GCI analysis)
-2. ✅ Validating against experimental data
-3. ✅ LES simulations (LUST preserves resolved turbulence)
-4. ✅ Numerical diffusion must be minimized
+1. Performing mesh independence studies (GCI analysis)
+2. Validating against experimental data
+3. Good mesh quality verified (ortho > 65°)
+4. Need lower diffusion than standard but more stability than precise
 
 Use 'standard' profile when:
-1. 🔄 Initial testing or geometry exploration
-2. 🔄 Screening multiple cases quickly
-3. 🔄 Mesh quality is marginal (60° < ortho < 70°)
-4. 🔄 Computational budget is limited
+1. Production runs with Windkessel outlets
+2. Typical mesh quality
+3. Stability is priority
 
-Use 'robust' profile when:
-1. ⚠️ Debugging convergence issues
-2. ⚠️ Very poor mesh quality
-3. ⚠️ Initial geometry validation
+Use 'precise' profile when:
+1. LES simulations (LUST required)
+2. Excellent mesh quality (ortho > 70°)
+3. Minimal diffusion required
 
 MESH REQUIREMENTS
 =================
-Minimum requirements for 'accurate' profile:
-
-Orthogonality:  > 70° (preferably > 75°)
-Max skewness:   < 2 (preferably < 1.5)
-Aspect ratio:   < 100 (< 50 in regions of interest)
-
-For RANS:
-- y+ = 1-10 (wall-resolved or enhanced wall treatment)
-- OR y+ = 30-300 (wall functions with high-quality near-wall mesh)
-
-For LES:
-- y+ < 1 (MANDATORY wall-resolved)
-- Smooth boundary layer mesh with expansion ratio < 1.3
-
-Run checkMesh and resolve major warnings before using this profile.
+Recommended mesh quality:
+- Orthogonality: > 65 degrees (> 70 preferred)
+- Max skewness: < 3 (< 2 preferred)
+- Aspect ratio: < 100 (< 50 in regions of interest)
+- y+ (for RANS): 1-10 for wall-resolved, 30-300 for wall functions
 
 LITERATURE BASIS
 ================
-LUST Scheme (Linear Upwind Stabilised Transport):
-  Friess, C., Manceau, R., Gatski, T.B. (2015).
-  "Toward an equivalence criterion for hybrid RANS/LES methods."
-  Computers & Fluids, 122, 233-246.
+- OpenFOAM User Guide (section 4.4.2): "linearUpwind provides second-order
+  accuracy with improved stability over pure central differencing."
 
-CrankNicolson Time Integration:
-  Crank, J., Nicolson, P. (1947).
-  "A practical method for numerical evaluation of PDEs."
-  Mathematical Proceedings of the Cambridge Philosophical Society.
+- Jasak, H. (1996). Error Analysis and Estimation for FVM with Applications
+  to Fluid Flows. PhD Thesis, Imperial College.
 
-OpenFOAM User Guide (v11+):
-  Section 4.4.1: "CrankNicolson coefficient 0.9 provides good balance"
-  Section 4.4.2: "LUST combines accuracy of central with boundedness"
-
-Verification & Validation:
-  Roache, P.J. (1998). "Verification of Codes and Calculations."
-  AIAA Journal, 36(5), 696-702. (Grid Convergence Index method)
-
-CONVERGENCE STUDY REQUIREMENTS (MANDATORY FOR PUBLICATIONS)
-============================================================
-Using the 'accurate' profile is NECESSARY but NOT SUFFICIENT for publishable results.
-You MUST also perform:
-
-1. ✅ Mesh Independence Study (REQUIRED):
-   - Run at 3+ mesh levels (base, 1.5x refinement, 2x refinement)
-   - Calculate Grid Convergence Index (GCI) per Roache (1998)
-   - Verify monotonic convergence
-   - Document observed order of accuracy
-   - Report GCI uncertainty for all key quantities
-
-2. ✅ Temporal Convergence (REQUIRED for transient):
-   - Halve time-step (Co → Co/2)
-   - Show < 1% change in key results
-   - Document temporal convergence behavior
-
-3. ✅ Residual Monitoring:
-   - All residuals < 1e-8 per timestep
-   - Mass conservation error < 0.01%
-   - Document residual histories
-
-4. ✅ Scheme Documentation:
-   - State: "LUST convection (bounded 2nd order)"
-   - State: "CrankNicolson 0.9 time integration"
-   - Cite relevant literature
-
-5. ✅ Validation (if available):
-   - Experimental data comparison
-   - Analytical solutions
-   - Higher-fidelity simulations (DNS/LES for RANS validation)
-
-WITHOUT mesh independence verification, results are NOT publication-ready
-regardless of which numeric profile is used.
-
-EXAMPLE METHODS SECTION FOR PAPER
-==================================
-"Simulations employed OpenFOAM v12 with second-order
-discretization schemes throughout. Time integration used the Crank-Nicolson
-scheme (α=0.9), providing implicit stability with reduced numerical diffusion
-compared to fully implicit methods. Convection terms employed the Linear
-Upwind Stabilised Transport (LUST) scheme, which blends 75% central
-differencing with 25% linearUpwind stabilization, maintaining second-order
-formal accuracy while ensuring boundedness. Pressure-velocity coupling utilized
-the PIMPLE algorithm with 3 outer correctors and 3 inner pressure correctors
-per time step. All equation residuals were converged to 10⁻⁸ per timestep.
-Mesh independence was verified via Grid Convergence Index (GCI) analysis on
-three successively refined meshes (refinement ratio r=√2), yielding estimated
-discretization uncertainties of <X% for [specific quantities]. The observed
-order of convergence was Y, consistent with the formal accuracy of the schemes."
-
-COMPUTATIONAL COST
-==================
-Expect ~2-3x longer runtime compared to 'standard' profile:
-- Tighter tolerances: 1e-8 vs 1e-6 → +30-50% per iteration
-- More correctors: 3/3 vs 2/2 → +50% per time step
-- Smaller Co: 0.8 vs 1.0 → +25% more time steps
-
-Budget accordingly. For a case taking 1 hour on 'standard',
-expect 2-3 hours on 'accurate'.
-
-WORTH IT for:
-- Mesh convergence studies (essential for low truncation error)
-- Validation against experiments (minimizes numerical artifacts)
-- LES simulations (LUST preserves resolved turbulence)
-
-NOT WORTH IT for:
-- Initial geometry testing (use standard)
-- Multiple screening cases (use standard)
-- Poor mesh quality (fix mesh first)
-
-REMEMBER: Computational cost of 'accurate' profile is wasted if you
-don't also perform mesh independence verification.
+- Roache, P.J. (1998). Verification and Validation. AIAA Journal 36(5).
 """
 
 from typing import Any, Dict
@@ -214,54 +90,37 @@ from typing import Any, Dict
 config: Dict[str, Any] = {
     # Time discretization
     "ddtSchemes": {
-        "default": "CrankNicolson 0.9",
-        "_comment": (
-            "Second-order implicit-explicit blend (α=0.9). "
-            "Better phase accuracy than backward scheme. "
-            "90% implicit (stable), 10% explicit (accurate). "
-            "Use 1.0 if stability issues arise."
-        )
+        "default": "backward",
+        "_comment": "Second-order implicit - stable and accurate for transient flows"
     },
 
     # Gradient discretization
     "gradSchemes": {
-        "default": "cellLimited Gauss linear 0.5",
-        "grad(U)": "cellLimited Gauss linear 0.5",
-        "_comment": (
-            "Tighter limiting (0.5) than standard (1.0). "
-            "Reduces overshoots on complex geometries. "
-            "Requires ortho > 70° for stability."
-        )
+        "default": "cellLimited Gauss linear 1",
+        "grad(U)": "cellLimited Gauss linear 1",
+        "grad(p)": "Gauss linear",
+        "_comment": "Standard gradient limiting (1.0) - less restrictive than standard profile"
     },
 
     # Convection discretization
     "divSchemes": {
         "default": "none",
-        "div(phi,U)": "Gauss LUST grad(U)",
-        "div(phi,k)": "Gauss limitedLinear 1",
-        "div(phi,omega)": "Gauss limitedLinear 1",
-        "div(phi,epsilon)": "Gauss limitedLinear 1",
+        "div(phi,U)": "Gauss linearUpwind grad(U)",
+        "div(phi,k)": "Gauss linearUpwind grad(k)",
+        "div(phi,omega)": "Gauss linearUpwind grad(omega)",
+        "div(phi,epsilon)": "Gauss linearUpwind grad(epsilon)",
         "div((nuEff*dev2(T(grad(U)))))": "Gauss linear",
-        "div(B)": "Gauss linear",
         "_comment": (
-            "LUST: Linear Upwind Stabilised Transport. "
-            "Blends 75% Gauss linear (central) + 25% linearUpwind. "
-            "Lower numerical diffusion than pure linearUpwind. "
-            "Bounded stability suitable for all physics models. "
-            "Turbulence: limitedLinear 1 (bounded, conservative for k/ω/ε). "
-            "See: Friess et al. (2015), Computers & Fluids 122:233-246."
+            "linearUpwind: 2nd order with gradient-based upwinding. "
+            "Lower diffusion than limitedLinearV but unbounded. "
+            "Requires good mesh quality for stability."
         )
     },
 
     # Laplacian discretization
     "laplacianSchemes": {
-        "default": "Gauss linear limited corrected 0.33",
-        "_comment": (
-            "Second-order with limited non-orthogonal correction. "
-            "Coefficient 0.33 limits correction for stability. "
-            "Better than plain 'corrected' on imperfect meshes. "
-            "Prevents overshoot on non-orthogonal cells."
-        )
+        "default": "Gauss linear corrected",
+        "_comment": "Full non-orthogonal correction - requires good mesh orthogonality"
     },
 
     # Interpolation
@@ -272,93 +131,85 @@ config: Dict[str, Any] = {
 
     # Surface-normal gradients
     "snGradSchemes": {
-        "default": "limited corrected 0.33",
-        "_comment": "Limited correction matching Laplacian scheme"
+        "default": "corrected",
+        "_comment": "Full correction - requires good mesh orthogonality"
     },
 
     # Solver settings
     "solvers": {
         "PIMPLE": {
-            "nOuterCorrectors": 3,
-            "nCorrectors": 3,
-            "nNonOrthogonalCorrectors": 2,
+            "nOuterCorrectors": 50,
+            "nCorrectors": 2,
+            "nNonOrthogonalCorrectors": 1,
+            "momentumPredictor": True,
             "_comment": (
-                "3 outer correctors for tight pressure-velocity coupling. "
-                "3 inner pressure correctors for accurate mass conservation. "
-                "2 non-orthogonal correctors for complex geometries."
-            )
+                "HIGH nOuterCorrectors (50) with convergence-based early exit. "
+                "Standard corrector counts for efficiency."
+            ),
+            "outerCorrectorResidualControl": {
+                "p": {"tolerance": 1e-4, "relTol": 0},
+                "U": {"tolerance": 1e-5, "relTol": 0},
+                "(k|epsilon|omega)": {"tolerance": 1e-5, "relTol": 0},
+                "_comment": "Standard tolerances for convergence-based early exit"
+            }
         },
         "relaxationFactors": {
             "fields": {
-                "p": 0.5,
-                "_comment": "Light pressure relaxation (rely on correctors)"
+                "p": 0.3,
+                "pFinal": 1.0,
+                "_comment": "Moderate pressure relaxation with full correction on final iteration"
             },
             "equations": {
-                "U": 0.9,
-                "k": 0.8,
-                "omega": 0.8,
-                "epsilon": 0.8,
-                "_comment": "Light equation relaxation for faster convergence with many correctors"
+                "U": 0.7,
+                "UFinal": 1.0,
+                "k": 0.7,
+                "kFinal": 1.0,
+                "omega": 0.7,
+                "omegaFinal": 1.0,
+                "epsilon": 0.7,
+                "epsilonFinal": 1.0,
+                "_comment": "Moderate relaxation with full correction on final PIMPLE iteration"
             }
         },
         "residualControl": {
-            "p": 1e-8,
-            "U": 1e-8,
-            "k": 1e-8,
-            "omega": 1e-8,
-            "_comment": "Tight tolerances for converged solutions per timestep"
+            "p": 1e-7,
+            "U": 1e-7,
+            "k": 1e-7,
+            "omega": 1e-7,
+            "_comment": "Tighter tolerance than standard for convergence studies"
         }
     },
 
     # Time stepping
     "time_stepping": {
-        "max_co": 0.8,
-        "max_delta_t": 0.0008,
+        "max_co": 1.0,
+        "initial_delta_t": 1e-6,
+        "max_delta_t": 1e-3,
         "adjustable_time_step": True,
-        "_comment": (
-            "Co=0.8 for accuracy with CrankNicolson. "
-            "Smaller than standard (Co=1.0) for temporal accuracy. "
-            "Larger than aggressive/LES-only profiles (Co=0.3-0.5). "
-            "Suitable for laminar, RANS, and LES."
-        )
+        "_comment": "Standard time stepping with Co=1.0"
     },
 
     # Metadata
     "_profile_metadata": {
         "name": "accurate",
-        "formal_order_of_accuracy": 2,
-        "stability": "good (requires quality mesh)",
-        "numerical_diffusion": "low (LUST preserves gradients)",
-        "intended_use": "convergence studies, validation, LES",
-        "recommended_for": "cases requiring minimal numerical diffusion",
-        "not_recommended_for": "poor meshes, initial testing, screening simulations",
-        "mesh_requirements": "orthogonality > 70°, skewness < 2, y+ < 1 for LES",
-        "disclaimer": (
-            "'Accurate' refers to low numerical diffusion, NOT guaranteed solution accuracy. "
-            "Solution accuracy requires mesh independence verification (GCI analysis)."
-        ),
-        "improvements_over_standard": [
-            "CrankNicolson time integration (better phase accuracy)",
-            "LUST convection (less diffusion than linearUpwind)",
-            "Tighter tolerances (1e-8 vs 1e-6)",
-            "More correctors (3/3 vs 2/2)",
-            "Limited Laplacian (better non-orthogonal handling)"
+        "order_of_accuracy": 2,
+        "stability": "good",
+        "numerical_diffusion": "low (linearUpwind)",
+        "intended_use": "convergence studies, validation, good meshes",
+        "recommended_for": "mesh independence studies, validation cases",
+        "expected_diffusion": "low (unbounded 2nd order)",
+        "mesh_requirements": "orthogonality > 65 degrees, skewness < 3",
+        "key_features": [
+            "linearUpwind for low-diffusion convection",
+            "Full corrected Laplacian/snGrad",
+            "Tighter tolerances (1e-7)",
+            "pFinal/UFinal = 1 for full correction"
         ],
         "literature": [
-            "Friess et al. (2015). LUST scheme. Computers & Fluids 122:233-246",
-            "Crank & Nicolson (1947). Practical method for PDEs. Math Proc Cambridge",
-            "Roache, P.J. (1998). Grid Convergence Index. AIAA Journal 36(5):696-702",
-            "OpenFOAM User Guide v11+, Sections 4.4-4.5 (Numerical Schemes)"
-        ],
-        "convergence_requirements": [
-            "MANDATORY: Mesh independence study (3+ levels, GCI analysis)",
-            "MANDATORY: Temporal convergence verification for transient cases",
-            "Run checkMesh - resolve major warnings (ortho > 70°, skewness < 2)",
-            "Residuals < 1e-8 for all variables (p, U, k, ω) per timestep",
-            "Mass conservation error < 0.01%",
-            "Compare to experimental/analytical data if available"
-        ],
-        "computational_cost_multiplier": "2-3x vs standard profile"
+            "OpenFOAM User Guide v11, Section 4.4 (Numerical Schemes)",
+            "Jasak, H. (1996). Error Analysis for FVM. PhD Thesis, Imperial College",
+            "Roache, P.J. (1998). Verification and Validation. AIAA Journal 36(5)"
+        ]
     }
 }
 

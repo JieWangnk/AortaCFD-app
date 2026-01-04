@@ -18,7 +18,8 @@ class InletMapping:
         self.log = Logger("inlet_mapping").get_logger()
 
         # Get all necessary settings from the config dictionary
-        self.inlet_settings = self.config['inlet']
+        # Support both config structures: boundary_conditions.inlet or inlet
+        self.inlet_settings = self.config.get('boundary_conditions', {}).get('inlet') or self.config.get('inlet', {})
         self.geom_settings = self.config['geometry']
         self.phys_settings = self.config['physics']
         self.inlet_name = self.geom_settings['inlet_keywords_ordered']
@@ -525,21 +526,25 @@ class InletMapping:
             # Load boundary points from inlet STL
             inlet_boundary_points = self._get_inlet_boundary_points()
 
-        distances = np.zeros(len(points))
+        # Use KDTree for fast nearest-neighbor lookup: O(N log M) instead of O(N*M)
+        try:
+            from scipy.spatial import cKDTree
 
-        for idx, pt in enumerate(points):
-            # Project point onto inlet plane (remove component along normal)
-            # For simplicity, use 2D distance in the inlet plane
-            pt_2d = pt[:2] if len(pt) >= 2 else pt
+            # Project to 2D (inlet plane) for distance calculation
+            points_2d = points[:, :2] if points.shape[1] >= 2 else points
+            boundary_2d = inlet_boundary_points[:, :2] if inlet_boundary_points.shape[1] >= 2 else inlet_boundary_points
 
-            # Find minimum distance to any boundary point
-            min_dist = np.inf
-            for boundary_pt in inlet_boundary_points:
-                boundary_2d = boundary_pt[:2] if len(boundary_pt) >= 2 else boundary_pt
-                dist = np.linalg.norm(pt_2d - boundary_2d)
-                min_dist = min(min_dist, dist)
+            tree = cKDTree(boundary_2d)
+            distances, _ = tree.query(points_2d, k=1)
 
-            distances[idx] = min_dist
+        except ImportError:
+            # Fallback to vectorized numpy
+            self.log.warning("scipy not available, using vectorized fallback (slower)")
+            distances = np.zeros(len(points))
+            for idx, pt in enumerate(points):
+                pt_2d = pt[:2] if len(pt) >= 2 else pt
+                boundary_2d = inlet_boundary_points[:, :2] if inlet_boundary_points.shape[1] >= 2 else inlet_boundary_points
+                distances[idx] = np.min(np.linalg.norm(boundary_2d - pt_2d, axis=1))
 
         return distances
 
@@ -883,7 +888,7 @@ class InletMapping:
         Vn_complex = None
         omega_fundamental = None
         n_harmonics_setting = self.inlet_settings.get('n_harmonics', 8)
-        profile_exponent = self.inlet_settings.get('profile_exponent', 2.0)
+        profile_exponent = self.inlet_settings.get('exponent', 2.0)
 
         if self.profile == 'womersley':
             # Simple single-frequency Womersley

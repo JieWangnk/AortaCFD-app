@@ -18,6 +18,11 @@ class ExecuteMeshingTask(Task):
             run_command(self.config, ["blockMesh"], case_dir, "log.blockMesh")
             run_command(self.config, ["surfaceFeatures"], case_dir, "log.surfaceFeatures")
 
+            # Note: surfaceFeatures creates closeness files with .stl in name
+            # e.g., wall_aorta.stl.closeness.internalPointCloseness
+            # snappyHexMesh expects this format when geometry is named "wall_aorta.stl"
+            # So we do NOT rename them - just distribute to processor directories
+
             if snappy_settings.get("parallel"):
                 n_proc = snappy_settings.get("nProcessors", 1)
 
@@ -28,6 +33,9 @@ class ExecuteMeshingTask(Task):
                 # Field files (0/p, 0/U) expect post-snappyHexMesh patches, not blockMesh "world" patch
                 run_command(self.config, ["decomposePar", "-force", "-noFields"], case_dir, "log.decomposePar.preMesh")
 
+                # Distribute closeness files to processor directories for parallel span refinement
+                self._distribute_closeness_files(case_dir, n_proc)
+
                 run_command(
                     self.config,
                     ["mpirun", "-np", str(n_proc), "snappyHexMesh", "-parallel", "-overwrite"],
@@ -35,6 +43,9 @@ class ExecuteMeshingTask(Task):
                     "log.snappyHexMesh",
                 )
                 run_command(self.config, ["reconstructPar", "-constant"], case_dir, "log.reconstructPar")
+
+                # Clean up processor directories to save disk space
+                self._cleanup_processor_directories(case_dir)
 
                 # Restore original decomposeParDict (using run_settings.subdomains for solver)
                 solver_subdomains = self.config.get("run_settings", {}).get("subdomains", 1)
@@ -109,6 +120,132 @@ class ExecuteMeshingTask(Task):
         except Exception as e:
             logger.warning(f"Could not analyze mesh quality: {e}")
             logger.warning("Proceeding without mesh quality check")
+
+    def _fix_closeness_file_names(self, case_dir: str):
+        """
+        Fix closeness file names for snappyHexMesh compatibility.
+
+        OpenFOAM 12's surfaceFeatures creates files like:
+            wall_aorta.stl.closeness.internalPointCloseness
+        But snappyHexMesh with insideSpan refinement expects:
+            wall_aorta.closeness.internalPointCloseness
+
+        This renames the files to remove the .stl extension.
+        """
+        import glob
+
+        tri_surface_dir = os.path.join(case_dir, "constant", "triSurface")
+
+        # Find all closeness files with .stl in the name
+        closeness_files = glob.glob(os.path.join(tri_surface_dir, "*.stl.closeness.*"))
+
+        fixed_count = 0
+        for old_path in closeness_files:
+            # Remove .stl from the filename
+            new_path = old_path.replace(".stl.closeness.", ".closeness.")
+            if old_path != new_path:
+                try:
+                    os.rename(old_path, new_path)
+                    fixed_count += 1
+                except OSError as e:
+                    logger.warning(f"Could not rename {old_path}: {e}")
+
+        if fixed_count > 0:
+            logger.info(f"Fixed {fixed_count} closeness file names for snappyHexMesh compatibility")
+
+    def _distribute_closeness_files(self, case_dir: str, n_proc: int):
+        """
+        Copy closeness files to processor directories for parallel meshing.
+
+        For parallel snappyHexMesh with insideSpan refinement, each processor
+        needs access to the closeness files in its own triSurface directory.
+
+        Note: surfaceFeatures creates files like wall_aorta.closeness.internalPointCloseness
+        But snappyHexMesh (when geometry is named "wall_aorta.stl") expects:
+        wall_aorta.stl.closeness.internalPointCloseness
+
+        So we need to copy with renamed files adding .stl before .closeness
+        """
+        import glob
+        import re
+
+        tri_surface_dir = os.path.join(case_dir, "constant", "triSurface")
+
+        # Find all closeness files
+        closeness_files = glob.glob(os.path.join(tri_surface_dir, "*.closeness.*"))
+
+        if not closeness_files:
+            logger.warning("No closeness files found - span refinement may not work")
+            return
+
+        logger.info(f"Distributing {len(closeness_files)} closeness files to {n_proc} processor directories...")
+
+        for i in range(n_proc):
+            proc_tri_dir = os.path.join(case_dir, f"processor{i}", "constant", "triSurface")
+
+            # Create directory if it doesn't exist
+            os.makedirs(proc_tri_dir, exist_ok=True)
+
+            # Copy each closeness file with .stl added to name
+            for src_file in closeness_files:
+                src_basename = os.path.basename(src_file)
+                # Convert: wall_aorta.closeness.xyz -> wall_aorta.stl.closeness.xyz
+                # Use regex to insert .stl before .closeness
+                if ".stl.closeness." not in src_basename:
+                    dst_basename = re.sub(r'\.closeness\.', '.stl.closeness.', src_basename)
+                else:
+                    dst_basename = src_basename
+                dst_file = os.path.join(proc_tri_dir, dst_basename)
+                try:
+                    shutil.copy2(src_file, dst_file)
+                except OSError as e:
+                    logger.warning(f"Could not copy {src_file} to processor{i}: {e}")
+
+        logger.info("Closeness files distributed to processor directories")
+
+    def _cleanup_processor_directories(self, case_dir: str):
+        """
+        Remove processor* directories after parallel meshing to save disk space.
+
+        After reconstructPar -constant, the mesh is consolidated in constant/polyMesh
+        and the processor directories are no longer needed.
+        """
+        import glob
+
+        processor_dirs = glob.glob(os.path.join(case_dir, "processor*"))
+
+        if not processor_dirs:
+            return
+
+        # Calculate total size before deletion
+        total_size = 0
+        for proc_dir in processor_dirs:
+            for dirpath, dirnames, filenames in os.walk(proc_dir):
+                for f in filenames:
+                    fp = os.path.join(dirpath, f)
+                    try:
+                        total_size += os.path.getsize(fp)
+                    except OSError:
+                        pass
+
+        # Remove directories
+        removed_count = 0
+        for proc_dir in processor_dirs:
+            try:
+                shutil.rmtree(proc_dir)
+                removed_count += 1
+            except OSError as e:
+                logger.warning(f"Could not remove {proc_dir}: {e}")
+
+        # Format size for display
+        if total_size > 1024 * 1024 * 1024:
+            size_str = f"{total_size / (1024 * 1024 * 1024):.1f} GB"
+        elif total_size > 1024 * 1024:
+            size_str = f"{total_size / (1024 * 1024):.1f} MB"
+        else:
+            size_str = f"{total_size / 1024:.1f} KB"
+
+        logger.info(f"🧹 Cleaned up {removed_count} processor directories (freed {size_str})")
 
     def _override_decompose_par_dict(self, case_dir: str, n_subdomains: int):
         """

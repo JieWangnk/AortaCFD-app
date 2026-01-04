@@ -53,7 +53,8 @@ maxCo           {{ controlDict.get('maxCo', 1.2) }};
 
 maxDeltaT       {{ controlDict.get('maxDeltaT', 1e-3) }};
 
-{% if config.get('windkessel_enabled', False) or config.get('outlets', {}).get('type') == '3EWINDKESSEL' or config.get('boundary_conditions', {}).get('outlets', {}).get('type') == '3EWINDKESSEL' %}
+{% set outlet_type = config.get('outlets', {}).get('type', '') or config.get('boundary_conditions', {}).get('outlets', {}).get('type', '') %}
+{% if config.get('windkessel_enabled', False) or outlet_type in ['2EWINDKESSEL', '3EWINDKESSEL'] %}
 
 libs
 (

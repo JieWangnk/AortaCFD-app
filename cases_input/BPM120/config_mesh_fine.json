@@ -1,6 +1,7 @@
 {
   "case_info": {
-    "patient_id": "BPM120_mesh_coarse"
+    "patient_id": "BPM120_mesh_fine",
+    "description": "Fine mesh (~1M cells) with CONSTANT inlet and 2-element Windkessel"
   },
 
   "physics": {
@@ -61,14 +62,17 @@
     },
 
     "outlets": {
-      "type": "3EWINDKESSEL",
+      "type": "2EWINDKESSEL",
+      "_comment": "2-element Windkessel (R-C, Z=0) appropriate for CONSTANT inlet - no wave propagation",
       "windkessel_settings": {
         "systolic_pressure": 120,
         "diastolic_pressure": 80,
         "venous_pressure": 0,
 
         "methodology": "murray_law_automatic",
-        "tau": 1.0
+        "tau": 1.0,
+
+        "coupling_mode": "implicit"
       }
     },
 

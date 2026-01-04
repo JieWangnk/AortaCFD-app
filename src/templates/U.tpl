@@ -78,30 +78,31 @@ boundaryField
         dampingFactor   {{ damping_factor }};
         value           uniform (0 0 0);
 
-        {% elif outlet_type == "3EWINDKESSEL" %}
-        // Windkessel outlet: Use inletOutlet for basic backflow handling
-        // - When flow is outward (normal): zeroGradient (extrapolate from interior)
-        // - When flow is inward (backflow): apply inletValue to prevent divergence
-        // For enhanced stability, set enable_stabilization: true in config
-        type            inletOutlet;
-        inletValue      uniform (0 0 0);  // Zero velocity during backflow
+        {% elif outlet_type in ["2EWINDKESSEL", "3EWINDKESSEL"] %}
+        // Windkessel outlet: Use pressureInletOutletVelocity for proper p-U coupling
+        // - Ensures velocity is consistent with pressure-driven Windkessel BC
+        // - Better stability than inletOutlet for pressure BCs
+        // For enhanced backflow stabilization, set enable_stabilization: true in config
+        type            pressureInletOutletVelocity;
+        phi             phi;
         value           uniform (0 0 0);
 
         {% elif outlet_type == "fixedPressure" %}
         // Fixed pressure: use pressureInletOutletVelocity for better coupling
         type            pressureInletOutletVelocity;
+        phi             phi;
         value           uniform (0 0 0);
 
         {% elif outlet_type == "resistance" %}
         // Resistance: velocity determined by flow rate
-        type            inletOutlet;
-        inletValue      uniform (0 0 0);
+        type            pressureInletOutletVelocity;
+        phi             phi;
         value           uniform (0 0 0);
 
         {% else %}
-        // Default: inletOutlet for safety
-        type            inletOutlet;
-        inletValue      uniform (0 0 0);
+        // Default: pressureInletOutletVelocity for pressure-driven outlets
+        type            pressureInletOutletVelocity;
+        phi             phi;
         value           uniform (0 0 0);
         {% endif %}
     }

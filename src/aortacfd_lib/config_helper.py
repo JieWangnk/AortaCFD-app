@@ -16,7 +16,7 @@ class BoundaryConditionsHelper:
         self.key_parameters = {
             "geometry.refinement_level": ["coarse", "medium", "fine"],
             "inlet.profile": ["plug", "parabolic", "womersley"],
-            "outlets.type": ["ZEROGRADIENT", "FIXEDVALUE", "3EWINDKESSEL"],
+            "outlets.type": ["ZEROGRADIENT", "FIXEDVALUE", "2EWINDKESSEL", "3EWINDKESSEL"],
             "simulation_control.number_of_cycles": [1, 2, 3, 4, 5]
         }
         
@@ -73,12 +73,12 @@ class BoundaryConditionsHelper:
         refinement_level = partial_config.get("geometry", {}).get("refinement_level", "medium")
         completed_config = self._apply_refinement_level_defaults(completed_config, refinement_level)
         
-        # Auto-complete based on inlet profile
-        inlet_profile = partial_config.get("inlet", {}).get("profile", "womersley")
+        # Auto-complete based on inlet profile (case-insensitive)
+        inlet_profile = partial_config.get("inlet", {}).get("profile", "womersley").lower()
         completed_config = self._apply_inlet_profile_defaults(completed_config, inlet_profile)
-        
-        # Auto-complete based on outlet type
-        outlet_type = partial_config.get("outlets", {}).get("type", "ZEROGRADIENT")
+
+        # Auto-complete based on outlet type (case-insensitive)
+        outlet_type = partial_config.get("outlets", {}).get("type", "ZEROGRADIENT").upper()
         completed_config = self._apply_outlet_type_defaults(completed_config, outlet_type)
         
         # Apply general intelligent defaults
@@ -149,15 +149,15 @@ class BoundaryConditionsHelper:
         elif refinement == "fine":
             suggestions.append("'Fine' mesh will be slower but more accurate")
             
-        # Inlet profile suggestions
-        profile = config.get("inlet", {}).get("profile")
+        # Inlet profile suggestions (case-insensitive)
+        profile = config.get("inlet", {}).get("profile", "").lower()
         if profile == "plug":
             suggestions.append("Consider 'womersley' profile for realistic pulsatile flow")
         elif profile == "womersley":
             suggestions.append("Womersley profile requires kinematic viscosity (nu) in physics config")
-            
-        # Outlet suggestions
-        outlet_type = config.get("outlets", {}).get("type")
+
+        # Outlet suggestions (case-insensitive)
+        outlet_type = config.get("outlets", {}).get("type", "").upper()
         if outlet_type == "ZEROGRADIENT":
             suggestions.append("Consider 'WINDKESSEL' outlets for physiological boundary conditions")
             
@@ -235,7 +235,7 @@ class BoundaryConditionsHelper:
         if "outlets" not in config:
             config["outlets"] = {}
             
-        if outlet_type == "3EWINDKESSEL" and "windkessel_settings" not in config["outlets"]:
+        if outlet_type in ["2EWINDKESSEL", "3EWINDKESSEL"] and "windkessel_settings" not in config["outlets"]:
             config["outlets"]["windkessel_settings"] = {
                 "systolic_pressure": 120,
                 "diastolic_pressure": 80,

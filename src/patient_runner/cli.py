@@ -24,8 +24,12 @@ QUICK START EXAMPLES
   # Use custom config
   python run_patient.py patient1 --config my_config.json
 
-  # Run only specific steps
-  python run_patient.py patient1 --step mesh --step solver
+  # Run only specific steps (two syntaxes)
+  python run_patient.py patient1 --steps case,mesh          # comma-separated
+  python run_patient.py patient1 --step mesh --step solver  # multiple flags
+
+  # Mesh-only for testing different configs
+  python run_patient.py BPM120 -c cases_input/BPM120/config_mesh_span20.json -s case,mesh
 
   # Update existing case with new config (preserves mesh!)
   python run_patient.py patient1 --update output/patient1/run_xxx/openfoam
@@ -60,9 +64,11 @@ WORKFLOW STEPS
 
     # ═══ WORKFLOW CONTROL ═══
     workflow_group = parser.add_argument_group('Workflow Control')
-    workflow_group.add_argument('--step', action='append',
+    workflow_group.add_argument('--steps', '-s', metavar='STEPS',
+                               help='Run specific step(s), comma-separated (e.g., --steps case,mesh)')
+    workflow_group.add_argument('--step', action='append', dest='step_list',
                                choices=['case', 'mesh', 'boundary', 'regenerate-numerics', 'solver', 'reconstruct', 'post', 'all'],
-                               help='Run specific step(s) (default: all). Can use multiple times.')
+                               help='Run specific step (can use multiple times: --step case --step mesh)')
 
     # ═══ CONFIGURATION ═══
     config_group = parser.add_argument_group('Configuration')
@@ -246,9 +252,28 @@ def main():
     elif args.case_dir:
         options['case_dir'] = args.case_dir
 
-    # Handle workflow steps
-    steps = args.step if args.step else ['all']
-    
+    # Handle workflow steps - support both --steps (comma-separated) and --step (multiple)
+    valid_steps = {'case', 'mesh', 'boundary', 'regenerate-numerics', 'solver', 'reconstruct', 'post', 'all'}
+    steps = []
+
+    # Parse --steps (comma-separated string)
+    if args.steps:
+        for s in args.steps.split(','):
+            s = s.strip()
+            if s not in valid_steps:
+                print(f"❌ Invalid step: '{s}'")
+                print(f"   Valid steps: {', '.join(sorted(valid_steps))}")
+                sys.exit(1)
+            steps.append(s)
+
+    # Parse --step (multiple arguments)
+    if args.step_list:
+        steps.extend(args.step_list)
+
+    # Default to 'all' if no steps specified
+    if not steps:
+        steps = ['all']
+
     # Map CLI step names to workflow commands
     step_mapping = {
         'case': 'setup:dict',

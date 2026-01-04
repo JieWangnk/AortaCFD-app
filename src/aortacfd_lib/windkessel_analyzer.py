@@ -167,7 +167,7 @@ class WindkesselAnalyzer:
         bc_config = self.config.get('boundary_conditions', {})
         outlets_config = bc_config.get('outlets', {})
 
-        if outlets_config.get('type') == '3EWINDKESSEL':
+        if outlets_config.get('type', '').upper() == '3EWINDKESSEL':
             wk_params = outlets_config.get('windkessel_params', {})
 
             for outlet in self.outlet_patches:

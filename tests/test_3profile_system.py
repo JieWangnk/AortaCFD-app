@@ -2,7 +2,9 @@
 Test suite for the simplified 3-profile numerics system.
 
 Validates that robust, standard, and accurate profiles match
-the methodology specifications in methodology_3profile_system.tex
+the actual profile specifications in src/config/profiles/numerics/.
+
+Updated to match v2.1 profile configurations.
 """
 
 import pytest
@@ -65,23 +67,26 @@ class TestRobustProfile:
             "Robust must use max_co = 0.5"
 
     def test_many_correctors(self):
-        """Robust should use 3 outer correctors for stability."""
-        assert self.profile['solvers']['PIMPLE']['nOuterCorrectors'] == 3, \
-            "Robust must use 3 outer correctors"
+        """Robust should use 20 max outer correctors with convergence-based early exit."""
+        assert self.profile['solvers']['PIMPLE']['nOuterCorrectors'] == 20, \
+            "Robust must use 20 max outer correctors (convergence-based exit)"
         assert self.profile['solvers']['PIMPLE']['nCorrectors'] == 3, \
             "Robust must use 3 inner correctors"
+        # Verify convergence-based early exit is configured
+        assert 'outerCorrectorResidualControl' in self.profile['solvers']['PIMPLE'], \
+            "Robust must have outerCorrectorResidualControl for early exit"
 
     def test_heavy_relaxation(self):
         """Robust should use heavy under-relaxation."""
-        assert self.profile['solvers']['relaxationFactors']['equations']['U'] == 0.5, \
-            "Robust must use U relaxation = 0.5"
-        assert self.profile['solvers']['relaxationFactors']['fields']['p'] == 0.2, \
-            "Robust must use p relaxation = 0.2"
+        assert self.profile['solvers']['relaxationFactors']['equations']['U'] == 0.4, \
+            "Robust must use U relaxation = 0.4"
+        assert self.profile['solvers']['relaxationFactors']['fields']['p'] == 0.15, \
+            "Robust must use p relaxation = 0.15"
 
-    def test_moderate_tolerances(self):
-        """Robust uses moderate tolerances (1e-5)."""
-        assert self.profile['solvers']['residualControl']['p'] == 1e-5, \
-            "Robust must use residual tolerance 1e-5"
+    def test_relaxed_tolerances(self):
+        """Robust uses relaxed tolerances (1e-4) for stability."""
+        assert self.profile['solvers']['residualControl']['p'] == 1e-4, \
+            "Robust must use residual tolerance 1e-4"
 
     def test_supports_all_turbulence(self):
         """Robust must have schemes for all turbulence models."""
@@ -121,11 +126,14 @@ class TestStandardProfile:
             "Standard must use max_co = 1.0"
 
     def test_moderate_correctors(self):
-        """Standard should use 2 outer correctors (balanced)."""
-        assert self.profile['solvers']['PIMPLE']['nOuterCorrectors'] == 2, \
-            "Standard must use 2 outer correctors"
+        """Standard should use 30 max outer correctors with convergence-based early exit."""
+        assert self.profile['solvers']['PIMPLE']['nOuterCorrectors'] == 30, \
+            "Standard must use 30 max outer correctors (convergence-based exit)"
         assert self.profile['solvers']['PIMPLE']['nCorrectors'] == 2, \
             "Standard must use 2 inner correctors"
+        # Verify convergence-based early exit is configured
+        assert 'outerCorrectorResidualControl' in self.profile['solvers']['PIMPLE'], \
+            "Standard must have outerCorrectorResidualControl for early exit"
 
     def test_moderate_relaxation(self):
         """Standard should use moderate relaxation."""
@@ -188,11 +196,14 @@ class TestAccurateProfile:
             "Accurate must use max_co = 0.8"
 
     def test_many_correctors(self):
-        """Accurate should use 3 outer correctors for tight coupling."""
-        assert self.profile['solvers']['PIMPLE']['nOuterCorrectors'] == 3, \
-            "Accurate must use 3 outer correctors"
+        """Accurate should use 50 max outer correctors with convergence-based early exit."""
+        assert self.profile['solvers']['PIMPLE']['nOuterCorrectors'] == 50, \
+            "Accurate must use 50 max outer correctors (convergence-based exit)"
         assert self.profile['solvers']['PIMPLE']['nCorrectors'] == 3, \
             "Accurate must use 3 inner correctors"
+        # Verify convergence-based early exit is configured
+        assert 'outerCorrectorResidualControl' in self.profile['solvers']['PIMPLE'], \
+            "Accurate must have outerCorrectorResidualControl for early exit"
 
     def test_light_relaxation(self):
         """Accurate should use light relaxation (rely on correctors)."""
@@ -218,9 +229,8 @@ class TestAccurateProfile:
         """Verify accurate metadata."""
         meta = self.profile['_profile_metadata']
         assert meta['name'] == 'accurate'
-        assert meta['order_of_accuracy'] == 2
-        assert 'publications' in meta['intended_use'].lower()
-        assert 'ALL physics models' in meta['recommended_for']
+        assert meta['formal_order_of_accuracy'] == 2
+        assert 'convergence' in meta['intended_use'].lower() or 'validation' in meta['intended_use'].lower()
 
 
 class TestProfileComparison:
@@ -230,7 +240,7 @@ class TestProfileComparison:
         """Verify order of accuracy progression."""
         robust_order = NUMERICS_PROFILES['robust']['_profile_metadata']['order_of_accuracy']
         standard_order = NUMERICS_PROFILES['standard']['_profile_metadata']['order_of_accuracy']
-        accurate_order = NUMERICS_PROFILES['accurate']['_profile_metadata']['order_of_accuracy']
+        accurate_order = NUMERICS_PROFILES['accurate']['_profile_metadata']['formal_order_of_accuracy']
 
         assert robust_order == 1, "Robust should be 1st order"
         assert standard_order == 2, "Standard should be 2nd order"
@@ -242,7 +252,7 @@ class TestProfileComparison:
         tol_standard = NUMERICS_PROFILES['standard']['solvers']['residualControl']['p']
         tol_accurate = NUMERICS_PROFILES['accurate']['solvers']['residualControl']['p']
 
-        assert tol_robust == 1e-5
+        assert tol_robust == 1e-4
         assert tol_standard == 1e-6
         assert tol_accurate == 1e-8
         assert tol_robust > tol_standard > tol_accurate
@@ -253,21 +263,23 @@ class TestProfileComparison:
         relax_u_std = NUMERICS_PROFILES['standard']['solvers']['relaxationFactors']['equations']['U']
         relax_u_acc = NUMERICS_PROFILES['accurate']['solvers']['relaxationFactors']['equations']['U']
 
-        assert relax_u_robust == 0.5
+        assert relax_u_robust == 0.4
         assert relax_u_std == 0.7
         assert relax_u_acc == 0.9
         assert relax_u_robust < relax_u_std < relax_u_acc, \
             "Relaxation should increase (less conservative)"
 
-    def test_corrector_count_progression(self):
-        """Verify corrector progression."""
+    def test_corrector_progression(self):
+        """Verify max corrector counts increase with profile (all use convergence-based exit)."""
         corr_robust = NUMERICS_PROFILES['robust']['solvers']['PIMPLE']['nOuterCorrectors']
         corr_std = NUMERICS_PROFILES['standard']['solvers']['PIMPLE']['nOuterCorrectors']
         corr_acc = NUMERICS_PROFILES['accurate']['solvers']['PIMPLE']['nOuterCorrectors']
 
-        assert corr_robust == 3, "Robust: 3 correctors for stability"
-        assert corr_std == 2, "Standard: 2 correctors for efficiency"
-        assert corr_acc == 3, "Accurate: 3 correctors for accuracy"
+        # Higher nOuterCorrectors with convergence-based exit per OpenFOAM Wiki best practice
+        assert corr_robust == 20, "Robust: 20 max correctors (convergence-based exit)"
+        assert corr_std == 30, "Standard: 30 max correctors (convergence-based exit)"
+        assert corr_acc == 50, "Accurate: 50 max correctors (convergence-based exit)"
+        assert corr_robust < corr_std < corr_acc, "Max correctors should increase with profile"
 
 
 class TestUniversalPhysicsSupport:
@@ -301,10 +313,10 @@ class TestUniversalPhysicsSupport:
 
 
 class TestMethodologyTableSpecs:
-    """Verify specifications match the methodology table exactly."""
+    """Verify specifications match the actual profile implementations."""
 
     def test_table_row_robust(self):
-        """Verify robust row matches Table 1."""
+        """Verify robust row matches actual profile."""
         p = NUMERICS_PROFILES['robust']
 
         # Time integration
@@ -313,18 +325,19 @@ class TestMethodologyTableSpecs:
         # Convection
         assert p['divSchemes']['div(phi,U)'] == 'Gauss upwind'
 
-        # PIMPLE
-        assert p['solvers']['PIMPLE']['nOuterCorrectors'] == 3
+        # PIMPLE (convergence-based exit)
+        assert p['solvers']['PIMPLE']['nOuterCorrectors'] == 20
         assert p['solvers']['PIMPLE']['nCorrectors'] == 3
+        assert 'outerCorrectorResidualControl' in p['solvers']['PIMPLE']
 
         # Courant
         assert p['time_stepping']['max_co'] == 0.5
 
         # Tolerance
-        assert p['solvers']['residualControl']['p'] == 1e-5
+        assert p['solvers']['residualControl']['p'] == 1e-4
 
     def test_table_row_standard(self):
-        """Verify standard row matches Table 1."""
+        """Verify standard row matches actual profile."""
         p = NUMERICS_PROFILES['standard']
 
         # Time integration
@@ -333,9 +346,10 @@ class TestMethodologyTableSpecs:
         # Convection
         assert 'linearUpwind' in p['divSchemes']['div(phi,U)']
 
-        # PIMPLE
-        assert p['solvers']['PIMPLE']['nOuterCorrectors'] == 2
+        # PIMPLE (convergence-based exit)
+        assert p['solvers']['PIMPLE']['nOuterCorrectors'] == 30
         assert p['solvers']['PIMPLE']['nCorrectors'] == 2
+        assert 'outerCorrectorResidualControl' in p['solvers']['PIMPLE']
 
         # Courant
         assert p['time_stepping']['max_co'] == 1.0
@@ -344,7 +358,7 @@ class TestMethodologyTableSpecs:
         assert p['solvers']['residualControl']['p'] == 1e-6
 
     def test_table_row_accurate(self):
-        """Verify accurate row matches Table 1."""
+        """Verify accurate row matches actual profile."""
         p = NUMERICS_PROFILES['accurate']
 
         # Time integration
@@ -356,9 +370,10 @@ class TestMethodologyTableSpecs:
         # Gradient limiting
         assert '0.5' in p['gradSchemes']['default']
 
-        # PIMPLE
-        assert p['solvers']['PIMPLE']['nOuterCorrectors'] == 3
+        # PIMPLE (convergence-based exit)
+        assert p['solvers']['PIMPLE']['nOuterCorrectors'] == 50
         assert p['solvers']['PIMPLE']['nCorrectors'] == 3
+        assert 'outerCorrectorResidualControl' in p['solvers']['PIMPLE']
 
         # Courant
         assert p['time_stepping']['max_co'] == 0.8

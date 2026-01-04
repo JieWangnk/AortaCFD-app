@@ -191,32 +191,56 @@ class TestFlowSplitPercentage:
 
 
 class TestMAPCalculation:
-    """Test Mean Arterial Pressure calculations."""
+    """Test Mean Arterial Pressure calculations.
+
+    Uses physiological MAP formula: MAP = DP + (SP-DP)/3 = (2*DP + SP)/3
+    This accounts for diastole being ~2/3 of the cardiac cycle.
+    Reference: Klabunde (2011) Cardiovascular Physiology Concepts
+    """
 
     def test_map_formula_standard_values(self):
-        """Test MAP calculation with standard BP values."""
+        """Test MAP calculation with standard BP values (120/80 mmHg)."""
         SP = 120  # mmHg
         DP = 80   # mmHg
 
-        # MAP = (SP + DP) / 2 (MATLAB formula)
-        expected_MAP = (120 + 80) / 2.0
-        assert expected_MAP == pytest.approx(100.0, rel=1e-6)
+        # Physiological MAP = DP + (SP-DP)/3 = 80 + 40/3 = 93.33 mmHg
+        pulse_pressure = SP - DP
+        expected_MAP = DP + (1.0 / 3.0) * pulse_pressure
+        assert expected_MAP == pytest.approx(93.333, rel=1e-3)
 
     def test_map_formula_high_bp(self):
-        """Test MAP with hypertensive values."""
+        """Test MAP with hypertensive values (160/100 mmHg)."""
         SP = 160
         DP = 100
 
-        expected_MAP = (160 + 100) / 2.0
-        assert expected_MAP == pytest.approx(130.0, rel=1e-6)
+        # MAP = 100 + (160-100)/3 = 100 + 20 = 120 mmHg
+        pulse_pressure = SP - DP
+        expected_MAP = DP + (1.0 / 3.0) * pulse_pressure
+        assert expected_MAP == pytest.approx(120.0, rel=1e-6)
 
     def test_map_formula_low_bp(self):
-        """Test MAP with hypotensive values."""
+        """Test MAP with hypotensive values (90/60 mmHg)."""
         SP = 90
         DP = 60
 
-        expected_MAP = (90 + 60) / 2.0
-        assert expected_MAP == pytest.approx(75.0, rel=1e-6)
+        # MAP = 60 + (90-60)/3 = 60 + 10 = 70 mmHg
+        pulse_pressure = SP - DP
+        expected_MAP = DP + (1.0 / 3.0) * pulse_pressure
+        assert expected_MAP == pytest.approx(70.0, rel=1e-6)
+
+    def test_map_formula_equivalent_forms(self):
+        """Test that MAP = DP + PP/3 = (2*DP + SP)/3."""
+        SP = 120
+        DP = 80
+
+        # Form 1: DP + (SP-DP)/3
+        pulse_pressure = SP - DP
+        map_form1 = DP + (1.0 / 3.0) * pulse_pressure
+
+        # Form 2: (2*DP + SP)/3
+        map_form2 = (2.0 * DP + SP) / 3.0
+
+        assert map_form1 == pytest.approx(map_form2, rel=1e-9)
 
     def test_map_conversion_to_pascal(self):
         """Test MAP conversion from mmHg to Pa."""

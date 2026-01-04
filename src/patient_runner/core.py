@@ -111,6 +111,8 @@ class PatientCaseRunner:
         try:
             with open(config_file, 'r') as f:
                 config = json.load(f)
+            # Store the config file path for later use (e.g., finding inlet CSV)
+            config['_config_file_path'] = str(config_file.resolve())
         except json.JSONDecodeError as e:
             raise PatientConfigurationError(f"Invalid JSON in configuration: {e}")
         except Exception as e:
@@ -355,6 +357,10 @@ class PatientCaseRunner:
             'system': 'new (physics/numerics/mesh)',
             'numerics_profile': profile_name,
         }
+
+        # Preserve config file path for finding related files (e.g., inlet CSV)
+        if '_config_file_path' in config:
+            merged_config['_config_file_path'] = config['_config_file_path']
 
         return {
             'config': merged_config,

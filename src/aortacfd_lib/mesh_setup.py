@@ -70,6 +70,9 @@ class GeometryAnalyzer:
         self.outlet_radii = []  # in meters (STLs are pre-scaled)
         self.reference_radius_m = None  # in meters
 
+        # Track if deprecation warning has been shown (prevent spam)
+        self._deprecated_warning_shown = False
+
         # Process user-friendly config options into SNAPPY_SETTINGS
         self._process_mesh_config_options()
         self._calculate_patch_properties()
@@ -354,38 +357,134 @@ class GeometryAnalyzer:
 
     def _cell_size_from_default_fallback(self) -> tuple:
         """
-        Priority 3: Conservative fallback (only if user provides no specification).
+        Priority 3: Conservative fallback OR span-based auto-calculation.
 
-        Uses DEFAULT_CELLS_PER_DIAMETER (10 cells/D) - conservative for initial
-        exploration but NOT suitable for production simulations.
+        For SPAN REFINEMENT (v2.0):
+            Smart calculation considering BOTH surface refinement AND span refinement.
 
-        IMPORTANT: This triggers a warning. Users should explicitly specify
-        target_cell_size_mm OR cells_per_diameter for any real simulation.
+            The total refinement is:
+              final_cells = blockMesh_cells × 2^surface_level × 2^span_level
+
+            We solve for blockMesh_cells:
+              blockMesh_cells = cells_across_span / (2^surface_level × 2^span_level)
+              blockMesh_cells = cells_across_span / 2^(surface_level + span_level)
+
+            This ensures the correct base mesh size for any combination of refinement levels.
+
+        For LEGACY (no span refinement):
+            Uses DEFAULT_CELLS_PER_DIAMETER (10 cells/D) - triggers warning.
 
         Returns:
             (cell_size_m, source_description)
         """
+        # Check if span refinement is enabled (v2.0 primary method)
+        span_refinement_enabled = self.snappy_settings.get('span_refinement_enabled', False)
+        cells_across_span = self.snappy_settings.get('cells_across_span', 0)
+
         if self.reference_radius_m is not None and self.reference_radius_m > 0:
             D_ref_m = 2.0 * self.reference_radius_m
             D_ref_mm = D_ref_m * 1000  # For display
-            cell_size_m = D_ref_m / DEFAULT_CELLS_PER_DIAMETER
-            cell_size_mm = cell_size_m * 1000  # For display
-            self.log.warning(
-                "="*70 + "\n"
-                "⚠️  NO MESH RESOLUTION SPECIFIED - Using conservative fallback\n"
-                "="*70 + "\n"
-                f"Defaulting to {DEFAULT_CELLS_PER_DIAMETER} cells/diameter → {cell_size_mm:.3f}mm\n\n"
-                "This is suitable for INITIAL GEOMETRY CHECK only.\n\n"
-                "For production simulations, explicitly specify in config:\n"
-                "  Option 1 (RECOMMENDED - geometry-adaptive):\n"
-                "    mesh.mesh_resolution.cells_per_diameter = 20  # or 15, 25, 30, etc.\n"
-                "    Guidelines: 10-12 (coarse), 15-20 (standard), 25-30 (fine)\n\n"
-                "  Option 2 (absolute control):\n"
-                "    mesh.mesh_resolution.target_cell_size_mm = 0.8  # or other value\n\n"
-                "Choose based on your mesh independence study requirements.\n"
-                "="*70
-            )
-            return cell_size_m, f"FALLBACK: {DEFAULT_CELLS_PER_DIAMETER} cells/D (D={D_ref_mm:.2f}mm → {cell_size_mm:.3f}mm)"
+
+            if span_refinement_enabled and cells_across_span > 0:
+                # Get refinement levels from config
+                surface_levels = self.snappy_settings.get('surfaceRefinementLevels', [1, 2])
+                surface_level = surface_levels[1] if len(surface_levels) > 1 else surface_levels[0]
+
+                # span_refinement_level: if not set, auto-calculate later
+                span_level = self.snappy_settings.get('span_refinement_level', None)
+
+                # Smart calculation: work backwards from target cells
+                # final_cells = blockMesh × 2^surface × 2^span
+                # blockMesh = final_cells / 2^(surface + span)
+                #
+                # If span_level not specified, we need to determine both blockMesh and span_level
+                # Strategy: Find the best combination that achieves target with minimum total refinement
+
+                if span_level is not None:
+                    # User specified span_refinement_level - calculate blockMesh directly
+                    total_refinement = surface_level + span_level
+                    refinement_multiplier = 2 ** total_refinement
+                    blockmesh_cells_per_d = max(2, int(np.ceil(cells_across_span / refinement_multiplier)))
+                    effective_cells = blockmesh_cells_per_d * refinement_multiplier
+
+                    self.log.info(
+                        f"SPAN REFINEMENT: Smart blockMesh calculation\n"
+                        f"  Target: {cells_across_span} cells across span\n"
+                        f"  Surface refinement level: {surface_level}\n"
+                        f"  Span refinement level: {span_level}\n"
+                        f"  Total refinement: 2^{total_refinement} = {refinement_multiplier}x\n"
+                        f"  BlockMesh: {blockmesh_cells_per_d} cells/D\n"
+                        f"  Final cells: {blockmesh_cells_per_d} × {refinement_multiplier} = {effective_cells} cells/D"
+                    )
+                else:
+                    # Auto-calculate optimal span_level and blockMesh
+                    # Try to minimize blockMesh size while achieving target
+                    # Minimum blockMesh = 2 cells/D (practical limit)
+                    MIN_BLOCKMESH = 2
+
+                    best_blockmesh = None
+                    best_span_level = None
+
+                    # Try span levels 1, 2, 3 and find the one that gives best blockMesh
+                    for try_span_level in range(1, 5):
+                        total_ref = surface_level + try_span_level
+                        ref_mult = 2 ** total_ref
+                        required_blockmesh = int(np.ceil(cells_across_span / ref_mult))
+
+                        if required_blockmesh >= MIN_BLOCKMESH:
+                            best_blockmesh = required_blockmesh
+                            best_span_level = try_span_level
+                            break
+
+                    if best_blockmesh is None:
+                        # Fallback: use minimum blockMesh with maximum reasonable span level
+                        best_blockmesh = MIN_BLOCKMESH
+                        best_span_level = 3
+
+                    blockmesh_cells_per_d = best_blockmesh
+                    span_level = best_span_level
+                    total_refinement = surface_level + span_level
+                    refinement_multiplier = 2 ** total_refinement
+                    effective_cells = blockmesh_cells_per_d * refinement_multiplier
+
+                    self.log.info(
+                        f"SPAN REFINEMENT: Auto-optimized blockMesh calculation\n"
+                        f"  Target: {cells_across_span} cells across span\n"
+                        f"  Surface refinement level: {surface_level}\n"
+                        f"  Auto-calculated span level: {span_level}\n"
+                        f"  Total refinement: 2^{total_refinement} = {refinement_multiplier}x\n"
+                        f"  BlockMesh: {blockmesh_cells_per_d} cells/D\n"
+                        f"  Final cells: {blockmesh_cells_per_d} × {refinement_multiplier} = {effective_cells} cells/D"
+                    )
+
+                cell_size_m = D_ref_m / blockmesh_cells_per_d
+                cell_size_mm = cell_size_m * 1000
+
+                return cell_size_m, f"SPAN_REFINEMENT: blockMesh={blockmesh_cells_per_d} cells/D, surface_level={surface_level}, span_level={span_level}, target={cells_across_span}"
+            else:
+                # Legacy warning for when span refinement is NOT used
+                cell_size_m = D_ref_m / DEFAULT_CELLS_PER_DIAMETER
+                cell_size_mm = cell_size_m * 1000
+                # Print warning as separate lines to avoid logging issues
+                self.log.warning("=" * 70)
+                self.log.warning("NO MESH RESOLUTION SPECIFIED - Using conservative fallback")
+                self.log.warning("=" * 70)
+                self.log.warning(f"Defaulting to {DEFAULT_CELLS_PER_DIAMETER} cells/diameter -> {cell_size_mm:.3f}mm")
+                self.log.warning("")
+                self.log.warning("This is suitable for INITIAL GEOMETRY CHECK only.")
+                self.log.warning("")
+                self.log.warning("For production simulations, explicitly specify in config:")
+                self.log.warning("  Option 1 (RECOMMENDED v2.0 - span-based):")
+                self.log.warning("    mesh.SNAPPY_SETTINGS.span_refinement_enabled = true")
+                self.log.warning("    mesh.SNAPPY_SETTINGS.cells_across_span = 20  # or 15, 25, 30")
+                self.log.warning("")
+                self.log.warning("  Option 2 (legacy - geometry-adaptive):")
+                self.log.warning("    mesh.mesh_resolution.cells_per_diameter = 20")
+                self.log.warning("")
+                self.log.warning("  Option 3 (legacy - absolute control):")
+                self.log.warning("    mesh.mesh_resolution.target_cell_size_mm = 0.8")
+                self.log.warning("=" * 70)
+                return cell_size_m, f"FALLBACK: {DEFAULT_CELLS_PER_DIAMETER} cells/D (D={D_ref_mm:.2f}mm -> {cell_size_mm:.3f}mm)"
         else:
             # Last resort if geometry completely unavailable
             fallback_mm = 2.0
@@ -400,28 +499,45 @@ class GeometryAnalyzer:
         """
         Validate mesh resolution configuration.
 
-        Warns if conflicting parameters are supplied.
-        Only two parameters are supported:
-        - target_cell_size_mm (Priority 1: absolute control)
-        - cells_per_diameter (Priority 2: geometry-adaptive)
+        v2.0: Warns about deprecated legacy methods.
+        Recommends cells_across_span as primary method.
         """
         has_target_mm = mesh_resolution.get('target_cell_size_mm') is not None
         has_cells_per_d = mesh_resolution.get('cells_per_diameter') is not None
+        has_span_refinement = self.snappy_settings.get('span_refinement_enabled', False)
 
-        # Warn if both parameters are set (conflict)
+        # v2.0: Deprecation warning for legacy methods (show once only)
+        if (has_target_mm or has_cells_per_d) and not self._deprecated_warning_shown:
+            self._deprecated_warning_shown = True
+            legacy_method = "target_cell_size_mm" if has_target_mm else "cells_per_diameter"
+            self.log.warning("=" * 70)
+            self.log.warning("DEPRECATED MESH RESOLUTION METHOD (v1.0)")
+            self.log.warning("=" * 70)
+            self.log.warning(f"Using legacy method: {legacy_method}")
+            self.log.warning("")
+            self.log.warning("v2.0 RECOMMENDED: Use cells_across_span instead:")
+            self.log.warning('  "mesh": {')
+            self.log.warning('    "SNAPPY_SETTINGS": {')
+            self.log.warning('      "span_refinement_enabled": true,')
+            self.log.warning('      "cells_across_span": 20')
+            self.log.warning('    }')
+            self.log.warning('  }')
+            self.log.warning("")
+            self.log.warning("Advantages of cells_across_span:")
+            self.log.warning("  - Guarantees minimum cells across diameter everywhere")
+            self.log.warning("  - Automatically handles coarctations and small branches")
+            self.log.warning("  - More robust for complex geometries")
+            self.log.warning("=" * 70)
+
+        # Warn if both legacy parameters are set (conflict)
         if has_target_mm and has_cells_per_d:
-            self.log.warning(
-                "="*70 + "\n"
-                "⚠️  CONFLICTING MESH RESOLUTION PARAMETERS\n"
-                "="*70 + "\n"
-                f"Both target_cell_size_mm and cells_per_diameter are set.\n"
-                f"Using target_cell_size_mm={mesh_resolution['target_cell_size_mm']}mm (Priority 1)\n"
-                f"Ignoring cells_per_diameter={mesh_resolution['cells_per_diameter']}\n\n"
-                "Recommendation: Set only ONE parameter:\n"
-                "  - target_cell_size_mm (absolute control for mesh studies), OR\n"
-                "  - cells_per_diameter (geometry-adaptive, RECOMMENDED)\n"
-                "="*70
-            )
+            self.log.warning("=" * 70)
+            self.log.warning("CONFLICTING MESH RESOLUTION PARAMETERS")
+            self.log.warning("=" * 70)
+            self.log.warning("Both target_cell_size_mm and cells_per_diameter are set.")
+            self.log.warning(f"Using target_cell_size_mm={mesh_resolution['target_cell_size_mm']}mm (Priority 1)")
+            self.log.warning(f"Ignoring cells_per_diameter={mesh_resolution['cells_per_diameter']}")
+            self.log.warning("=" * 70)
 
     def _get_cell_size_strategies(self, mesh_resolution: dict):
         """
@@ -648,18 +764,78 @@ class GeometryAnalyzer:
     def _write_snappyhexmesh_dict(self, internal_point: np.ndarray):
         """
         Generate snappyHexMeshDict with boundary layer settings.
+
+        For span refinement mode, auto-calculates the required refinement level
+        based on cells_across_span and blockMesh resolution.
         """
+        # Calculate auto refinement level for span mode
+        span_refinement_level = self._calculate_span_refinement_level()
+
         context = {
             "config": self.config,
             "patches": self.all_patches,
             "wall_patch": self.wall_patch,
-            "internal_point": internal_point
+            "internal_point": internal_point,
+            "span_refinement_level": span_refinement_level
         }
         self._write_file_from_template("snappyHexMeshDict.tpl", os.path.join(self.case_dir, "system", "snappyHexMeshDict"), context)
+
+    def _calculate_span_refinement_level(self) -> int:
+        """
+        Calculate the required refinement level for span-based refinement.
+
+        Smart calculation considering both surface refinement and span refinement:
+          final_cells = blockMesh × 2^surface_level × 2^span_level
+          span_level = log2(cells_across_span / blockMesh) - surface_level
+
+        If span_refinement_level is explicitly set in config, use that value.
+        Otherwise, auto-calculate based on cells_across_span and surface refinement.
+
+        Returns:
+            int: Required refinement level (default 2 if span refinement not enabled)
+        """
+        span_refinement_enabled = self.snappy_settings.get('span_refinement_enabled', False)
+        cells_across_span = self.snappy_settings.get('cells_across_span', 0)
+
+        if not span_refinement_enabled or cells_across_span <= 0:
+            # Return default if span refinement not used
+            return self.snappy_settings.get('span_refinement_level', 2)
+
+        # If user explicitly set span_refinement_level, use it
+        user_span_level = self.snappy_settings.get('span_refinement_level', None)
+        if user_span_level is not None:
+            self.log.info(f"Using user-specified span refinement level: {user_span_level}")
+            return user_span_level
+
+        # Auto-calculate span level considering surface refinement
+        # This must match the logic in _cell_size_from_default_fallback
+        surface_levels = self.snappy_settings.get('surfaceRefinementLevels', [1, 2])
+        surface_level = surface_levels[1] if len(surface_levels) > 1 else surface_levels[0]
+
+        MIN_BLOCKMESH = 2
+
+        # Try span levels 1, 2, 3, 4 and find the one that gives valid blockMesh
+        for try_span_level in range(1, 5):
+            total_ref = surface_level + try_span_level
+            ref_mult = 2 ** total_ref
+            required_blockmesh = int(np.ceil(cells_across_span / ref_mult))
+
+            if required_blockmesh >= MIN_BLOCKMESH:
+                self.log.info(
+                    f"Auto-calculated span refinement level: {try_span_level}\n"
+                    f"  (surface={surface_level}, span={try_span_level}, blockMesh={required_blockmesh} → "
+                    f"{required_blockmesh * ref_mult} cells/D)"
+                )
+                return try_span_level
+
+        # Fallback
+        self.log.info(f"Using fallback span refinement level: 3")
+        return 3
 
     def _write_surfacefeatures_dict(self):
         context = {
             "patches": self.all_patches,
+            "wall_patch": self.wall_patch,
             "snappy_settings": self.snappy_settings,
             "config": self.config
         }

@@ -45,103 +45,148 @@ config = {
         "default_prandtl": 0.7
     },
     
-    # Mesh defaults - Robust settings optimized for cardiovascular geometries
-    # Philosophy: QUALITY OVER DETAIL - prioritize mesh robustness for complex aortic geometries
-    # These defaults handle: coarctations, stenoses, aneurysms, bifurcations, high curvature
-    # Updated: 2025-10-28 - Conservative defaults to avoid skewness and boundary layer collapse
+    # Mesh defaults - OpenFOAM defaults optimized for high-curvature cardiovascular geometries
+    # Based on: OpenFOAM documentation (openfoam.com/documentation/guides/latest)
+    # Optimized for: coarctations, stenoses, aneurysms, bifurcations, high curvature vessels
+    # Updated: 2025-12-17 - Aligned with OpenFOAM defaults + cardiovascular best practices
     "mesh": {
         "SNAPPY_SETTINGS": {
-            # ========== SURFACE REFINEMENT (CONSERVATIVE) ==========
-            # Conservative: [1,2] provides smooth transitions without excessive skewness
-            # Only use [2,3] for simple geometries or after verifying [1,2] works
-            "surfaceRefinementLevels": [1, 2],
+            # ==========================================================================
+            # CASTELLATED MESH CONTROLS
+            # Ref: guide-meshing-snappyhexmesh-castellation.html
+            # ==========================================================================
 
-            # ========== FEATURE EDGE DETECTION (surfaceFeatures) ==========
-            # includedAngle: Edge detection angle for surfaceFeatures command
+            # Cell count limits
+            "maxLocalCells": 10000000,      # Per-processor hint, triggers balancing when exceeded
+            "maxGlobalCells": 20000000,     # Overall limit before removing unwanted regions
+            "minRefinementCells": 10,       # Halts refinement when cells below this count
+            "maxLoadUnbalance": 0.10,       # Relative cell difference tolerance between processors
+
+            # Refinement transition
+            "nCellsBetweenLevels": 3,       # OpenFOAM recommended: 3 (balances transitions)
+
+            # Surface refinement
+            "surfaceRefinementLevels": [1, 2],  # [min, max] - conservative for cardiovascular
+
+            # Feature edge detection (for surfaceFeatures command)
             # Features = edges where face angle < includedAngle
-            # 170° = detect edges with angle > 10° (180 - 170)
-            # Lower value = fewer edges detected (conservative)
-            # Higher value = more edges detected (aggressive)
-            "includedAngle": 170,
+            # 150° = detect edges with angle > 30° (conservative for smooth vessel walls)
+            "includedAngle": 150,
 
-            # ========== FEATURE RESOLUTION (snappyHexMesh) ==========
-            # resolveFeatureAngle: How aggressively to resolve geometry features
-            # Higher angle = fewer features captured = smoother mesh
-            # 30° is typical for cardiovascular geometries
-            "resolveFeatureAngle": 30,
+            # Feature resolution in snappyHexMesh
+            # Threshold angle between surface normals triggering higher refinement
+            "resolveFeatureAngle": 30,      # Typical for cardiovascular (captures branches)
 
-            # featureLevel: Refinement level for feature edges (single integer)
-            # AUTO-CALCULATED in template from max(surfaceRefinementLevels) if not set
-            # Set explicitly to override: "featureLevel": 2
-            # Controls refinement along sharp edges (inlet/outlet boundaries, vessel branches)
-
-            # ========== QUALITY CONTROLS ==========
-            "maxNonOrtho": 65,
-            "maxBoundarySkewness": 20,
-            "maxInternalSkewness": 4,
-            "maxConcave": 80,
-            "minVol": 1e-18,
-            "minTetQuality": 1e-20,
-            "minArea": -1,
-            "minTwist": 0.01,
-            "minDeterminant": 0.001,
-            "minFaceWeight": 0.02,
-            "minVolRatio": 0.01,
-            "minTriangleTwist": -1,
-
-            # ========== TRANSITION SMOOTHNESS ==========
-            "nCellsBetweenLevels": 2,       # Smoother transitions (was 3)
-
-            # ========== SNAPPING & QUALITY ITERATIONS ==========
-            # Optimized for cardiovascular geometries (curved surfaces, branches)
-            "snapTolerance": 1.0,           # Snap tolerance as fraction of cell size
-            "nSmoothPatch": 3,              # Patch smoothing before snapping (3-5)
-            "nSmoothScale": 4,              # Mesh smoothing iterations
-            "nSolveIter": 10,               # Mesh displacement solver iterations (30-50 for aorta)
-            "nRelaxIter": 5,                # Snapping relaxation (low for curved surfaces)
-            "nFeatureSnapIter": 5,         # Feature edge snapping (moderate - high causes failures)
-            "nSmoothInternal": 3,           # Internal point smoothing
-            "nSmoothDisplacement": 50,      # Displacement smoothing (50-100)
-            "errorReduction": 0.75,         # Error reduction factor
-
-            # ========== RELAXED QUALITY CONTROLS ==========
-            "relaxed_maxNonOrtho": 75,  # More gradual transition between refinement levels
-
-            # ========== CELL COUNTS AND LIMITS ==========
-            "maxLocalCells": 10000000,
-            "maxGlobalCells": 20000000,
-            "minRefinementCells": 10,
-
-            # ========== CASTELLATED MESH CONTROLS ==========
+            # Main controls
             "castellatedMesh": True,
             "snap": True,
             "addLayers": True,
 
-            # ========== BOUNDARY LAYER SETTINGS (TRADITIONAL OPENFOAM STYLE) ==========
-            # Uses relativeSizes=true with finalLayerThickness as fraction of local cell size
-            # This is the standard OpenFOAM approach - simple and predictable
-            "addLayer": 5,                  # nSurfaceLayers: typical for cardiovascular
-            "expansionRatio": 1.2,          # Growth ratio between layers (1.15-1.25 typical)
-            "finalLayerThickness": 0.3,     # Outermost layer as fraction of cell size (relativeSizes=true)
-            "minThickness": 0.1,            # Minimum layer thickness (allows graceful collapse)
-            "relativeSizes": True,          # true=fraction of cell size (default), false=absolute meters
+            # ==========================================================================
+            # SNAP CONTROLS
+            # Ref: guide-meshing-snappyhexmesh-snapping.html
+            # ==========================================================================
 
-            # ========== LAYER ADDITION CONTROLS (MAXIMUM CONSERVATISM) ==========
-            # CRITICAL: nSmoothSurfaceNormals is THE KEY to layer success
-            # Philosophy: Let layers fail gracefully rather than create bad cells
-            # FINAL PUSH: Skip even more features, maximum smoothing
-            "nGrow": 0,
-            "featureAngle": 160,            # ⭐⭐⭐ Was 150° → 160° (FINAL: skip MOST features)
-            "slipFeatureAngle": 30,         # Allow layer slip at boundaries
-            "nSmoothSurfaceNormals": 15,    # ⭐⭐⭐ Was 10 → 15 (FINAL: maximum smoothing)
-            "nSmoothThickness": 10,         # Smooth thickness field
-            "maxFaceThicknessRatio": 0.25,  # ⭐⭐⭐ Was 0.3 → 0.25 (FINAL: thinnest safe ratio)
-            "maxThicknessToMedialRatio": 0.3,
-            "minMedianAxisAngle": 90,
-            "nBufferCellsNoExtrude": 0,
-            "nLayerIter": 30,               # ⭐ Was 50 → 30 (less aggressive pushing)
-            "nRelaxedIter": 30,             # ⭐⭐⭐ Was 20 → 30 (FINAL: maximum relaxation)
-            "nSmoothNormals": 3             # ⭐ Additional normal smoothing
+            # Surface smoothing
+            "nSmoothPatch": 3,              # OpenFOAM default: 3 (pre-snap surface smoothing)
+            "nSmoothInternal": 3,           # Internal smoothing to reduce non-orthogonality
+
+            # Snap attraction
+            "snapTolerance": 1.0,           # Proven: 1.0 works better than 2.0 for cardiovascular
+
+            # Mesh displacement iterations
+            "nSolveIter": 10,               # Proven: 10 sufficient for cardiovascular (not 30)
+
+            # Relaxation iterations
+            "nRelaxIter": 5,                # OpenFOAM default: 5 (adaptation attempts)
+
+            # Feature edge snapping
+            "nFeatureSnapIter": 5,          # Proven: 5 sufficient for cardiovascular (not 10)
+
+            # Feature snap modes
+            "implicitFeatureSnap": False,   # Not recommended for complex geometry
+            "explicitFeatureSnap": True,    # Use pre-extracted .eMesh files (recommended)
+            "multiRegionFeatureSnap": False,
+
+            # ==========================================================================
+            # ADD LAYERS CONTROLS
+            # Ref: guide-meshing-snappyhexmesh-layers.html
+            # Critical for WSS accuracy in cardiovascular CFD
+            # ==========================================================================
+
+            # Layer sizing mode
+            "relativeSizes": True,          # true = relative to cell size (recommended)
+
+            # Layer count and growth
+            "addLayer": 7,                  # nSurfaceLayers: 7-10 for y+ ≈ 1 in cardiovascular
+            "expansionRatio": 1.15,         # OpenFOAM typical: 1.1, slightly higher for gradual growth
+            "finalLayerThickness": 0.3,     # Last layer as fraction of cell size (0.3-0.5)
+            "minThickness": 0.1,            # Minimum before termination (OpenFOAM default: 0.1)
+
+            # Feature angle controls (critical for curved surfaces)
+            "featureAngle": 170,            # Proven: 170 for good layer coverage at bifurcations
+            "slipFeatureAngle": 30,         # Permit sliding on patches without layers
+            "layerTerminationAngle": -180,  # -180 = attempt extrusion everywhere
+
+            # Growth controls
+            "nGrow": 0,                     # Delay extrusion near features (0 = immediate)
+            "nBufferCellsNoExtrude": 0,     # Gradual layer termination regions
+            "addLayers_nRelaxIter": 5,      # Layer addition relaxation iterations
+
+            # Smoothing iterations (DOE study findings)
+            "nSmoothNormals": 3,            # Interior mesh movement direction smoothing
+            "nSmoothSurfaceNormals": 20,    # DOE: insensitive (10-50 all work)
+            "nSmoothThickness": 10,         # DOE: +0.367 effect - LOWER is better!
+            "nSmoothDisplacement": 10,      # Post-medial axis smoothing
+
+            # Thickness ratio controls (DOE findings)
+            "maxFaceThicknessRatio": 0.5,   # DOE: +0.286 effect - LOWER is better!
+            "maxThicknessToMedialRatio": 0.3,  # OpenFOAM typical: 0.3 (protect narrow cavities)
+            "minMedianAxisAngle": 90,       # OpenFOAM typical: 90°
+
+            # Iteration limits
+            "nLayerIter": 50,               # OpenFOAM default: 50 (max layer addition iterations)
+            "nRelaxedIter": 20,             # Iterations before switching to relaxed quality
+
+            # ==========================================================================
+            # MESH QUALITY CONTROLS
+            # Ref: guide-meshing-snappyhexmesh-meshquality.html
+            # ==========================================================================
+
+            # Non-orthogonality (angle between cell center vector and face normal)
+            # < 65°: no correctors needed
+            # 65-75°: 1 corrector
+            # > 85°: likely divergence
+            "maxNonOrtho": 65,              # OpenFOAM default: 65°
+
+            # Skewness (critical for numerical accuracy)
+            # Note: OpenFOAM default of 4 is too strict for cardiovascular geometries
+            # Coarctations, bifurcations, and high-curvature regions often produce
+            # isolated cells with skewness 4-8. Values up to 8 are acceptable for
+            # pimpleFoam/foamRun with proper under-relaxation.
+            "maxBoundarySkewness": 20,      # OpenFOAM default: 20
+            "maxInternalSkewness": 8,       # OpenFOAM default: 4, relaxed for cardiovascular
+
+            # Cell shape quality
+            "maxConcave": 80,               # OpenFOAM default: 80°
+            "minVol": 1e-13,                # OpenFOAM default: 1e-13 m³
+            "minTetQuality": 1e-15,         # OpenFOAM default: 1e-15
+            "minArea": -1,                  # -1 = disabled (OpenFOAM default)
+            "minTwist": 0.02,               # OpenFOAM default: 0.02
+            "minDeterminant": 0.001,        # OpenFOAM default: 0.001
+            "minFaceWeight": 0.05,          # OpenFOAM default: 0.05
+            "minVolRatio": 0.01,            # OpenFOAM default: 0.01
+            "minTriangleTwist": -1,         # -1 = disabled
+
+            # Smoothing and error reduction
+            "nSmoothScale": 4,              # OpenFOAM default: 4
+            "errorReduction": 0.75,         # OpenFOAM default: 0.75
+
+            # Relaxed quality controls (used during layer addition after nRelaxedIter)
+            # More permissive to allow layers to be added, final mesh checked against base
+            "relaxed_maxNonOrtho": 75,
+            "relaxed_maxBoundarySkewness": 25,
+            "relaxed_maxInternalSkewness": 10   # Relaxed for layer addition phase
         }
     },
     

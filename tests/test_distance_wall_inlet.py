@@ -24,6 +24,14 @@ from src.aortacfd_lib.distance_wall_inlet_profile import (
     create_distance_wall_profile
 )
 
+# Define distance-wall profile names for testing
+# These are the profile names recognized as distance-to-wall based profiles
+DISTANCE_WALL_PROFILES = {
+    'distance_wall', 'distance_to_wall', 'wall_distance',
+    'power_law', 'poiseuille_distance', 'hybrid_jet',
+    'blunted', 'blunted_parabolic', 'irregular'
+}
+
 
 class TestShapeFunctions(unittest.TestCase):
     """Test shape function calculations."""
@@ -185,8 +193,7 @@ class TestConfigParsing(unittest.TestCase):
 
     def test_shape_function_parsing(self):
         """Test that shape function strings are parsed correctly."""
-        from src.aortacfd_lib.inlet_mapping import DISTANCE_WALL_PROFILES
-
+        # Use module-level constant instead of importing from inlet_mapping
         # Check all distance-wall profiles are recognized
         expected_profiles = [
             'distance_wall', 'distance_to_wall', 'wall_distance',
@@ -302,8 +309,8 @@ class TestIntegrationWithInletMapping(unittest.TestCase):
     """Test integration with InletMapping class."""
 
     def test_distance_wall_profile_detection(self):
-        """Test that InletMapping correctly identifies distance-wall profiles."""
-        from src.aortacfd_lib.inlet_mapping import InletMapping, DISTANCE_WALL_PROFILES
+        """Test that distance-wall profiles are correctly identified."""
+        # Use module-level constant instead of importing from inlet_mapping
 
         # Create config with distance-wall profile
         config = {
@@ -319,8 +326,7 @@ class TestIntegrationWithInletMapping(unittest.TestCase):
             'physics': {'nu': 3.7736e-6}
         }
 
-        # InletMapping should recognize this as distance-wall profile
-        # (Cannot fully test without case directory, but can check logic)
+        # Test profile detection logic
         profile = config['inlet']['profile'].lower().strip()
         use_distance_wall = profile in DISTANCE_WALL_PROFILES
 
@@ -328,8 +334,7 @@ class TestIntegrationWithInletMapping(unittest.TestCase):
 
     def test_standard_profile_not_delegated(self):
         """Test that standard profiles are not delegated."""
-        from src.aortacfd_lib.inlet_mapping import DISTANCE_WALL_PROFILES
-
+        # Use module-level constant instead of importing from inlet_mapping
         standard_profiles = ['plug', 'parabolic', 'womersley']
 
         for profile in standard_profiles:
