@@ -84,69 +84,75 @@ MESH_QUALITY_PRESETS: Dict[str, Dict[str, Any]] = {
     # STANDARD: Proven robust for cardiovascular CFD [RECOMMENDED]
     # =========================================================================
     # Use for: Production runs, typical aortic geometries, most CFD studies
-    # DOE Validated: 20/20 tests passed (skewness 3.04-3.74)
-    # Best result: val_preset_standard achieved skew=3.60
+    # Updated: 2026-01-07 - Tightened to prevent negative volume cells
     # Meshing time: ~2-3x baseline
     "standard": {
-        # Proven snap parameters (DOE confirmed)
-        "snapTolerance": 1.0,           # DOE: +0.286 effect, use LOW
-        "nSolveIter": 10,               # Proven sufficient
-        "nFeatureSnapIter": 5,          # Proven sufficient
+        # Base.py now has tightened defaults, standard preset uses base defaults
+        # Only override what differs from the new tightened base.py
 
-        # Layer parameters (DOE optimized)
-        "nSmoothSurfaceNormals": 20,    # DOE: insensitive, 20 is good
-        "nSmoothThickness": 10,         # DOE: +0.367 effect - LOWER is better!
-        "nLayerIter": 50,               # Sufficient for 10 layers
-        "featureAngle": 170,            # Good layer coverage at bifurcations
-        "maxFaceThicknessRatio": 0.5,   # DOE: +0.286 effect - LOWER is better!
+        # Layer parameters
+        "nSmoothSurfaceNormals": 30,    # Match base.py default
+        "nSmoothThickness": 15,         # Match base.py default
+        "nLayerIter": 100,              # Match base.py default
+        "featureAngle": 150,            # Match base.py default
+        "maxFaceThicknessRatio": 0.4,   # Match base.py default
 
         # Refinement transitions
         "nCellsBetweenLevels": 3,       # DOE: insensitive
     },
 
     # =========================================================================
-    # HIGH_QUALITY: Maximum quality for second-order schemes
+    # HIGH_QUALITY: Maximum quality for LES and second-order schemes
     # =========================================================================
-    # Use for: Second-order CFD (LUST, linearUpwind), publications, validation
-    # Target: Skewness < 2.0, Non-orthogonality < 60° (required for accurate profile)
+    # Use for: LES, second-order CFD (LUST, linearUpwind), publications, validation
+    # Target: Skewness < 2.0, Non-orthogonality < 55° (required for LES/accurate)
+    # Updated: 2026-01-07 - Even tighter to prevent negative volume cells for LES
     # Meshing time: ~5-10x baseline
     "high_quality": {
-        # Proven snap parameters
-        "snapTolerance": 1.0,           # DOE: +0.286 effect, use LOW
-        "nSolveIter": 15,               # Increased for better snapping
-        "nFeatureSnapIter": 10,         # More iterations for feature edges
+        # Snap parameters - maximum iterations for complex geometry
+        "snapTolerance": 2.0,           # Higher tolerance for better snapping
+        "nSolveIter": 150,              # Maximum iterations for complex geometry
+        "nFeatureSnapIter": 15,         # More iterations for feature edges
 
-        # Enhanced smoothing for low skewness
-        "nSmoothSurfaceNormals": 50,    # Increased for smoother surface
-        "nSmoothThickness": 10,         # DOE: +0.367 effect - LOWER is better!
+        # Enhanced smoothing for low skewness and no negative volumes
+        "nSmoothSurfaceNormals": 50,    # Maximum for smoother surface
+        "nSmoothThickness": 20,         # Increased smoothing
         "nSmoothPatch": 10,             # More pre-snap smoothing
         "nSmoothNormals": 10,           # Additional normal smoothing
+        "nSmoothDisplacement": 20,      # More displacement smoothing
 
         # Relaxation iterations
-        "nRelaxIter": 10,               # More relaxation iterations
+        "nRelaxIter": 15,               # More relaxation iterations
 
         # Layer iterations - maximum effort
         "nLayerIter": 150,              # More iterations for complex cases
-        "nRelaxedIter": 60,             # More iterations before relaxing
-        "featureAngle": 180,            # Maximum layer coverage
+        "nRelaxedIter": 75,             # More iterations before relaxing
+        "featureAngle": 140,            # Conservative for better quality
 
-        # Optimal expansion ratio from DOE
-        "expansionRatio": 1.12,         # Even gentler than 1.15 for quality
+        # Conservative expansion ratio
+        "expansionRatio": 1.08,         # Very gentle growth for LES
 
         # Transition smoothness
         "nCellsBetweenLevels": 4,       # More cells between levels for smoothness
 
-        # STRICT quality thresholds for second-order schemes
-        "maxNonOrtho": 55,              # Strict non-orthogonality (< 60° for accurate)
-        "maxInternalSkewness": 2.0,     # STRICT: Required for second-order schemes
-        "maxBoundarySkewness": 8,       # Strict boundary skewness
+        # STRICT quality thresholds for LES and second-order schemes
+        "maxNonOrtho": 55,              # Strict non-orthogonality for LES
+        "maxInternalSkewness": 2.0,     # STRICT: Required for LES/second-order
+        "maxBoundarySkewness": 3,       # Very strict boundary skewness for WSS
 
-        # Layer coverage - DOE shows LOWER is better
-        "maxFaceThicknessRatio": 0.4,   # Even lower for quality
+        # Cell quality - ultra-tight to prevent negative volumes
+        "minVol": 1e-20,                # Ultra-tight volume threshold
+        "minDeterminant": 0.02,         # Stricter determinant
+        "minTwist": 0.005,              # Stricter twist
+
+        # Layer coverage
+        "maxFaceThicknessRatio": 0.3,   # Even lower for quality
+        "maxThicknessToMedialRatio": 0.2,  # Tighter for narrow regions
 
         # Mesh quality controls
-        "minMedialAxisAngle": 90,       # Better medial axis for layers
-        "minThickness": 0.05,           # Allow thin layers where needed
+        "minMedianAxisAngle": 90,       # Better medial axis for layers
+        "minThickness": 0.1,            # Conservative minimum thickness
+        "nSmoothScale": 8,              # More smoothing iterations
     },
 }
 

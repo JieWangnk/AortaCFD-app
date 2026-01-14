@@ -1,7 +1,7 @@
 {
   "_comment": "COMPREHENSIVE AORTACFD CONFIGURATION - ALL PARAMETERS",
-  "_version": "2.1",
-  "_date": "2025-12-03",
+  "_version": "2.2",
+  "_date": "2026-01-05",
   "_description": "Complete configuration file demonstrating all available parameters for the 3-profile system (robust/standard/accurate)",
 
   "case_info": {
@@ -252,9 +252,15 @@
         "csv_file": "patient_flow.csv",
         "_csv_file_comment": "CSV file with flow data (in cases_input/<case>/)",
 
-        "data_type": "velocity",
+        "data_type": "flowrate",
         "_data_type_options": ["velocity", "flowrate"],
-        "_data_type_comment": "Type of data in CSV (velocity: m/s, flowrate: mL/s)",
+        "_data_type_comment": "Type of data in CSV column 2",
+        "_data_type_units": {
+          "flowrate": "L/min (auto-detected if max > 1.0, converted to m³/s internally)",
+          "velocity": "m/s (no conversion)"
+        },
+        "_csv_format_example": "time,flowrate\\n0.000,0.25\\n0.100,3.30\\n...",
+        "_csv_units_note": "Clinical flowrate data should be in L/min (e.g., 0.5-5.0 L/min for adults). System auto-detects and converts.",
 
         "profile": "parabolic",
         "_profile_options": ["plug", "parabolic", "elliptical", "wall_distance", "womersley"],
@@ -503,11 +509,60 @@
     }
   },
 
+  "hemodynamics": {
+    "_comment": "Runtime hemodynamics function objects (NEW v2.2)",
+    "_description": "Configure WSS, TAWSS, OSI, RRT computation during simulation",
+
+    "runtime_functions": {
+      "wallShearStress": true,
+      "_wallShearStress_comment": "Compute WSS at wall patches every writeTime",
+
+      "fieldAverage": "auto",
+      "_fieldAverage_options": [true, false, "auto"],
+      "_fieldAverage_comment": "'auto' enables only for pulsatile inlet (TIMEVARYING/WOMERSLEY)",
+
+      "pressureMonitoring": true,
+      "_pressureMonitoring_comment": "Area-averaged pressure at inlet and outlets for pressure drop calculation"
+    },
+
+    "tawss_settings": {
+      "_comment": "Time-averaged WSS settings (only for pulsatile flow)",
+
+      "skip_cycles": 2,
+      "_skip_cycles_comment": "Skip initial N cardiac cycles before averaging (allow transients to decay)",
+
+      "periodicRestart": true,
+      "_periodicRestart_comment": "Restart averaging each cardiac cycle (for per-cycle TAWSS convergence check)",
+      "_periodicRestart_note": "If false, accumulates over entire simulation after skip_cycles",
+
+      "keep_all_cycles": true,
+      "_keep_all_cycles_comment": "Keep TAWSS data from all cycles (for convergence analysis)"
+    },
+
+    "_output_fields": {
+      "wallShearStress": "Instantaneous WSS vector at wall patches",
+      "wallShearStressMean": "Time-averaged WSS (TAWSS) - from fieldAverage",
+      "_derived_metrics": {
+        "TAWSS": "Time-Averaged Wall Shear Stress = mean(|WSS|) over cardiac cycle",
+        "OSI": "Oscillatory Shear Index = 0.5 * (1 - |mean(WSS)| / mean(|WSS|))",
+        "RRT": "Relative Residence Time = 1 / ((1 - 2*OSI) * TAWSS)"
+      }
+    },
+
+    "_notes": [
+      "WSS computed for ALL inlet types (CONSTANT and pulsatile)",
+      "TAWSS/OSI/RRT only meaningful for pulsatile flow",
+      "For CONSTANT inlet: OSI=0, RRT=1/TAWSS (no oscillation)",
+      "fieldAverage timeStart = skip_cycles * cardiac_cycle",
+      "Pressure drop = inlet_pressure - outlet_pressure (area-averaged)"
+    ]
+  },
+
   "post_processing": {
     "_comment": "Post-simulation analysis and visualization",
 
     "compute_hemodynamics": true,
-    "_compute_hemodynamics_comment": "Calculate hemodynamic indices (WSS, OSI, RRT)",
+    "_compute_hemodynamics_comment": "Calculate hemodynamic indices (WSS, OSI, RRT) from simulation data",
 
     "extract_surfaces": {
       "enabled": true,

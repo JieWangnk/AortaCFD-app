@@ -51,17 +51,12 @@ class SimulationReportGenerator:
         with open(txt_path, 'w') as f:
             f.write(report_txt)
 
-        # Optionally generate JSON for automation (comment out if not needed)
-        # report_json = self._generate_json_report(config, geometry_info, mesh_info, timestamp)
-        # json_path = self.report_dir / "simulation_setup_report.json"
-        # with open(json_path, 'w') as f:
-        #     json.dump(report_json, f, indent=2)
+        # Save full merged config as JSON for reproducibility
+        config_json_path = self.report_dir / "merged_config.json"
+        self._save_config_json(config, config_json_path, timestamp)
 
-        # Generate summary text file
-        summary_txt = self._generate_summary_txt(config, timestamp)
-        summary_path = self.report_dir / "simulation_summary.txt"
-        with open(summary_path, 'w') as f:
-            f.write(summary_txt)
+        # Note: simulation_summary.txt removed as simulation_setup_report.txt
+        # provides more comprehensive information
 
         return str(txt_path)
 
@@ -246,6 +241,33 @@ python run_patient.py {self.case_name}
             }
         }
 
+    def _save_config_json(self, config: Dict, output_path: Path, timestamp: str) -> None:
+        """
+        Save full merged configuration as JSON for reproducibility.
+
+        This enables exact reproduction of the simulation by capturing all
+        parameters (user-specified + defaults + computed values).
+        """
+        # Create a clean config dict with metadata
+        export_config = {
+            "_metadata": {
+                "case_name": self.case_name,
+                "generated_at": timestamp,
+                "output_directory": str(self.output_dir),
+                "description": "Full merged configuration for simulation reproducibility",
+                "usage": f"python run_patient.py {self.case_name} --config <this_file>"
+            },
+            **{k: v for k, v in config.items() if not k.startswith('_')}
+        }
+
+        # Also preserve any user comments/metadata from original config
+        for key in config:
+            if key.startswith('_') and key not in ['_metadata']:
+                export_config[key] = config[key]
+
+        with open(output_path, 'w') as f:
+            json.dump(export_config, f, indent=2, default=str)
+
     def _generate_summary_txt(self, config: Dict, timestamp: str) -> str:
         """Generate concise text summary."""
 
@@ -381,12 +403,19 @@ Command:        python run_patient.py {self.case_name}
 
     def _describe_flow_regime(self, config: Dict) -> str:
         """Describe flow regime based on settings."""
-        solver = config.get('simulation_settings', {}).get('solver_type', '').upper()
         physics = config.get('physics', {})
 
-        if solver == 'LAMINAR':
-            return "- **Flow Regime:** Laminar (Re < 2300)\n- **Turbulence Model:** None\n"
-        elif solver == 'RANS':
+        # Check multiple locations for flow model/simulation type
+        flow_model = (
+            physics.get('simulation_type') or
+            physics.get('model') or
+            config.get('simulation_settings', {}).get('solver_type', '') or
+            ''
+        ).upper()
+
+        if flow_model == 'LAMINAR':
+            return "- **Flow Regime:** Laminar\n- **Turbulence Model:** None (Stokes)\n"
+        elif flow_model in ['RANS', 'TURBULENT']:
             # Try multiple locations for turbulence model
             turb_model = (
                 physics.get('turbulence_model') or
@@ -394,7 +423,7 @@ Command:        python run_patient.py {self.case_name}
                 'kOmegaSST (default)'
             )
             return f"- **Flow Regime:** Turbulent (RANS)\n- **Turbulence Model:** {turb_model}\n"
-        elif solver == 'LES':
+        elif flow_model == 'LES':
             # Try multiple locations for LES model
             les_model = (
                 physics.get('subgrid_model') or
@@ -403,6 +432,9 @@ Command:        python run_patient.py {self.case_name}
             )
             return f"- **Flow Regime:** Turbulent (LES)\n- **LES Model:** {les_model}\n"
         else:
+            # Fallback: check for laminar indicators
+            if physics.get('default_turbulence') == 'laminar':
+                return "- **Flow Regime:** Laminar\n- **Turbulence Model:** None (Stokes)\n"
             return "- **Flow Regime:** Unknown\n"
 
     def _format_geometry_section(self, config: Dict, geometry_info: Optional[Dict]) -> str:
@@ -607,49 +639,66 @@ Command:        python run_patient.py {self.case_name}
         """Format numerical schemes and settings."""
         section = ""
 
+        # Check multiple locations for numerical settings
         num_settings = config.get('numerical_settings', {})
+        numerical = config.get('numerical', {})
 
-        # Time schemes
+        # Time schemes - check controlDict and numerical config
         section += "### Time Discretization\n"
-        ddt_scheme = num_settings.get('ddtSchemes', {}).get('default', 'CrankNicolson 0.9 (default)')
+        ctrl_dict = config.get('simulation_control', {}).get('controlDict', {})
+        ddt_scheme = (
+            num_settings.get('ddtSchemes', {}).get('default') or
+            numerical.get('time_scheme') or
+            'Euler'
+        )
         section += f"- **ddt Scheme:** {ddt_scheme}\n"
         section += f"- **Description:** Time derivative discretization for transient simulations\n"
 
         # Gradient schemes
         section += "\n### Gradient Schemes\n"
-        grad_scheme = num_settings.get('gradSchemes', {}).get('default', 'Gauss linear (default)')
+        grad_scheme = (
+            num_settings.get('gradSchemes', {}).get('default') or
+            numerical.get('gradient_scheme') or
+            'Gauss linear'
+        )
         section += f"- **Default:** {grad_scheme}\n"
         section += f"- **Description:** Spatial gradient calculation using Gauss integration\n"
 
         # Divergence schemes
         section += "\n### Divergence Schemes\n"
-        div_schemes = num_settings.get('divSchemes', {})
-        if div_schemes:
-            for key, value in div_schemes.items():
-                if key == 'default':
-                    section += f"- **Default:** {value}\n"
-                elif 'U' in key:
-                    section += f"- **Momentum (div(phi,U)):** {value}\n"
-                else:
-                    section += f"- **{key}:** {value}\n"
+        div_scheme = (
+            num_settings.get('divSchemes', {}).get('div(phi,U)') or
+            numerical.get('divergence_scheme') or
+            None
+        )
+        if div_scheme:
+            section += f"- **Momentum (div(phi,U)):** {div_scheme}\n"
         else:
             section += f"- **Momentum:** Gauss linearUpwindV grad(U) (default for incompressible flow)\n"
 
         # Laplacian schemes
-        laplacian = num_settings.get('laplacianSchemes', {})
-        if laplacian:
-            section += "\n### Laplacian Schemes\n"
-            lap_default = laplacian.get('default', 'Gauss linear corrected')
-            section += f"- **Default:** {lap_default}\n"
+        laplacian = (
+            num_settings.get('laplacianSchemes', {}).get('default') or
+            numerical.get('laplacian_scheme') or
+            'Gauss linear corrected'
+        )
+        section += "\n### Laplacian Schemes\n"
+        section += f"- **Default:** {laplacian}\n"
 
         # Linear solvers
-        solvers = num_settings.get('solvers', {})
-        if solvers:
-            section += "\n### Linear Solvers\n"
-            if 'p' in solvers:
-                section += f"- **Pressure:** {solvers['p'].get('solver', 'GAMG')}\n"
-            if 'U' in solvers:
-                section += f"- **Velocity:** {solvers['U'].get('solver', 'smoothSolver')}\n"
+        section += "\n### Linear Solvers\n"
+        p_solver = (
+            num_settings.get('solvers', {}).get('p', {}).get('solver') or
+            numerical.get('pressure_solver') or
+            'GAMG'
+        )
+        u_solver = (
+            num_settings.get('solvers', {}).get('U', {}).get('solver') or
+            numerical.get('velocity_solver') or
+            'smoothSolver'
+        )
+        section += f"- **Pressure:** {p_solver}\n"
+        section += f"- **Velocity:** {u_solver}\n"
 
         section += "\n"
         return section

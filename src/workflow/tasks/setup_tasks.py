@@ -537,7 +537,7 @@ class GenerateControlDictTask(Task):
             control_dict_template['purgeWrite'] = purge_write
 
         writer = SimulationSetup(config=self.config, case_directory=context["case_directory"])
-        writer.write_controlDict(final_control_dict=control_dict_template)
+        writer.write_controlDict(final_control_dict=control_dict_template, cardiac_cycle=cardiac_cycle)
 
         return True
 

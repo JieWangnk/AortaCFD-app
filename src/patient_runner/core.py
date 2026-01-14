@@ -215,12 +215,40 @@ class PatientCaseRunner:
             Simulation configuration dictionary with same structure as old system
         """
         config = case_info['config'].copy()
-
-        # Prepare output directories
         patient_output_dir = self.output_dir / case_info['patient_id']
         patient_output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Check if we're resuming from an existing case directory
+        # Determine run directory
+        run_dir = self._resolve_run_directory(patient_output_dir, options)
+
+        # Build numerics configuration
+        numerics_config, profile_name = self._build_numerics_config(config)
+
+        # Build merged configuration
+        merged_config = self._build_merged_config(case_info, config, numerics_config, profile_name)
+
+        return {
+            'config': merged_config,
+            'profile_name': f"{config['physics']['model']}_{profile_name}",
+            'profile_key': f"{config['physics']['model']}_{profile_name}",
+            'run_dir': run_dir,
+            'patient_output_dir': patient_output_dir,
+            'case_config': case_info['config'],
+            'case_config_file': case_info['config_file'],
+            'parallel': merged_config['mesh']['SNAPPY_SETTINGS'].get('parallel', False)
+        }
+
+    def _resolve_run_directory(self, patient_output_dir: Path, options: dict = None) -> Path:
+        """
+        Determine the run directory based on options.
+
+        Args:
+            patient_output_dir: Base output directory for the patient
+            options: Optional runtime overrides (case_dir, overwrite)
+
+        Returns:
+            Path to the run directory
+        """
         if options and options.get('case_dir'):
             case_dir_path = Path(options['case_dir'])
             if case_dir_path.name == 'openfoam':
@@ -238,24 +266,46 @@ class PatientCaseRunner:
             run_dir = patient_output_dir / f"run_{timestamp}"
             run_dir.mkdir(exist_ok=True)
 
-        # Build numerics configuration from profile
+        return run_dir
+
+    def _build_numerics_config(self, config: dict) -> tuple:
+        """
+        Build numerics configuration from profile.
+
+        Args:
+            config: User configuration dictionary
+
+        Returns:
+            Tuple of (numerics_config, profile_name)
+        """
         numerics_builder = NumericsBuilder()
         try:
             numerics_config = numerics_builder.build(config)
             profile_name = config.get('numerics', {}).get('profile', 'standard')
             self.logger.info(f"✅ Loaded numerics profile: {profile_name}")
+            return numerics_config, profile_name
         except Exception as e:
             raise PatientConfigurationError(f"Failed to build numerics: {e}")
 
-        # Merge base configuration
+    def _build_merged_config(self, case_info: dict, config: dict,
+                              numerics_config: dict, profile_name: str) -> dict:
+        """
+        Build the merged configuration from base, case-specific, and numerics configs.
+
+        Args:
+            case_info: Patient case information
+            config: User configuration
+            numerics_config: Built numerics configuration
+            profile_name: Name of the numerics profile
+
+        Returns:
+            Fully merged configuration dictionary
+        """
         builder = ConfigBuilder()
 
-        # Load base config only (no old profiles)
+        # Load and merge base config
         base_config = builder._load_python_profile('.base', package='src.config')
-
-        # Start with base
-        merged_config = {}
-        merged_config = deep_merge(merged_config, base_config)
+        merged_config = deep_merge({}, base_config)
 
         # Convert and apply case-specific config
         case_specific_config = builder._convert_unified_config(
@@ -268,79 +318,96 @@ class PatientCaseRunner:
         merged_config = builder._apply_openfoam_12_settings(merged_config)
         builder._validate_physical_parameters(merged_config)
 
-        # Apply numerics from new system
+        # Apply numerics and solver settings
         merged_config['schemes'] = numerics_config
-
-        # Extract fvSolution settings from numerics (PIMPLE, relaxation, etc.)
         if 'solvers' in numerics_config:
             merged_config['fvSolution'] = numerics_config['solvers']
 
-        # Extract time stepping settings for controlDict
-        if 'time_stepping' in numerics_config:
-            time_step_settings = numerics_config['time_stepping']
-            merged_config.setdefault('simulation_control', {})
-            merged_config['simulation_control'].setdefault('controlDict', {})
+        # Apply time stepping settings
+        self._apply_time_stepping_settings(merged_config, numerics_config)
 
-            # Set initial deltaT and time stepping controls
-            merged_config['simulation_control']['controlDict']['deltaT'] = time_step_settings.get('max_delta_t', 0.0001)
-            merged_config['simulation_control']['controlDict']['adjustTimeStep'] = 'yes' if time_step_settings.get('adjustable_time_step', True) else 'no'
-            merged_config['simulation_control']['controlDict']['maxCo'] = time_step_settings.get('max_co', 1.0)
-            merged_config['simulation_control']['controlDict']['maxDeltaT'] = time_step_settings.get('max_delta_t', 0.001)
+        # Apply physics settings
+        self._apply_physics_settings(merged_config, config)
 
-            # Add other standard controlDict settings
-            merged_config['simulation_control']['controlDict']['startFrom'] = 'startTime'
-            merged_config['simulation_control']['controlDict']['startTime'] = 0
-            merged_config['simulation_control']['controlDict']['stopAt'] = 'endTime'
-            merged_config['simulation_control']['controlDict']['writeControl'] = 'adjustableRunTime'
-            merged_config['simulation_control']['controlDict']['writeFormat'] = 'binary'
-            merged_config['simulation_control']['controlDict']['writePrecision'] = 6
-            merged_config['simulation_control']['controlDict']['writeCompression'] = 'off'
-            merged_config['simulation_control']['controlDict']['timeFormat'] = 'general'
-            merged_config['simulation_control']['controlDict']['timePrecision'] = 6
-            merged_config['simulation_control']['controlDict']['runTimeModifiable'] = 'true'
+        # Apply mesh settings
+        self._apply_mesh_settings(merged_config, config)
 
-        # Add physics settings (use deep_merge to preserve mapped nu/rho/mu from _apply_openfoam_12_settings)
-        if 'physics' not in merged_config:
-            merged_config['physics'] = {}
-        merged_config['physics'] = deep_merge(merged_config['physics'], config['physics'])
-
-        # Add simulation_type for backward compatibility with BC generation
-        # BC setup expects 'simulation_type' with values 'laminar', 'RAS', 'LES'
-        # New system uses 'model' with values 'laminar', 'rans', 'les'
-        model_to_sim_type = {
-            'laminar': 'laminar',
-            'rans': 'RAS',
-            'les': 'LES'
-        }
-        merged_config['physics']['simulation_type'] = model_to_sim_type.get(
-            config['physics']['model'],
-            'laminar'
-        )
-
-        # Add mesh settings if provided
-        if 'mesh' in config:
-            # Ensure mesh.mesh_resolution path exists
-            merged_config.setdefault('mesh', {})
-            merged_config['mesh'].setdefault('mesh_resolution', {})
-
-            if 'cells_per_diameter' in config['mesh']:
-                merged_config['mesh']['mesh_resolution']['cells_per_diameter'] = config['mesh']['cells_per_diameter']
-            if 'target_cell_size_mm' in config['mesh']:
-                merged_config['mesh']['mesh_resolution']['target_cell_size_mm'] = config['mesh']['target_cell_size_mm']
-
-            # Copy other mesh settings
-            for key in ['surface_refinement', 'boundary_layers']:
-                if key in config['mesh']:
-                    merged_config['mesh'][key] = config['mesh'][key]
-
-        # Apply config settings (boundary conditions, etc.)
+        # Apply boundary conditions and other config settings
         self._apply_config_settings(merged_config, config)
 
         # Handle writeInterval from user config
         if 'simulation_control' in config and 'writeInterval' in config['simulation_control']:
             merged_config['simulation_control']['controlDict']['writeInterval'] = config['simulation_control']['writeInterval']
 
-        # Store metadata
+        # Store metadata and config source
+        self._store_config_metadata(merged_config, config, case_info, profile_name)
+
+        return merged_config
+
+    def _apply_time_stepping_settings(self, merged_config: dict, numerics_config: dict) -> None:
+        """Apply time stepping settings from numerics config to controlDict."""
+        if 'time_stepping' not in numerics_config:
+            return
+
+        time_step_settings = numerics_config['time_stepping']
+        merged_config.setdefault('simulation_control', {})
+        merged_config['simulation_control'].setdefault('controlDict', {})
+        control_dict = merged_config['simulation_control']['controlDict']
+
+        # Set time stepping controls
+        control_dict['deltaT'] = time_step_settings.get('max_delta_t', 0.0001)
+        control_dict['adjustTimeStep'] = 'yes' if time_step_settings.get('adjustable_time_step', True) else 'no'
+        control_dict['maxCo'] = time_step_settings.get('max_co', 1.0)
+        control_dict['maxDeltaT'] = time_step_settings.get('max_delta_t', 0.001)
+
+        # Standard controlDict settings
+        control_dict.update({
+            'startFrom': 'startTime',
+            'startTime': 0,
+            'stopAt': 'endTime',
+            'writeControl': 'adjustableRunTime',
+            'writeFormat': 'binary',
+            'writePrecision': 6,
+            'writeCompression': 'off',
+            'timeFormat': 'general',
+            'timePrecision': 6,
+            'runTimeModifiable': 'true'
+        })
+
+    def _apply_physics_settings(self, merged_config: dict, config: dict) -> None:
+        """Apply physics settings and simulation type mapping."""
+        if 'physics' not in merged_config:
+            merged_config['physics'] = {}
+        merged_config['physics'] = deep_merge(merged_config['physics'], config['physics'])
+
+        # Map new model names to old simulation_type for BC generation compatibility
+        # Use lowercase comparison for case-insensitive matching
+        model_to_sim_type = {'laminar': 'laminar', 'rans': 'RAS', 'les': 'LES'}
+        model_value = config['physics'].get('model', 'laminar').lower()
+        merged_config['physics']['simulation_type'] = model_to_sim_type.get(
+            model_value, 'laminar'
+        )
+
+    def _apply_mesh_settings(self, merged_config: dict, config: dict) -> None:
+        """Apply mesh resolution and refinement settings."""
+        if 'mesh' not in config:
+            return
+
+        merged_config.setdefault('mesh', {})
+        merged_config['mesh'].setdefault('mesh_resolution', {})
+
+        if 'cells_per_diameter' in config['mesh']:
+            merged_config['mesh']['mesh_resolution']['cells_per_diameter'] = config['mesh']['cells_per_diameter']
+        if 'target_cell_size_mm' in config['mesh']:
+            merged_config['mesh']['mesh_resolution']['target_cell_size_mm'] = config['mesh']['target_cell_size_mm']
+
+        for key in ['surface_refinement', 'boundary_layers']:
+            if key in config['mesh']:
+                merged_config['mesh'][key] = config['mesh'][key]
+
+    def _store_config_metadata(self, merged_config: dict, config: dict,
+                                case_info: dict, profile_name: str) -> None:
+        """Store metadata and config source information."""
         merged_config['profile_metadata'] = {
             'system': 'new',
             'physics_model': config['physics']['model'],
@@ -351,27 +418,14 @@ class PatientCaseRunner:
         if 'mesh' in config:
             merged_config['profile_metadata']['mesh'] = config['mesh']
 
-        # Store config source information
         merged_config['config_source'] = {
             'case_config_file': case_info['config_file'],
             'system': 'new (physics/numerics/mesh)',
             'numerics_profile': profile_name,
         }
 
-        # Preserve config file path for finding related files (e.g., inlet CSV)
         if '_config_file_path' in config:
             merged_config['_config_file_path'] = config['_config_file_path']
-
-        return {
-            'config': merged_config,
-            'profile_name': f"{config['physics']['model']}_{profile_name}",
-            'profile_key': f"{config['physics']['model']}_{profile_name}",
-            'run_dir': run_dir,
-            'patient_output_dir': patient_output_dir,
-            'case_config': case_info['config'],
-            'case_config_file': case_info['config_file'],
-            'parallel': merged_config['mesh']['SNAPPY_SETTINGS'].get('parallel', False)
-        }
 
     def run_workflow_step(self, sim_config: dict, workflow_step: str = 'runAll', case_dir: str = None) -> bool:
         """Run specific workflow step.

@@ -751,12 +751,28 @@ class WkSetup:
         # Normalize data type for case-insensitive comparison
         data_type_norm = self._normalize_data_type(data_type)
 
+        # Count comment/empty lines and detect header
+        # skiprows in loadtxt skips from beginning BEFORE comment processing
+        comment_lines = 0
+        header_line = 0
+
         with open(file_path, 'r') as f:
-            first_line = f.readline()
-            if "time" in first_line.lower() or "flow" in first_line.lower() or "velocity" in first_line.lower():
-                Q_data = np.loadtxt(file_path, delimiter=",", skiprows=1)
-            else:
-                Q_data = np.loadtxt(file_path, delimiter=",")
+            for line in f:
+                stripped = line.strip()
+                if not stripped or stripped.startswith('#'):
+                    comment_lines += 1
+                else:
+                    # First non-comment line - check if it's a header
+                    if ("time" in stripped.lower() or
+                        "flow" in stripped.lower() or
+                        "velocity" in stripped.lower()):
+                        header_line = 1
+                    break
+
+        # Total lines to skip = comment lines + header (if present)
+        skiprows = comment_lines + header_line
+
+        Q_data = np.loadtxt(file_path, delimiter=",", skiprows=skiprows)
 
         if data_type_norm == "flowrate":
             times = Q_data[:, 0]

@@ -324,6 +324,11 @@ class ExecuteSolverTask(Task):
                     logger.info("🔄 Reconstructing case...")
                     run_command(self.config, ["reconstructPar"], case_dir, "log.reconstructPar")
                     context["case_decomposed"] = False
+
+                    # Clean up processor directories to save disk space
+                    cleanup_processors = run_settings.get("cleanup_processors", True)
+                    if cleanup_processors:
+                        self._cleanup_processor_directories(case_dir)
             else:
                 run_command(self.config, [solver_cmd], case_dir, "log.solver")
                 context["case_decomposed"] = False
@@ -334,6 +339,50 @@ class ExecuteSolverTask(Task):
 
         logger.info("Solver execution completed successfully.")
         return True
+
+    def _cleanup_processor_directories(self, case_dir: str):
+        """
+        Remove processor* directories after reconstruction to save disk space.
+
+        After reconstructPar, the fields are consolidated in time directories
+        and the processor directories are no longer needed.
+        """
+        import glob
+
+        processor_dirs = glob.glob(os.path.join(case_dir, "processor*"))
+
+        if not processor_dirs:
+            return
+
+        # Calculate total size before deletion
+        total_size = 0
+        for proc_dir in processor_dirs:
+            for dirpath, dirnames, filenames in os.walk(proc_dir):
+                for f in filenames:
+                    fp = os.path.join(dirpath, f)
+                    try:
+                        total_size += os.path.getsize(fp)
+                    except OSError:
+                        pass
+
+        # Remove directories
+        removed_count = 0
+        for proc_dir in processor_dirs:
+            try:
+                shutil.rmtree(proc_dir)
+                removed_count += 1
+            except OSError as e:
+                logger.warning(f"Could not remove {proc_dir}: {e}")
+
+        # Format size for display
+        if total_size > 1024 * 1024 * 1024:
+            size_str = f"{total_size / (1024 * 1024 * 1024):.1f} GB"
+        elif total_size > 1024 * 1024:
+            size_str = f"{total_size / (1024 * 1024):.1f} MB"
+        else:
+            size_str = f"{total_size / 1024:.1f} KB"
+
+        logger.info(f"🧹 Cleaned up {removed_count} processor directories (freed {size_str})")
 
 
 class ExecuteReconstructionTask(Task):
@@ -423,3 +472,71 @@ class ExecutePostProcessingTask(Task):
         logger.info("Post-processing completed successfully.")
         logger.info(f"Check results in: {case_dir}/Images/")
         return True
+
+
+class ExecuteHemodynamicsTask(Task):
+    """
+    Compute hemodynamic metrics: WSS, TAWSS, OSI, RRT, pressure drop.
+
+    This task can be run:
+    1. After simulation completes (uses runtime function object data)
+    2. As standalone post-processing (runs postProcess -func wallShearStress if needed)
+
+    For pulsatile flow: Computes TAWSS, OSI, RRT from fieldAverage data
+    For steady flow: Computes steady WSS and pressure drop only
+    """
+
+    def execute(self, context: dict) -> bool:
+        """Execute hemodynamics post-processing."""
+        logger.info("=" * 60)
+        logger.info("HEMODYNAMICS ANALYSIS")
+        logger.info("=" * 60)
+
+        case_dir = context["case_directory"]
+
+        # Determine output directory (reports folder)
+        run_dir = os.path.dirname(case_dir)  # Parent of openfoam/
+        reports_dir = os.path.join(run_dir, "reports")
+        os.makedirs(reports_dir, exist_ok=True)
+
+        try:
+            from aortacfd_lib.hemodynamics_postprocessor import (
+                HemodynamicsPostProcessor,
+                run_hemodynamics_analysis
+            )
+
+            # Run complete analysis
+            results = run_hemodynamics_analysis(case_dir, self.config, reports_dir)
+
+            # Log summary
+            logger.info("-" * 60)
+            logger.info("HEMODYNAMICS SUMMARY")
+            logger.info("-" * 60)
+            logger.info(f"  Inlet type: {results.inlet_type}")
+
+            if results.wss_mean > 0:
+                logger.info(f"  WSS max/mean: {results.wss_max:.4f} / {results.wss_mean:.4f} Pa")
+
+            if results.is_pulsatile and results.tawss_mean > 0:
+                logger.info(f"  TAWSS max/mean: {results.tawss_max:.4f} / {results.tawss_mean:.4f} Pa")
+                logger.info(f"  OSI max/mean: {results.osi_max:.4f} / {results.osi_mean:.4f}")
+                logger.info(f"  RRT max/mean: {results.rrt_max:.4f} / {results.rrt_mean:.4f} Pa⁻¹")
+
+            if results.pressure_drop_mmhg:
+                logger.info("  Pressure drops:")
+                for outlet, dp in results.pressure_drop_mmhg.items():
+                    logger.info(f"    → {outlet}: {dp:.2f} mmHg")
+
+            logger.info("-" * 60)
+            logger.info(f"Full report: {reports_dir}/hemodynamics_report.txt")
+            return True
+
+        except ImportError as e:
+            logger.error(f"Failed to import hemodynamics module: {e}")
+            logger.warning("Hemodynamics analysis skipped.")
+            return False
+        except Exception as e:
+            logger.error(f"Hemodynamics analysis failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return False

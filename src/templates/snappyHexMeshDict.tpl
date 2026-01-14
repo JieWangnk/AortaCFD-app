@@ -240,6 +240,12 @@ meshQualityControls
         maxNonOrtho         {{ config.mesh.SNAPPY_SETTINGS.relaxed_maxNonOrtho }};
         maxBoundarySkewness {{ config.mesh.SNAPPY_SETTINGS.relaxed_maxBoundarySkewness }};
         maxInternalSkewness {{ config.mesh.SNAPPY_SETTINGS.relaxed_maxInternalSkewness }};
+        {% if config.mesh.SNAPPY_SETTINGS.relaxed_minDeterminant is defined %}
+        minDeterminant      {{ config.mesh.SNAPPY_SETTINGS.relaxed_minDeterminant }};
+        {% endif %}
+        {% if config.mesh.SNAPPY_SETTINGS.relaxed_minVol is defined %}
+        minVol              {{ config.mesh.SNAPPY_SETTINGS.relaxed_minVol }};
+        {% endif %}
     }
 };
 

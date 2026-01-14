@@ -70,8 +70,9 @@ config = {
 
             # Feature edge detection (for surfaceFeatures command)
             # Features = edges where face angle < includedAngle
-            # 150° = detect edges with angle > 30° (conservative for smooth vessel walls)
-            "includedAngle": 150,
+            # Higher value = more edges detected (captures gentle curves at patch junctions)
+            # 170° = detect edges with angle > 10° (good for inlet-wall transitions)
+            "includedAngle": 170,
 
             # Feature resolution in snappyHexMesh
             # Threshold angle between surface normals triggering higher refinement
@@ -87,21 +88,21 @@ config = {
             # Ref: guide-meshing-snappyhexmesh-snapping.html
             # ==========================================================================
 
-            # Surface smoothing
-            "nSmoothPatch": 3,              # OpenFOAM default: 3 (pre-snap surface smoothing)
-            "nSmoothInternal": 3,           # Internal smoothing to reduce non-orthogonality
+            # Surface smoothing - increased for better quality and to prevent negative volume cells
+            "nSmoothPatch": 5,              # Increased from 3 for better surface quality
+            "nSmoothInternal": 5,           # Internal smoothing to reduce non-orthogonality
 
             # Snap attraction
-            "snapTolerance": 1.0,           # Proven: 1.0 works better than 2.0 for cardiovascular
+            "snapTolerance": 2.0,           # Increased for better snapping on complex geometry
 
-            # Mesh displacement iterations
-            "nSolveIter": 10,               # Proven: 10 sufficient for cardiovascular (not 30)
+            # Mesh displacement iterations - increased to prevent negative volume cells
+            "nSolveIter": 100,              # Increased from 10 for complex cardiovascular geometry
 
-            # Relaxation iterations
-            "nRelaxIter": 5,                # OpenFOAM default: 5 (adaptation attempts)
+            # Relaxation iterations - increased for better quality
+            "nRelaxIter": 10,               # Increased from 5 for better adaptation
 
-            # Feature edge snapping
-            "nFeatureSnapIter": 5,          # Proven: 5 sufficient for cardiovascular (not 10)
+            # Feature edge snapping - increased for complex geometry
+            "nFeatureSnapIter": 10,         # Increased from 5 for better feature edge snapping
 
             # Feature snap modes
             "implicitFeatureSnap": False,   # Not recommended for complex geometry
@@ -117,76 +118,76 @@ config = {
             # Layer sizing mode
             "relativeSizes": True,          # true = relative to cell size (recommended)
 
-            # Layer count and growth
-            "addLayer": 7,                  # nSurfaceLayers: 7-10 for y+ ≈ 1 in cardiovascular
-            "expansionRatio": 1.15,         # OpenFOAM typical: 1.1, slightly higher for gradual growth
-            "finalLayerThickness": 0.3,     # Last layer as fraction of cell size (0.3-0.5)
-            "minThickness": 0.1,            # Minimum before termination (OpenFOAM default: 0.1)
+            # Layer count and growth - more conservative for quality
+            "addLayer": 10,                 # nSurfaceLayers: 10 for y+ ≈ 1 in cardiovascular
+            "expansionRatio": 1.1,          # Conservative growth ratio for better quality
+            "finalLayerThickness": 0.4,     # Last layer as fraction of cell size
+            "minThickness": 0.15,           # Minimum before termination
 
             # Feature angle controls (critical for curved surfaces)
-            "featureAngle": 170,            # Proven: 170 for good layer coverage at bifurcations
+            "featureAngle": 150,            # Conservative for better layer quality
             "slipFeatureAngle": 30,         # Permit sliding on patches without layers
             "layerTerminationAngle": -180,  # -180 = attempt extrusion everywhere
 
             # Growth controls
             "nGrow": 0,                     # Delay extrusion near features (0 = immediate)
             "nBufferCellsNoExtrude": 0,     # Gradual layer termination regions
-            "addLayers_nRelaxIter": 5,      # Layer addition relaxation iterations
+            "addLayers_nRelaxIter": 10,     # Layer addition relaxation iterations - increased
 
-            # Smoothing iterations (DOE study findings)
-            "nSmoothNormals": 3,            # Interior mesh movement direction smoothing
-            "nSmoothSurfaceNormals": 20,    # DOE: insensitive (10-50 all work)
-            "nSmoothThickness": 10,         # DOE: +0.367 effect - LOWER is better!
-            "nSmoothDisplacement": 10,      # Post-medial axis smoothing
+            # Smoothing iterations - increased for better quality
+            "nSmoothNormals": 5,            # Interior mesh movement direction smoothing
+            "nSmoothSurfaceNormals": 30,    # Increased for curved cardiovascular surfaces
+            "nSmoothThickness": 15,         # Increased for better layer quality
+            "nSmoothDisplacement": 15,      # Post-medial axis smoothing - increased
 
-            # Thickness ratio controls (DOE findings)
-            "maxFaceThicknessRatio": 0.5,   # DOE: +0.286 effect - LOWER is better!
-            "maxThicknessToMedialRatio": 0.3,  # OpenFOAM typical: 0.3 (protect narrow cavities)
+            # Thickness ratio controls - tightened for quality
+            "maxFaceThicknessRatio": 0.4,   # Tighter for better quality
+            "maxThicknessToMedialRatio": 0.25,  # Tighter to prevent self-intersection
             "minMedianAxisAngle": 90,       # OpenFOAM typical: 90°
 
-            # Iteration limits
-            "nLayerIter": 50,               # OpenFOAM default: 50 (max layer addition iterations)
-            "nRelaxedIter": 20,             # Iterations before switching to relaxed quality
+            # Iteration limits - increased for better quality
+            "nLayerIter": 100,              # Increased from 50 for complex geometry
+            "nRelaxedIter": 50,             # Increased for more iterations before relaxing
 
             # ==========================================================================
             # MESH QUALITY CONTROLS
             # Ref: guide-meshing-snappyhexmesh-meshquality.html
+            # Tightened to prevent negative volume cells in complex cardiovascular geometry
             # ==========================================================================
 
             # Non-orthogonality (angle between cell center vector and face normal)
             # < 65°: no correctors needed
             # 65-75°: 1 corrector
             # > 85°: likely divergence
-            "maxNonOrtho": 65,              # OpenFOAM default: 65°
+            "maxNonOrtho": 60,              # Tightened from 65° for better quality
 
-            # Skewness (critical for numerical accuracy)
-            # Note: OpenFOAM default of 4 is too strict for cardiovascular geometries
-            # Coarctations, bifurcations, and high-curvature regions often produce
-            # isolated cells with skewness 4-8. Values up to 8 are acceptable for
-            # pimpleFoam/foamRun with proper under-relaxation.
-            "maxBoundarySkewness": 20,      # OpenFOAM default: 20
-            "maxInternalSkewness": 8,       # OpenFOAM default: 4, relaxed for cardiovascular
+            # Skewness (critical for numerical accuracy and LES)
+            # Tightened for LES and to prevent negative volume cells
+            "maxBoundarySkewness": 4,       # Tightened from 20 for WSS accuracy
+            "maxInternalSkewness": 4,       # Tightened from 8 for LES compatibility
 
-            # Cell shape quality
+            # Cell shape quality - tightened to prevent negative volume cells
             "maxConcave": 80,               # OpenFOAM default: 80°
-            "minVol": 1e-13,                # OpenFOAM default: 1e-13 m³
-            "minTetQuality": 1e-15,         # OpenFOAM default: 1e-15
-            "minArea": -1,                  # -1 = disabled (OpenFOAM default)
-            "minTwist": 0.02,               # OpenFOAM default: 0.02
-            "minDeterminant": 0.001,        # OpenFOAM default: 0.001
-            "minFaceWeight": 0.05,          # OpenFOAM default: 0.05
+            "minVol": 1e-18,                # Tightened from 1e-13 to prevent negative volume
+            "minTetQuality": 1e-30,         # Tighter tet quality
+            "minArea": 1e-20,               # Positive minimum area (was -1 disabled)
+            "minTwist": 0.01,               # Tightened from 0.02 for better quality
+            "minDeterminant": 0.01,         # Tightened from 0.001 for cell quality
+            "minFaceWeight": 0.02,          # Tightened from 0.05 for better face weighting
             "minVolRatio": 0.01,            # OpenFOAM default: 0.01
             "minTriangleTwist": -1,         # -1 = disabled
 
-            # Smoothing and error reduction
-            "nSmoothScale": 4,              # OpenFOAM default: 4
+            # Smoothing and error reduction - increased iterations
+            "nSmoothScale": 6,              # Increased from 4 for more smoothing
             "errorReduction": 0.75,         # OpenFOAM default: 0.75
 
             # Relaxed quality controls (used during layer addition after nRelaxedIter)
-            # More permissive to allow layers to be added, final mesh checked against base
-            "relaxed_maxNonOrtho": 75,
-            "relaxed_maxBoundarySkewness": 25,
-            "relaxed_maxInternalSkewness": 10   # Relaxed for layer addition phase
+            # Still tighter than before to prevent quality issues
+            "relaxed_maxNonOrtho": 70,
+            "relaxed_maxBoundarySkewness": 10,
+            "relaxed_maxInternalSkewness": 6,
+            "relaxed_minDeterminant": 0.001,
+            "relaxed_minVol": 1e-20
         }
     },
     

@@ -1,7 +1,7 @@
 # AortaCFD Configuration Guide
 
-**Updated**: December 3, 2025
-**Version**: 2.1 (Enhanced Inlet Profiles & Mesh Quality)
+**Updated**: January 5, 2026
+**Version**: 2.2 (Hemodynamics & Flowrate Units)
 
 ---
 
@@ -178,6 +178,52 @@ python run_patient.py --help
 
 ---
 
+## 📏 Input Data Units
+
+AortaCFD uses **clinical-friendly units** for user input while internally converting to SI units for OpenFOAM.
+
+### Unit Summary Table
+
+| Parameter | User Input Unit | Internal (SI) | Notes |
+|-----------|-----------------|---------------|-------|
+| **cardiac_output** | L/min | m³/s | Automatic conversion |
+| **flowrate** (config) | L/min | m³/s | Automatic conversion |
+| **flowrate** (CSV) | **L/min** (auto-detect) | m³/s | If max > 1.0, assumes L/min |
+| **velocity** | m/s | m/s | No conversion |
+| **pressure** (WK) | mmHg | Pa | Automatic conversion |
+| **geometry** | mm (with scale_factor=0.001) | m | Via scale_factor |
+| **density (rho)** | kg/m³ | kg/m³ | SI unit |
+| **viscosity (nu)** | m²/s | m²/s | SI unit |
+| **time** | s | s | SI unit |
+
+### CSV Flowrate Auto-Detection
+
+For time-varying inlet (`TIMEVARYING`), the system automatically detects flowrate units:
+
+```
+max(flowrate) > 1.0  →  Assumes L/min  →  Converts to m³/s
+max(flowrate) ≤ 1.0  →  Assumes m³/s   →  No conversion
+```
+
+**Example: Clinical flowrate CSV (L/min)**
+```csv
+# time (s), flowrate (L/min)
+time,flowrate
+0.000,0.25
+0.050,2.70
+0.090,3.30
+0.200,0.25
+0.500,0.25
+```
+
+**Log output confirms conversion:**
+```
+INFO: Flowrate CSV auto-detected as L/min (max=3.30)
+INFO:   Converted to m³/s: max=5.500000e-05 m³/s
+```
+
+---
+
 ## 📊 Configuration Sections
 
 ### 1. **case_info** (Optional)
@@ -303,6 +349,26 @@ Inlet, outlet, and wall boundary conditions.
 }
 ```
 
+**⚠️ CSV File Units (Important!):**
+
+| data_type | Expected Unit | Auto-Detection |
+|-----------|---------------|----------------|
+| `flowrate` | **L/min** | Yes - values > 1.0 assumed L/min, converted internally to m³/s |
+| `velocity` | **m/s** | No conversion needed |
+
+The system automatically detects flowrate units based on magnitude:
+- If max(flowrate) > 1.0 → assumes **L/min** (clinical standard), converts to m³/s internally
+- If max(flowrate) ≤ 1.0 → assumes **m³/s** (SI units), no conversion
+
+**Example CSV format (flowrate in L/min):**
+```csv
+time,flowrate
+0.000,0.25
+0.100,3.30
+0.200,0.50
+...
+```
+
 **Inlet Profile Options (NEW v2.1)**:
 | Profile | Description | Use Case |
 |---------|-------------|----------|
@@ -387,6 +453,47 @@ Parallel execution settings.
 }
 ```
 
+### 9. **hemodynamics** (Optional, NEW v2.2)
+Runtime hemodynamic metric computation.
+
+```json
+"hemodynamics": {
+  "runtime_functions": {
+    "wallShearStress": true,
+    "fieldAverage": "auto",
+    "pressureMonitoring": true
+  },
+  "tawss_settings": {
+    "skip_cycles": 2,
+    "periodicRestart": true,
+    "keep_all_cycles": true
+  }
+}
+```
+
+**Runtime Functions:**
+| Function | Description | When Enabled |
+|----------|-------------|--------------|
+| `wallShearStress` | Compute WSS at wall patches | Always (default: true) |
+| `fieldAverage` | Time-average WSS for TAWSS | `"auto"` = pulsatile only |
+| `pressureMonitoring` | Patch-averaged pressure | Always (default: true) |
+
+**TAWSS Settings (Pulsatile Flow Only):**
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `skip_cycles` | Skip initial cycles before averaging | 2 |
+| `periodicRestart` | Restart averaging each cardiac cycle | true |
+| `keep_all_cycles` | Keep per-cycle TAWSS data | true |
+
+**Hemodynamic Metrics:**
+| Metric | Formula | Interpretation |
+|--------|---------|----------------|
+| **TAWSS** | mean(\|WSS\|) over cycle | Low (<0.4 Pa) → atherosclerosis risk |
+| **OSI** | 0.5 × (1 - \|mean(WSS)\| / mean(\|WSS\|)) | High (>0.3) → disturbed flow |
+| **RRT** | 1 / ((1 - 2×OSI) × TAWSS) | High → long particle residence |
+
+**Note:** For CONSTANT (steady) inlet, OSI=0 and TAWSS=WSS (no time variation).
+
 ---
 
 ## 🎓 Common Workflows
@@ -447,6 +554,70 @@ Parallel execution settings.
   // Run with 12, 15, 18, 20 cells/diameter
 }
 ```
+
+---
+
+## 🛡️ Mesh Quality Controls for LES (NEW v2.2)
+
+**IMPORTANT UPDATE (January 7, 2026)**: Default mesh quality controls have been significantly tightened to **prevent negative volume cells** in complex cardiovascular geometries, especially for LES simulations.
+
+### The Problem
+
+Complex cardiovascular geometries (coarctations, stenoses, bifurcations) with high curvature and narrow regions can produce cells with:
+- Negative or zero volume (numerical precision issues)
+- High skewness (> 4.0) causing numerical instability
+- Poor non-orthogonality (> 65°) requiring excessive correctors
+
+These issues are particularly problematic for LES simulations which require high mesh quality.
+
+### The Solution
+
+AortaCFD v2.2 introduces tightened mesh quality defaults in `src/config/base.py`:
+
+| Parameter | Old Default | New Default | Purpose |
+|-----------|-------------|-------------|---------|
+| `minVol` | 1e-13 | **1e-18** | Prevent negative volume cells |
+| `minDeterminant` | 0.001 | **0.01** | Better cell shape quality |
+| `maxBoundarySkewness` | 20 | **4** | Tighter boundary skewness for WSS accuracy |
+| `maxInternalSkewness` | 8 | **4** | LES-compatible skewness |
+| `maxNonOrtho` | 65° | **60°** | Reduced non-orthogonality requirement |
+| `nSolveIter` | 10 | **100** | More snap solver iterations |
+| `nSmoothPatch` | 3 | **5** | Better surface smoothing |
+| `nLayerIter` | 50 | **100** | More layer addition iterations |
+
+### Validation Results
+
+**Before tightening (failed):**
+```
+***Zero or negative cell volume detected. Minimum negative volume: -2.32238e-16
+***Max skewness = 51.89, highly skew faces detected
+***Number of non-orthogonality errors: 22
+Failed 4 mesh checks.
+```
+
+**After tightening (passed):**
+```
+Min volume = 8.42909e-18. Max volume = 4.90777e-13. Cell volumes OK.
+Max skewness = 2.83 OK.
+Mesh non-orthogonality Max: 59.99 average: 6.10
+Mesh OK.
+```
+
+### Using Mesh Quality Presets
+
+For different use cases, select appropriate presets:
+
+```json
+"mesh": {
+  "quality_preset": "high_quality"  // For LES simulations
+}
+```
+
+| Preset | Use Case | Key Settings |
+|--------|----------|--------------|
+| `draft` | Quick testing | Relaxed thresholds, faster |
+| `standard` | Production (recommended) | Balanced quality/speed |
+| `high_quality` | LES/validation | Ultra-tight: minVol=1e-20, maxSkewness=2.0 |
 
 ---
 
@@ -618,13 +789,28 @@ print(f"Mass balanced: {result['is_balanced']}")  # True if < 1% imbalance
 
 ---
 
-**Last Updated**: December 3, 2025
+**Last Updated**: January 5, 2026
 **Maintained by**: AortaCFD Development Team
 **Questions?**: Check test suite or open an issue
 
 ---
 
 ## 📝 Version History
+
+### v2.2 (January 2026)
+- **Hemodynamics Module**: NEW runtime hemodynamics computation (WSS, TAWSS, OSI, RRT, pressure drop)
+- **Flowrate Unit Auto-Detection**: CSV flowrate data auto-detected as L/min if max > 1.0, converted to m³/s internally
+- **Input Data Units Section**: Added comprehensive documentation of all input units
+- **fieldAverage Auto Mode**: `"auto"` enables time-averaging only for pulsatile flow
+- **TAWSS Settings**: Configurable skip_cycles, periodicRestart, keep_all_cycles for convergence analysis
+- **Pressure Monitoring**: Area-averaged pressure at all patches for pressure drop calculation
+- **🛡️ Mesh Quality Controls for LES**: Tightened defaults to prevent negative volume cells
+  - `minVol`: 1e-13 → 1e-18 (prevent negative volumes)
+  - `minDeterminant`: 0.001 → 0.01 (better cell quality)
+  - `maxBoundarySkewness`: 20 → 4 (WSS accuracy)
+  - `maxInternalSkewness`: 8 → 4 (LES compatibility)
+  - `nSolveIter`: 10 → 100 (more snap iterations)
+  - Validated: 4.7M cell mesh passes checkMesh with zero negative volumes
 
 ### v2.1 (December 2025)
 - **Enhanced Inlet Profiles**: Added `elliptical`, `wall_distance` profiles for irregular inlet geometries
