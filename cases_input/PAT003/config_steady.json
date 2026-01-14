@@ -1,0 +1,81 @@
+{
+  "_comment": "QUICK TEST CONFIG - PAT003 - Infant with 3WK + Murray's law outlets",
+  "_mesh_explanation": [
+    "Using cells_per_diameter=5 (legacy distance mode)",
+    "insideSpan requires closed STL - blood vessels are open tubes",
+    "surface refinement [0,1] adds 2x refinement at walls",
+    "Very coarse mesh for quick workflow testing"
+  ],
+  "_bc_explanation": [
+    "CONSTANT inlet: steady flow, no pulsatility",
+    "3EWINDKESSEL: Auto-converts to 2-element (Z=0) for CONSTANT inlet",
+    "  - Murray's law splits flow based on outlet diameters^3",
+    "Infant BP: 80/50 mmHg (normal for infants)"
+  ],
+
+  "case_info": {
+    "patient_id": "PAT003",
+    "description": "Infant test - CONSTANT inlet + 3WK Murray's law outlets"
+  },
+
+  "physics": {
+    "model": "laminar",
+    "transport_properties": {
+      "rho": 1060,
+      "nu": 3.7736e-6
+    }
+  },
+
+  "numerics": {
+    "profile": "robust"
+  },
+
+  "mesh": {
+    "SNAPPY_SETTINGS": {
+      "surfaceRefinementLevels": [0, 1]
+    },
+    "mesh_resolution": {
+      "cells_per_diameter": 5
+    }
+  },
+
+  "geometry": {
+    "inlet_keywords_ordered": "PAT003inlet",
+    "outlet_keywords_ordered": ["PAT003outlet1", "PAT003outlet2", "PAT003outlet3", "PAT003outlet4"],
+    "wall_keywords_ordered": "PAT003wall_aorta",
+    "scale_factor": 0.001
+  },
+
+  "boundary_conditions": {
+    "inlet": {
+      "type": "CONSTANT",
+      "cardiac_output": 1.0,
+      "_comment": "Infant CO ~1.0 L/min (adult=5.0). Inlet D=10.5mm suggests infant.",
+      "profile": "wall_distance"
+    },
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "_comment": "Auto-converts to 2-element (Z=0) for CONSTANT inlet",
+      "windkessel_settings": {
+        "systolic_pressure": 80,
+        "diastolic_pressure": 50,
+        "venous_pressure": 0,
+        "methodology": "murray_law_automatic",
+        "tau": 1.0,
+        "coupling_mode": "implicit"
+      }
+    },
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+
+  "simulation_control": {
+    "end_time": 0.5,
+    "writeInterval": 0.1
+  },
+
+  "run_settings": {
+    "solution_type": "serial"
+  }
+}

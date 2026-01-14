@@ -75,6 +75,7 @@ OPENFOAM/
 *.vtk
 *.vtu
 *.pvsm
+hemodynamics_report.txt
 
 *.??csv
 

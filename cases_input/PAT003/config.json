@@ -1,0 +1,109 @@
+{
+  "_comment": "PULSATILE TEST CONFIG - PAT003 - 1-Year-Old Infant with 3WK + Murray's law",
+  "_physiology": [
+    "1-year-old infant (~10 kg body weight)",
+    "Heart rate: 120 bpm → cardiac cycle T = 0.5s",
+    "Cardiac output: ~1.0 L/min (100 ml/min/kg)",
+    "Blood pressure: 80/50 mmHg (normal for infants)",
+    "Stroke volume: ~8.3 ml (heart-rate dependent in infants)",
+    "Reference: PMC5895966 - Neonatal Hemodynamics"
+  ],
+  "_bc_explanation": [
+    "TIMEVARYING inlet: pulsatile flow from flowrate.csv",
+    "3EWINDKESSEL: Full 3-element (Z-R-C) for wave propagation",
+    "  - Murray's law splits flow based on outlet diameters^3",
+    "wall_distance profile: Physiological velocity distribution"
+  ],
+  "_hemodynamics_note": [
+    "TAWSS/OSI/RRT will be computed (pulsatile flow)",
+    "fieldAverage starts after 2 cycles (timeStart = 1.0s)",
+    "periodicRestart: true → per-cycle TAWSS for convergence check",
+    "Pressure drop monitored at all patches"
+  ],
+
+  "case_info": {
+    "patient_id": "PAT003",
+    "description": "1-year-old infant pulsatile simulation - 3WK + Murray's law"
+  },
+
+  "physics": {
+    "model": "laminar",
+    "transport_properties": {
+      "rho": 1060,
+      "nu": 3.7736e-6
+    }
+  },
+
+  "numerics": {
+    "profile": "robust"
+  },
+
+  "mesh": {
+    "SNAPPY_SETTINGS": {
+      "surfaceRefinementLevels": [0, 1]
+    },
+    "mesh_resolution": {
+      "cells_per_diameter": 5
+    }
+  },
+
+  "geometry": {
+    "inlet_keywords_ordered": "PAT003inlet",
+    "outlet_keywords_ordered": ["PAT003outlet1", "PAT003outlet2", "PAT003outlet3", "PAT003outlet4"],
+    "wall_keywords_ordered": "PAT003wall_aorta",
+    "scale_factor": 0.001
+  },
+
+  "boundary_conditions": {
+    "inlet": {
+      "type": "TIMEVARYING",
+      "csv_file": "flowrate.csv",
+      "data_type": "flowrate",
+      "profile": "wall_distance",
+      "_comment": "Pulsatile infant aortic flow, 120 bpm, CO ~1.0 L/min"
+    },
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "_comment": "Full 3-element Windkessel for pulsatile flow",
+      "windkessel_settings": {
+        "systolic_pressure": 80,
+        "diastolic_pressure": 50,
+        "venous_pressure": 0,
+        "methodology": "murray_law_automatic",
+        "tau": 0.5,
+        "_tau_comment": "tau = 0.5s matches cardiac cycle for infant HR 120 bpm",
+        "coupling_mode": "implicit"
+      }
+    },
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+
+  "hemodynamics": {
+    "_comment": "Hemodynamic metrics configuration for pulsatile flow",
+    "runtime_functions": {
+      "wallShearStress": true,
+      "fieldAverage": true,
+      "pressureMonitoring": true
+    },
+    "tawss_settings": {
+      "skip_cycles": 2,
+      "periodicRestart": true,
+      "keep_all_cycles": true
+    }
+  },
+
+  "simulation_control": {
+    "end_time": 2.5,
+    "_end_time_comment": "5 cardiac cycles (0.5s each) for TAWSS convergence",
+    "number_of_cycles": 5,
+    "writeInterval": 0.05,
+    "_writeInterval_comment": "10 outputs per cycle for smooth TAWSS"
+  },
+
+  "run_settings": {
+    "solution_type": "parallel",
+    "subdomains": 8
+  }
+}
