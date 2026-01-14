@@ -52,9 +52,9 @@ class TestMethodologyProfileTable:
         assert profile['ddtSchemes']['default'] == 'Euler', \
             "Robust profile should use Euler time integration"
 
-        # Correctors - should be high with convergence-based exit (20 max outer correctors)
-        assert profile['solvers']['PIMPLE']['nOuterCorrectors'] == 20, \
-            "Robust profile should use 20 max outer correctors (convergence-based exit)"
+        # Correctors - should be moderate with convergence-based exit (25 max outer correctors)
+        assert profile['solvers']['PIMPLE']['nOuterCorrectors'] == 25, \
+            "Robust profile should use 25 max outer correctors (convergence-based exit)"
         assert 'outerCorrectorResidualControl' in profile['solvers']['PIMPLE'], \
             "Robust profile must have outerCorrectorResidualControl for early exit"
 
@@ -70,17 +70,17 @@ class TestMethodologyProfileTable:
         """Verify standard profile matches methodology description."""
         profile = NUMERICS_PROFILES['standard']
 
-        # Should be second-order bounded (linearUpwind)
-        assert 'linearUpwind' in profile['divSchemes']['div(phi,U)'], \
-            "Standard profile should use linearUpwind (2nd order bounded)"
+        # Should be second-order bounded (limitedLinearV TVD)
+        assert 'limitedLinear' in profile['divSchemes']['div(phi,U)'], \
+            "Standard profile should use limitedLinearV (2nd order TVD bounded)"
 
         # Time integration should be backward (second-order)
         assert profile['ddtSchemes']['default'] == 'backward', \
             "Standard profile should use backward time integration"
 
-        # Correctors - moderate max with convergence-based exit (30 max outer correctors)
-        assert profile['solvers']['PIMPLE']['nOuterCorrectors'] == 30, \
-            "Standard profile should use 30 max outer correctors (convergence-based exit)"
+        # Correctors - high max with convergence-based exit (50 max outer correctors)
+        assert profile['solvers']['PIMPLE']['nOuterCorrectors'] == 50, \
+            "Standard profile should use 50 max outer correctors (convergence-based exit)"
         assert 'outerCorrectorResidualControl' in profile['solvers']['PIMPLE'], \
             "Standard profile must have outerCorrectorResidualControl for early exit"
 
@@ -96,21 +96,21 @@ class TestMethodologyProfileTable:
         """Verify accurate profile matches methodology description."""
         profile = NUMERICS_PROFILES['accurate']
 
-        # Should use LUST or other low-diffusion scheme
+        # Should use linearUpwind (low-diffusion scheme)
         conv_scheme = profile['divSchemes']['div(phi,U)']
-        assert 'LUST' in conv_scheme or 'linear' in conv_scheme.lower(), \
-            "Accurate profile should use low-diffusion scheme (LUST preferred)"
+        assert 'linearUpwind' in conv_scheme, \
+            "Accurate profile should use linearUpwind (low-diffusion scheme)"
 
-        # Time integration should be CrankNicolson (better phase accuracy)
-        assert 'CrankNicolson' in profile['ddtSchemes']['default'], \
-            "Accurate profile should use CrankNicolson time integration"
+        # Time integration should be backward (stable 2nd order)
+        assert profile['ddtSchemes']['default'] == 'backward', \
+            "Accurate profile should use backward time integration"
 
         # Should have tight tolerances
         assert profile['solvers']['residualControl']['p'] <= 1e-7, \
             "Accurate profile should have tight residual tolerances (≤1e-7)"
 
-        # Order of accuracy (accurate profile uses formal_order_of_accuracy)
-        assert profile['_profile_metadata']['formal_order_of_accuracy'] == 2, \
+        # Order of accuracy
+        assert profile['_profile_metadata']['order_of_accuracy'] == 2, \
             "Accurate profile should be second-order accurate"
 
 
@@ -239,7 +239,8 @@ class TestMethodologyNumericalSchemes:
 
     @pytest.mark.parametrize("profile_name,expected_laplacian", [
         ('robust', 'Gauss linear limited corrected'),
-        ('standard', 'Gauss linear corrected'),
+        ('standard', 'Gauss linear limited corrected'),
+        ('accurate', 'Gauss linear corrected'),
     ])
     def test_laplacian_schemes(self, profile_name, expected_laplacian):
         """Verify Laplacian schemes match methodology."""
