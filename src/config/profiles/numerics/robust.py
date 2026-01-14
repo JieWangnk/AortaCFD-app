@@ -13,9 +13,9 @@ Time Integration:    Euler (1st order implicit)
 Convection:          Gauss upwind (1st order, bounded, highly stable)
 Gradients:           Gauss linear (2nd order - gradients less sensitive)
 Laplacian:           Gauss linear corrected (2nd order)
-Solver:              PIMPLE with many correctors
-Relaxation:          Heavy (U: 0.5, p: 0.2)
-Residual tolerance:  1e-5 (tight for stability)
+Solver:              PIMPLE with moderate correctors (25 outer)
+Relaxation:          Conservative (U: 0.55, p: 0.25) - Windkessel compatible
+Residual tolerance:  1e-3 (relaxed for convergence during diastole)
 Max Courant:         0.5 (small time steps)
 
 TRADE-OFFS
@@ -110,13 +110,13 @@ config: Dict[str, Any] = {
     # Solver settings
     "solvers": {
         "PIMPLE": {
-            "nOuterCorrectors": 50,
+            "nOuterCorrectors": 25,
             "nCorrectors": 3,
-            "nNonOrthogonalCorrectors": 3,
+            "nNonOrthogonalCorrectors": 2,
             "_comment": (
-                "HIGH nOuterCorrectors (50) with convergence-based early exit. "
-                "Per OpenFOAM Wiki: 'Set nOuterCorrectors to high value (~50) and control with residual control.' "
-                "Provides safety margin for pulsatile Windkessel simulations during peak systole."
+                "Moderate nOuterCorrectors (25) with convergence-based early exit. "
+                "Reduced from 50 to prevent hanging during low-flow diastolic phases with Windkessel BCs. "
+                "Still provides safety margin for pulsatile flow while avoiding infinite loops."
             ),
             "outerCorrectorResidualControl": {
                 "p": {"tolerance": 1e-3, "relTol": 0},
@@ -127,15 +127,15 @@ config: Dict[str, Any] = {
         },
         "relaxationFactors": {
             "fields": {
-                "p": 0.15,
-                "_comment": "VERY heavy pressure relaxation for maximum stability (mesh-adaptive system may relax further)"
+                "p": 0.25,
+                "_comment": "Conservative pressure relaxation. Increased from 0.15 to 0.25 for Windkessel compatibility during diastole."
             },
             "equations": {
-                "U": 0.4,
-                "k": 0.4,
-                "omega": 0.4,
-                "epsilon": 0.4,
-                "_comment": "VERY heavy equation relaxation - maximum stability, slower convergence accepted"
+                "U": 0.55,
+                "k": 0.55,
+                "omega": 0.55,
+                "epsilon": 0.55,
+                "_comment": "Conservative equation relaxation. Increased from 0.4 to 0.55 for Windkessel compatibility."
             }
         },
         "residualControl": {

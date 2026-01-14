@@ -44,7 +44,8 @@ WORKFLOW STEPS
   regenerate-numerics → Regenerate fvSchemes/fvSolution with mesh-adaptive adjustments
   solver              → Run CFD solver (parallel execution)
   reconstruct         → Reconstruct results from parallel decomposition
-  post                → Post-processing and visualization
+  hemodynamics        → Compute WSS, TAWSS, OSI, RRT, pressure drop
+  post                → Post-processing and visualization (ParaView)
   all                 → Run complete workflow (default)
 
 ═══════════════════════════════════════════════════════════════
@@ -67,7 +68,7 @@ WORKFLOW STEPS
     workflow_group.add_argument('--steps', '-s', metavar='STEPS',
                                help='Run specific step(s), comma-separated (e.g., --steps case,mesh)')
     workflow_group.add_argument('--step', action='append', dest='step_list',
-                               choices=['case', 'mesh', 'boundary', 'regenerate-numerics', 'solver', 'reconstruct', 'post', 'all'],
+                               choices=['case', 'mesh', 'boundary', 'regenerate-numerics', 'solver', 'reconstruct', 'hemodynamics', 'post', 'all'],
                                help='Run specific step (can use multiple times: --step case --step mesh)')
 
     # ═══ CONFIGURATION ═══
@@ -134,7 +135,8 @@ def main():
             'regenerate-numerics': ('Regenerate fvSchemes/fvSolution with mesh-adaptive adjustments', ['setup:regenerate-numerics']),
             'solver': ('Run CFD solver (pimpleFoam/foamRun)', ['run:solver']),
             'reconstruct': ('Reconstruct parallel case from processor directories', ['run:reconstruct']),
-            'post': ('Execute post-processing', ['execute_post']),
+            'hemodynamics': ('Compute WSS, TAWSS, OSI, RRT, pressure drop', ['run:hemodynamics']),
+            'post': ('Execute ParaView visualization', ['execute_post']),
             'all': ('Complete workflow (default)', ['runAll'])
         }
         
@@ -253,7 +255,7 @@ def main():
         options['case_dir'] = args.case_dir
 
     # Handle workflow steps - support both --steps (comma-separated) and --step (multiple)
-    valid_steps = {'case', 'mesh', 'boundary', 'regenerate-numerics', 'solver', 'reconstruct', 'post', 'all'}
+    valid_steps = {'case', 'mesh', 'boundary', 'regenerate-numerics', 'solver', 'reconstruct', 'hemodynamics', 'post', 'all'}
     steps = []
 
     # Parse --steps (comma-separated string)
@@ -282,6 +284,7 @@ def main():
         'regenerate-numerics': 'setup:regenerate-numerics',
         'solver': 'run:solver',
         'reconstruct': 'run:reconstruct',
+        'hemodynamics': 'run:hemodynamics',
         'post': 'execute_post',
         'all': 'runAll'
     }

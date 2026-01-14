@@ -1,5 +1,9 @@
 # workflow/base_task.py
+"""Base task classes and exceptions for the AortaCFD workflow system."""
+
 from abc import ABC, abstractmethod
+from typing import Any, Dict, Optional, Type
+
 try:
     from ..aortacfd_lib.utils.logger import Logger
 except ImportError:
@@ -18,22 +22,40 @@ class AortaCFDError(Exception):
 class Task(ABC):
     """
     Abstract Base Class for all workflow tasks.
+
     It defines the basic structure, ensuring every task has an execute method.
+
+    Attributes:
+        config: Full configuration dictionary for the simulation.
+        log: Logger instance for task-specific logging.
     """
-    def __init__(self, config: dict):
+
+    config: Dict[str, Any]
+
+    def __init__(self, config: Dict[str, Any]) -> None:
+        """
+        Initialize the task with configuration.
+
+        Args:
+            config: Full configuration dictionary containing geometry, mesh,
+                   physics, and boundary condition settings.
+        """
         self.config = config
         self.log = logger
 
     @abstractmethod
-    def execute(self, context: dict) -> bool:
+    def execute(self, context: Dict[str, Any]) -> bool:
         """
-        Executes the main logic of the task.
+        Execute the main logic of the task.
 
         Args:
-            context (dict): A dictionary for sharing data between tasks
-                            (e.g., case_directory, cardiac_cycle).
+            context: A dictionary for sharing data between tasks.
+                    Common keys include:
+                    - case_directory: Path to OpenFOAM case
+                    - cardiac_cycle: Duration of cardiac cycle in seconds
+                    - patient_name: Patient identifier
 
         Returns:
-            bool: True if the task completed successfully, False otherwise.
+            True if the task completed successfully, False otherwise.
         """
         pass

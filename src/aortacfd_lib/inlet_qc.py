@@ -311,12 +311,25 @@ class InletQC:
         Returns:
             Dictionary with statistics
         """
-        # Read CSV
-        with open(csv_path, 'r') as f:
-            first_line = f.readline()
-            has_header = any(c.isalpha() for c in first_line)
+        # Count comment/empty lines and detect header
+        # skip_header in genfromtxt skips from beginning BEFORE comment processing
+        comment_lines = 0
+        header_line = 0
 
-        skiprows = 1 if has_header else 0
+        with open(csv_path, 'r') as f:
+            for line in f:
+                stripped = line.strip()
+                if not stripped or stripped.startswith('#'):
+                    comment_lines += 1
+                else:
+                    # First non-comment line - check if it's a header
+                    if any(c.isalpha() for c in stripped):
+                        header_line = 1
+                    break
+
+        # Total lines to skip = comment lines + header (if present)
+        skiprows = comment_lines + header_line
+
         data = np.genfromtxt(csv_path, delimiter=',', skip_header=skiprows)
 
         if data.ndim < 2 or data.shape[1] < 2:

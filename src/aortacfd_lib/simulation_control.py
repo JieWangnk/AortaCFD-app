@@ -17,21 +17,30 @@ class SimulationSetup:
         self.jinja_env = Environment(loader=FileSystemLoader(template_path))
         self.version_adapter = OFVersionAdapter(self.config['openfoam_version'])
 
-    def write_controlDict(self, final_control_dict: dict):
+    def write_controlDict(self, final_control_dict: dict, cardiac_cycle: float = None):
         """
         Writes the controlDict file using a finalized dictionary passed from a workflow task.
+
+        Args:
+            final_control_dict: Dictionary of controlDict settings
+            cardiac_cycle: Cardiac cycle duration in seconds (for TAWSS averaging settings)
         """
         template = self.jinja_env.get_template("controlDict.tpl")
-        
+
+        # Use provided cardiac_cycle or fall back to config value
+        if cardiac_cycle is None:
+            cardiac_cycle = self.config.get('cardiac_cycle', 0.8)
+
         context = {
             "version": self.config["openfoam_version"],
-            "controlDict": final_control_dict, # Use the finalized dict passed from the task
+            "controlDict": final_control_dict,
             "config": self.config,
+            "cardiac_cycle": cardiac_cycle,  # Pass actual cardiac cycle to template
             "template_vars": self.config.get('template_vars', {}),
             "openfoam_version": self.config.get('openfoam_version', '8'),
             "openfoam_major_version": self.config.get('openfoam_major_version', 8)
         }
-        
+
         output_path = os.path.join(self.case_dir, "system", "controlDict")
         with open(output_path, 'w') as f:
             f.write(template.render(context))

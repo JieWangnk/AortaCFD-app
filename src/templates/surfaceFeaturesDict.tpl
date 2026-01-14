@@ -16,9 +16,9 @@ FoamFile
 surfaces ({% for patch_name in patches %}"{{ patch_name }}.stl"{% if not loop.last %} {% endif %}{% endfor %});
 
 // Identify a feature when angle between faces < includedAngle
-// 150° = detect edges with angle > 30° (180 - 150 = 30°)
-// Lower value = more edges detected (aggressive), Higher value = fewer edges (conservative)
-includedAngle   {{ config.mesh.SNAPPY_SETTINGS.get('includedAngle', 150) }};
+// Higher value = more edges detected (captures gentle curves at patch junctions)
+// 170° = detect edges with deviation > 10° from flat (good for inlet-wall transitions)
+includedAngle   {{ config.mesh.SNAPPY_SETTINGS.get('includedAngle', 170) }};
 
 {% if config.mesh.SNAPPY_SETTINGS.get('span_refinement_enabled', False) %}
 // ==========================================================================

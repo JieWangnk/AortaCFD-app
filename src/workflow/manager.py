@@ -1,22 +1,56 @@
+"""Workflow manager for orchestrating CFD simulation tasks.
+
+This module provides the WorkflowManager class that coordinates the execution
+of simulation tasks based on predefined recipes (command sequences).
+"""
+
 import os
+from typing import Any, Dict, List, Type
+
 try:
-    from .base_task import logger, AortaCFDError
+    from .base_task import logger, AortaCFDError, Task
     from .tasks import setup_tasks, execution_tasks
 except ImportError:
-    from workflow.base_task import logger, AortaCFDError
+    from workflow.base_task import logger, AortaCFDError, Task
     from workflow.tasks import setup_tasks, execution_tasks
+
 
 class WorkflowManager:
     """
     Orchestrates the execution of a series of tasks based on a user command.
+
+    The manager maintains a registry of available tasks and predefined recipes
+    (sequences of tasks) that can be executed by command name.
+
+    Attributes:
+        config: Full simulation configuration dictionary.
+        context: Shared context dictionary passed between tasks.
+        available_tasks: Registry mapping task names to task classes.
+
+    Example:
+        >>> manager = WorkflowManager(config)
+        >>> manager.run_workflow("runAll")  # Full simulation
+        >>> manager.run_workflow("run:mesh")  # Mesh only
     """
-    def __init__(self, config: dict):
+
+    config: Dict[str, Any]
+    context: Dict[str, Any]
+    available_tasks: Dict[str, Type[Task]]
+
+    def __init__(self, config: Dict[str, Any]) -> None:
+        """
+        Initialize the workflow manager.
+
+        Args:
+            config: Full simulation configuration dictionary containing
+                   geometry, mesh, physics, and boundary condition settings.
+        """
         self.config = config
-        self.context = {}
+        self.context: Dict[str, Any] = {}
         self._register_tasks()
 
-    def _register_tasks(self):
-        """Creates a complete library of all available tasks."""
+    def _register_tasks(self) -> None:
+        """Create a complete library of all available tasks."""
         self.available_tasks = {
             "create_case_structure": setup_tasks.CreateCaseStructureTask,
             "generate_mesh_files": setup_tasks.GenerateMeshFilesTask,
@@ -33,11 +67,30 @@ class WorkflowManager:
             "execute_meshing": execution_tasks.ExecuteMeshingTask,
             "execute_solver": execution_tasks.ExecuteSolverTask,
             "execute_reconstruct": execution_tasks.ExecuteReconstructionTask,
-            "execute_post": execution_tasks.ExecutePostProcessingTask
+            "execute_post": execution_tasks.ExecutePostProcessingTask,
+            "execute_hemodynamics": execution_tasks.ExecuteHemodynamicsTask
         }
         
-    def run_workflow(self, command: str):
-        """Looks up the recipe for a command and runs the tasks."""
+    def run_workflow(self, command: str) -> None:
+        """
+        Look up the recipe for a command and run the tasks.
+
+        Args:
+            command: Workflow command name. Available commands:
+                - "runAll": Full end-to-end simulation
+                - "createCase": Setup case without running solver
+                - "setup:dict": Generate dictionary files only
+                - "setup:bc": Generate boundary condition files
+                - "run:mesh": Execute meshing only
+                - "run:solver": Execute solver only
+                - "run:post": Execute post-processing
+                - "run:reconstruct": Reconstruct parallel case
+                - "run:hemodynamics": Compute hemodynamic metrics (WSS, TAWSS, OSI, RRT)
+                - "setup:regenerate-numerics": Regenerate schemes
+
+        Raises:
+            AortaCFDError: If command is unknown or a task fails.
+        """
         
         recipes = {
             # COMMAND 1: Generates all non-mesh-dependent dictionary files.
@@ -48,7 +101,8 @@ class WorkflowManager:
                 "generate_numerical_schemes",
                 "generate_solver_settings",
                 "generate_decompose_par_dict",
-                "generate_control_dict" # Writes preliminary controlDict
+                "generate_control_dict",  # Writes preliminary controlDict
+                "generate_simulation_report"  # Save config manifest for reproducibility
             ],
 
             # COMMAND 2: Generates BC files and data AFTER a mesh exists.
@@ -65,11 +119,16 @@ class WorkflowManager:
             # COMMAND 4: Executes the solver.
             "run:solver": ["execute_solver"],
 
-            # COMMAND 5: Executes post-processing.
+            # COMMAND 5: Executes post-processing (ParaView visualization).
             "run:post": ["execute_post"],
             "execute_post": ["execute_post"],  # Alias
 
-            # COMMAND 6: Executes reconstruction.
+            # COMMAND 6: Executes hemodynamics analysis (WSS, TAWSS, OSI, RRT, pressure drop).
+            # Can be run after simulation or as standalone post-processing.
+            "run:hemodynamics": ["execute_hemodynamics"],
+            "execute_hemodynamics": ["execute_hemodynamics"],  # Alias
+
+            # COMMAND 7: Executes reconstruction.
             "run:reconstruct": ["execute_reconstruct"],
             "execute_reconstruct": ["execute_reconstruct"],  # Alias
 
@@ -88,7 +147,7 @@ class WorkflowManager:
                 "update_control_dict"
             ],
 
-            # COMMAND 8: The full end-to-end run.
+            # COMMAND 9: The full end-to-end run.
             "runAll": [
                 "create_case_structure",
                 "generate_mesh_files",
@@ -103,8 +162,9 @@ class WorkflowManager:
                 "generate_bc_files",
                 "update_control_dict",
                 "execute_solver",
-                "execute_post",
-                "generate_windkessel_report"  # Generate WK analysis after simulation
+                "execute_hemodynamics",        # Compute WSS, TAWSS, OSI, RRT, pressure drop
+                "execute_post",                # ParaView visualization
+                "generate_windkessel_report"   # Generate WK analysis after simulation
             ],
 
             # COMMAND 9: Regenerate numerical schemes with mesh-adaptive adjustments.

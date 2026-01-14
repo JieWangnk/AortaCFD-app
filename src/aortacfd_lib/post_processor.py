@@ -126,6 +126,8 @@ class OpenFOAMParaView:
             }
         }
 
+        # Default: auto-scale to data range for each timestep
+        # This ensures the color scale adapts to the actual field values
         default_ranges = {
             "U": [0, 1],
             "KE": [0, 100],
@@ -133,7 +135,7 @@ class OpenFOAMParaView:
             "Pressure": [0, 20]
         }
         self.rescaleSettings = rescaleSettings or {
-            key: {"rescaleToData": False, "rescaleRange": val} for key, val in default_ranges.items()
+            key: {"rescaleToData": True, "rescaleRange": val} for key, val in default_ranges.items()
         }
 
     def generate_screenshots(self):
@@ -258,8 +260,9 @@ class OpenFOAMParaView:
         for field in self.fields:
             if field in self.property_map:
                 prop = self.property_map[field]
+                # Look up rescale settings by display name (e.g., "Pressure" not "p")
                 rescale_setting = self.rescaleSettings.get(
-                    field, {"rescaleToData": False, "rescaleRange": [0, 10]}
+                    prop["name"], {"rescaleToData": True, "rescaleRange": [0, 10]}
                 )
 
                 new_properties.append({
@@ -363,30 +366,44 @@ class OpenFOAMParaView:
                 ColorBy(finalDisplay, prop["component"])
                 finalDisplay.SetRepresentationType(prop["representation"])
 
-                # Get the LUT
+                # Get the LUT and opacity transfer function
                 lut = GetColorTransferFunction(prop["name"])
                 pwf = GetOpacityTransferFunction(prop["name"])
                 lut.ApplyPreset(prop["preset"], True)
 
+                # Update display first to get correct data range
+                renderView1.Update()
+
+                # Rescale color map to current timestep data range
                 if prop["rescaleToData"]:
+                    # Use display's method to rescale to data range
                     finalDisplay.RescaleTransferFunctionToDataRange(False, True)
                 else:
                     lut.RescaleTransferFunction(*prop["rescaleRange"])
                     pwf.RescaleTransferFunction(*prop["rescaleRange"])
 
-                # Show colorbar with units
+                # Show colorbar with units - positioned to avoid cropping
                 finalDisplay.SetScalarBarVisibility(renderView1, True)
                 scalarBar = GetScalarBar(lut, renderView1)
                 if scalarBar:
+                    # Position colorbar on left side to avoid cropping
+                    scalarBar.WindowLocation = 'Any Location'
+                    scalarBar.Position = [0.02, 0.25]  # Left side with margin
+                    scalarBar.ScalarBarLength = 0.5    # 50% of view height
+                    scalarBar.ScalarBarThickness = 16  # Width in pixels
+                    scalarBar.Orientation = 'Vertical'
+
+                    # Title and labels
                     scalarBar.Title = f"{prop['name']} ({prop['unit']})"
                     scalarBar.TitleBold = 1
-                    scalarBar.TitleFontSize = 20
+                    scalarBar.TitleFontSize = 16
                     scalarBar.LabelBold = 1
-                    scalarBar.LabelFontSize = 20
-                    scalarBar.AddRangeLabels = 0
+                    scalarBar.LabelFontSize = 14
+                    scalarBar.AddRangeLabels = 1
+                    scalarBar.RangeLabelFormat = '%.2f'
                     scalarBar.Visibility = 1
 
-                # Update
+                # Final update
                 renderView1.Update()
 
                 # Build filename

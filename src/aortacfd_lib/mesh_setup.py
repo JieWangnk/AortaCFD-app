@@ -1,7 +1,18 @@
+"""Mesh setup and geometry analysis for OpenFOAM CFD simulations.
+
+This module provides the GeometryAnalyzer class for analyzing patient-specific
+aortic geometry and generating OpenFOAM mesh dictionaries (blockMeshDict,
+snappyHexMeshDict, surfaceFeaturesDict).
+"""
+
 import os
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
 import numpy as np
+from numpy.typing import NDArray
 from stl import mesh as np_stl_mesh
 from jinja2 import Environment, FileSystemLoader
+
 from .utils.logger import Logger
 from .utils.patch_processing import PatchProcessing
 from .utils.mesh_constants import (
@@ -154,7 +165,7 @@ class GeometryAnalyzer:
         else:
             self.log.warning("Could not determine reference radius from geometry; falling back to default cell sizing.")
 
-    def _determine_reference_radius(self):
+    def _determine_reference_radius(self) -> Optional[float]:
         """
         Determine reference radius for mesh sizing from vessel geometry.
 
@@ -170,7 +181,7 @@ class GeometryAnalyzer:
             mesh in large vessels (adaptive refinement handles this automatically).
 
         Returns:
-            float: Reference radius in meters, or None if no valid geometry
+            Reference radius in meters, or None if no valid geometry.
         """
         radii = []
         if self.inlet_radius and self.inlet_radius > 0:
@@ -188,8 +199,8 @@ class GeometryAnalyzer:
             return max(radii)
         return min(radii)  # Default: conservative sizing based on smallest vessel
 
-    def write_all_mesh_files(self):
-        """A single public method to generate all necessary mesh files."""
+    def write_all_mesh_files(self) -> None:
+        """Generate all necessary mesh dictionary files for OpenFOAM."""
         self.log.info("Generating all mesh dictionary files...")
 
         all_vertices = self._get_all_vertices()
@@ -203,8 +214,8 @@ class GeometryAnalyzer:
 
         self.log.info("All mesh dictionary files generated successfully.")
 
-    def _get_all_vertices(self) -> np.ndarray:
-        """Extracts unique vertices from all STL files defined in the config."""
+    def _get_all_vertices(self) -> NDArray[np.float64]:
+        """Extract unique vertices from all STL files defined in the config."""
         all_verts = []
         for patch_name in self.all_patches:
             all_verts.append(self._extract_vertices_from_stl(f"{patch_name}.stl"))
@@ -215,8 +226,8 @@ class GeometryAnalyzer:
         
         return np.vstack(all_verts)
 
-    def _extract_vertices_from_stl(self, stl_file_basename: str) -> np.ndarray:
-        """Extracts unique vertices from a single STL file (already in meters)."""
+    def _extract_vertices_from_stl(self, stl_file_basename: str) -> NDArray[np.float64]:
+        """Extract unique vertices from a single STL file (already in meters)."""
         full_path = os.path.join(self.tri_surface_path, stl_file_basename)
         try:
             stl_mesh = np_stl_mesh.Mesh.from_file(full_path)
@@ -227,8 +238,8 @@ class GeometryAnalyzer:
         except Exception as e:
             raise RuntimeError(f"Error processing STL file {full_path}: {e}") from e
 
-    def _get_blockmesh_bounds(self, all_vertices: np.ndarray) -> dict:
-        """Calculates the expanded bounding box for blockMesh (in meters)."""
+    def _get_blockmesh_bounds(self, all_vertices: NDArray[np.float64]) -> Dict[str, NDArray[np.float64]]:
+        """Calculate the expanded bounding box for blockMesh (in meters)."""
         min_coords = np.min(all_vertices, axis=0)
         max_coords = np.max(all_vertices, axis=0)
 
@@ -360,16 +371,20 @@ class GeometryAnalyzer:
         Priority 3: Conservative fallback OR span-based auto-calculation.
 
         For SPAN REFINEMENT (v2.0):
-            Smart calculation considering BOTH surface refinement AND span refinement.
+            CORRECTED calculation based on how snappyHexMesh actually works:
 
-            The total refinement is:
-              final_cells = blockMesh_cells × 2^surface_level × 2^span_level
+            Key insight (from systematic testing and OpenFOAM docs):
+            - insideSpan mode uses ONLY span_level for internal volume refinement
+            - Surface refinement is INDEPENDENT and only affects near-surface cells
+            - cellsAcrossSpan is the TARGET, span_level LIMITS max refinement
 
-            We solve for blockMesh_cells:
-              blockMesh_cells = cells_across_span / (2^surface_level × 2^span_level)
-              blockMesh_cells = cells_across_span / 2^(surface_level + span_level)
+            The correct formula is:
+              achievable_cells = blockMesh_cells × 2^span_level
+              blockMesh_cells = cells_across_span / 2^span_level
 
-            This ensures the correct base mesh size for any combination of refinement levels.
+            NOT the old (incorrect) formula that combined surface + span levels.
+
+            This ensures cellsAcrossSpan actually achieves the target resolution.
 
         For LEGACY (no span refinement):
             Uses DEFAULT_CELLS_PER_DIAMETER (10 cells/D) - triggers warning.
@@ -386,50 +401,57 @@ class GeometryAnalyzer:
             D_ref_mm = D_ref_m * 1000  # For display
 
             if span_refinement_enabled and cells_across_span > 0:
-                # Get refinement levels from config
+                # Get refinement levels from config (surface is logged but NOT used for blockMesh calc)
                 surface_levels = self.snappy_settings.get('surfaceRefinementLevels', [1, 2])
                 surface_level = surface_levels[1] if len(surface_levels) > 1 else surface_levels[0]
 
-                # span_refinement_level: if not set, auto-calculate later
+                # span_refinement_level: if not set, auto-calculate
                 span_level = self.snappy_settings.get('span_refinement_level', None)
 
-                # Smart calculation: work backwards from target cells
-                # final_cells = blockMesh × 2^surface × 2^span
-                # blockMesh = final_cells / 2^(surface + span)
+                # CORRECTED calculation:
+                # - insideSpan mode uses ONLY span_level for internal refinement
+                # - achievable = blockMesh × 2^span_level
+                # - Surface refinement is SEPARATE (affects near-surface cells only)
                 #
-                # If span_level not specified, we need to determine both blockMesh and span_level
-                # Strategy: Find the best combination that achieves target with minimum total refinement
+                # Reference: OpenFOAM User Guide & systematic parameter study
+
+                # Minimum blockMesh = 4 cells/D (practical limit for quality mesh)
+                MIN_BLOCKMESH = 4
 
                 if span_level is not None:
                     # User specified span_refinement_level - calculate blockMesh directly
-                    total_refinement = surface_level + span_level
-                    refinement_multiplier = 2 ** total_refinement
-                    blockmesh_cells_per_d = max(2, int(np.ceil(cells_across_span / refinement_multiplier)))
-                    effective_cells = blockmesh_cells_per_d * refinement_multiplier
+                    # ONLY use span_level (NOT surface_level) for insideSpan calculation
+                    span_multiplier = 2 ** span_level
+                    blockmesh_cells_per_d = max(MIN_BLOCKMESH, int(np.ceil(cells_across_span / span_multiplier)))
+                    achievable_cells = blockmesh_cells_per_d * span_multiplier
 
                     self.log.info(
-                        f"SPAN REFINEMENT: Smart blockMesh calculation\n"
+                        f"SPAN REFINEMENT: Corrected blockMesh calculation\n"
                         f"  Target: {cells_across_span} cells across span\n"
-                        f"  Surface refinement level: {surface_level}\n"
-                        f"  Span refinement level: {span_level}\n"
-                        f"  Total refinement: 2^{total_refinement} = {refinement_multiplier}x\n"
+                        f"  Span refinement level: {span_level} (2^{span_level} = {span_multiplier}x)\n"
+                        f"  Surface refinement level: {surface_level} (separate, near-surface only)\n"
                         f"  BlockMesh: {blockmesh_cells_per_d} cells/D\n"
-                        f"  Final cells: {blockmesh_cells_per_d} × {refinement_multiplier} = {effective_cells} cells/D"
+                        f"  Achievable: {blockmesh_cells_per_d} × {span_multiplier} = {achievable_cells} cells across span"
                     )
+
+                    # Warn if target cannot be achieved
+                    if achievable_cells < cells_across_span:
+                        self.log.warning(
+                            f"  ⚠️  Target {cells_across_span} not fully achievable with span_level={span_level}\n"
+                            f"      Maximum achievable: {achievable_cells} cells\n"
+                            f"      Consider increasing span_refinement_level to {span_level + 1}"
+                        )
                 else:
-                    # Auto-calculate optimal span_level and blockMesh
-                    # Try to minimize blockMesh size while achieving target
-                    # Minimum blockMesh = 2 cells/D (practical limit)
-                    MIN_BLOCKMESH = 2
+                    # Auto-calculate optimal span_level to achieve target
+                    # Strategy: Find minimum span_level that achieves target with reasonable blockMesh
 
                     best_blockmesh = None
                     best_span_level = None
 
-                    # Try span levels 1, 2, 3 and find the one that gives best blockMesh
+                    # Try span levels 1, 2, 3, 4 and find the one that achieves target
                     for try_span_level in range(1, 5):
-                        total_ref = surface_level + try_span_level
-                        ref_mult = 2 ** total_ref
-                        required_blockmesh = int(np.ceil(cells_across_span / ref_mult))
+                        span_mult = 2 ** try_span_level
+                        required_blockmesh = int(np.ceil(cells_across_span / span_mult))
 
                         if required_blockmesh >= MIN_BLOCKMESH:
                             best_blockmesh = required_blockmesh
@@ -437,30 +459,28 @@ class GeometryAnalyzer:
                             break
 
                     if best_blockmesh is None:
-                        # Fallback: use minimum blockMesh with maximum reasonable span level
+                        # Fallback: use minimum blockMesh with span level 3
                         best_blockmesh = MIN_BLOCKMESH
                         best_span_level = 3
 
                     blockmesh_cells_per_d = best_blockmesh
                     span_level = best_span_level
-                    total_refinement = surface_level + span_level
-                    refinement_multiplier = 2 ** total_refinement
-                    effective_cells = blockmesh_cells_per_d * refinement_multiplier
+                    span_multiplier = 2 ** span_level
+                    achievable_cells = blockmesh_cells_per_d * span_multiplier
 
                     self.log.info(
-                        f"SPAN REFINEMENT: Auto-optimized blockMesh calculation\n"
+                        f"SPAN REFINEMENT: Auto-calculated settings\n"
                         f"  Target: {cells_across_span} cells across span\n"
-                        f"  Surface refinement level: {surface_level}\n"
-                        f"  Auto-calculated span level: {span_level}\n"
-                        f"  Total refinement: 2^{total_refinement} = {refinement_multiplier}x\n"
+                        f"  Auto-calculated span level: {span_level} (2^{span_level} = {span_multiplier}x)\n"
+                        f"  Surface refinement level: {surface_level} (separate, near-surface only)\n"
                         f"  BlockMesh: {blockmesh_cells_per_d} cells/D\n"
-                        f"  Final cells: {blockmesh_cells_per_d} × {refinement_multiplier} = {effective_cells} cells/D"
+                        f"  Achievable: {blockmesh_cells_per_d} × {span_multiplier} = {achievable_cells} cells across span"
                     )
 
                 cell_size_m = D_ref_m / blockmesh_cells_per_d
                 cell_size_mm = cell_size_m * 1000
 
-                return cell_size_m, f"SPAN_REFINEMENT: blockMesh={blockmesh_cells_per_d} cells/D, surface_level={surface_level}, span_level={span_level}, target={cells_across_span}"
+                return cell_size_m, f"SPAN_REFINEMENT: blockMesh={blockmesh_cells_per_d} cells/D, span_level={span_level}, target={cells_across_span}, achievable={achievable_cells}"
             else:
                 # Legacy warning for when span refinement is NOT used
                 cell_size_m = D_ref_m / DEFAULT_CELLS_PER_DIAMETER
@@ -784,12 +804,13 @@ class GeometryAnalyzer:
         """
         Calculate the required refinement level for span-based refinement.
 
-        Smart calculation considering both surface refinement and span refinement:
-          final_cells = blockMesh × 2^surface_level × 2^span_level
-          span_level = log2(cells_across_span / blockMesh) - surface_level
+        CORRECTED calculation (matches _cell_size_from_default_fallback):
+        - insideSpan mode uses ONLY span_level for internal refinement
+        - achievable_cells = blockMesh × 2^span_level
+        - Surface refinement is SEPARATE (near-surface cells only)
 
         If span_refinement_level is explicitly set in config, use that value.
-        Otherwise, auto-calculate based on cells_across_span and surface refinement.
+        Otherwise, auto-calculate based on cells_across_span.
 
         Returns:
             int: Required refinement level (default 2 if span refinement not enabled)
@@ -807,24 +828,20 @@ class GeometryAnalyzer:
             self.log.info(f"Using user-specified span refinement level: {user_span_level}")
             return user_span_level
 
-        # Auto-calculate span level considering surface refinement
+        # Auto-calculate span level (surface refinement is SEPARATE, not included)
         # This must match the logic in _cell_size_from_default_fallback
-        surface_levels = self.snappy_settings.get('surfaceRefinementLevels', [1, 2])
-        surface_level = surface_levels[1] if len(surface_levels) > 1 else surface_levels[0]
+        MIN_BLOCKMESH = 4
 
-        MIN_BLOCKMESH = 2
-
-        # Try span levels 1, 2, 3, 4 and find the one that gives valid blockMesh
+        # Try span levels 1, 2, 3, 4 and find the one that achieves target with reasonable blockMesh
         for try_span_level in range(1, 5):
-            total_ref = surface_level + try_span_level
-            ref_mult = 2 ** total_ref
-            required_blockmesh = int(np.ceil(cells_across_span / ref_mult))
+            span_mult = 2 ** try_span_level
+            required_blockmesh = int(np.ceil(cells_across_span / span_mult))
 
             if required_blockmesh >= MIN_BLOCKMESH:
+                achievable = required_blockmesh * span_mult
                 self.log.info(
                     f"Auto-calculated span refinement level: {try_span_level}\n"
-                    f"  (surface={surface_level}, span={try_span_level}, blockMesh={required_blockmesh} → "
-                    f"{required_blockmesh * ref_mult} cells/D)"
+                    f"  (blockMesh={required_blockmesh} cells/D × 2^{try_span_level} = {achievable} cells across span)"
                 )
                 return try_span_level
 

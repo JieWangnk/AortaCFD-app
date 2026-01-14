@@ -95,10 +95,25 @@ class InletMapping:
 
     def _read_csv_file(self, file_name):
         try:
+            # Count comment/empty lines and detect header
+            # skip_header in genfromtxt skips from beginning BEFORE comment processing
+            comment_lines = 0
+            header_line = 0
+
             with open(file_name, 'r') as f:
-                first_line = f.readline()
-                has_header = any(c.isalpha() for c in first_line)
-            skiprows = 1 if has_header else 0
+                for line in f:
+                    stripped = line.strip()
+                    if not stripped or stripped.startswith('#'):
+                        comment_lines += 1
+                    else:
+                        # First non-comment line - check if it's a header
+                        if any(c.isalpha() for c in stripped):
+                            header_line = 1
+                        break
+
+            # Total lines to skip = comment lines + header (if present)
+            skiprows = comment_lines + header_line
+
             data = np.genfromtxt(file_name, delimiter=',', skip_header=skiprows)
             if data.ndim < 2 or data.shape[1] < 2:
                 raise ValueError(f"CSV file {file_name} must have at least 2 columns.")
@@ -107,6 +122,20 @@ class InletMapping:
 
         times = data[:, 0]
         yval = data[:, 1]
+
+        # Auto-detect flowrate units and convert to m³/s if needed
+        # Clinical data is typically in L/min (values > 1.0)
+        # CFD data is typically in m³/s (values << 1.0, order of 1e-4 to 1e-5)
+        if self.data_type == 'flowrate':
+            max_abs_value = np.max(np.abs(yval))
+            if max_abs_value > 1.0:
+                # Likely L/min - convert to m³/s
+                yval = yval * 1e-3 / 60.0  # L/min -> m³/s
+                self.log.info(f"Flowrate CSV auto-detected as L/min (max={max_abs_value:.2f})")
+                self.log.info(f"  Converted to m³/s: max={np.max(np.abs(yval)):.6e} m³/s")
+            else:
+                self.log.info(f"Flowrate CSV appears to be in m³/s (max={max_abs_value:.6e})")
+
         cardiac_cycle = self._determine_cardiac_period(times)
         return times, yval, cardiac_cycle
 
@@ -951,8 +980,9 @@ class InletMapping:
             csv_value = csv_values[i]
 
             # Determine target flow rate in m³/s
+            # Note: csv_values are already converted to m³/s in _read_csv_file()
             if self.data_type == 'flowrate':
-                # CSV contains flow rate directly (assumed m³/s)
+                # CSV flow rate already converted to m³/s during file read
                 target_Q = csv_value
             else:
                 # CSV contains velocity - convert to flow rate

@@ -1075,8 +1075,8 @@ class BoundaryConditionValidator:
         try:
             import pandas as pd
 
-            # Read CSV file
-            df = pd.read_csv(csv_path)
+            # Read CSV file, skipping comment lines
+            df = pd.read_csv(csv_path, comment='#')
 
             # Normalize column names to lowercase for case-insensitive matching
             # Create mapping: original_name -> lowercase_name
@@ -1227,9 +1227,50 @@ class BoundaryConditionValidator:
 
         return result
 
+    def _check_direct_rcz_mode(self, wk_settings: dict) -> bool:
+        """
+        Check if direct RCZ mode is being used.
+
+        Direct RCZ mode is when the user provides R, C, Z values for outlets
+        directly, bypassing the need for systolic/diastolic pressure for
+        automatic Windkessel calculation.
+
+        Args:
+            wk_settings: Windkessel settings dictionary
+
+        Returns:
+            True if outlet_parameters contains at least one outlet with R, C, Z values
+        """
+        outlet_params = wk_settings.get('outlet_parameters', {})
+
+        if not outlet_params:
+            return False
+
+        # Check if any outlet has R, C, Z specified
+        for outlet_name, params in outlet_params.items():
+            if not isinstance(params, dict):
+                continue
+
+            # Check for required keys R, C, Z
+            has_all_keys = all(key in params for key in ['R', 'C', 'Z'])
+            if has_all_keys:
+                # Verify values are numeric
+                try:
+                    for key in ['R', 'C', 'Z']:
+                        float(params[key])
+                    return True  # At least one outlet has valid R, C, Z
+                except (TypeError, ValueError):
+                    continue
+
+        return False
+
     def validate_windkessel_parameters(self, outlet_config: dict) -> ValidationResult:
         """
         Validate Windkessel boundary condition parameters.
+
+        Supports two modes:
+        1. Automatic calculation: Requires systolic/diastolic pressure
+        2. Direct RCZ mode: User provides R, C, Z for all outlets (no pressure needed)
 
         Args:
             outlet_config: Outlet configuration dictionary
@@ -1246,6 +1287,10 @@ class BoundaryConditionValidator:
 
         wk_settings = outlet_config['windkessel_settings']
 
+        # Check if direct RCZ mode is being used (user provided R, C, Z for all outlets)
+        # In direct RCZ mode, systolic/diastolic pressure are not required
+        direct_rcz_mode = self._check_direct_rcz_mode(wk_settings)
+
         # Check methodology (optional - defaults are used if not specified)
         methodology = wk_settings.get('methodology', '').lower()
         valid_methodologies = ['murray_law_automatic', 'manual', 'literature_based']
@@ -1255,48 +1300,58 @@ class BoundaryConditionValidator:
                 f"Unknown methodology '{methodology}'. Expected: {', '.join(valid_methodologies)}"
             )
 
-        # Validate pressure values (always required)
+        # Validate pressure values (required unless in direct RCZ mode)
         systolic_p = wk_settings.get('systolic_pressure')
         diastolic_p = wk_settings.get('diastolic_pressure')
 
-        if systolic_p is None:
-            result.add_error("Windkessel settings missing 'systolic_pressure'")
-        elif not isinstance(systolic_p, (int, float)):
-            result.add_error(f"Invalid systolic_pressure: {systolic_p} (must be numeric)")
+        if not direct_rcz_mode:
+            # Pressure is required for automatic WK calculation
+            if systolic_p is None:
+                result.add_error("Windkessel settings missing 'systolic_pressure'")
+            elif not isinstance(systolic_p, (int, float)):
+                result.add_error(f"Invalid systolic_pressure: {systolic_p} (must be numeric)")
+            else:
+                min_p, max_p = self.WINDKESSEL_RANGES['systolic_pressure']
+                if not (min_p <= systolic_p <= max_p):
+                    result.add_warning(
+                        f"Systolic pressure ({systolic_p} mmHg) outside typical range: {min_p}-{max_p} mmHg"
+                    )
+
+            if diastolic_p is None:
+                result.add_error("Windkessel settings missing 'diastolic_pressure'")
+            elif not isinstance(diastolic_p, (int, float)):
+                result.add_error(f"Invalid diastolic_pressure: {diastolic_p} (must be numeric)")
+            else:
+                min_p, max_p = self.WINDKESSEL_RANGES['diastolic_pressure']
+                if not (min_p <= diastolic_p <= max_p):
+                    result.add_warning(
+                        f"Diastolic pressure ({diastolic_p} mmHg) outside typical range: {min_p}-{max_p} mmHg"
+                    )
+
+            # Check pressure relationship
+            if systolic_p and diastolic_p:
+                if systolic_p <= diastolic_p:
+                    result.add_error(
+                        f"Systolic pressure ({systolic_p}) must be greater than diastolic ({diastolic_p})"
+                    )
+
+                pulse_pressure = systolic_p - diastolic_p
+                if pulse_pressure < 20:
+                    result.add_warning(
+                        f"Pulse pressure ({pulse_pressure} mmHg) is very low. Typical range: 30-50 mmHg"
+                    )
+                elif pulse_pressure > 80:
+                    result.add_warning(
+                        f"Pulse pressure ({pulse_pressure} mmHg) is very high. Typical range: 30-50 mmHg"
+                    )
         else:
-            min_p, max_p = self.WINDKESSEL_RANGES['systolic_pressure']
-            if not (min_p <= systolic_p <= max_p):
-                result.add_warning(
-                    f"Systolic pressure ({systolic_p} mmHg) outside typical range: {min_p}-{max_p} mmHg"
-                )
-
-        if diastolic_p is None:
-            result.add_error("Windkessel settings missing 'diastolic_pressure'")
-        elif not isinstance(diastolic_p, (int, float)):
-            result.add_error(f"Invalid diastolic_pressure: {diastolic_p} (must be numeric)")
-        else:
-            min_p, max_p = self.WINDKESSEL_RANGES['diastolic_pressure']
-            if not (min_p <= diastolic_p <= max_p):
-                result.add_warning(
-                    f"Diastolic pressure ({diastolic_p} mmHg) outside typical range: {min_p}-{max_p} mmHg"
-                )
-
-        # Check pressure relationship
-        if systolic_p and diastolic_p:
-            if systolic_p <= diastolic_p:
-                result.add_error(
-                    f"Systolic pressure ({systolic_p}) must be greater than diastolic ({diastolic_p})"
-                )
-
-            pulse_pressure = systolic_p - diastolic_p
-            if pulse_pressure < 20:
-                result.add_warning(
-                    f"Pulse pressure ({pulse_pressure} mmHg) is very low. Typical range: 30-50 mmHg"
-                )
-            elif pulse_pressure > 80:
-                result.add_warning(
-                    f"Pulse pressure ({pulse_pressure} mmHg) is very high. Typical range: 30-50 mmHg"
-                )
+            # Direct RCZ mode - pressure values are optional but validate if provided
+            if systolic_p is not None and diastolic_p is not None:
+                if isinstance(systolic_p, (int, float)) and isinstance(diastolic_p, (int, float)):
+                    if systolic_p <= diastolic_p:
+                        result.add_warning(
+                            f"Systolic pressure ({systolic_p}) should be greater than diastolic ({diastolic_p})"
+                        )
 
         # Validate initial_pressure_method if specified
         init_method = wk_settings.get('initial_pressure_method', 'diastolic').lower()

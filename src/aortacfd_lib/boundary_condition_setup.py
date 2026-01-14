@@ -1,8 +1,28 @@
+"""Boundary condition setup for OpenFOAM CFD simulations.
+
+This module generates initial condition files (U, p, nut, k, omega) by reading
+from the configuration and using Jinja2 templates.
+"""
+
 import os
+from typing import Any, Dict, Optional, Tuple
+
 from jinja2 import Environment, FileSystemLoader
+
 from .utils.logger import Logger
 from .utils.ofVersionAdapter import OFVersionAdapter
 from .utils.patch_utils import detect_world_patch_mode, get_murray_law_cache_key
+from .constants import (
+    MMHG_TO_PA,
+    SYSTOLIC_PRESSURE_DEFAULT,
+    DIASTOLIC_PRESSURE_DEFAULT,
+    AORTIC_DIAMETER_DEFAULT,
+    AORTIC_VELOCITY_REFERENCE,
+    C_MU,
+    TURBULENCE_INTENSITY_DEFAULT,
+    TURBULENCE_VISCOSITY_RATIO_DEFAULT,
+    MIXING_LENGTH_FACTOR,
+)
 
 class BoundaryConditionSetup:
     """
@@ -283,36 +303,45 @@ class BoundaryConditionSetup:
         self.log.info(f"Successfully wrote file: {os.path.basename(output_path)}")
     
     
-    def _calculate_turbulence_parameters(self):
+    def _calculate_turbulence_parameters(self) -> Dict[str, float]:
         """
         Calculate turbulence parameters for RANS simulation.
-        Based on typical cardiovascular flow conditions.
+
+        Based on typical cardiovascular flow conditions using k-omega SST model.
+
+        Returns:
+            Dictionary containing:
+            - k_initial: Initial turbulent kinetic energy (m²/s²)
+            - omega_initial: Initial specific dissipation rate (1/s)
+            - turbulence_intensity: Turbulence intensity fraction
+            - mixing_length: Mixing length for boundary conditions (m)
         """
         # Get turbulence parameters from physics settings or use defaults
-        turbulence_intensity = self.physics_settings.get('turbulence_intensity', 0.05)  # 5% default
-        turbulence_viscosity_ratio = self.physics_settings.get('turbulence_viscosity_ratio', 10.0)  # 10:1 default
-        
+        turbulence_intensity = self.physics_settings.get(
+            'turbulence_intensity', TURBULENCE_INTENSITY_DEFAULT
+        )
+        turbulence_viscosity_ratio = self.physics_settings.get(
+            'turbulence_viscosity_ratio', TURBULENCE_VISCOSITY_RATIO_DEFAULT
+        )
+
         # Estimate characteristic velocity from inlet settings
         if 'mean_velocity' in self.inlet_settings:
             U_ref = self.inlet_settings['mean_velocity']
         else:
-            U_ref = 0.5  # Default reference velocity in m/s for aortic flow
-        
+            U_ref = AORTIC_VELOCITY_REFERENCE
+
         # Calculate turbulent kinetic energy: k = 1.5 * (U * I)^2
         k_initial = 1.5 * (U_ref * turbulence_intensity) ** 2
-        
+
         # Calculate characteristic length scale (hydraulic diameter estimate)
-        # For aortic flow, assume ~25mm diameter
-        L_ref = 0.025  # 25mm in meters
-        
+        L_ref = AORTIC_DIAMETER_DEFAULT
+
         # Calculate omega: omega = k^0.5 / (C_mu^0.25 * L)
-        # Where C_mu = 0.09 for k-omega SST
-        C_mu = 0.09
-        omega_initial = k_initial**0.5 / (C_mu**0.25 * L_ref)
-        
+        omega_initial = k_initial**0.5 / (C_MU**0.25 * L_ref)
+
         # Calculate mixing length for omega boundary condition
-        mixing_length = 0.07 * L_ref  # 7% of characteristic length
-        
+        mixing_length = MIXING_LENGTH_FACTOR * L_ref
+
         return {
             'k_initial': k_initial,
             'omega_initial': omega_initial,
@@ -372,14 +401,11 @@ class BoundaryConditionSetup:
             wk_settings = self.outlet_settings.get('windkessel_settings', {})
 
             # Get systolic and diastolic pressures (mmHg)
-            systolic = wk_settings.get('systolic_pressure', 120)  # Default adult normal
-            diastolic = wk_settings.get('diastolic_pressure', 80)   # Default adult normal
+            systolic = wk_settings.get('systolic_pressure', SYSTOLIC_PRESSURE_DEFAULT)
+            diastolic = wk_settings.get('diastolic_pressure', DIASTOLIC_PRESSURE_DEFAULT)
 
             # Get initialization method (default: diastolic - simulation starts at end-diastole)
             init_method = wk_settings.get('initial_pressure_method', 'diastolic').lower()
-
-            # Unit conversion
-            MMHG_TO_PA = 133.322
 
             # Calculate pressure based on method
             # Reference: Klabunde (2011) Cardiovascular Physiology Concepts
