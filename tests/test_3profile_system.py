@@ -76,12 +76,16 @@ class TestRobustProfile:
         assert 'outerCorrectorResidualControl' in self.profile['solvers']['PIMPLE'], \
             "Robust must have outerCorrectorResidualControl for early exit"
 
-    def test_heavy_relaxation(self):
-        """Robust should use conservative under-relaxation (Windkessel compatible)."""
-        assert self.profile['solvers']['relaxationFactors']['equations']['U'] == 0.55, \
-            "Robust must use U relaxation = 0.55 (Windkessel compatible)"
-        assert self.profile['solvers']['relaxationFactors']['fields']['p'] == 0.25, \
-            "Robust must use p relaxation = 0.25 (Windkessel compatible)"
+    def test_moderate_relaxation_with_final_correction(self):
+        """Robust should use moderate relaxation with pFinal/UFinal=1 for Windkessel coupling."""
+        assert self.profile['solvers']['relaxationFactors']['equations']['U'] == 0.7, \
+            "Robust must use U relaxation = 0.7 (Windkessel compatible)"
+        assert self.profile['solvers']['relaxationFactors']['equations']['UFinal'] == 1.0, \
+            "Robust must use UFinal = 1.0 for full correction"
+        assert self.profile['solvers']['relaxationFactors']['fields']['p'] == 0.3, \
+            "Robust must use p relaxation = 0.3 (Windkessel compatible)"
+        assert self.profile['solvers']['relaxationFactors']['fields']['pFinal'] == 1.0, \
+            "Robust must use pFinal = 1.0 for full correction"
 
     def test_relaxed_tolerances(self):
         """Robust uses relaxed tolerances (1e-4) for stability."""
@@ -255,17 +259,21 @@ class TestProfileComparison:
         assert tol_accurate == 1e-7
         assert tol_robust > tol_standard > tol_accurate
 
-    def test_relaxation_progression(self):
-        """Verify relaxation: robust is conservative, standard/accurate are moderate."""
+    def test_relaxation_uniformity(self):
+        """Verify all profiles use same moderate relaxation with pFinal/UFinal=1 for Windkessel."""
         relax_u_robust = NUMERICS_PROFILES['robust']['solvers']['relaxationFactors']['equations']['U']
         relax_u_std = NUMERICS_PROFILES['standard']['solvers']['relaxationFactors']['equations']['U']
         relax_u_acc = NUMERICS_PROFILES['accurate']['solvers']['relaxationFactors']['equations']['U']
 
-        assert relax_u_robust == 0.55, "Robust uses 0.55 (Windkessel compatible)"
+        # All profiles now use moderate relaxation for Windkessel compatibility
+        assert relax_u_robust == 0.7, "Robust uses 0.7 (Windkessel compatible)"
         assert relax_u_std == 0.7, "Standard uses 0.7"
-        assert relax_u_acc == 0.7, "Accurate uses 0.7 (same as standard)"
-        assert relax_u_robust < relax_u_std, \
-            "Robust relaxation should be more conservative than standard"
+        assert relax_u_acc == 0.7, "Accurate uses 0.7"
+
+        # All profiles should have pFinal/UFinal = 1 for full correction
+        assert NUMERICS_PROFILES['robust']['solvers']['relaxationFactors']['fields']['pFinal'] == 1.0
+        assert NUMERICS_PROFILES['standard']['solvers']['relaxationFactors']['fields']['pFinal'] == 1.0
+        assert NUMERICS_PROFILES['accurate']['solvers']['relaxationFactors']['fields']['pFinal'] == 1.0
 
     def test_corrector_progression(self):
         """Verify max corrector counts (all use convergence-based exit)."""

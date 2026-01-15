@@ -14,7 +14,7 @@ Convection:          Gauss upwind (1st order, bounded, highly stable)
 Gradients:           Gauss linear (2nd order - gradients less sensitive)
 Laplacian:           Gauss linear corrected (2nd order)
 Solver:              PIMPLE with moderate correctors (25 outer)
-Relaxation:          Conservative (U: 0.55, p: 0.25) - Windkessel compatible
+Relaxation:          Moderate (U: 0.7, p: 0.3) - Windkessel compatible with pFinal=1
 Residual tolerance:  1e-3 (relaxed for convergence during diastole)
 Max Courant:         0.5 (small time steps)
 
@@ -24,12 +24,12 @@ TRADE-OFFS
    - Maximum stability (bounded, monotone schemes)
    - Converges on poor-quality meshes
    - Robust to difficult boundary conditions
+   - Compatible with Windkessel outlets (pFinal/UFinal=1)
 
 ❌ Cons:
    - Numerical diffusion from first-order schemes
    - Less accurate than second-order methods
    - Results are mesh-dependent (not second-order accurate)
-   - Slower convergence due to heavy relaxation
 
 LITERATURE BASIS
 ================
@@ -127,15 +127,20 @@ config: Dict[str, Any] = {
         },
         "relaxationFactors": {
             "fields": {
-                "p": 0.25,
-                "_comment": "Conservative pressure relaxation. Increased from 0.15 to 0.25 for Windkessel compatibility during diastole."
+                "p": 0.3,
+                "pFinal": 1.0,
+                "_comment": "Moderate pressure relaxation with full correction on final iteration for Windkessel coupling."
             },
             "equations": {
-                "U": 0.55,
-                "k": 0.55,
-                "omega": 0.55,
-                "epsilon": 0.55,
-                "_comment": "Conservative equation relaxation. Increased from 0.4 to 0.55 for Windkessel compatibility."
+                "U": 0.7,
+                "UFinal": 1.0,
+                "k": 0.7,
+                "kFinal": 1.0,
+                "omega": 0.7,
+                "omegaFinal": 1.0,
+                "epsilon": 0.7,
+                "epsilonFinal": 1.0,
+                "_comment": "Moderate relaxation with full correction on final PIMPLE iteration for proper Windkessel coupling."
             }
         },
         "residualControl": {
