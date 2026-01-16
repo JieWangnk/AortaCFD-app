@@ -458,13 +458,14 @@ class GenerateBCFilesTask(Task):
         return True
 
 class GeneratePhysicalPropertiesTask(Task):
-    """Generates the transportProperties and momentumTransport files."""
+    """Generates the transportProperties, momentumTransport, and fvOptions files."""
     def execute(self, context: dict) -> bool:
         logger.info("Generating physical properties files...")
         writer = PhysicalPropertiesWriter(config=self.config, case_directory=context["case_directory"])
         writer.write_transportProperties_file()
-        # CORRECTED: Use the new, correct method name
         writer.write_momentumTransport_file()
+        # Generate fvOptions for LES stability (bounds nut to prevent FPE)
+        writer.write_fvOptions_file()
         return True
     
 class GenerateNumericalSchemesTask(Task):
