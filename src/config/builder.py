@@ -6,6 +6,7 @@ import importlib
 import logging
 
 from .mesh_quality_presets import get_mesh_preset, get_available_presets
+from .schema import validate_config, is_pydantic_available
 
 def deep_merge(destination: dict, source: dict) -> dict:
     """Recursively merges the source dictionary into the destination dictionary."""
@@ -59,6 +60,14 @@ class ConfigBuilder:
 
         # Validate physical parameters
         self._validate_physical_parameters(final_config)
+
+        # Schema validation (if pydantic available)
+        if is_pydantic_available():
+            try:
+                validate_config(final_config)
+                self.logger.debug("✅ Final config validated against schema")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Config schema validation warning: {e}")
 
         return final_config
 
@@ -128,6 +137,14 @@ class ConfigBuilder:
 
         # Validate physical parameters
         self._validate_physical_parameters(final_config)
+
+        # Schema validation (if pydantic available)
+        if is_pydantic_available():
+            try:
+                validate_config(final_config)
+                self.logger.debug("✅ Final config validated against schema")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Config schema validation warning: {e}")
 
         return final_config
 

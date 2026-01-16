@@ -14,20 +14,24 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
+{# Use pre-computed values from template_context.py when available, fallback to inline computation for backward compatibility #}
+{%- set _is_steady = is_steady if is_steady is defined else physics.get('steady_state', false) -%}
+{%- set _profile = profile if profile is defined else 'standard' -%}
+{%- set _ddt_scheme = ddt_scheme if ddt_scheme is defined else ('steadyState' if _is_steady else ('Euler' if _profile == 'robust' else 'backward')) -%}
+{%- set _div_scheme_U = div_scheme_U if div_scheme_U is defined else ('Gauss upwind' if _profile == 'robust' else 'bounded Gauss limitedLinearV 1') -%}
+{%- set _div_scheme_k = div_scheme_k if div_scheme_k is defined else 'bounded Gauss limitedLinear 1' -%}
+{%- set _grad_limiter = grad_limiter if grad_limiter is defined else 0.5 -%}
+
 ddtSchemes
 {
-    {% if physics.get('steady_state', false) %}
-    default         steadyState;
-    {% elif schemes and schemes.ddtSchemes %}
+    {% if schemes and schemes.ddtSchemes %}
     {%- for key, value in schemes.ddtSchemes.items() %}
     {%- if not key.startswith('_') %}  {# Skip metadata/comments #}
     {{ key }}       {{ value }};
     {%- endif %}
     {%- endfor %}
-    {% elif physics.simulation_performance == 'low' %}
-    default         Euler;
     {% else %}
-    default         backward;
+    default         {{ _ddt_scheme }};
     {% endif %}
 }
 
@@ -40,10 +44,10 @@ gradSchemes
     {%- endif %}
     {%- endfor %}
     {% else %}
-    // Robust gradient schemes for OpenFOAM 12
-    default         cellLimited Gauss linear 0.5;
+    // Gradient schemes with cellLimited for stability
+    default         cellLimited Gauss linear {{ _grad_limiter }};
     grad(p)         cellLimited Gauss linear 0.33;
-    grad(U)         cellLimited Gauss linear 0.5;
+    grad(U)         cellLimited Gauss linear {{ _grad_limiter }};
     {% endif %}
 }
 
@@ -57,16 +61,10 @@ divSchemes
     {%- endfor %}
     {% else %}
     default         none;
-    {% if physics.simulation_performance == 'low' %}
-    div(phi,U)      Gauss upwind;
-    {% elif physics.simulation_performance == 'high' and physics.simulation_type == 'laminar' %}
-    div(phi,U)      bounded Gauss linearUpwindV grad(U);
-    {% else %}
-    div(phi,U)      bounded Gauss limitedLinearV 1;
-    {% endif %}
-    div(phi,k)      bounded Gauss limitedLinear 1;
-    div(phi,epsilon) bounded Gauss limitedLinear 1;
-    div(phi,omega)  bounded Gauss limitedLinear 1;
+    div(phi,U)      {{ _div_scheme_U }};
+    div(phi,k)      {{ _div_scheme_k }};
+    div(phi,epsilon) {{ _div_scheme_k }};
+    div(phi,omega)  {{ _div_scheme_k }};
     div((nuEff*dev2(T(grad(U)))))  Gauss linear;
     {% endif %}
 }

@@ -2,6 +2,7 @@ import os
 from jinja2 import Environment, FileSystemLoader
 from .utils.logger import Logger
 from .utils.ofVersionAdapter import OFVersionAdapter
+from .template_context import prepare_control_dict_context
 
 class SimulationSetup:
     """
@@ -31,7 +32,18 @@ class SimulationSetup:
         if cardiac_cycle is None:
             cardiac_cycle = self.config.get('cardiac_cycle', 0.8)
 
+        # Pre-process business logic using template_context module
+        # This extracts decisions from template into testable Python code
+        preprocessed = prepare_control_dict_context(self.config)
+
+        # Build context with pre-computed values + raw data for backward compatibility
         context = {
+            # Pre-computed business logic values
+            "needs_windkessel_lib": preprocessed['needs_windkessel_lib'],
+            "is_pulsatile": preprocessed['is_pulsatile'],
+            "inlet_type": preprocessed['inlet_type'],
+
+            # Raw data (still needed for some template logic)
             "version": self.config["openfoam_version"],
             "controlDict": final_control_dict,
             "config": self.config,

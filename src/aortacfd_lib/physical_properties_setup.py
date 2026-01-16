@@ -2,6 +2,7 @@ import os
 from jinja2 import Environment, FileSystemLoader
 from .utils.logger import Logger
 from .utils.ofVersionAdapter import OFVersionAdapter
+from .template_context import prepare_fv_options_context
 
 class PhysicalPropertiesWriter:
     """
@@ -49,7 +50,17 @@ class PhysicalPropertiesWriter:
         to prevent floating point exceptions from extreme SGS viscosity values.
         """
         template = self.jinja_env.get_template("fvOptions.tpl")
+
+        # Pre-process business logic using template_context module
+        # This extracts LES stability decisions into testable Python code
+        preprocessed = prepare_fv_options_context(self.config)
+
         context = {
+            # Pre-computed values
+            "is_les": preprocessed['is_les'],
+            "bound_nut": preprocessed['bound_nut'],
+            "nut_min": preprocessed['nut_min'],
+            # Raw data for backward compatibility
             "physics": self.config['physics'],
         }
         output_path = os.path.join(self.case_dir, "system", "fvOptions")
@@ -57,5 +68,5 @@ class PhysicalPropertiesWriter:
             f.write(template.render(context))
 
         # Only log if LES (when fvOptions actually has content)
-        if self.config['physics'].get('simulation_type') == 'LES':
+        if preprocessed['is_les']:
             self.log.info(f"Generated fvOptions with nut bound for LES stability")

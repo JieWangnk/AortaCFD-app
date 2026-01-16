@@ -3,6 +3,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from .utils.logger import Logger
 from .utils.ofVersionAdapter import OFVersionAdapter
+from .template_context import prepare_fv_schemes_context
 
 class FvSchemesWriter:
     """
@@ -42,9 +43,22 @@ class FvSchemesWriter:
         # This single method replaces all the previous private _get... methods.
         template = self.jinja_env.get_template("fvSchemes.tpl")
 
+        # Pre-process business logic using template_context module
+        # This extracts profile-based scheme decisions into testable Python code
+        preprocessed = prepare_fv_schemes_context(self.config)
+
         # The template will use these settings to decide which schemes to write.
         context = {
             "header": self.version_adapter.get_foam_file_header("dictionary", "fvSchemes"),
+            # Pre-computed business logic values
+            "is_steady": preprocessed['is_steady'],
+            "simulation_type": preprocessed['simulation_type'],
+            "profile": preprocessed['profile'],
+            "ddt_scheme": preprocessed['ddt_scheme'],
+            "div_scheme_U": preprocessed['div_scheme_U'],
+            "div_scheme_k": preprocessed['div_scheme_k'],
+            "grad_limiter": preprocessed['grad_limiter'],
+            # Raw data (still needed for scheme overrides)
             "physics": self.config['physics'],
             "schemes": schemes,
             "template_vars": self.config.get('template_vars', {}),

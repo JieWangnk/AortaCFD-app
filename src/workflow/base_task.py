@@ -119,6 +119,48 @@ class ExecutionContext:
         custom_data = {k: v for k, v in data.items() if k not in known_keys}
         return cls(**known_data, custom_data=custom_data)
 
+    # =========================================================================
+    # DICT-LIKE ACCESS (backward compatibility with context["key"] syntax)
+    # =========================================================================
+
+    def __getitem__(self, key: str) -> Any:
+        """Allow dict-like access: context['case_directory']."""
+        if hasattr(self, key) and not key.startswith('_'):
+            return getattr(self, key)
+        return self.custom_data.get(key)
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        """Allow dict-like assignment: context['cardiac_cycle'] = 0.85."""
+        known_attrs = {
+            "case_directory", "patient_name", "cardiac_cycle",
+            "mesh_generated", "bc_generated", "solver_completed", "post_processed"
+        }
+        if key in known_attrs:
+            setattr(self, key, value)
+        else:
+            self.custom_data[key] = value
+
+    def __contains__(self, key: str) -> bool:
+        """Allow 'in' operator: 'case_directory' in context."""
+        if hasattr(self, key) and not key.startswith('_'):
+            value = getattr(self, key)
+            # For string attributes, check if non-empty
+            if isinstance(value, str):
+                return bool(value)
+            # For numeric, always return True if attribute exists
+            return True
+        return key in self.custom_data
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Allow dict-like get: context.get('key', default)."""
+        if hasattr(self, key) and not key.startswith('_'):
+            value = getattr(self, key)
+            # Return default for empty strings/zero values if that's the intent
+            if value == "" or value == 0.0:
+                return default if default is not None else value
+            return value
+        return self.custom_data.get(key, default)
+
 
 # =============================================================================
 # TASK METADATA

@@ -15,6 +15,7 @@ if src_path not in sys.path:
 
 from config.builder import ConfigBuilder, deep_merge
 from config.numerics_builder import NumericsBuilder
+from config.schema import validate_config, is_pydantic_available
 from workflow.manager import WorkflowManager
 from aortacfd_lib.utils.logger import Logger
 
@@ -117,6 +118,17 @@ class PatientCaseRunner:
             raise PatientConfigurationError(f"Invalid JSON in configuration: {e}")
         except Exception as e:
             raise PatientConfigurationError(f"Error reading configuration: {e}")
+
+        # Validate configuration against schema (if pydantic available)
+        if is_pydantic_available():
+            try:
+                validated = validate_config(config)
+                self.logger.debug("✅ Configuration validated against schema")
+            except Exception as e:
+                raise PatientConfigurationError(
+                    f"Configuration validation failed:\n{e}\n\n"
+                    f"See examples/config_full.json for valid configuration format."
+                )
         
         # Optional sanity check: ensure patient_id aligns if present in config
         config_patient_id = config.get('case_info', {}).get('patient_id')
