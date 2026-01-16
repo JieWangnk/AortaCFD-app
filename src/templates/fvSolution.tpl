@@ -151,15 +151,19 @@ PIMPLE
 
 relaxationFactors
 {
+    // pFinal/UFinal = 1.0 is critical for Windkessel BC coupling
     fields
     {
         p               {{ fvSolution.get('relaxationFactors', {}).get('fields', {}).get('p', '0.3') }};
+        pFinal          {{ fvSolution.get('relaxationFactors', {}).get('fields', {}).get('pFinal', '1.0') }};
     }
 
     equations
     {
         U               {{ fvSolution.get('relaxationFactors', {}).get('equations', {}).get('U', '0.7') }};
-        "(k|epsilon|omega).*"   {{ fvSolution.get('relaxationFactors', {}).get('equations', {}).get('k', '0.7') }};
+        UFinal          {{ fvSolution.get('relaxationFactors', {}).get('equations', {}).get('UFinal', '1.0') }};
+        "(k|epsilon|omega)"     {{ fvSolution.get('relaxationFactors', {}).get('equations', {}).get('k', '0.7') }};
+        "(k|epsilon|omega)Final" {{ fvSolution.get('relaxationFactors', {}).get('equations', {}).get('kFinal', '1.0') }};
     }
 }
 

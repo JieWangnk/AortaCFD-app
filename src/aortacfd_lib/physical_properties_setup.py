@@ -40,3 +40,22 @@ class PhysicalPropertiesWriter:
         output_path = os.path.join(self.case_dir, "constant", "momentumTransport")
         with open(output_path, 'w') as f:
             f.write(template.render(context))
+
+    def write_fvOptions_file(self):
+        """
+        Generates fvOptions file for LES stability.
+
+        For LES simulations (especially WALE), adds a bound constraint on nut
+        to prevent floating point exceptions from extreme SGS viscosity values.
+        """
+        template = self.jinja_env.get_template("fvOptions.tpl")
+        context = {
+            "physics": self.config['physics'],
+        }
+        output_path = os.path.join(self.case_dir, "system", "fvOptions")
+        with open(output_path, 'w') as f:
+            f.write(template.render(context))
+
+        # Only log if LES (when fvOptions actually has content)
+        if self.config['physics'].get('simulation_type') == 'LES':
+            self.log.info(f"Generated fvOptions with nut bound for LES stability")
