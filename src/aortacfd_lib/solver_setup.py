@@ -4,6 +4,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from .utils.logger import Logger
 from .utils.ofVersionAdapter import OFVersionAdapter
+from .template_context import prepare_fv_solution_context
 
 class FvSolutionWriter:
     """
@@ -57,10 +58,20 @@ class FvSolutionWriter:
         # This single method replaces all the previous private _get... methods.
         template = self.jinja_env.get_template("fvSolution.tpl")
 
+        # Pre-process business logic using template_context module
+        # This extracts profile-based solver decisions into testable Python code
+        preprocessed = prepare_fv_solution_context(self.config)
+
         # The template will use these dictionaries to build the file.
         # This data comes directly from your sim_*.py profile.
         context = {
             "header": self.version_adapter.get_foam_file_header("dictionary", "fvSolution"),
+            # Pre-computed business logic values
+            "profile": preprocessed['profile'],
+            "pimple_defaults": preprocessed['pimple'],
+            "relaxation_defaults": preprocessed['relaxation'],
+            "tolerance_defaults": preprocessed['tolerances'],
+            # Raw data (still needed for user overrides and mesh-adaptive adjustments)
             "fvSolution": fvSolution,
             "template_vars": self.config.get('template_vars', {}),
             "openfoam_version": self.config.get('openfoam_version', '8'),

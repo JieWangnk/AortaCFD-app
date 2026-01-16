@@ -14,6 +14,12 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
+{# Use pre-computed values from template_context.py when available, fallback to inline defaults for backward compatibility #}
+{%- set _profile = profile if profile is defined else 'standard' -%}
+{%- set _pimple = pimple_defaults if pimple_defaults is defined else {'nOuterCorrectors': 30, 'nCorrectors': 2, 'nNonOrthogonalCorrectors': 1} -%}
+{%- set _relaxation = relaxation_defaults if relaxation_defaults is defined else {'p': 0.3, 'pFinal': 1.0, 'U': 0.7, 'UFinal': 1.0, 'k': 0.7, 'kFinal': 1.0} -%}
+{%- set _tolerances = tolerance_defaults if tolerance_defaults is defined else {'p': 1e-4, 'U': 1e-5} -%}
+
 solvers
 {
     p
@@ -59,9 +65,9 @@ SIMPLE
 
 PIMPLE
 {
-    nOuterCorrectors {{ fvSolution.get('PIMPLE', {}).get('nOuterCorrectors', 1) }};
-    nCorrectors     {{ fvSolution.get('PIMPLE', {}).get('nCorrectors', 2) }};
-    nNonOrthogonalCorrectors {{ fvSolution.get('PIMPLE', {}).get('nNonOrthogonalCorrectors', 0) }};
+    nOuterCorrectors {{ fvSolution.get('PIMPLE', {}).get('nOuterCorrectors', _pimple.get('nOuterCorrectors', 30)) }};
+    nCorrectors     {{ fvSolution.get('PIMPLE', {}).get('nCorrectors', _pimple.get('nCorrectors', 2)) }};
+    nNonOrthogonalCorrectors {{ fvSolution.get('PIMPLE', {}).get('nNonOrthogonalCorrectors', _pimple.get('nNonOrthogonalCorrectors', 1)) }};
     {% set pref = fvSolution.get('PIMPLE', {}).get('pRefPoint', None) %}
     {% if pref %}
     pRefPoint       ({{ pref[0] }} {{ pref[1] }} {{ pref[2] }});
@@ -154,16 +160,16 @@ relaxationFactors
     // pFinal/UFinal = 1.0 is critical for Windkessel BC coupling
     fields
     {
-        p               {{ fvSolution.get('relaxationFactors', {}).get('fields', {}).get('p', '0.3') }};
-        pFinal          {{ fvSolution.get('relaxationFactors', {}).get('fields', {}).get('pFinal', '1.0') }};
+        p               {{ fvSolution.get('relaxationFactors', {}).get('fields', {}).get('p', _relaxation.get('p', 0.3)) }};
+        pFinal          {{ fvSolution.get('relaxationFactors', {}).get('fields', {}).get('pFinal', _relaxation.get('pFinal', 1.0)) }};
     }
 
     equations
     {
-        U               {{ fvSolution.get('relaxationFactors', {}).get('equations', {}).get('U', '0.7') }};
-        UFinal          {{ fvSolution.get('relaxationFactors', {}).get('equations', {}).get('UFinal', '1.0') }};
-        "(k|epsilon|omega)"     {{ fvSolution.get('relaxationFactors', {}).get('equations', {}).get('k', '0.7') }};
-        "(k|epsilon|omega)Final" {{ fvSolution.get('relaxationFactors', {}).get('equations', {}).get('kFinal', '1.0') }};
+        U               {{ fvSolution.get('relaxationFactors', {}).get('equations', {}).get('U', _relaxation.get('U', 0.7)) }};
+        UFinal          {{ fvSolution.get('relaxationFactors', {}).get('equations', {}).get('UFinal', _relaxation.get('UFinal', 1.0)) }};
+        "(k|epsilon|omega)"     {{ fvSolution.get('relaxationFactors', {}).get('equations', {}).get('k', _relaxation.get('k', 0.7)) }};
+        "(k|epsilon|omega)Final" {{ fvSolution.get('relaxationFactors', {}).get('equations', {}).get('kFinal', _relaxation.get('kFinal', 1.0)) }};
     }
 }
 

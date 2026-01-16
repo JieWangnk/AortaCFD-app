@@ -5,13 +5,13 @@ of simulation tasks based on predefined recipes (command sequences).
 """
 
 import os
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Type, Union
 
 try:
-    from .base_task import logger, AortaCFDError, Task
+    from .base_task import logger, AortaCFDError, Task, ExecutionContext
     from .tasks import setup_tasks, execution_tasks
 except ImportError:
-    from workflow.base_task import logger, AortaCFDError, Task
+    from workflow.base_task import logger, AortaCFDError, Task, ExecutionContext
     from workflow.tasks import setup_tasks, execution_tasks
 
 
@@ -24,7 +24,7 @@ class WorkflowManager:
 
     Attributes:
         config: Full simulation configuration dictionary.
-        context: Shared context dictionary passed between tasks.
+        context: Typed ExecutionContext for sharing data between tasks.
         available_tasks: Registry mapping task names to task classes.
 
     Example:
@@ -34,7 +34,7 @@ class WorkflowManager:
     """
 
     config: Dict[str, Any]
-    context: Dict[str, Any]
+    context: ExecutionContext
     available_tasks: Dict[str, Type[Task]]
 
     def __init__(self, config: Dict[str, Any]) -> None:
@@ -46,8 +46,39 @@ class WorkflowManager:
                    geometry, mesh, physics, and boundary condition settings.
         """
         self.config = config
-        self.context: Dict[str, Any] = {}
+        self.context = ExecutionContext()  # Typed context for task data sharing
         self._register_tasks()
+        self._initialize_context()  # Initialize context with config values early
+
+    def _initialize_context(self) -> None:
+        """
+        Initialize the execution context from config.
+
+        Sets up case directory and patient name from config settings.
+        Called during __init__ so context is ready before any workflow runs.
+        """
+        # Only initialize if geometry config is available
+        geom_cfg = self.config.get("geometry")
+        if not geom_cfg:
+            return
+
+        # Set case directory
+        if not self.context.case_directory:
+            refinement = geom_cfg.get("refinement_level", "default")
+            self.context.case_directory = os.path.join(
+                os.getcwd(), "output", "OPENFOAM", f"{geom_cfg['case_name']}_{refinement}"
+            )
+
+        # Set patient name for report generation
+        if not self.context.patient_name:
+            self.context.patient_name = self.config.get('case_info', {}).get(
+                'patient_id', geom_cfg.get('case_name', 'unknown')
+            )
+
+        # Set cardiac cycle if available
+        cardiac_cycle = self.config.get('cardiac_cycle')
+        if cardiac_cycle and not self.context.cardiac_cycle:
+            self.context.cardiac_cycle = cardiac_cycle
 
     def _register_tasks(self) -> None:
         """Create a complete library of all available tasks."""
@@ -179,16 +210,9 @@ class WorkflowManager:
         if not task_sequence:
             raise AortaCFDError(f"Unknown command '{command}'")
 
-        # Set up the execution context with case directory (only if not already set)
-        if "case_directory" not in self.context:
-            geom_cfg = self.config["geometry"]
-            refinement = geom_cfg.get("refinement_level", "default")
-            self.context["case_directory"] = os.path.join(
-                os.getcwd(), "output", "OPENFOAM", f"{geom_cfg['case_name']}_{refinement}"
-            )
-            # Add patient name for report generation
-            self.context["patient_name"] = self.config.get('case_info', {}).get('patient_id',
-                                                                                geom_cfg.get('case_name', 'unknown'))
+        # Ensure context is initialized (idempotent - safe to call multiple times)
+        self._initialize_context()
+
         logger.info(f"Starting workflow for command: '{command}'")
         for task_name in task_sequence:
             task_class = self.available_tasks.get(task_name)

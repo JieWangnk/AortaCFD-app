@@ -51,8 +51,10 @@ adjustTimeStep  {{ controlDict.get('adjustTimeStep', 'yes') }};
 maxCo           {{ controlDict.get('maxCo', 1.2) }};
 
 maxDeltaT       {{ controlDict.get('maxDeltaT', 1e-3) }};
-{%- set outlet_type = config.get('outlets', {}).get('type', '') or config.get('boundary_conditions', {}).get('outlets', {}).get('type', '') %}
-{%- if config.get('windkessel_enabled', False) or outlet_type in ['2EWINDKESSEL', '3EWINDKESSEL'] %}
+{# Use pre-computed values from template_context.py when available, fallback to inline computation for backward compatibility #}
+{%- set _outlet_type = config.get('outlets', {}).get('type', '') or config.get('boundary_conditions', {}).get('outlets', {}).get('type', '') -%}
+{%- set _needs_wk = needs_windkessel_lib if needs_windkessel_lib is defined else (config.get('windkessel_enabled', False) or _outlet_type in ['2EWINDKESSEL', '3EWINDKESSEL']) -%}
+{%- if _needs_wk %}
 
 libs
 (
@@ -61,15 +63,15 @@ libs
 {%- endif %}
 {%- set hemodynamics = config.get('hemodynamics', {}) -%}
 {%- set inlet_settings = config.get('inlet', {}) or config.get('boundary_conditions', {}).get('inlet', {}) -%}
-{%- set inlet_type = inlet_settings.get('type', 'CONSTANT').upper() -%}
-{%- set is_pulsatile = inlet_type in ['TIMEVARYING', 'WOMERSLEY'] -%}
+{%- set _inlet_type = inlet_type if inlet_type is defined else inlet_settings.get('type', 'CONSTANT').upper() -%}
+{%- set _is_pulsatile = is_pulsatile if is_pulsatile is defined else (_inlet_type in ['TIMEVARYING', 'WOMERSLEY']) -%}
 {%- set cardiac_cycle_val = cardiac_cycle if cardiac_cycle is defined and cardiac_cycle else config.get('cardiac_cycle', 0.8) -%}
 {%- set runtime_funcs = hemodynamics.get('runtime_functions', {}) -%}
 {%- set enable_wss = runtime_funcs.get('wallShearStress', true) -%}
 {%- set enable_fieldavg = runtime_funcs.get('fieldAverage', 'auto') -%}
 {%- set enable_pressure = runtime_funcs.get('pressureMonitoring', true) -%}
 {%- if enable_fieldavg == 'auto' -%}
-    {%- set enable_fieldavg = is_pulsatile -%}
+    {%- set enable_fieldavg = _is_pulsatile -%}
 {%- endif -%}
 {%- set tawss_settings = hemodynamics.get('tawss_settings', {}) -%}
 {%- set skip_cycles = tawss_settings.get('skip_cycles', 2) -%}
@@ -99,7 +101,7 @@ functions
         log             true;
     }
 {%- endif %}
-{%- if enable_fieldavg and is_pulsatile %}
+{%- if enable_fieldavg and _is_pulsatile %}
 
     fieldAverageWSS
     {
