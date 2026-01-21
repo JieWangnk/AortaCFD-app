@@ -170,15 +170,15 @@ class GeometryAnalyzer:
         Determine reference radius for mesh sizing from vessel geometry.
 
         Strategy Options (config: geometry.reference_radius_strategy):
-            - 'min' (default): Smallest vessel radius - ensures adequate resolution everywhere
+            - 'max' (default): Largest vessel - uses main aorta diameter as reference
             - 'inlet': Inlet radius only - for inlet-dominated flows
             - 'mean': Average of all vessels - balanced approach
-            - 'max': Largest vessel - coarser overall mesh
+            - 'min': Smallest vessel radius - ensures adequate resolution everywhere
 
-        Rationale for 'min' default:
-            Mesh quality is limited by worst-resolved region. Using minimum radius
-            ensures small branches have sufficient cells while allowing coarser
-            mesh in large vessels (adaptive refinement handles this automatically).
+        Rationale for 'max' default:
+            Uses the largest vessel (typically main aorta) as the reference diameter.
+            This provides intuitive mesh sizing relative to the primary vessel.
+            Small branches get refined via snappyHexMesh surface refinement.
 
         Returns:
             Reference radius in meters, or None if no valid geometry.
@@ -190,14 +190,14 @@ class GeometryAnalyzer:
         if not radii:
             return None
 
-        strategy = self.geom_settings.get('reference_radius_strategy', 'min').lower()
+        strategy = self.geom_settings.get('reference_radius_strategy', 'max').lower()
         if strategy == 'inlet':
             return self.inlet_radius
         if strategy == 'mean':
             return float(np.mean(radii))
-        if strategy == 'max':
-            return max(radii)
-        return min(radii)  # Default: conservative sizing based on smallest vessel
+        if strategy == 'min':
+            return min(radii)
+        return max(radii)  # Default: use largest vessel diameter
 
     def write_all_mesh_files(self) -> None:
         """Generate all necessary mesh dictionary files for OpenFOAM."""
