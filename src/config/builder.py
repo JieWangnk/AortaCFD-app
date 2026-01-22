@@ -249,7 +249,7 @@ class ConfigBuilder:
 
         # Merge all components: STL discovery + geometry settings + boundary conditions + simulation control + mesh + run_settings + simulation_settings
         result = deep_merge(discovered_geom_config, {"geometry": geometry_settings})
-        result = deep_merge(result, boundary_conditions)
+        result = deep_merge(result, {"boundary_conditions": boundary_conditions})
         result = deep_merge(result, {"simulation_control": simulation_control})
         if mesh_settings:
             result = deep_merge(result, {"mesh": mesh_settings})

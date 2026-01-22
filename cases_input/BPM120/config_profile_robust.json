@@ -15,7 +15,7 @@
   },
 
   "numerics": {
-    "profile": "robust",
+    "profile": "standard",
     "max_co": 1.0,
     "_comment": "Profile study: robust (1st order upwind, Euler time, high stability)"
   },
@@ -25,6 +25,21 @@
     "outlet_keywords_ordered": ["outlet1", "outlet2", "outlet3", "outlet4"],
     "wall_keywords_ordered": "wall_aorta",
     "scale_factor": 0.001
+  },
+  "mesh": {
+    "cells_per_diameter": 10,
+    "boundary_layers": {
+      "enabled": true,
+      "num_layers": 5,
+      "expansion_ratio": 1.2,
+      "final_layer_thickness": 0.3,
+      "min_thickness": 0.1
+    },
+    "SNAPPY_SETTINGS": {
+      "parallel": true,
+      "nProcessors": 8,
+      "surfaceRefinementLevels": [1, 2]
+    }
   },
 
   "boundary_conditions": {
@@ -41,7 +56,8 @@
         "diastolic_pressure": 80,
         "venous_pressure": 0,
         "methodology": "murray_law_automatic",
-        "tau": 1.0
+        "tau": 1.0,
+        "flow_split": 70
       }
     },
     "walls": {

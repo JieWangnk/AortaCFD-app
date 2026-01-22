@@ -28,7 +28,7 @@ simulationType  RAS;
 
 RAS
 {
-    model           kOmegaSST;
+    model           {{ physics.rans_model | default('kOmegaSST') }};
     turbulence      on;
     printCoeffs     on;
 }
@@ -37,10 +37,33 @@ simulationType LES;
 
 LES
 {
-    model           WALE;
+{% if physics.les_model | default('WALE') == 'Smagorinsky' %}
+    // Smagorinsky: Algebraic model, robust with Windkessel BCs
+    // (WALE can cause FPE in pow3() during backflow)
+    LESModel        Smagorinsky;
+
     turbulence      on;
     printCoeffs     on;
-    delta           cubeRootVol;
+
+    SmagorinskyCoeffs
+    {
+        Cs              {{ physics.les_settings.Cs | default(0.1) }};
+        Ck              {{ physics.les_settings.Ck | default(0.094) }};
+    }
+
+    delta           {{ physics.les_settings.delta | default('cubeRootVol') }};
+
+    cubeRootVolCoeffs
+    {
+        deltaCoeff      1;
+    }
+{% else %}
+    // WALE: Wall-Adapting Local Eddy-viscosity model
+    // Note: May cause FPE with Windkessel BCs - use Smagorinsky if unstable
+    model           {{ physics.les_model | default('WALE') }};
+    turbulence      on;
+    printCoeffs     on;
+    delta           {{ physics.les_settings.delta | default('cubeRootVol') if physics.les_settings else 'cubeRootVol' }};
     cubeRootVolCoeffs
     {
         deltaCoeff      1;
@@ -50,6 +73,7 @@ LES
         delta           cubeRootVol;
         maxDeltaRatio   1.1;
     }
+{% endif %}
 }
 {% endif %}
 

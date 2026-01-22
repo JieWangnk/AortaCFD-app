@@ -367,10 +367,11 @@ class PatientCaseRunner:
         control_dict = merged_config['simulation_control']['controlDict']
 
         # Set time stepping controls
-        control_dict['deltaT'] = time_step_settings.get('max_delta_t', 0.0001)
+        # deltaT is the INITIAL timestep (small for safe startup), maxDeltaT is the limit
+        control_dict['deltaT'] = time_step_settings.get('initial_delta_t', 1e-6)
         control_dict['adjustTimeStep'] = 'yes' if time_step_settings.get('adjustable_time_step', True) else 'no'
         control_dict['maxCo'] = time_step_settings.get('max_co', 1.0)
-        control_dict['maxDeltaT'] = time_step_settings.get('max_delta_t', 0.001)
+        control_dict['maxDeltaT'] = time_step_settings.get('max_delta_t', 1e-4)
 
         # Standard controlDict settings
         control_dict.update({
@@ -450,14 +451,22 @@ class PatientCaseRunner:
         try:
             manager = WorkflowManager(sim_config['config'])
 
-            # Use existing case directory if provided, otherwise create new
+            # Determine OpenFOAM case directory
             if case_dir:
-                openfoam_dir = Path(case_dir)
-                if not openfoam_dir.exists():
-                    raise PatientSimulationError(f"Case directory not found: {case_dir}")
-                self.logger.info(f"Using existing case directory: {openfoam_dir}")
+                case_dir_path = Path(case_dir)
+                # If case_dir ends with 'openfoam', use it directly (existing case)
+                if case_dir_path.name == 'openfoam':
+                    openfoam_dir = case_dir_path
+                    if not openfoam_dir.exists():
+                        raise PatientSimulationError(f"Case directory not found: {case_dir}")
+                    self.logger.info(f"Using existing case directory: {openfoam_dir}")
+                else:
+                    # case_dir is the run directory, create openfoam subdirectory
+                    openfoam_dir = case_dir_path / "openfoam"
+                    openfoam_dir.mkdir(parents=True, exist_ok=True)
+                    self.logger.info(f"Created case directory: {openfoam_dir}")
             else:
-                # Setup new case directory
+                # Setup new case directory from run_dir
                 run_dir = sim_config['run_dir']
                 openfoam_dir = run_dir / "openfoam"
                 openfoam_dir.mkdir(parents=True, exist_ok=True)

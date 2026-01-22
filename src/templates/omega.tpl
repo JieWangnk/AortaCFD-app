@@ -31,7 +31,7 @@ boundaryField
     // The inlet specific dissipation rate boundary condition
     {{ inlet_patch }}
     {
-        type            turbulentMixingLengthDissipationRateInlet;
+        type            turbulentMixingLengthFrequencyInlet;
         mixingLength    {{ mixing_length }};
         value           uniform {{ omega_initial }};
     }
