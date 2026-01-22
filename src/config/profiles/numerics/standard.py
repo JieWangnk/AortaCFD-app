@@ -25,7 +25,7 @@ This profile combines 2nd order accuracy with robust stability measures:
 1. limitedLinearV (TVD bounded) - Prevents oscillations at boundaries/outlets
 2. cellLimited 0.5 - Tighter gradient limiting than traditional 1.0
 3. limited corrected 0.5 - Non-orthogonal correction with stability limiting
-4. pFinal/UFinal = 1 - Full correction on final PIMPLE iteration
+4. pFinal = 0.9, UFinal = 1 - Slight under-relaxation on final p to prevent Windkessel instability
 5. nOuterCorrectors = 50 - High with convergence-based early exit
 
 TRADE-OFFS
@@ -155,8 +155,8 @@ config: Dict[str, Any] = {
         "relaxationFactors": {
             "fields": {
                 "p": 0.3,
-                "pFinal": 1.0,
-                "_comment": "Moderate pressure relaxation with full correction on final iteration"
+                "pFinal": 0.9,
+                "_comment": "STABILITY FIX: pFinal reduced from 1.0 to 0.9. Full 1.0 causes pressure shocks in PIMPLE final iteration that destabilize Windkessel BCs."
             },
             "equations": {
                 "U": 0.7,
@@ -201,7 +201,7 @@ config: Dict[str, Any] = {
             "limitedLinearV for TVD bounded convection",
             "cellLimited 0.5 for tighter gradient limiting",
             "limited corrected 0.5 for stable non-orthogonal correction",
-            "pFinal/UFinal = 1 for full correction on final iteration"
+            "pFinal = 0.9 for stable Windkessel coupling (UFinal = 1)"
         ],
         "literature": [
             "OpenFOAM User Guide v11, Section 4.4 (Numerical Schemes)",

@@ -42,11 +42,10 @@ class PhysicsModel(str, Enum):
 
 
 class NumericsProfile(str, Enum):
-    """Numerical accuracy profiles."""
-    ROBUST = "robust"
-    STANDARD = "standard"
-    ACCURATE = "accurate"
-    PRECISE = "precise"
+    """Numerical accuracy profiles (3-profile system)."""
+    ROBUST = "robust"      # 1st order, maximum stability
+    STANDARD = "standard"  # 2nd order TVD bounded (default)
+    PRECISE = "precise"    # 2nd order LUST/CrankNicolson, minimal diffusion
 
 
 class InletType(str, Enum):

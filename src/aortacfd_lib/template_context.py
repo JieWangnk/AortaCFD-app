@@ -33,9 +33,10 @@ def prepare_control_dict_context(config: Dict[str, Any]) -> Dict[str, Any]:
         Dictionary with pre-computed template variables
     """
     # Extract boundary condition settings
+    # Support both nested (boundary_conditions.outlets) and flattened (outlets) config structures
     bc = config.get('boundary_conditions', {})
-    outlets = bc.get('outlets', {})
-    inlet = bc.get('inlet', {})
+    outlets = bc.get('outlets') or config.get('outlets', {})
+    inlet = bc.get('inlet') or config.get('inlet', {})
 
     # Determine outlet type
     outlet_type = outlets.get('type', '').upper()

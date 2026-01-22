@@ -1,15 +1,9 @@
 {
-  "_comment": "COMPREHENSIVE AORTACFD CONFIGURATION - ALL PARAMETERS",
-  "_version": "2.2",
-  "_date": "2026-01-05",
-  "_description": "Complete configuration file demonstrating all available parameters for the 3-profile system (robust/standard/accurate)",
+  "_doc": "AortaCFD config reference v2.2 - Profiles: robust/standard/precise",
 
   "case_info": {
-    "patient_id": "EXAMPLE_FULL_CONFIG",
-    "description": "Complete configuration example with all parameters",
-    "date": "2025-10-31",
-    "researcher": "Your Name",
-    "notes": "Comprehensive example showing all available configuration options"
+    "patient_id": "EXAMPLE",
+    "notes": "Optional metadata for tracking"
   },
 
   "physics": {
@@ -33,15 +27,15 @@
   "numerics": {
     "_comment": "Numerical schemes and solver settings using 3-profile system",
     "profile": "standard",
-    "_profile_options": ["robust", "standard", "accurate"],
+    "_profile_options": ["robust", "standard", "precise"],
     "_profile_descriptions": {
-      "robust": "Maximum stability (1st order, Euler, upwind) - for difficult meshes",
-      "standard": "Balanced accuracy/stability (2nd order bounded) - recommended",
-      "accurate": "Maximum accuracy (LUST, CrankNicolson) - for well-resolved meshes"
+      "robust": "Maximum stability (1st order, Euler, upwind) - for difficult meshes/debugging",
+      "standard": "Balanced accuracy/stability (2nd order TVD bounded) - recommended for production",
+      "precise": "Minimal diffusion (LUST, CrankNicolson) - for LES, validation, convergence studies"
     },
 
     "max_co": 1.0,
-    "_max_co_comment": "Maximum Courant number (robust: 0.5, standard: 1.0, accurate: 0.5)",
+    "_max_co_comment": "Maximum Courant number (robust: 1.0, standard: 1.0, precise: 0.8)",
 
     "adjustable_timestep": true,
     "_adjustable_timestep_comment": "Enable adaptive time stepping based on Courant number",
@@ -49,10 +43,10 @@
     "correctors": {
       "_comment": "PIMPLE algorithm corrector settings",
       "nOuterCorrectors": 5,
-      "_nOuterCorrectors_comment": "Outer correctors (robust: 3, standard: 2, accurate: 3)",
+      "_nOuterCorrectors_comment": "Outer correctors (robust: 25, standard: 50, precise: 50 with residual control)",
 
       "nCorrectors": 2,
-      "_nCorrectors_comment": "Inner pressure correctors (robust: 3, standard: 2, accurate: 3)",
+      "_nCorrectors_comment": "Inner pressure correctors (robust: 3, standard: 2, precise: 3)",
 
       "nNonOrthogonalCorrectors": 2,
       "_nNonOrthogonalCorrectors_comment": "Non-orthogonal correctors (typical: 2)"
@@ -61,10 +55,10 @@
     "relaxation_factors": {
       "_comment": "Under-relaxation factors (override profile defaults if needed)",
       "p": 0.3,
-      "_p_comment": "Pressure relaxation (robust: 0.2, standard: 0.3, accurate: 0.7)",
+      "_p_comment": "Pressure relaxation (robust: 0.3, standard: 0.3, precise: 0.5)",
 
       "U": 0.7,
-      "_U_comment": "Velocity relaxation (robust: 0.5, standard: 0.7, accurate: 0.9)",
+      "_U_comment": "Velocity relaxation (robust: 0.7, standard: 0.7, precise: 0.9)",
 
       "k": 0.7,
       "_k_comment": "Turbulent kinetic energy relaxation (for RANS)",
@@ -76,7 +70,7 @@
     "residual_control": {
       "_comment": "Convergence tolerances (override profile defaults if needed)",
       "p": 1e-6,
-      "_p_comment": "Pressure residual (robust: 1e-5, standard: 1e-6, accurate: 1e-8)",
+      "_p_comment": "Pressure residual (robust: 1e-4, standard: 1e-6, precise: 1e-8)",
 
       "U": 1e-6,
       "_U_comment": "Velocity residual",
@@ -220,7 +214,11 @@
     "_wall_comment": "Wall patch name (from wall*.stl)",
 
     "scale_factor": 0.001,
-    "_scale_factor_comment": "Geometry scale factor (0.001 = mm to m)"
+    "_scale_factor_comment": "Geometry scale factor (0.001 = mm to m)",
+
+    "reference_radius_strategy": "inlet",
+    "_reference_radius_strategy_options": ["inlet", "minimum", "average"],
+    "_reference_radius_strategy_comment": "How to determine reference radius for mesh sizing. 'inlet' uses inlet patch radius, 'minimum' uses smallest vessel radius, 'average' uses mean radius."
   },
 
   "boundary_conditions": {
@@ -292,22 +290,17 @@
 
     "outlets": {
       "type": "3EWINDKESSEL",
-      "_type_options": ["ZEROGRADIENT", "FIXEDPRESSURE", "RESISTANCE", "3EWINDKESSEL"],
+      "_type_options": ["zeroGradient", "fixedValue", "2EWINDKESSEL", "3EWINDKESSEL"],
       "_type_descriptions": {
-        "ZEROGRADIENT": "Zero gradient (outflow) - simplest",
-        "FIXEDPRESSURE": "Fixed pressure value",
-        "RESISTANCE": "Resistance boundary condition",
-        "3EWINDKESSEL": "3-element Windkessel model (R1, R2, C)"
+        "zeroGradient": "Zero gradient (outflow) - simplest, no pressure specification",
+        "fixedValue": "Fixed pressure value at outlet",
+        "2EWINDKESSEL": "2-element Windkessel model (R-C, Z=0) - for steady/CONSTANT flow",
+        "3EWINDKESSEL": "3-element Windkessel model (R-C-Z) - for pulsatile flow (recommended)"
       },
 
-      "_FIXEDPRESSURE_parameters": {
+      "_fixedValue_parameters": {
         "pressure_pa": 10000,
-        "_pressure_pa_comment": "Fixed outlet pressure in Pascals"
-      },
-
-      "_RESISTANCE_parameters": {
-        "resistance": 1e8,
-        "_resistance_comment": "Outlet resistance in Pa·s/m³"
+        "_pressure_pa_comment": "Fixed outlet pressure in Pascals (converted to kinematic: p/rho)"
       },
 
       "windkessel_settings": {
@@ -389,7 +382,12 @@
         "_stabilization_type_comment": "fluxBased recommended for complex 3D geometries",
 
         "beta": 0.9,
-        "_beta_comment": "Stabilization coefficient (0.5-0.7 weak, 0.8-0.9 balanced, 0.95-1.0 strong)",
+        "_beta_comment": "Stabilization coefficient (0-1). Optimal value depends on stabilization_type.",
+        "_beta_defaults_by_method": {
+          "simple": "0.9 (aggressive damping, most robust - default if not specified)",
+          "fluxBased": "0.7 (moderate, FVM-consistent)",
+          "traction": "0.3 (gentle, physics-based)"
+        },
 
         "damping_factor": 1.0,
         "_damping_factor_comment": "Additional damping for extreme cases (0.5-1.0, 1.0 = no extra damping)",
@@ -646,7 +644,7 @@
   "_usage_notes": {
     "1_required_files": "STL geometry files in cases_input/<case_name>/",
     "2_required_names": "inlet.stl, outlet*.stl, wall*.stl",
-    "3_profile_selection": "Use 'robust' for difficult meshes, 'standard' for production, 'accurate' for validation",
+    "3_profile_selection": "Use 'robust' for difficult meshes, 'standard' for production, 'precise' for LES/validation",
     "4_mesh_resolution": "Use cells_per_diameter: 10-12 (coarse), 15-20 (standard), 25-30 (fine)",
     "5_boundary_layers": "Use 10 layers (SimVascular standard), 1.2 expansion ratio. Increase to 12-15 for fine resolution",
     "6_windkessel": "Leave flow_split=null for automatic Murray's law distribution",
@@ -659,7 +657,7 @@
   "_parameter_hierarchy": {
     "override_order": [
       "1. base.py defaults",
-      "2. numerics profile (robust/standard/accurate)",
+      "2. numerics profile (robust/standard/precise)",
       "3. config.json values",
       "4. command-line arguments (if any)"
     ]

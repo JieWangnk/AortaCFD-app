@@ -276,7 +276,9 @@ class PrepareBoundaryDataTask(Task):
                     self.log.info(f"Inlet type is {inlet_type} with {inlet_profile} profile (uniform). Using fixedValue BC.")
 
             # Set up Windkessel if needed (case-insensitive) - supports both 2-element and 3-element
-            outlet_type = self.config.get("outlets", {}).get("type", "").upper()
+            # Support both nested (boundary_conditions.outlets) and flattened (outlets) config structures
+            outlets = self.config.get('boundary_conditions', {}).get('outlets') or self.config.get('outlets', {})
+            outlet_type = outlets.get("type", "").upper()
             if outlet_type in ["2EWINDKESSEL", "3EWINDKESSEL"]:
                 self.log.info("Calculating and writing Windkessel properties...")
                 tri_surface_dir = os.path.join(case_dir, "constant", "triSurface")

@@ -1,134 +1,61 @@
 {
-  "_comment": "STANDARD CONFIG - Recommended for clinical/research use",
-  "_description": "Balanced configuration with Windkessel outlets and time-varying inlet",
-  "_usage": "python run_patient.py <patient_id> --config examples/config_standard.json",
-
-  "case_info": {
-    "patient_id": "example_standard",
-    "description": "Standard clinical simulation configuration",
-    "clinical_data": {
-      "age": 45,
-      "sex": "Male",
-      "heart_rate": 75
-    }
-  },
+  "_doc": "Standard aortic CFD config - Windkessel outlets, pulsatile flow",
 
   "physics": {
     "model": "laminar",
     "transport_properties": {
       "rho": 1060,
-      "nu": 3.7736e-6,
-      "_comment": "Blood: rho=1060 kg/m³, mu=0.004 Pa·s → nu=mu/rho=3.77e-6 m²/s"
+      "nu": 3.7736e-6
     }
   },
 
   "numerics": {
-    "profile": "standard",
-    "_profiles_available": ["robust", "standard", "accurate"],
-    "max_co": 1.0,
-    "correctors": {
-      "nOuterCorrectors": 2,
-      "nCorrectors": 2,
-      "nNonOrthogonalCorrectors": 1
-    }
+    "profile": "standard"
   },
 
   "mesh": {
-    "_comment": "v2.0: cells_across_span is now the primary mesh resolution method",
     "boundary_layers": {
-      "enabled": true,
-      "num_layers": 5,
-      "expansion_ratio": 1.2,
-      "final_layer_thickness": 0.3,
-      "min_thickness": 0.1
+      "num_layers": 10,
+      "expansion_ratio": 1.2
     },
     "SNAPPY_SETTINGS": {
-      "parallel": true,
-      "nProcessors": 8,
-      "surfaceRefinementLevels": [1, 2],
-      "_comment": "Span-based refinement (OpenFOAM 12+) - guarantees cells across diameter",
-      "span_refinement_enabled": true,
       "cells_across_span": 20,
-      "span_refinement_level": 2,
-      "_span_refinement_level_warning": "USE 1 or 2 ONLY - level 3 with cells_across_span>10 causes mesh failure!",
-      "_cells_across_span_guide": {
-        "coarse": "10-15 cells - quick tests",
-        "standard": "15-20 cells - production (RECOMMENDED)",
-        "fine": "25-30 cells - mesh independence studies"
-      },
-      "_DOE_validated": {
-        "nSmoothThickness": 10,
-        "maxFaceThicknessRatio": 0.5,
-        "_comment": "DOE study confirmed: LOWER values are better for these parameters"
-      }
+      "nProcessors": 8
     }
   },
 
   "geometry": {
     "inlet_keywords_ordered": "inlet",
     "outlet_keywords_ordered": ["outlet1", "outlet2", "outlet3", "outlet4"],
-    "wall_keywords_ordered": "wall_aorta",
-    "scale_factor": 0.001,
-    "_comment": "Geometry in mm, scale 0.001 converts to meters"
+    "wall_keywords_ordered": "wall"
   },
 
   "boundary_conditions": {
     "inlet": {
       "type": "TIMEVARYING",
       "csv_file": "flow_data.csv",
-      "data_type": "flowrate",
-      "profile": "parabolic",
-      "_profiles_available": ["plug", "parabolic", "womersley", "wall_distance"]
+      "profile": "parabolic"
     },
-
     "outlets": {
       "type": "3EWINDKESSEL",
       "windkessel_settings": {
         "systolic_pressure": 120,
         "diastolic_pressure": 80,
-        "venous_pressure": 0,
-        "methodology": "murray_law_automatic",
-        "tau": 1.0,
-        "initial_pressure_method": "diastolic",
-        "_comment": "3-element Windkessel (R1-C-R2) with Murray's law flow distribution",
-
-        "_backflow_stabilization": "Backflow stabilization for pulsatile Windkessel simulations",
+        "flow_split": 70,
         "enable_stabilization": true,
-        "stabilization_type": "simple",
-        "_stabilization_types": {
-          "simple": "Direct velocity damping, uses only beta (DEFAULT, most robust)",
-          "fluxBased": "FVM flux-based detection, uses beta×dampingFactor",
-          "traction": "Physics-based from Moghadam 2011, uses beta×dampingFactor"
-        },
-        "beta": 0.5,
-        "_beta_guide": "0.0=no damping, 0.5=moderate (RECOMMENDED), 1.0=full suppression (most robust)",
-        "damping_factor": 1.0,
-        "_damping_factor_note": "Only used by fluxBased and traction methods"
+        "beta": 0.5
       }
-    },
-
-    "walls": {
-      "type": "no_slip"
     }
   },
 
   "simulation_control": {
     "cardiac_cycle_period": 0.8,
     "number_of_cycles": 3,
-    "writeInterval": 0.04,
-    "keep_last_cycles": 2,
-    "_keep_last_cycles_comment": "Automatically calculates purgeWrite to keep only last 2 cardiac cycles on disk",
-    "_purgeWrite_options": {
-      "keep_last_cycles": "Smart: auto-calculate purgeWrite based on cardiac cycle (RECOMMENDED)",
-      "purgeWrite_in_controlDict": "Direct: set purgeWrite value directly in controlDict section",
-      "omit_both": "Keep all time directories (default, uses most disk space)"
-    },
-    "_comment": "3 cardiac cycles, output every 40ms, keep last 2 cycles on disk"
+    "writeInterval": 0.04
   },
 
   "run_settings": {
     "solution_type": "parallel",
-    "subdomains": 8,
-    "decomposition_method": "scotch"
+    "subdomains": 8
   }
 }

@@ -1,19 +1,8 @@
 {
-  "_comment": "MINIMAL CONFIG - Required fields only",
-  "_description": "Bare minimum configuration for AortaCFD. Uses all defaults.",
-  "_usage": "python run_patient.py <patient_id> --config examples/config_minimal.json",
-
-  "case_info": {
-    "patient_id": "example_minimal",
-    "description": "Minimal configuration example"
-  },
+  "_doc": "Minimal AortaCFD config - uses defaults where possible",
 
   "physics": {
-    "model": "laminar",
-    "transport_properties": {
-      "rho": 1060,
-      "nu": 3.7736e-6
-    }
+    "model": "laminar"
   },
 
   "numerics": {
@@ -21,38 +10,30 @@
   },
 
   "mesh": {
-    "_comment": "v2.0: Uses cells_across_span for mesh resolution",
     "SNAPPY_SETTINGS": {
-      "cells_across_span": 15,
-      "span_refinement_level": 2,
-      "_note": "Use level 1 or 2 only (level 3 causes mesh failure with cells>10)"
+      "cells_across_span": 15
     }
   },
 
   "geometry": {
     "inlet_keywords_ordered": "inlet",
-    "outlet_keywords_ordered": ["outlet1", "outlet2"],
-    "wall_keywords_ordered": "wall_aorta",
+    "outlet_keywords_ordered": ["outlet"],
+    "wall_keywords_ordered": "wall",
     "scale_factor": 0.001
   },
 
   "boundary_conditions": {
     "inlet": {
       "type": "CONSTANT",
-      "cardiac_output": 5.0,
-      "profile": "plug"
+      "cardiac_output": 5.0
     },
     "outlets": {
-      "type": "ZEROGRADIENT"
-    },
-    "walls": {
-      "type": "no_slip"
+      "type": "zeroGradient"
     }
   },
 
   "simulation_control": {
-    "end_time": 1.0,
-    "writeInterval": 0.1
+    "end_time": 1.0
   },
 
   "run_settings": {
