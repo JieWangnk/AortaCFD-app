@@ -226,12 +226,13 @@
 
     "inlet": {
       "type": "TIMEVARYING",
-      "_type_options": ["CONSTANT", "PARABOLIC", "TIMEVARYING", "WOMERSLEY"],
+      "_type_options": ["CONSTANT", "PARABOLIC", "TIMEVARYING", "WOMERSLEY", "MRI"],
       "_type_descriptions": {
         "CONSTANT": "Uniform plug flow (specify velocity or cardiac_output)",
         "PARABOLIC": "Parabolic velocity profile",
         "TIMEVARYING": "Time-varying flow from CSV file",
-        "WOMERSLEY": "Womersley pulsatile profile"
+        "WOMERSLEY": "Womersley pulsatile profile",
+        "MRI": "Pre-processed 4D flow MRI inlet data (OpenFOAM format)"
       },
 
       "_CONSTANT_parameters": {
@@ -278,6 +279,33 @@
         "n_harmonics": "auto",
         "_n_harmonics_options": ["auto", 4, 8, 16, 32],
         "_n_harmonics_comment": "Number of Fourier harmonics for Womersley profile. 'auto' = FFT-based spectral energy detection (99% threshold)"
+      },
+
+      "_MRI_parameters": {
+        "_description": "Use pre-processed 4D flow MRI data directly (no profile mapping)",
+        "_use_case": "When spatially resolved inlet velocities from 4D flow MRI are available",
+
+        "file": "./inlet/",
+        "_file_comment": "Path to directory containing time directories with U files",
+        "_file_note": "Relative to patient case directory (cases_input/<case>/)",
+
+        "_data_format": {
+          "structure": "inlet/0.000000/U, inlet/0.005700/U, ..., inlet/0.845000/U",
+          "U_file_format": "OpenFOAM vectorField format (one velocity vector per inlet face)",
+          "cardiac_cycle": "Auto-detected from max time directory name"
+        },
+
+        "_workflow": [
+          "1. System copies time directories to constant/boundaryData/<inlet_patch>/",
+          "2. Points file is generated from mesh inlet patch faces",
+          "3. CycleDataSetup creates symlinks for additional cardiac cycles",
+          "4. No velocity profile mapping or interpolation is performed"
+        ],
+
+        "_example_config": {
+          "type": "MRI",
+          "file": "./inlet/"
+        }
       },
 
       "_current_config": {
@@ -651,7 +679,8 @@
     "7_simulation_time": "Run at least 3-5 cardiac cycles for pulsatile flow",
     "8_parallel": "Use 4-8 cores for medium cases, more for large geometries",
     "9_inlet_profile": "Use 'parabolic' for circular inlets, 'wall_distance' for irregular inlets (e.g., aortic root)",
-    "10_womersley": "Use n_harmonics='auto' for automatic spectral energy-based harmonic selection"
+    "10_womersley": "Use n_harmonics='auto' for automatic spectral energy-based harmonic selection",
+    "11_mri_inlet": "Use type='MRI' with file='./inlet/' for pre-processed 4D flow MRI inlet data (no profile mapping)"
   },
 
   "_parameter_hierarchy": {
