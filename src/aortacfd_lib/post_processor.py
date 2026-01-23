@@ -1,4 +1,5 @@
 import os
+import json
 import vtk
 from vtk.util.numpy_support import vtk_to_numpy
 import numpy as np
@@ -115,6 +116,33 @@ class OpenFOAMParaView:
                 "representation": "Surface",
                 "unit": "Pa"
             },
+            "TAWSS": {
+                "name": "TAWSS",
+                "derived": False,  # Read directly from field saved by hemodynamics
+                "prefix": "TAWSS",
+                "component": ('POINTS', 'TAWSS'),
+                "preset": "Viridis (matplotlib)",
+                "representation": "Surface",
+                "unit": "Pa"
+            },
+            "OSI": {
+                "name": "OSI",
+                "derived": False,  # Read directly from field saved by hemodynamics
+                "prefix": "OSI",
+                "component": ('POINTS', 'OSI'),
+                "preset": "Cool to Warm",
+                "representation": "Surface",
+                "unit": ""
+            },
+            "RRT": {
+                "name": "RRT",
+                "derived": False,  # Read directly from field saved by hemodynamics
+                "prefix": "RRT",
+                "component": ('POINTS', 'RRT'),
+                "preset": "Plasma (matplotlib)",
+                "representation": "Surface",
+                "unit": "1/Pa"
+            },
             "KE": {
                 "name": "KE",
                 "derived": True,
@@ -126,16 +154,26 @@ class OpenFOAMParaView:
             }
         }
 
-        # Default: auto-scale to data range for each timestep
-        # This ensures the color scale adapts to the actual field values
+        # Default rescale settings per field
+        # rescaleToData=True: auto-scale to data range (good for velocity)
+        # rescaleToData=False: use fixed rescaleRange (good for WSS comparison across cases)
         default_ranges = {
             "U": [0, 1],
             "KE": [0, 100],
-            "WSS": [0, 10],
+            "WSS": [0, 50],      # Fixed range 0-50 Pa for clinical comparison
+            "TAWSS": [0, 50],    # Fixed range for TAWSS
+            "OSI": [0, 0.5],     # OSI bounded [0, 0.5]
+            "RRT": [0, 10],      # RRT in 1/Pa
             "Pressure": [0, 20]
         }
         self.rescaleSettings = rescaleSettings or {
-            key: {"rescaleToData": True, "rescaleRange": val} for key, val in default_ranges.items()
+            "U": {"rescaleToData": True, "rescaleRange": default_ranges["U"]},
+            "KE": {"rescaleToData": True, "rescaleRange": default_ranges["KE"]},
+            "WSS": {"rescaleToData": False, "rescaleRange": default_ranges["WSS"]},  # Fixed range
+            "TAWSS": {"rescaleToData": False, "rescaleRange": default_ranges["TAWSS"]},  # Fixed range
+            "OSI": {"rescaleToData": False, "rescaleRange": default_ranges["OSI"]},  # Fixed range
+            "RRT": {"rescaleToData": False, "rescaleRange": default_ranges["RRT"]},  # Fixed range
+            "Pressure": {"rescaleToData": True, "rescaleRange": default_ranges["Pressure"]}
         }
 
     def generate_screenshots(self):
@@ -236,8 +274,8 @@ class OpenFOAMParaView:
             renderView1.CameraViewUp = [0.0, 0.0, 1.0]
 
         # ---------------------------------------------------------------------
-        # 5) Create new Calculator filters for KE, WSS, Pressure:
-        #    chain them so final pipeline is ffoam -> calcKE -> calcWSS -> calcP
+        # 5) Create new Calculator filters for KE, WSS, TAWSS, Pressure:
+        #    chain them so final pipeline is ffoam -> calcKE -> calcWSS -> calcTAWSS -> calcP
         calculatorKE = Calculator(Input=ffoam)
         calculatorKE.ResultArrayName = 'KE'
         calculatorKE.Function = '0.5*1060*(U_X^2 + U_Y^2 + U_Z^2)'
@@ -246,7 +284,12 @@ class OpenFOAMParaView:
         calculatorWSS.ResultArrayName = 'WSS'
         calculatorWSS.Function = '1060*mag(wallShearStress)'
 
-        calculatorP = Calculator(Input=calculatorWSS)
+        # TAWSS from wallShearStressMean (time-averaged WSS from fieldAverage)
+        calculatorTAWSS = Calculator(Input=calculatorWSS)
+        calculatorTAWSS.ResultArrayName = 'TAWSS'
+        calculatorTAWSS.Function = '1060*mag(wallShearStressMean)'
+
+        calculatorP = Calculator(Input=calculatorTAWSS)
         calculatorP.ResultArrayName = 'Pressure'
         calculatorP.Function = 'p*1060/133.32'
 
@@ -550,9 +593,68 @@ if __name__ == "__main__":
 
     print(f"[INFO] Found {foam_files[0]}")
 
+    # Load visualization config from merged_config.json if available
+    run_dir = os.path.dirname(os.path.abspath(case_path))
+    config_path = os.path.join(run_dir, "reports", "merged_config.json")
+    viz_config = {}
+    rescale_settings = None
+    config_time_steps = None
+    config_fields = None
+
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r') as f:
+                full_config = json.load(f)
+            viz_config = full_config.get("visualization", {})
+
+            # Load time_steps from config (list of specific times)
+            config_time_steps = viz_config.get("time_steps")
+            if config_time_steps and isinstance(config_time_steps, list):
+                print(f"[INFO] Using time steps from config: {config_time_steps}")
+
+            # Load fields from config
+            config_fields = viz_config.get("fields")
+            if config_fields:
+                print(f"[INFO] Using fields from config: {config_fields}")
+
+            # Build rescale settings from config
+            color_ranges = viz_config.get("color_ranges", {})
+            if color_ranges:
+                print(f"[INFO] Loaded color ranges from config: {color_ranges}")
+                rescale_settings = {}
+                # Map config keys to internal field names
+                field_map = {"U": "U", "velocity": "U", "WSS": "WSS", "wss": "WSS",
+                             "TAWSS": "TAWSS", "tawss": "TAWSS",
+                             "OSI": "OSI", "osi": "OSI",
+                             "RRT": "RRT", "rrt": "RRT",
+                             "Pressure": "Pressure", "pressure": "Pressure", "KE": "KE"}
+                defaults = {"U": [0, 1], "WSS": [0, 50], "TAWSS": [0, 50],
+                           "OSI": [0, 0.5], "RRT": [0, 10], "Pressure": [0, 20], "KE": [0, 100]}
+
+                for field in ["U", "WSS", "TAWSS", "OSI", "RRT", "Pressure", "KE"]:
+                    # Check if user specified this field (case-insensitive)
+                    user_range = None
+                    for key, mapped in field_map.items():
+                        if mapped == field and key in color_ranges:
+                            user_range = color_ranges[key]
+                            break
+
+                    if user_range:
+                        rescale_settings[field] = {"rescaleToData": False, "rescaleRange": user_range}
+                        print(f"[INFO] {field}: fixed range {user_range}")
+                    else:
+                        # Not specified by user: auto-scale
+                        rescale_settings[field] = {"rescaleToData": True, "rescaleRange": defaults[field]}
+                        print(f"[INFO] {field}: auto-scale")
+        except Exception as e:
+            print(f"[WARNING] Could not load config: {e}")
+    else:
+        print(f"[INFO] No config found at {config_path}, using defaults")
+
     # Parse command-line options for time step selection
-    time_option = None
-    if len(sys.argv) > 2:
+    # Config time_steps takes priority, then command-line argument
+    time_option = config_time_steps  # May be None or a list from config
+    if time_option is None and len(sys.argv) > 2:
         time_arg = sys.argv[2].lower()
         if time_arg == 'last':
             time_option = 'last'
@@ -566,13 +668,19 @@ if __name__ == "__main__":
         else:
             print(f"[WARNING] Unknown time option '{time_arg}'. Using default (all time steps)")
 
+    # Determine fields to visualize
+    # Config fields takes priority, then default
+    default_fields = ["U", "p", "wallShearStress"]
+    fields_to_use = config_fields if config_fields else default_fields
+
     # Initialize post-processor
     try:
         processor = OpenFOAMParaView(
             casePath=case_path,
             caseType='auto',  # Auto-detect Reconstructed or Decomposed
-            timeSteps=time_option,  # None, 'last', or 'peak'
-            fields=["U", "p", "wallShearStress"]  # All available fields
+            timeSteps=time_option,  # None, 'last', 'peak', or list of times
+            fields=fields_to_use,  # Fields from config or default
+            rescaleSettings=rescale_settings  # Color ranges from config
         )
 
         print("[INFO] Generating visualizations...")

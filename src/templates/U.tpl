@@ -58,24 +58,22 @@ boundaryField
     {% set outlet_type = outlet_settings.get('type', '3EWINDKESSEL') %}
     {% set wk_settings = outlet_settings.get('windkessel_settings', {}) %}
     {% set enable_stabilization = wk_settings.get('enable_stabilization', false) %}
-    {% set stabilization_type = wk_settings.get('stabilization_type', 'simple') %}
-    {% set beta = wk_settings.get('beta', 0.5) %}
-    {% set damping_factor = wk_settings.get('damping_factor', 1.0) %}
+    {# Two-parameter stabilization: betaT (tangential), betaN (normal) #}
+    {# Backward compatibility: if old 'beta' is used, map to betaT with betaN=0 #}
+    {% set betaT = wk_settings.get('betaT', wk_settings.get('beta', 0.3)) %}
+    {% set betaN = wk_settings.get('betaN', 0.0) %}
     {% for outlet in outlet_patches %}
     {{ outlet }}
     {
         {% if outlet_type == "3EWINDKESSEL" and enable_stabilization %}
-        // Stabilized Windkessel velocity BC - modularWKPressure library
-        // Backflow stabilization methods (damping formula: V_out = (1 - damping) * V_backflow):
-        //   simple:    damping = beta           (DEFAULT, most robust, ignores dampingFactor)
-        //   fluxBased: damping = beta × dampingFactor  (FVM-consistent, uses phi field)
-        //   traction:  damping = beta × dampingFactor  (physics-based, Moghadam 2011)
-        // Robustness: simple > fluxBased ≈ traction (for same effective damping)
+        // Two-parameter directional backflow stabilization (Esmaily-Moghadam formulation)
+        // Tensor: F = H(-φ) × [βN·n⊗n + βT·(I - n⊗n)]
+        //   betaT: Tangential damping (0-1) - suppresses spurious vortices during backflow
+        //   betaN: Normal damping (0-1) - keep at 0.0 to preserve Windkessel P-Q coupling
+        // Recommended: betaT=0.3, betaN=0.0
         type            stabilizedWindkesselVelocity;
-        enableStabilization true;
-        stabilizationType {{ stabilization_type }};
-        beta            {{ beta }};
-        dampingFactor   {{ damping_factor }};
+        betaT           {{ betaT }};
+        betaN           {{ betaN }};
         value           uniform (0 0 0);
 
         {% elif outlet_type in ["2EWINDKESSEL", "3EWINDKESSEL"] %}

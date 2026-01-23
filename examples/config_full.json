@@ -405,20 +405,25 @@
         "enable_stabilization": true,
         "_enable_stabilization_comment": "Enable stabilizedWindkesselVelocity BC (prevents backflow divergence)",
 
-        "stabilization_type": "fluxBased",
-        "_stabilization_type_options": ["simple", "fluxBased", "traction"],
-        "_stabilization_type_comment": "fluxBased recommended for complex 3D geometries",
+        "_stabilization_formulation": "Two-parameter directional stabilization: F = H(-φ) × [βN·n⊗n + βT·(I - n⊗n)]",
 
-        "beta": 0.9,
-        "_beta_comment": "Stabilization coefficient (0-1). Optimal value depends on stabilization_type.",
-        "_beta_defaults_by_method": {
-          "simple": "0.9 (aggressive damping, most robust - default if not specified)",
-          "fluxBased": "0.7 (moderate, FVM-consistent)",
-          "traction": "0.3 (gentle, physics-based)"
+        "betaT": 0.3,
+        "_betaT_comment": "Tangential damping coefficient (0-1). Suppresses spurious vortices during backflow.",
+        "_betaT_guidelines": {
+          "0.0": "No tangential damping - use only for validation/comparison",
+          "0.2": "Mild damping - for cases with minimal backflow",
+          "0.3": "Recommended - good balance of stability and physics preservation",
+          "0.5": "Strong damping - for severe backflow or difficult geometries"
         },
 
-        "damping_factor": 1.0,
-        "_damping_factor_comment": "Additional damping for extreme cases (0.5-1.0, 1.0 = no extra damping)",
+        "betaN": 0.0,
+        "_betaN_comment": "Normal damping coefficient (0-1). Keep at 0.0 to preserve Windkessel P-Q coupling.",
+        "_betaN_guidelines": {
+          "0.0": "RECOMMENDED - allows normal velocity to respond to Windkessel pressure",
+          "0.05": "Emergency - only if βT alone cannot stabilize",
+          "0.1": "Maximum safe - beyond this distorts Windkessel physics"
+        },
+        "_betaN_warning": "Setting βN > 0 constrains normal velocity during backflow, fighting against Windkessel pressure",
 
         "methodology": "murray_law_automatic",
         "_methodology_comment": "Windkessel calculation methodology (informational)",

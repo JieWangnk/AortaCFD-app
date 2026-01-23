@@ -105,5 +105,12 @@
   "run_settings": {
     "solution_type": "parallel",
     "subdomains": 8
+  },
+
+  "visualization": {
+    "_comment": "Color ranges for ParaView screenshots (only specified fields use fixed range, others auto-scale)",
+    "color_ranges": {
+      "WSS": [0, 50]
+    }
   }
 }

@@ -352,10 +352,119 @@ class HemodynamicsPostProcessor:
             self.log.info(f"OSI: max={results.osi_max:.4f}, mean={results.osi_mean:.4f}")
             self.log.info(f"RRT: max={results.rrt_max:.4f}, mean={results.rrt_mean:.4f} Pa⁻¹")
 
+            # Save fields for ParaView visualization
+            self._save_hemodynamic_fields(latest, tawss_proper, osi, rrt)
+
         except Exception as e:
             self.log.error(f"Failed to compute TAWSS/OSI/RRT: {e}")
             import traceback
             traceback.print_exc()
+
+    def _save_hemodynamic_fields(self, time_dir: Path, tawss: np.ndarray,
+                                  osi: np.ndarray, rrt: np.ndarray) -> None:
+        """
+        Save TAWSS, OSI, and RRT as OpenFOAM scalar boundary fields for ParaView visualization.
+
+        These are saved as volScalarField files in the time directory with the data
+        on the wall boundary patch.
+        """
+        try:
+            # Get wall patch name from geometry config
+            wall_keywords = self.config.get('geometry', {}).get('wall_keywords_ordered', 'wall')
+            if isinstance(wall_keywords, list):
+                wall_patch = wall_keywords[0]
+            else:
+                wall_patch = wall_keywords
+
+            # Find actual wall patch name in the case
+            wall_patch_name = None
+            for patch_name in self._get_boundary_patches():
+                if wall_patch.lower() in patch_name.lower() or 'wall' in patch_name.lower():
+                    wall_patch_name = patch_name
+                    break
+
+            if not wall_patch_name:
+                self.log.warning("Could not find wall patch for saving fields")
+                return
+
+            # Save each field
+            fields_to_save = [
+                ('TAWSS', tawss, 'Pa'),
+                ('OSI', osi, ''),
+                ('RRT', rrt, '1/Pa')
+            ]
+
+            for field_name, field_data, unit in fields_to_save:
+                self._write_scalar_boundary_field(
+                    time_dir, field_name, field_data, wall_patch_name, unit
+                )
+
+            self.log.info(f"Saved TAWSS, OSI, RRT fields to {time_dir}")
+
+        except Exception as e:
+            self.log.warning(f"Could not save hemodynamic fields: {e}")
+
+    def _get_boundary_patches(self) -> list:
+        """Get list of boundary patch names from the case."""
+        boundary_file = self.case_dir / 'constant' / 'polyMesh' / 'boundary'
+        patches = []
+        if boundary_file.exists():
+            with open(boundary_file, 'r') as f:
+                content = f.read()
+                # Simple regex to find patch names
+                import re
+                matches = re.findall(r'^\s*(\w+)\s*\n\s*\{', content, re.MULTILINE)
+                patches = [m for m in matches if m not in ['FoamFile', 'boundary']]
+        return patches
+
+    def _write_scalar_boundary_field(self, time_dir: Path, field_name: str,
+                                      data: np.ndarray, wall_patch: str, unit: str) -> None:
+        """Write a scalar field as OpenFOAM boundary field format."""
+        output_file = time_dir / field_name
+
+        n_faces = len(data)
+
+        # Format data as OpenFOAM list
+        data_str = '\n'.join(f'{v:.8g}' for v in data)
+
+        content = f'''FoamFile
+{{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      {field_name};
+}}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 0 0 0 0 0 0];
+
+internalField   uniform 0;
+
+boundaryField
+{{
+    {wall_patch}
+    {{
+        type            fixedValue;
+        value           nonuniform List<scalar>
+{n_faces}
+(
+{data_str}
+)
+;
+    }}
+
+    ".*"
+    {{
+        type            calculated;
+        value           uniform 0;
+    }}
+}}
+
+// ************************************************************************* //
+'''
+
+        with open(output_file, 'w') as f:
+            f.write(content)
 
     def _compute_pressure_drop(self, results: HemodynamicsResults) -> None:
         """

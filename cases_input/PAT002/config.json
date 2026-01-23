@@ -31,7 +31,7 @@
   },
 
   "mesh": {
-    "cells_per_diameter": 15,
+    "cells_per_diameter": 10,
     "boundary_layers": {
       "enabled": true,
       "num_layers": 5,
@@ -42,7 +42,7 @@
     },
     "SNAPPY_SETTINGS": {
       "parallel": true,
-      "nProcessors": 16,
+      "nProcessors": 2,
       "surfaceRefinementLevels": [1, 2],
       "featureLevel": 2
     }
@@ -78,18 +78,12 @@
         "tau": 1.0,
         "initial_pressure_method": "diastolic",
 
-        "_backflow_stabilization_comment": "Maximum stability configuration for challenging geometry",
+        "_backflow_stabilization_comment": "Two-parameter directional backflow stabilization (Esmaily-Moghadam formulation)",
         "enable_stabilization": true,
-        "stabilization_type": "simple",
-        "_stabilization_types": {
-          "simple": "Uses only beta, most robust (RECOMMENDED for difficult cases)",
-          "fluxBased": "Uses beta×dampingFactor, FVM-consistent",
-          "traction": "Uses beta×dampingFactor, physics-based (Moghadam 2011)"
-        },
-        "beta": 1.0,
-        "_beta_comment": "beta=1.0 fully suppresses backflow (most robust for 50% flow split)",
-        "damping_factor": 1.0,
-        "_damping_factor_comment": "Only used by fluxBased/traction methods"
+        "betaT": 0.3,
+        "_betaT_comment": "Tangential damping (0-1). Suppresses spurious vortices during backflow. Recommended: 0.2-0.5",
+        "betaN": 0.0,
+        "_betaN_comment": "Normal damping (0-1). Keep at 0.0 to preserve Windkessel P-Q coupling. Only increase for severe instability."
       }
     },
 
@@ -105,7 +99,7 @@
   },
 
   "run_settings": {
-    "solution_type": "parallel",
+    "solution_type": "serial",
     "subdomains": 16,
     "decomposition_method": "scotch"
   }
