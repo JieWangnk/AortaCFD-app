@@ -1,7 +1,7 @@
 # AortaCFD Configuration Guide
 
-**Updated**: January 5, 2026
-**Version**: 2.2 (Hemodynamics & Flowrate Units)
+**Updated**: January 23, 2026
+**Version**: 2.3 (MRI Inlet Support)
 
 ---
 
@@ -16,7 +16,7 @@ AortaCFD uses a **hierarchical configuration system** with a new **3-profile num
    - Conservative mesh quality defaults
    - Physics defaults
 
-2. **Numerics Profile** (robust/standard/accurate)
+2. **Numerics Profile** (robust/standard/precise)
    - Predefined numerical schemes
    - Solver settings and tolerances
    - Time integration methods
@@ -38,9 +38,9 @@ AortaCFD uses a **hierarchical configuration system** with a new **3-profile num
 
 | Profile | Use Case | Accuracy | Stability | Speed | Best For |
 |---------|----------|----------|-----------|-------|----------|
-| **robust** | Difficult meshes | 1st order | Maximum | Slower | Poor mesh quality, debugging |
+| **robust** | Difficult meshes | 1st order | Maximum | Fast | Poor mesh quality, debugging |
 | **standard** | Production | 2nd order | High | Fast | Most simulations (recommended) |
-| **accurate** | Validation | 2nd order | Medium | Slower | Well-resolved meshes, publications |
+| **precise** | LES/Validation | 2nd order | Good | Slower | Minimal diffusion, LES, convergence studies |
 
 ### Profile Characteristics
 
@@ -53,9 +53,9 @@ AortaCFD uses a **hierarchical configuration system** with a new **3-profile num
 
 - **Time Integration**: Euler (1st order)
 - **Convection**: Upwind (1st order, bounded)
-- **Courant Number**: 0.5 (small timesteps)
-- **Relaxation**: Heavy (U: 0.5, p: 0.2)
-- **Tolerances**: 1e-5 (tight for stability)
+- **Courant Number**: 1.0 (stable with 1st order schemes)
+- **Relaxation**: Moderate (U: 0.7, p: 0.3, pFinal: 0.9)
+- **Tolerances**: 1e-3 (relaxed for convergence)
 - **Best For**:
   - Initial testing of new geometries
   - Poor mesh quality (high skewness)
@@ -71,9 +71,9 @@ AortaCFD uses a **hierarchical configuration system** with a new **3-profile num
 ```
 
 - **Time Integration**: Backward (2nd order)
-- **Convection**: linearUpwind (2nd order bounded)
+- **Convection**: limitedLinearV (2nd order TVD bounded)
 - **Courant Number**: 1.0 (normal timesteps)
-- **Relaxation**: Moderate (U: 0.7, p: 0.3)
+- **Relaxation**: Moderate (U: 0.7, p: 0.3, pFinal: 0.9)
 - **Tolerances**: 1e-6 (good accuracy)
 - **Best For**:
   - Production simulations
@@ -82,24 +82,24 @@ AortaCFD uses a **hierarchical configuration system** with a new **3-profile num
   - Balanced accuracy and convergence
 - **✅ Recommended**: Default choice for most users
 
-#### 🎯 **accurate** Profile
+#### 🎯 **precise** Profile
 ```json
 "numerics": {
-  "profile": "accurate"
+  "profile": "precise"
 }
 ```
 
 - **Time Integration**: CrankNicolson 0.9 (better phase accuracy)
-- **Convection**: LUST (low diffusion)
-- **Courant Number**: 0.5 (small timesteps for accuracy)
-- **Relaxation**: Light (U: 0.9, p: 0.7)
+- **Convection**: LUST (75% central + 25% upwind, minimal diffusion)
+- **Courant Number**: 0.8 (smaller timesteps for accuracy)
+- **Relaxation**: Light (U: 0.9, p: 0.5)
 - **Tolerances**: 1e-8 (very tight)
 - **Best For**:
+  - LES simulations (LUST preserves resolved turbulence)
   - Validation studies
-  - Well-resolved meshes (fine)
-  - Publications
   - Mesh convergence studies
-- **⚠️ Note**: Requires good mesh quality and may be slower
+  - Cases requiring minimal numerical diffusion
+- **⚠️ Note**: Requires excellent mesh quality (ortho > 70°, skewness < 2)
 
 ---
 
@@ -261,7 +261,7 @@ Numerical schemes via profile system.
 
 ```json
 "numerics": {
-  "profile": "standard",  // robust/standard/accurate
+  "profile": "standard",  // robust/standard/precise
   "max_co": 1.0,         // Override profile default
   "correctors": {
     "nOuterCorrectors": 3  // Override if needed
@@ -369,7 +369,16 @@ time,flowrate
 ...
 ```
 
-**Inlet Profile Options (NEW v2.1)**:
+**Inlet Type Options**:
+| Type | Description | Data Required |
+|------|-------------|---------------|
+| `CONSTANT` | Uniform plug flow | `velocity` or `cardiac_output` |
+| `PARABOLIC` | Parabolic velocity profile | `velocity` or `cardiac_output` |
+| `TIMEVARYING` | Time-varying from CSV | `csv_file`, `profile` |
+| `WOMERSLEY` | Womersley pulsatile profile | `csv_file`, `n_harmonics` |
+| `MRI` | Pre-processed 4D flow MRI data | `file` (directory path) |
+
+**Inlet Profile Options (for TIMEVARYING)**:
 | Profile | Description | Use Case |
 |---------|-------------|----------|
 | `plug` | Uniform velocity | Simple/turbulent inlet |
@@ -386,6 +395,39 @@ time,flowrate
   "n_harmonics": "auto"  // FFT-based spectral energy detection (99% threshold)
 }
 ```
+
+**D. MRI Inlet (Pre-processed 4D Flow Data) - NEW v2.3**
+
+When spatially resolved inlet velocities from 4D flow MRI are available, use the `MRI` inlet type to bypass all profile mapping and use the data directly.
+
+```json
+"inlet": {
+  "type": "MRI",
+  "file": "./inlet/"
+}
+```
+
+**MRI Inlet Data Format:**
+```
+cases_input/<case>/inlet/
+├── 0.000000/U      # Velocity at t=0.000s
+├── 0.005700/U      # Velocity at t=0.0057s
+├── 0.011300/U      # ...
+├── ...
+└── 0.845000/U      # Last time = cardiac cycle period
+```
+
+**How it works:**
+1. **No profile mapping** - U files are already in OpenFOAM format (one velocity vector per inlet face)
+2. **Auto cardiac cycle detection** - System reads max time from directory names
+3. **Multi-cycle via symlinks** - CycleDataSetup creates symlinks for additional cycles
+4. **Points file generated from mesh** - Ensures face ordering matches your mesh
+
+**When to use MRI inlet:**
+- 4D flow MRI data has been pre-processed to OpenFOAM format
+- Inlet geometry is complex (e.g., aortic root with valve leaflets)
+- Spatially-resolved velocity measurements are available
+- You want to preserve patient-specific inlet flow patterns
 
 #### Outlet Options
 
@@ -549,7 +591,7 @@ Runtime hemodynamic metric computation.
 
 ```json
 {
-  "numerics": {"profile": "accurate"},
+  "numerics": {"profile": "precise"},
   "mesh": {"cells_per_diameter": 20},
   // Run with 12, 15, 18, 20 cells/diameter
 }
@@ -789,13 +831,20 @@ print(f"Mass balanced: {result['is_balanced']}")  # True if < 1% imbalance
 
 ---
 
-**Last Updated**: January 5, 2026
+**Last Updated**: January 23, 2026
 **Maintained by**: AortaCFD Development Team
 **Questions?**: Check test suite or open an issue
 
 ---
 
 ## 📝 Version History
+
+### v2.3 (January 2026)
+- **MRI Inlet Support**: NEW `type: "MRI"` for pre-processed 4D flow MRI inlet data
+  - Direct use of OpenFOAM-format velocity data (no profile mapping)
+  - Auto-detection of cardiac cycle from time directory names
+  - Multi-cycle support via symbolic links
+  - Bypasses CSV processing and velocity profile interpolation
 
 ### v2.2 (January 2026)
 - **Hemodynamics Module**: NEW runtime hemodynamics computation (WSS, TAWSS, OSI, RRT, pressure drop)
@@ -821,6 +870,6 @@ print(f"Mass balanced: {result['is_balanced']}")  # True if < 1% imbalance
 - **Parabolic Velocity Fix**: Corrected scaling to use analytical U_max = 2*Q/A
 
 ### v2.0 (October 2025)
-- 3-Profile numerics system (robust/standard/accurate)
+- 3-Profile numerics system (robust/standard/precise)
 - Complete Windkessel configuration options
 - Enhanced mesh resolution controls

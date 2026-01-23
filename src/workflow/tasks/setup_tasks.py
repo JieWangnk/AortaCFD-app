@@ -221,7 +221,61 @@ class PrepareBoundaryDataTask(Task):
             inlet_config = self.config.get('boundary_conditions', {}).get('inlet') or self.config.get('inlet', {})
             inlet_type = inlet_config.get('type', 'TIMEVARYING').upper()
 
-            if inlet_type in ['TIMEVARYING', 'WOMERSLEY']:
+            if inlet_type == 'MRI':
+                # MRI inlet type: pre-processed 4D flow MRI data in OpenFOAM format
+                # User provides directory with time directories containing U files
+                mri_source_dir = inlet_config.get('file', inlet_config.get('source_dir', ''))
+                if not mri_source_dir:
+                    raise ValueError("MRI inlet type requires 'file' parameter pointing to inlet data directory")
+
+                # Resolve the source directory path
+                if not os.path.isabs(mri_source_dir):
+                    # Try relative to patient case directory first
+                    patient_case_dir = self.config.get('patient_case_directory', '')
+                    if patient_case_dir and os.path.isdir(os.path.join(patient_case_dir, mri_source_dir)):
+                        mri_source_dir = os.path.join(patient_case_dir, mri_source_dir)
+                    elif os.path.isdir(mri_source_dir):
+                        pass  # Already a valid relative path
+                    else:
+                        raise FileNotFoundError(f"MRI inlet source directory not found: {mri_source_dir}")
+
+                if not os.path.isdir(mri_source_dir):
+                    raise FileNotFoundError(f"MRI inlet source directory not found: {mri_source_dir}")
+
+                self.log.info(f"Using pre-processed MRI inlet data from: {mri_source_dir}")
+
+                # Find time directories in source
+                source_time_dirs = [d for d in os.listdir(mri_source_dir)
+                                   if os.path.isdir(os.path.join(mri_source_dir, d))
+                                   and d.replace('.', '', 1).isdigit()]
+
+                if not source_time_dirs:
+                    raise ValueError(f"No time directories found in MRI source: {mri_source_dir}")
+
+                source_times = sorted([float(d) for d in source_time_dirs])
+
+                # Determine cardiac cycle from the data (max time in source)
+                cardiac_cycle = max(source_times)
+                context['cardiac_cycle'] = cardiac_cycle
+                self.log.info(f"MRI inlet data: {len(source_times)} time points, cardiac cycle = {cardiac_cycle}s")
+
+                # Copy time directories from source to boundaryData
+                for time_str in source_time_dirs:
+                    src_path = os.path.join(mri_source_dir, time_str)
+                    dst_path = os.path.join(boundary_data_inlet_dir, time_str)
+                    if os.path.exists(dst_path):
+                        shutil.rmtree(dst_path)
+                    shutil.copytree(src_path, dst_path)
+                    self.log.debug(f"Copied MRI inlet data: {time_str}")
+
+                self.log.info(f"Copied {len(source_time_dirs)} time directories to boundaryData")
+
+                # Set up data for multiple cycles using symbolic links
+                self.log.info("Setting up data for multiple cardiac cycles...")
+                cycle_setup = CycleDataSetup(config=self.config, cardiac_cycle=cardiac_cycle, case_directory=case_dir)
+                cycle_setup.execute()
+
+            elif inlet_type in ['TIMEVARYING', 'WOMERSLEY']:
                 # Copy inlet CSV file to boundaryData directory if not already present
                 csv_file = inlet_config.get('csv_file')
                 if csv_file:
