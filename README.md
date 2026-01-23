@@ -6,7 +6,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![OpenFOAM](https://img.shields.io/badge/OpenFOAM-12-orange.svg)
 
-**AortaCFD** is an end-to-end automated pipeline for patient-specific cardiovascular CFD simulations using OpenFOAM 12. It streamlines the complete workflow from geometry to results, featuring a simplified 3-profile numerics system (robust/standard/accurate), physics model selection (laminar/RANS/LES), and advanced boundary conditions including 3-element Windkessel (3EWK) models with automatic parameter calculation.
+**AortaCFD** is an end-to-end automated pipeline for patient-specific cardiovascular CFD simulations using OpenFOAM 12. It streamlines the complete workflow from geometry to results, featuring a simplified 3-profile numerics system (robust/standard/precise), physics model selection (laminar/RANS/LES), and advanced boundary conditions including 3-element Windkessel (3EWK) models with automatic parameter calculation.
 
 ---
 
@@ -97,7 +97,7 @@ output/<patient_id>/           # Results
 
 ### Core Capabilities
 - **End-to-End Automation** - From geometry to results with single command
-- **3-Profile Numerics System** - Simple selection: `robust`, `standard`, or `accurate`
+- **3-Profile Numerics System** - Simple selection: `robust`, `standard`, or `precise`
 - **Physics Model Selection** - Laminar, RANS (k-ω SST), or LES (WALE)
 - **Advanced Boundary Conditions** - 3-element Windkessel (3EWK) with automatic parameter calculation
 - **Multiple Inlet Profiles** - Time-varying, constant, parabolic, Womersley, wall-distance
@@ -290,7 +290,7 @@ python run_patient.py BPM120 --steps case,mesh,boundary
 
 AortaCFD uses a unified `config.json` format. The configuration system features:
 
-- **3-Profile Numerics**: Select `robust`, `standard`, or `accurate`
+- **3-Profile Numerics**: Select `robust`, `standard`, or `precise`
 - **Physics Model**: Choose `laminar`, `rans`, or `les`
 - **Smart Defaults**: Minimal config required - system provides sensible defaults
 
@@ -367,8 +367,8 @@ AortaCFD uses a simplified **3-profile numerics system** that works with ALL phy
 | Profile | Order | Stability | Use Case |
 |---------|-------|-----------|----------|
 | **robust** | 1st | Maximum | Debugging, poor meshes, initial testing |
-| **standard** | 2nd | Good | Production runs, clinical studies (DEFAULT) |
-| **accurate** | 2nd | Good* | Convergence studies, validation, LES |
+| **standard** | 2nd | High | Production runs, clinical studies (DEFAULT) |
+| **precise** | 2nd | Good* | LES, validation, minimal diffusion |
 
 *Requires good mesh quality (orthogonality > 70°, skewness < 2)
 
@@ -377,19 +377,22 @@ AortaCFD uses a simplified **3-profile numerics system** that works with ALL phy
 **`robust`** - Maximum Stability
 - Time: Euler (1st order)
 - Convection: Gauss upwind (1st order, bounded)
+- Relaxation: U: 0.7, p: 0.3, pFinal: 0.9
 - Use when: Debugging, poor mesh quality, initial testing
 - Trade-off: Highly diffusive (damps gradients)
 
 **`standard`** - Balanced (RECOMMENDED)
 - Time: backward (2nd order implicit)
-- Convection: Gauss linearUpwind (2nd order, bounded)
-- Use when: Production runs, clinical studies, most RANS
-- Trade-off: Good accuracy with stability
+- Convection: Gauss limitedLinearV (2nd order, TVD bounded)
+- Relaxation: U: 0.7, p: 0.3, pFinal: 0.9
+- Use when: Production runs, clinical studies, Windkessel outlets
+- Trade-off: Good accuracy with high stability
 
-**`accurate`** - Low Diffusion
+**`precise`** - Minimal Diffusion
 - Time: CrankNicolson 0.9 (2nd order)
 - Convection: Gauss LUST (75% central + 25% upwind)
-- Use when: Mesh independence studies, validation, LES
+- Relaxation: U: 0.9, p: 0.5
+- Use when: LES simulations, final validation, minimal diffusion required
 - Requirements: Good mesh quality, ~2-3x longer runtime
 
 ### Physics Models
@@ -402,7 +405,7 @@ Combine any numerics profile with any physics model:
     "model": "laminar"    // or "rans" or "les"
   },
   "numerics": {
-    "profile": "standard" // or "robust" or "accurate"
+    "profile": "standard" // or "robust" or "precise"
   }
 }
 ```
@@ -486,9 +489,8 @@ Combine any numerics profile with any physics model:
       "tau": 1.0,
 
       "enable_stabilization": true,
-      "stabilization_type": "simple",
-      "beta": 0.5,
-      "damping_factor": 1.0
+      "betaT": 0.3,
+      "betaN": 0.0
     }
   }
 }
@@ -504,35 +506,285 @@ Combine any numerics profile with any physics model:
 
 ### Backflow Stabilization
 
-For pulsatile simulations with Windkessel BCs, backflow stabilization prevents divergence during diastole. Three methods are available:
+For pulsatile simulations with Windkessel BCs, backflow stabilization prevents divergence during diastole. The implementation uses a **two-parameter directional approach** (`betaT`, `betaN`) based on Esmaily Moghadam et al. (2011).
 
-| Method | Formula | Default β | Robustness | Notes |
-|--------|---------|-----------|------------|-------|
-| `simple` | `damping = beta` | 0.9 | **Highest** | Uses only beta, ignores dampingFactor |
-| `fluxBased` | `damping = beta × dampingFactor` | 0.7 | Medium | FVM-consistent, uses phi field |
-| `traction` | `damping = beta × dampingFactor` | 0.3 | Medium | Physics-based (Moghadam 2011) |
+**Two-Parameter Formulation:**
 
-**Effective damping:** `V_out = (1 - damping) × V_backflow`
+| Parameter | Direction | Default | Effect |
+|-----------|-----------|---------|--------|
+| `betaT` | Tangential | **0.3** | Suppresses vortices during backflow |
+| `betaN` | Normal | **0.0** | Controls normal velocity damping |
 
-**Recommendations:**
-- **Standard cases:** `simple` with `beta=0.5` (50% backflow reduction)
-- **Challenging geometries:** `simple` with `beta=1.0` (full backflow suppression)
-- **Research/validation:** `traction` with `beta=0.5`, `damping_factor=1.0`
+> **Important:** `betaN = 0` preserves the Windkessel pressure-flow coupling. Only increase `betaN` for severe instabilities.
 
-**Example for difficult cases (50% flow split, complex geometry):**
+**Tensor formulation:**
+```
+F = H(-φ) × [βN·n⊗n + βT·(I - n⊗n)]
+```
+where H(-φ) activates stabilization only during backflow.
+
+**Configuration:**
 ```json
 {
-  "enable_stabilization": true,
-  "stabilization_type": "simple",
-  "beta": 1.0
+  "outlets": {
+    "type": "3EWINDKESSEL",
+    "windkessel_settings": {
+      "enable_stabilization": true,
+      "betaT": 0.3,
+      "betaN": 0.0
+    }
+  }
 }
 ```
+
+**Recommendations:**
+- **Standard cases:** `betaT=0.3`, `betaN=0.0` (recommended default)
+- **Mild instabilities:** Increase `betaT` to 0.5
+- **Severe backflow:** Add small `betaN=0.05` as last resort
+
+See [OpenFOAM-WK](https://github.com/JieWangnk/OpenFOAM-WK) for detailed documentation.
 
 ---
 
 ## Post-Processing
 
-### Automated Visualization
+AortaCFD includes comprehensive post-processing for visualization and hemodynamic analysis.
+
+### Quick Usage (Workflow Integration)
+
+```bash
+# Run post-processing as part of workflow
+python run_patient.py BPM120 --step post
+
+# Run post-processing on existing case
+python run_patient.py BPM120 --case-dir output/BPM120/run_20251220_093653 --step post
+
+# Include post-processing in full workflow
+python run_patient.py BPM120  # post-processing runs automatically at end
+```
+
+### Standalone Post-Processing (Advanced)
+
+For running post-processing outside the workflow:
+
+```bash
+# ParaView visualization (screenshots/animations)
+pvbatch src/aortacfd_lib/post_processor.py output/BPM120/run_*/openfoam all
+
+# Check post-processing dependencies
+python -m aortacfd_lib.post_processing --check-deps
+```
+
+### Hemodynamic Metrics
+
+The hemodynamics module computes clinical metrics from CFD results for cardiovascular assessment.
+
+#### Overview
+
+| Metric | Description | Unit | Clinical Threshold |
+|--------|-------------|------|-------------------|
+| **TAWSS** | Time-averaged wall shear stress | Pa | Low <0.4 Pa: Atherogenic risk |
+| **OSI** | Oscillatory shear index | - | High >0.3: Thrombus risk |
+| **RRT** | Relative residence time | 1/Pa | High >10: Particle trapping |
+| **ΔP** | Pressure drop | mmHg | >20 mmHg: Significant coarctation |
+
+#### Mathematical Formulas
+
+The hemodynamic indices are computed using standard definitions from literature (He & Ku 1996, Himburg et al. 2004):
+
+**TAWSS (Time-Averaged Wall Shear Stress):**
+```
+TAWSS = (1/T) ∫₀ᵀ |τ_w(t)| dt = mean(|WSS|)
+```
+Where τ_w is the wall shear stress vector and T is the cardiac cycle period.
+
+**OSI (Oscillatory Shear Index):**
+```
+OSI = 0.5 × (1 - |mean(τ_w)| / TAWSS)
+    = 0.5 × (1 - |∫τ_w dt| / ∫|τ_w| dt)
+```
+OSI ranges from 0 (unidirectional flow) to 0.5 (fully oscillatory flow).
+
+**RRT (Relative Residence Time):**
+```
+RRT = 1 / ((1 - 2×OSI) × TAWSS)
+```
+RRT indicates the residence time of particles near the wall.
+
+#### Clinical Interpretation
+
+| Metric | Normal Range | Abnormal | Clinical Implication |
+|--------|--------------|----------|---------------------|
+| TAWSS | 1-7 Pa | <0.4 Pa | Atherosclerosis-prone regions |
+| TAWSS | 1-7 Pa | >40 Pa | Endothelial damage risk |
+| OSI | <0.1 | >0.3 | Disturbed flow, platelet activation |
+| RRT | <1 Pa⁻¹ | >10 Pa⁻¹ | Particle/thrombus accumulation |
+
+#### Example Output
+
+```
+HEMODYNAMICS ANALYSIS REPORT
+======================================================================
+TAWSS Maximum: 143.75 Pa    Mean: 16.41 Pa
+OSI Maximum:   0.45         Mean: 0.0087
+RRT Maximum:   6.67 Pa⁻¹    Mean: 0.18 Pa⁻¹
+
+Pressure Drop (Inlet → Outlets):
+  → outlet1: 29.85 mmHg
+  → outlet2: 29.85 mmHg
+```
+
+#### Visualization
+
+TAWSS, OSI, and RRT are saved as OpenFOAM scalar fields and can be visualized in ParaView:
+
+```json
+{
+  "visualization": {
+    "fields": ["TAWSS", "OSI", "RRT"],
+    "time_steps": [2.5],
+    "color_ranges": {
+      "TAWSS": [0, 50],
+      "OSI": [0, 0.5],
+      "RRT": [0, 10]
+    }
+  }
+}
+```
+
+### Requirements for TAWSS/OSI/RRT
+
+**Important:** TAWSS, OSI, and RRT require specific runtime configuration. These metrics **cannot be computed after the simulation** if not enabled beforehand.
+
+#### Required Configuration
+
+Add to your `config.json`:
+
+```json
+{
+  "hemodynamics": {
+    "runtime_functions": {
+      "wallShearStress": true,
+      "fieldAverage": true
+    },
+    "tawss_settings": {
+      "skip_cycles": 2
+    }
+  }
+}
+```
+
+#### What Each Setting Does
+
+| Setting | Purpose | What Happens If Missing |
+|---------|---------|------------------------|
+| `wallShearStress: true` | Computes WSS at each time step | No WSS data (can run `foamPostProcess` after) |
+| `fieldAverage: true` | Computes time-averaged fields during runtime | **TAWSS/OSI/RRT unavailable** |
+| `skip_cycles: 2` | Skips initial transient cycles | Uses all cycles (may include startup artifacts) |
+
+#### Minimum Simulation Duration
+
+For TAWSS/OSI/RRT, you need at least `skip_cycles + 1` complete cardiac cycles:
+
+```
+Example: cardiac_cycle = 0.5s, skip_cycles = 2
+Minimum end_time = (2 + 1) × 0.5s = 1.5s
+Recommended: 4-5 cycles for converged statistics
+```
+
+#### If fieldAverage Was Not Enabled
+
+If you ran a simulation without `fieldAverage: true`, you will see:
+```
+WARNING: fieldAverage data not found. TAWSS/OSI/RRT not computed.
+```
+
+**Solution:** Re-run the simulation with `fieldAverage` enabled. There is no way to compute proper time-averaged metrics after the fact.
+
+#### References
+
+- He, X., & Ku, D. N. (1996). Pulsatile flow in the human left coronary artery bifurcation. *Journal of Biomechanical Engineering*, 118(1), 74-82.
+- Himburg, H. A., et al. (2004). Spatial comparison between wall shear stress measures and porcine arterial endothelial permeability. *American Journal of Physiology*, 286(5), H1916-H1922.
+- Malek, A. M., et al. (1999). Hemodynamic shear stress and its role in atherosclerosis. *JAMA*, 282(21), 2035-2042.
+
+### Python API (For Custom Scripts)
+
+```python
+from aortacfd_lib.hemodynamics_postprocessor import (
+    HemodynamicsPostProcessor,
+    run_hemodynamics_analysis
+)
+
+# Run hemodynamics analysis
+config = {
+    'inlet': {'type': 'TIMEVARYING'},
+    'cardiac_cycle': 0.8,
+    'geometry': {
+        'inlet_keywords_ordered': 'inlet',
+        'outlet_keywords_ordered': ['outlet_1', 'outlet_2'],
+        'wall_keywords_ordered': 'wall_aorta'
+    }
+}
+
+results = run_hemodynamics_analysis(
+    case_dir="output/BPM120/run_*/openfoam",
+    config=config,
+    output_dir="output/BPM120/run_*/reports"
+)
+print(f"TAWSS mean: {results.tawss_mean:.4f} Pa")
+print(f"OSI mean: {results.osi_mean:.4f}")
+```
+
+### Customizing Visualization
+
+Add a `visualization` section to your `config.json` to control fields, time steps, and color ranges:
+
+```json
+{
+  "visualization": {
+    "fields": ["U", "p", "wallShearStress", "TAWSS"],
+    "time_steps": [0.5, 1.0, 1.5, 2.0],
+    "color_ranges": {
+      "WSS": [0, 50],
+      "TAWSS": [0, 30]
+    }
+  }
+}
+```
+
+#### Available Options
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `fields` | Fields to visualize | `["U", "wallShearStress", "TAWSS", "OSI", "RRT"]` |
+| `time_steps` | Specific times to capture (reduces computation) | `[0.5, 1.0, 1.5]` |
+| `color_ranges` | Fixed color ranges (others auto-scale) | `{"WSS": [0, 50]}` |
+
+#### Available Fields
+
+| Field | Description | Notes |
+|-------|-------------|-------|
+| `U` | Velocity | Volume rendering |
+| `p` | Pressure | Surface rendering |
+| `wallShearStress` | Instantaneous WSS | Surface rendering |
+| `TAWSS` | Time-averaged WSS | Requires hemodynamics post-processing first |
+| `OSI` | Oscillatory Shear Index | Requires hemodynamics post-processing first |
+| `RRT` | Relative Residence Time | Requires hemodynamics post-processing first |
+
+**Note:** TAWSS, OSI, and RRT fields are generated by the hemodynamics post-processor. Run `--step post` to create them before visualization.
+
+#### Color Range Examples
+
+| Field | Unit | Default | Clinical Threshold |
+|-------|------|---------|-------------------|
+| `WSS` | Pa | `[0, 50]` | Low <0.4 Pa (atherogenic) |
+| `TAWSS` | Pa | `[0, 50]` | Low <0.4 Pa (atherogenic) |
+| `OSI` | - | `[0, 0.5]` | High >0.3 (oscillatory flow) |
+| `RRT` | 1/Pa | `[0, 10]` | High >10 (particle trapping) |
+| `U` | m/s | auto | - |
+| `Pressure` | Pa | auto | - |
+
+### Manual Visualization
 
 ```bash
 # Navigate to case directory
@@ -552,6 +804,10 @@ output/<patient_id>/run_*/
 │   ├── system/                # Control dictionaries
 │   ├── processor*/            # Parallel decomposition
 │   └── openfoam.foam          # ParaView file
+├── postProcessing_results/    # Post-processing output
+│   ├── images/                # Screenshots and animations
+│   ├── hemodynamics_report.txt
+│   └── pressure_drop_timeseries.png
 ├── results/                   # Extracted results
 └── summary.json               # Run metadata
 ```
@@ -591,6 +847,14 @@ AortaCFD-app/
 │   │   ├── boundary_condition_setup.py  # BC file generation
 │   │   ├── inlet_mapping.py          # Inlet profile mapping
 │   │   ├── wk_setup.py               # Windkessel BC setup
+│   │   ├── hemodynamics_postprocessor.py  # TAWSS/OSI/RRT
+│   │   ├── post_processor.py         # ParaView visualization
+│   │   ├── post_processing/          # Unified post-processing module
+│   │   │   ├── __init__.py           # Package exports
+│   │   │   ├── core.py               # PostProcessor class
+│   │   │   ├── config.py             # Configuration handling
+│   │   │   ├── dependencies.py       # Dependency checking
+│   │   │   └── cli.py                # Command-line interface
 │   │   └── utils/                    # Utilities
 │   ├── workflow/             # Task-based workflow system
 │   │   ├── manager.py                # Workflow orchestrator
@@ -602,7 +866,7 @@ AortaCFD-app/
 │   │   └── profiles/numerics/        # 3 numerics profiles
 │   │       ├── robust.py             # Maximum stability
 │   │       ├── standard.py           # Balanced (default)
-│   │       └── accurate.py           # Low diffusion
+│   │       └── precise.py            # Minimal diffusion
 │   ├── patient_runner/       # CLI and patient case management
 │   │   ├── cli.py                    # Command-line interface
 │   │   ├── core.py                   # PatientCaseRunner
