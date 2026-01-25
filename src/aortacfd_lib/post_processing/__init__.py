@@ -26,6 +26,15 @@ Author: AortaCFD Team
 from .config import PostProcessingConfig, load_config
 from .dependencies import check_dependencies, DependencyStatus
 from .core import PostProcessor
+from .exceptions import (
+    PostProcessingError,
+    MissingFieldError,
+    ParaViewError,
+    ConfigurationError,
+    CaseNotFoundError,
+    DependencyError,
+    HemodynamicsError,
+)
 
 # Re-export hemodynamics from existing module
 from ..hemodynamics_postprocessor import (
@@ -42,6 +51,14 @@ __all__ = [
     # Dependencies
     'check_dependencies',
     'DependencyStatus',
+    # Exceptions
+    'PostProcessingError',
+    'MissingFieldError',
+    'ParaViewError',
+    'ConfigurationError',
+    'CaseNotFoundError',
+    'DependencyError',
+    'HemodynamicsError',
     # Hemodynamics (re-exported)
     'HemodynamicsPostProcessor',
     'HemodynamicsResults',

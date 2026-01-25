@@ -247,7 +247,16 @@ class ConfigBuilder:
         # Extract simulation settings from unified config
         simulation_settings = case_config.get('simulation_settings', {})
 
-        # Merge all components: STL discovery + geometry settings + boundary conditions + simulation control + mesh + run_settings + simulation_settings
+        # Extract hemodynamics settings from unified config
+        hemodynamics = case_config.get('hemodynamics', {})
+
+        # Extract visualization settings from unified config
+        visualization = case_config.get('visualization', {})
+
+        # Extract top-level cardiac_cycle from unified config
+        cardiac_cycle = case_config.get('cardiac_cycle')
+
+        # Merge all components: STL discovery + geometry settings + boundary conditions + simulation control + mesh + run_settings + simulation_settings + hemodynamics + visualization
         result = deep_merge(discovered_geom_config, {"geometry": geometry_settings})
         result = deep_merge(result, {"boundary_conditions": boundary_conditions})
         result = deep_merge(result, {"simulation_control": simulation_control})
@@ -257,6 +266,12 @@ class ConfigBuilder:
             result = deep_merge(result, {"run_settings": run_settings})
         if simulation_settings:
             result = deep_merge(result, {"simulation_settings": simulation_settings})
+        if hemodynamics:
+            result = deep_merge(result, {"hemodynamics": hemodynamics})
+        if visualization:
+            result = deep_merge(result, {"visualization": visualization})
+        if cardiac_cycle is not None:
+            result['cardiac_cycle'] = cardiac_cycle
 
         return result
 

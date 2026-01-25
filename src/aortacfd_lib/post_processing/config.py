@@ -2,6 +2,7 @@
 Configuration handling for post-processing.
 
 Supports JSON and YAML configuration files with sensible defaults.
+Provides Pydantic validation when available for schema enforcement.
 """
 
 import os
@@ -9,7 +10,7 @@ import json
 import logging
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,190 @@ try:
     HAS_YAML = True
 except ImportError:
     HAS_YAML = False
+
+# Try to import Pydantic for validation
+try:
+    from pydantic import BaseModel, Field, field_validator, model_validator
+    HAS_PYDANTIC = True
+except ImportError:
+    HAS_PYDANTIC = False
+
+
+# =============================================================================
+# PYDANTIC VALIDATION MODELS (when available)
+# =============================================================================
+
+if HAS_PYDANTIC:
+
+    class VisualizationSchema(BaseModel):
+        """Pydantic schema for visualization configuration validation."""
+
+        fields: List[str] = Field(
+            default=["U", "p", "wallShearStress"],
+            description="Fields to visualize"
+        )
+        time_steps: Optional[Union[str, List[float]]] = Field(
+            default=None,
+            description="Time step selection: None (all), 'last', 'peak', or list"
+        )
+        resolution: Tuple[int, int] = Field(
+            default=(1600, 900),
+            description="Output image resolution (width, height)"
+        )
+        fps: int = Field(
+            default=30,
+            ge=1,
+            le=120,
+            description="Animation frame rate"
+        )
+        color_ranges: Dict[str, List[float]] = Field(
+            default_factory=dict,
+            description="Per-field color ranges, e.g., {'WSS': [0, 50]}"
+        )
+
+        @field_validator('fields')
+        @classmethod
+        def validate_fields(cls, v: List[str]) -> List[str]:
+            """Validate that fields are recognized."""
+            valid_fields = {
+                'U', 'p', 'wallShearStress', 'TAWSS', 'OSI', 'RRT', 'KE',
+                'vorticity', 'Q', 'helicity'
+            }
+            unknown = set(v) - valid_fields
+            if unknown:
+                logger.warning(f"Unknown fields: {unknown}. May not be visualizable.")
+            return v
+
+        @field_validator('time_steps')
+        @classmethod
+        def validate_time_steps(cls, v: Optional[Union[str, List[float]]]) -> Optional[Union[str, List[float]]]:
+            """Validate time step selection."""
+            if isinstance(v, str) and v not in ('all', 'last', 'peak'):
+                raise ValueError(
+                    f"Invalid time_steps: '{v}'. "
+                    "Use None, 'all', 'last', 'peak', or a list of float values."
+                )
+            return v
+
+        @field_validator('color_ranges')
+        @classmethod
+        def validate_color_ranges(cls, v: Dict[str, List[float]]) -> Dict[str, List[float]]:
+            """Validate color range format."""
+            for field_name, range_vals in v.items():
+                if not isinstance(range_vals, (list, tuple)) or len(range_vals) != 2:
+                    raise ValueError(
+                        f"Color range for '{field_name}' must be [min, max], got: {range_vals}"
+                    )
+                if range_vals[0] >= range_vals[1]:
+                    raise ValueError(
+                        f"Color range for '{field_name}' invalid: min ({range_vals[0]}) >= max ({range_vals[1]})"
+                    )
+            return v
+
+        class Config:
+            extra = "allow"
+
+
+    class HemodynamicsSchema(BaseModel):
+        """Pydantic schema for hemodynamics configuration validation."""
+
+        skip_cycles: int = Field(
+            default=2,
+            ge=0,
+            le=10,
+            description="Number of cardiac cycles to skip for TAWSS averaging"
+        )
+        run_wss_postprocess: bool = Field(
+            default=True,
+            description="Run wallShearStress post-processing if not found"
+        )
+        generate_plots: bool = Field(
+            default=True,
+            description="Generate pressure drop plots"
+        )
+        low_tawss_threshold: float = Field(
+            default=0.4,
+            ge=0,
+            description="Clinical threshold for low TAWSS (Pa)"
+        )
+        high_tawss_threshold: float = Field(
+            default=40.0,
+            ge=0,
+            description="Clinical threshold for high TAWSS (Pa)"
+        )
+
+        class Config:
+            extra = "allow"
+
+
+    class PostProcessingSchema(BaseModel):
+        """
+        Complete post-processing configuration with validation.
+
+        This schema validates user input before processing, catching
+        configuration errors early with helpful error messages.
+        """
+
+        case_dir: str = Field(
+            default=".",
+            description="Path to OpenFOAM case directory"
+        )
+        cardiac_cycle: float = Field(
+            default=0.8,
+            gt=0,
+            le=10,
+            description="Cardiac cycle duration in seconds"
+        )
+        verbosity: int = Field(
+            default=1,
+            ge=0,
+            le=2,
+            description="Verbosity level: 0=quiet, 1=normal, 2=debug"
+        )
+        visualization: VisualizationSchema = Field(
+            default_factory=VisualizationSchema
+        )
+        hemodynamics: HemodynamicsSchema = Field(
+            default_factory=HemodynamicsSchema
+        )
+
+        @model_validator(mode='after')
+        def validate_case_exists(self) -> 'PostProcessingSchema':
+            """Warn if case directory doesn't exist."""
+            if self.case_dir and self.case_dir != ".":
+                if not os.path.exists(self.case_dir):
+                    logger.warning(f"Case directory does not exist: {self.case_dir}")
+            return self
+
+        class Config:
+            extra = "allow"
+
+
+    def validate_config(config_dict: Dict[str, Any]) -> PostProcessingSchema:
+        """
+        Validate configuration dictionary against schema.
+
+        Args:
+            config_dict: Raw configuration dictionary
+
+        Returns:
+            Validated PostProcessingSchema instance
+
+        Raises:
+            pydantic.ValidationError: If configuration is invalid
+        """
+        return PostProcessingSchema(**config_dict)
+
+else:
+    # Fallback when Pydantic not available
+    def validate_config(config_dict: Dict[str, Any]) -> Dict[str, Any]:
+        """Basic validation without Pydantic."""
+        # Minimal validation
+        viz = config_dict.get('visualization', {})
+        time_steps = viz.get('time_steps')
+        if isinstance(time_steps, str) and time_steps not in ('all', 'last', 'peak'):
+            raise ValueError(f"Invalid time_steps: '{time_steps}'")
+        return config_dict
 
 
 @dataclass

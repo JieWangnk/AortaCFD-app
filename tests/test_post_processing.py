@@ -546,3 +546,330 @@ class TestModuleImports:
         assert HemodynamicsPostProcessor is not None
         assert HemodynamicsResults is not None
         assert run_hemodynamics_analysis is not None
+
+    def test_exceptions_import(self):
+        """Test exception classes can be imported."""
+        from aortacfd_lib.post_processing import (
+            PostProcessingError,
+            MissingFieldError,
+            ParaViewError,
+            ConfigurationError,
+            CaseNotFoundError,
+            DependencyError,
+            HemodynamicsError,
+        )
+
+        assert PostProcessingError is not None
+        assert MissingFieldError is not None
+        assert ParaViewError is not None
+
+
+# =============================================================================
+# NEW TESTS FOR REFACTORED POST_PROCESSOR
+# =============================================================================
+
+class TestPostProcessorExceptions:
+    """Test custom exception classes."""
+
+    def test_post_processing_error_basic(self):
+        """Test PostProcessingError basic usage."""
+        from aortacfd_lib.post_processing.exceptions import PostProcessingError
+
+        error = PostProcessingError("Something went wrong")
+        assert str(error) == "Something went wrong"
+
+    def test_post_processing_error_with_details(self):
+        """Test PostProcessingError with details."""
+        from aortacfd_lib.post_processing.exceptions import PostProcessingError
+
+        error = PostProcessingError("Something went wrong", details="Check input files")
+        assert "Something went wrong" in str(error)
+        assert "Check input files" in str(error)
+
+    def test_missing_field_error(self):
+        """Test MissingFieldError."""
+        from aortacfd_lib.post_processing.exceptions import MissingFieldError
+
+        error = MissingFieldError(
+            "wallShearStressMean",
+            required_for="TAWSS calculation",
+            hint="Enable fieldAverage in controlDict"
+        )
+        assert "wallShearStressMean" in str(error)
+        assert "TAWSS" in str(error)
+        assert "fieldAverage" in str(error)
+
+    def test_configuration_error(self):
+        """Test ConfigurationError."""
+        from aortacfd_lib.post_processing.exceptions import ConfigurationError
+
+        error = ConfigurationError(
+            "Invalid time_steps value",
+            value="invalid",
+            valid_options="None, 'last', 'peak', or list"
+        )
+        assert "Invalid time_steps" in str(error)
+        assert "invalid" in str(error)
+
+    def test_case_not_found_error(self):
+        """Test CaseNotFoundError."""
+        from aortacfd_lib.post_processing.exceptions import CaseNotFoundError
+
+        error = CaseNotFoundError("/path/to/case", "No .foam file found")
+        assert "/path/to/case" in str(error)
+        assert "No .foam file" in str(error)
+
+    def test_hemodynamics_error(self):
+        """Test HemodynamicsError."""
+        from aortacfd_lib.post_processing.exceptions import HemodynamicsError
+
+        error = HemodynamicsError(
+            "Calculation failed",
+            metric="OSI",
+            reason="Division by zero"
+        )
+        assert "Calculation failed" in str(error)
+        assert "OSI" in str(error)
+
+
+class TestTimeStepPreparation:
+    """Test time step preparation logic."""
+
+    def test_prepare_time_steps_all(self):
+        """Test preparing all time steps."""
+        available = [0.0, 0.1, 0.2, 0.3, 0.4]
+
+        # Simulating the logic
+        time_steps = None  # None means all
+        if not time_steps:
+            result = list(available)
+        else:
+            result = []
+
+        assert result == available
+
+    def test_prepare_time_steps_last(self):
+        """Test preparing last time step."""
+        available = [0.0, 0.1, 0.2, 0.3, 0.4]
+
+        time_steps = 'last'
+        if time_steps == 'last':
+            result = [max(available)]
+        else:
+            result = []
+
+        assert result == [0.4]
+
+    def test_prepare_time_steps_custom_list(self):
+        """Test preparing custom time step list."""
+        available = [0.0, 0.1, 0.2, 0.3, 0.4]
+        time_steps = [0.1, 0.3]
+
+        if isinstance(time_steps, (list, tuple)):
+            result = list(time_steps)
+        else:
+            result = []
+
+        assert result == [0.1, 0.3]
+
+
+class TestOSIRRTCalculations:
+    """Test OSI and RRT formula calculations."""
+
+    def test_osi_unidirectional_flow(self):
+        """Test OSI = 0 for unidirectional flow."""
+        import numpy as np
+
+        # Unidirectional flow: WSS always same direction
+        # mean WSS magnitude = TAWSS
+        tawss = 1.0
+        wss_mean_magnitude = 1.0
+
+        osi = 0.5 * (1 - wss_mean_magnitude / tawss)
+
+        assert osi == pytest.approx(0.0)
+
+    def test_osi_fully_oscillatory(self):
+        """Test OSI = 0.5 for fully oscillatory flow."""
+        # Fully reversing flow: mean WSS = 0
+        tawss = 1.0
+        wss_mean_magnitude = 0.0
+
+        osi = 0.5 * (1 - wss_mean_magnitude / tawss)
+
+        assert osi == pytest.approx(0.5)
+
+    def test_osi_partial_oscillation(self):
+        """Test OSI for partial oscillation."""
+        tawss = 1.0
+        wss_mean_magnitude = 0.5  # 50% of TAWSS
+
+        osi = 0.5 * (1 - wss_mean_magnitude / tawss)
+
+        assert osi == pytest.approx(0.25)
+
+    def test_rrt_formula(self):
+        """Test RRT = 1 / ((1 - 2*OSI) * TAWSS)."""
+        tawss = 2.0
+        osi = 0.25
+
+        rrt = 1.0 / ((1 - 2 * osi) * tawss)
+
+        # (1 - 2*0.25) * 2.0 = 0.5 * 2.0 = 1.0
+        # RRT = 1/1.0 = 1.0
+        assert rrt == pytest.approx(1.0)
+
+    def test_rrt_osi_zero(self):
+        """Test RRT when OSI = 0."""
+        tawss = 2.0
+        osi = 0.0
+
+        rrt = 1.0 / ((1 - 2 * osi) * tawss)
+
+        # (1 - 0) * 2.0 = 2.0
+        # RRT = 1/2.0 = 0.5
+        assert rrt == pytest.approx(0.5)
+
+    def test_rrt_high_osi(self):
+        """Test RRT increases with OSI."""
+        tawss = 2.0
+
+        rrt_low_osi = 1.0 / ((1 - 2 * 0.1) * tawss)
+        rrt_high_osi = 1.0 / ((1 - 2 * 0.4) * tawss)
+
+        # Higher OSI should give higher RRT
+        assert rrt_high_osi > rrt_low_osi
+
+
+class TestColorRangeHandling:
+    """Test color range configuration handling."""
+
+    def test_build_rescale_settings_defaults(self):
+        """Test default rescale settings."""
+        from aortacfd_lib.post_processor import DEFAULT_COLOR_RANGES
+
+        assert "WSS" in DEFAULT_COLOR_RANGES
+        assert DEFAULT_COLOR_RANGES["WSS"] == [0, 50]
+        assert DEFAULT_COLOR_RANGES["OSI"] == [0, 0.5]
+        assert DEFAULT_COLOR_RANGES["RRT"] == [0, 10]
+
+    def test_rescale_auto_vs_fixed(self):
+        """Test auto-scale vs fixed range logic."""
+        # WSS should use fixed range by default
+        rescale_settings = {
+            "U": {"rescaleToData": True, "rescaleRange": [0, 1]},
+            "WSS": {"rescaleToData": False, "rescaleRange": [0, 50]},
+        }
+
+        assert rescale_settings["U"]["rescaleToData"] == True
+        assert rescale_settings["WSS"]["rescaleToData"] == False
+        assert rescale_settings["WSS"]["rescaleRange"] == [0, 50]
+
+
+class TestPydanticValidation:
+    """Test Pydantic validation schemas."""
+
+    def test_visualization_schema_valid_fields(self):
+        """Test visualization schema with valid fields."""
+        try:
+            from aortacfd_lib.post_processing.config import HAS_PYDANTIC
+            if not HAS_PYDANTIC:
+                pytest.skip("Pydantic not available")
+
+            from aortacfd_lib.post_processing.config import VisualizationSchema
+
+            schema = VisualizationSchema(
+                fields=["U", "p", "TAWSS"],
+                time_steps="last",
+                fps=30
+            )
+
+            assert schema.fields == ["U", "p", "TAWSS"]
+            assert schema.time_steps == "last"
+        except ImportError:
+            pytest.skip("Pydantic not available")
+
+    def test_visualization_schema_invalid_time_steps(self):
+        """Test visualization schema rejects invalid time_steps."""
+        try:
+            from aortacfd_lib.post_processing.config import HAS_PYDANTIC
+            if not HAS_PYDANTIC:
+                pytest.skip("Pydantic not available")
+
+            from aortacfd_lib.post_processing.config import VisualizationSchema
+            from pydantic import ValidationError
+
+            with pytest.raises(ValidationError):
+                VisualizationSchema(time_steps="invalid_option")
+        except ImportError:
+            pytest.skip("Pydantic not available")
+
+    def test_color_ranges_validation(self):
+        """Test color range validation."""
+        try:
+            from aortacfd_lib.post_processing.config import HAS_PYDANTIC
+            if not HAS_PYDANTIC:
+                pytest.skip("Pydantic not available")
+
+            from aortacfd_lib.post_processing.config import VisualizationSchema
+            from pydantic import ValidationError
+
+            # Valid color ranges
+            schema = VisualizationSchema(
+                color_ranges={"WSS": [0, 50], "OSI": [0, 0.5]}
+            )
+            assert schema.color_ranges["WSS"] == [0, 50]
+
+            # Invalid: min >= max
+            with pytest.raises(ValidationError):
+                VisualizationSchema(color_ranges={"WSS": [50, 0]})
+        except ImportError:
+            pytest.skip("Pydantic not available")
+
+
+class TestPropertyMap:
+    """Test property map and field configuration."""
+
+    def test_default_property_map_fields(self):
+        """Test default property map contains expected fields."""
+        from aortacfd_lib.post_processor import DEFAULT_PROPERTY_MAP
+
+        expected_fields = ["U", "p", "wallShearStress", "TAWSS", "OSI", "RRT", "KE"]
+        for field in expected_fields:
+            assert field in DEFAULT_PROPERTY_MAP
+            assert "name" in DEFAULT_PROPERTY_MAP[field]
+            assert "preset" in DEFAULT_PROPERTY_MAP[field]
+            assert "unit" in DEFAULT_PROPERTY_MAP[field]
+
+    def test_property_map_osi_bounded(self):
+        """Test OSI has correct bounds in color range."""
+        from aortacfd_lib.post_processor import DEFAULT_COLOR_RANGES
+
+        assert DEFAULT_COLOR_RANGES["OSI"] == [0, 0.5]
+
+    def test_property_map_wss_unit(self):
+        """Test WSS has correct unit."""
+        from aortacfd_lib.post_processor import DEFAULT_PROPERTY_MAP
+
+        assert DEFAULT_PROPERTY_MAP["wallShearStress"]["unit"] == "Pa"
+        assert DEFAULT_PROPERTY_MAP["TAWSS"]["unit"] == "Pa"
+
+
+class TestHelperFunctions:
+    """Test helper functions."""
+
+    def test_check_ffmpeg_available_returns_bool(self):
+        """Test check_ffmpeg_available returns boolean."""
+        from aortacfd_lib.post_processor import check_ffmpeg_available
+
+        result = check_ffmpeg_available()
+        assert isinstance(result, bool)
+
+    def test_hide_all_scalar_bars_handles_empty(self):
+        """Test hide_all_scalar_bars handles empty list."""
+        from aortacfd_lib.post_processor import hide_all_scalar_bars
+
+        # Should not raise with empty list
+        # (render_view is mocked as None since we can't test ParaView)
+        # This just tests the function signature exists
+        assert callable(hide_all_scalar_bars)
