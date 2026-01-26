@@ -25,17 +25,31 @@ import os
 from typing import Any, Dict, List, Optional
 from copy import deepcopy
 
-from ..registry.numerics import (
-    get_numerics,
-    get_schemes,
-    get_solver_settings,
-    get_relaxation_factors,
-    get_pimple_settings,
-    get_time_stepping,
-    list_profiles,
-)
-from ..registry.physics import BLOOD_PROPERTIES, PHYSICAL_CONSTANTS
-from ..registry.mesh import BOUNDARY_LAYER_DEFAULTS, SNAPPY_QUALITY_DEFAULTS
+# Handle both relative and absolute imports
+try:
+    from ..registry.numerics import (
+        get_numerics,
+        get_schemes,
+        get_solver_settings,
+        get_relaxation_factors,
+        get_pimple_settings,
+        get_time_stepping,
+        list_profiles,
+    )
+    from ..registry.physics import BLOOD_PROPERTIES, PHYSICAL_CONSTANTS
+    from ..registry.mesh import BOUNDARY_LAYER_DEFAULTS, SNAPPY_QUALITY_DEFAULTS
+except ImportError:
+    from src.registry.numerics import (
+        get_numerics,
+        get_schemes,
+        get_solver_settings,
+        get_relaxation_factors,
+        get_pimple_settings,
+        get_time_stepping,
+        list_profiles,
+    )
+    from src.registry.physics import BLOOD_PROPERTIES, PHYSICAL_CONSTANTS
+    from src.registry.mesh import BOUNDARY_LAYER_DEFAULTS, SNAPPY_QUALITY_DEFAULTS
 
 
 def generate_config(
