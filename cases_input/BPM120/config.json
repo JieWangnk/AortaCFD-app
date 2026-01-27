@@ -29,7 +29,7 @@
   },
 
   "mesh": {
-    "cells_per_diameter": 15,
+    "cells_per_diameter": 10,
     "boundary_layers": {
       "enabled": true,
       "num_layers": 5,

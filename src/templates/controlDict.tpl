@@ -69,6 +69,7 @@ libs
 {%- set runtime_funcs = hemodynamics.get('runtime_functions', {}) -%}
 {%- set enable_wss = runtime_funcs.get('wallShearStress', true) -%}
 {%- set enable_fieldavg = runtime_funcs.get('fieldAverage', 'auto') -%}
+{%- set enable_velocity_avg = runtime_funcs.get('velocityFieldAverage', false) -%}
 {%- set enable_pressure = runtime_funcs.get('pressureMonitoring', true) -%}
 {%- if enable_fieldavg == 'auto' -%}
     {%- set enable_fieldavg = _is_pulsatile -%}
@@ -116,6 +117,35 @@ functions
         fields
         (
             wallShearStress
+            {
+                mean        on;
+                prime2Mean  off;
+                base        time;
+            }
+        );
+    }
+{%- endif %}
+{%- if enable_velocity_avg and _is_pulsatile %}
+
+    fieldAverageU
+    {
+        type            fieldAverage;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        timeStart       {{ time_start }};
+        periodicRestart {{ 'true' if periodic_restart else 'false' }};
+        restartPeriod   {{ cardiac_cycle_val }};
+        restartOnRestart false;
+
+        fields
+        (
+            U
+            {
+                mean        on;
+                prime2Mean  on;
+                base        time;
+            }
+            p
             {
                 mean        on;
                 prime2Mean  off;

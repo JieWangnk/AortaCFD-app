@@ -552,6 +552,12 @@
       "_fieldAverage_options": [true, false, "auto"],
       "_fieldAverage_comment": "'auto' enables only for pulsatile inlet (TIMEVARYING/WOMERSLEY)",
 
+      "velocityFieldAverage": false,
+      "_velocityFieldAverage_comment": "Compute UMean and UPrime2Mean for turbulence analysis (requires pulsatile flow)",
+      "_velocityFieldAverage_output": ["UMean", "UPrime2Mean (Reynolds stresses)", "pMean"],
+      "_velocityFieldAverage_use_case": "Required for LES turbulent kinetic energy (k) calculation and turbulence intensity analysis",
+      "_velocityFieldAverage_impact": "Adds ~30% to output file size (3 additional fields written at each writeTime)",
+
       "pressureMonitoring": true,
       "_pressureMonitoring_comment": "Area-averaged pressure at inlet and outlets for pressure drop calculation"
     },
