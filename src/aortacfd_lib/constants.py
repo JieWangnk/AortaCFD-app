@@ -206,8 +206,10 @@ TAU_RC_MAX: Final[float] = 3.0
 # =============================================================================
 
 # Murray's law exponent
-MURRAY_LAW_EXPONENT: Final[float] = 3.0
-"""Murray's law exponent: flow ∝ diameter^3."""
+# Classical value is 3.0 (laminar flow), but 2.6-2.7 is more accurate for pulsatile arterial flow
+# Default 2.6 matches schema.py for cardiovascular applications
+MURRAY_LAW_EXPONENT: Final[float] = 2.6
+"""Murray's law exponent: flow ∝ diameter^n (2.6 for pulsatile, 3.0 for laminar)."""
 
 # =============================================================================
 # HELPER FUNCTIONS

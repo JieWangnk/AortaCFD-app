@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import re
 
+from .constants import MMHG_TO_PA, ML_TO_M3
+
 
 class WindkesselAnalyzer:
     """Analyze and report Windkessel boundary condition behavior."""
@@ -227,9 +229,6 @@ Outlets: {', '.join(self.outlet_patches)}
             table_text += "=" * 80 + "\n"
             table_text += f"{'Outlet':<12} {'R (mmHg·s/mL)':<20} {'C (mL/mmHg)':<20} {'Z (mmHg·s/mL)':<20}\n"
             table_text += "-" * 80 + "\n"
-
-            MMHG_TO_PA = 133.322
-            ML_TO_M3 = 1e-6
 
             for outlet, params in wk_params.items():
                 R_clinical = params['R'] / (MMHG_TO_PA * 1e6)

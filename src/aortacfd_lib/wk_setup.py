@@ -5,6 +5,7 @@ import numpy as np
 
 from .utils.patch_processing import PatchProcessing
 from .utils.logger import Logger
+from .constants import MMHG_TO_PA, ML_TO_M3
 
 class WkSetup:
     """
@@ -81,10 +82,6 @@ class WkSetup:
         - Stergiopulos et al., J Biomech 1992 (tau=R2·C)
         - Reymond et al., J Biomech 2009 (lumped parameter models)
     """
-
-    # Unit conversions
-    MMHG_TO_PA = 133.322  # 1 mmHg = 133.322 Pa
-    ML_TO_M3 = 1e-6       # 1 mL = 1e-6 m³
 
     def __init__(self, config: dict, stl_files: list, case_directory: str, cardiac_cycle: float):
         """Initialize with config and case context."""
@@ -196,6 +193,8 @@ class WkSetup:
         # Step 1: Calculate MAP from cuff pressures
         SP = self.wk_model_settings.get("systolic_pressure", 120)  # mmHg
         DP = self.wk_model_settings.get("diastolic_pressure", 80)  # mmHg
+        # Venous pressure: 0 mmHg = gauge pressure reference (typical CFD convention)
+        # Physiological venous pressure is ~5 mmHg, but 0 provides numerical stability
         P_venous = self.wk_model_settings.get("venous_pressure", 0)  # mmHg (0-5 typical)
 
         # Physiological MAP formula: MAP = DP + (SP-DP)/3 = (2*DP + SP)/3
@@ -203,8 +202,8 @@ class WkSetup:
         # Reference: Klabunde (2011) Cardiovascular Physiology Concepts
         pulse_pressure = SP - DP
         MAP = DP + (1.0 / 3.0) * pulse_pressure  # Mean arterial pressure (mmHg)
-        MAP_Pa = MAP * self.MMHG_TO_PA  # Convert to Pa
-        P_venous_Pa = P_venous * self.MMHG_TO_PA
+        MAP_Pa = MAP * MMHG_TO_PA  # Convert to Pa
+        P_venous_Pa = P_venous * MMHG_TO_PA
 
         self.log.info(f"Step 1: Pressure targets")
         self.log.info(f"  Systolic pressure (SP): {SP} mmHg")
@@ -264,7 +263,7 @@ class WkSetup:
                 R_total[i] = 1e15  # Very high for zero flow
 
             # Convert to mmHg·s/mL for logging
-            R_total_mmHg = R_total[i] / (self.MMHG_TO_PA * 1e6)
+            R_total_mmHg = R_total[i] / (MMHG_TO_PA * 1e6)
             self.log.info(f"  {outlet}: R_total = {R_total[i]:.2e} Pa·s/m³ ({R_total_mmHg:.1f} mmHg·s/mL)")
 
         # Initialize R1 (proximal/characteristic impedance) and R2 (distal resistance)
@@ -277,7 +276,7 @@ class WkSetup:
             for i, outlet in enumerate(outlet_patches):
                 R1[i] = 0.0  # No proximal impedance for 2-element
                 R2[i] = R_total[i]  # Full resistance
-                R_mmHg = R2[i] / (self.MMHG_TO_PA * 1e6)
+                R_mmHg = R2[i] / (MMHG_TO_PA * 1e6)
                 self.log.info(f"  {outlet}: R = {R2[i]:.2e} Pa·s/m³ ({R_mmHg:.1f} mmHg·s/mL), Z = 0")
 
             self.log.info(f"\nStep 5: Skipped (2-element model has no R1/R2 split)")
@@ -329,7 +328,7 @@ class WkSetup:
                 # Calculate characteristic impedance
                 R1[i] = rho * c_i / A_i
 
-                R1_mmHg = R1[i] / (self.MMHG_TO_PA * 1e6)
+                R1_mmHg = R1[i] / (MMHG_TO_PA * 1e6)
                 self.log.info(f"  {outlet}: A={A_mm2:.2f}mm², PWV = {c_i:.2f} m/s ({method}) → R1 = {R1[i]:.2e} Pa·s/m³ ({R1_mmHg:.1f} mmHg·s/mL)")
 
             # Step 5: Distal resistance R2
@@ -342,7 +341,7 @@ class WkSetup:
                     R1[i] = 0.1 * R_total[i]
                     R2[i] = 0.9 * R_total[i]
 
-                R2_mmHg = R2[i] / (self.MMHG_TO_PA * 1e6)
+                R2_mmHg = R2[i] / (MMHG_TO_PA * 1e6)
                 self.log.info(f"  {outlet}: R2 = {R2[i]:.2e} Pa·s/m³ ({R2_mmHg:.1f} mmHg·s/mL)")
 
         # Step 6: Compliance C
@@ -370,7 +369,7 @@ class WkSetup:
             for i, outlet in enumerate(outlet_patches):
                 C[i] = flow_split_ratios[outlet] * C_total
                 RC_i = R2[i] * C[i]
-                C_mmHg = C[i] / (self.ML_TO_M3 / self.MMHG_TO_PA)
+                C_mmHg = C[i] / (ML_TO_M3 / MMHG_TO_PA)
                 self.log.info(f"  {outlet}: C = {C[i]:.2e} m³/Pa ({C_mmHg:.2e} mL/mmHg), RC = {RC_i:.2f} s")
         else:
             # Uniform tau for all outlets, C = tau / R2 (correct 3-element WK formula)
@@ -378,7 +377,7 @@ class WkSetup:
             for i, outlet in enumerate(outlet_patches):
                 C[i] = tau_systemic / R2[i]  # Correct: C = tau / R2 (distal resistance only)
                 RC_i = R2[i] * C[i]
-                C_mmHg = C[i] / (self.ML_TO_M3 / self.MMHG_TO_PA)
+                C_mmHg = C[i] / (ML_TO_M3 / MMHG_TO_PA)
                 self.log.info(f"  {outlet}: C = {C[i]:.2e} m³/Pa ({C_mmHg:.2e} mL/mmHg), RC = {RC_i:.2f} s")
 
         # Store calculated WK coefficients
@@ -894,11 +893,7 @@ class WkSetup:
         ax4 = fig.add_subplot(gs[2, :])
         ax4.axis('off')
 
-        # Unit conversion constants
-        MMHG_TO_PA = 133.322
-        ML_TO_M3 = 1e-6
-
-        # Build table data
+        # Build table data (uses module-level MMHG_TO_PA and ML_TO_M3 constants)
         table_data = []
         headers = ['Outlet', 'Mean Flow\n(mL/s)', 'Flow\n(%)',
                    'R (Pa·s/m³)', 'C (m³/Pa)', 'Z (Pa·s/m³)',
@@ -1031,11 +1026,7 @@ class WkSetup:
         ax3 = fig.add_subplot(2, 1, 2)
         ax3.axis('off')
 
-        # Unit conversion constants
-        MMHG_TO_PA = 133.322
-        ML_TO_M3 = 1e-6
-
-        # Build table data
+        # Build table data (uses module-level MMHG_TO_PA and ML_TO_M3 constants)
         table_data = []
         headers = ['Outlet', 'Flow\n(mL/s)', 'Flow\n(%)',
                    'R (Pa·s/m³)', 'C (m³/Pa)', 'Z (Pa·s/m³)',

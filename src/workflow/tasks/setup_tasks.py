@@ -3,45 +3,33 @@ import shutil
 import numpy as np
 from stl import mesh as np_stl_mesh
 
+# Use centralized import resolver to avoid duplicate try/except blocks
 try:
-    from ..base_task import Task, logger
-    from ...aortacfd_lib.utils.runner import run_command, CommandExecutionError
-    from ...aortacfd_lib.utils.validation import GeometryValidator, BoundaryConditionValidator
-    from ...aortacfd_lib.mesh_setup import GeometryAnalyzer
-    from ...aortacfd_lib.boundary_condition_setup import BoundaryConditionSetup
-    from ...aortacfd_lib.physical_properties_setup import PhysicalPropertiesWriter
-    from ...aortacfd_lib.numerical_setup import FvSchemesWriter
+    from ...utils.imports import (
+        Task, logger,
+        run_command, CommandExecutionError,
+        GeometryValidator, BoundaryConditionValidator,
+        GeometryAnalyzer, BoundaryConditionSetup,
+        PhysicalPropertiesWriter, FvSchemesWriter,
+        FvSolutionWriter, SimulationSetup, SolnType,
+        InletMapping, CycleDataSetup,
+        detect_world_patch_mode, EnhancedPointsFormatter,
+        WkSetup, SimulationReportGenerator,
+        DistanceWallInletProfile,
+    )
 except ImportError:
-    from workflow.base_task import Task, logger
-    from aortacfd_lib.utils.runner import run_command, CommandExecutionError
-    from aortacfd_lib.utils.validation import GeometryValidator, BoundaryConditionValidator
-    from aortacfd_lib.mesh_setup import GeometryAnalyzer
-    from aortacfd_lib.boundary_condition_setup import BoundaryConditionSetup
-    from aortacfd_lib.physical_properties_setup import PhysicalPropertiesWriter
-    from aortacfd_lib.numerical_setup import FvSchemesWriter
-
-try:
-    from ...aortacfd_lib.solver_setup import FvSolutionWriter
-    from ...aortacfd_lib.simulation_control import SimulationSetup
-    from ...aortacfd_lib.decompose_setup import SolnType
-    from ...aortacfd_lib.inlet_mapping import InletMapping
-    from ...aortacfd_lib.cycle_data_setup import CycleDataSetup
-    from ...aortacfd_lib.utils.patch_utils import detect_world_patch_mode
-    from ...aortacfd_lib.utils.format_points import EnhancedPointsFormatter
-    from ...aortacfd_lib.wk_setup import WkSetup
-    from ...aortacfd_lib.simulation_report_generator import SimulationReportGenerator
-    from ...aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
-except ImportError:
-    from aortacfd_lib.solver_setup import FvSolutionWriter
-    from aortacfd_lib.simulation_control import SimulationSetup
-    from aortacfd_lib.decompose_setup import SolnType
-    from aortacfd_lib.inlet_mapping import InletMapping
-    from aortacfd_lib.cycle_data_setup import CycleDataSetup
-    from aortacfd_lib.utils.patch_utils import detect_world_patch_mode
-    from aortacfd_lib.utils.format_points import EnhancedPointsFormatter
-    from aortacfd_lib.wk_setup import WkSetup
-    from aortacfd_lib.simulation_report_generator import SimulationReportGenerator
-    from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
+    from utils.imports import (
+        Task, logger,
+        run_command, CommandExecutionError,
+        GeometryValidator, BoundaryConditionValidator,
+        GeometryAnalyzer, BoundaryConditionSetup,
+        PhysicalPropertiesWriter, FvSchemesWriter,
+        FvSolutionWriter, SimulationSetup, SolnType,
+        InletMapping, CycleDataSetup,
+        detect_world_patch_mode, EnhancedPointsFormatter,
+        WkSetup, SimulationReportGenerator,
+        DistanceWallInletProfile,
+    )
 
 class CreateCaseStructureTask(Task):
     """
@@ -170,7 +158,13 @@ class PrepareBoundaryDataTask(Task):
                 context['cardiac_cycle'] = 1.0
                 self.log.info("Using default cardiac cycle of 1.0s for world patch scenario")
                 return True
-            
+
+            # Verify mesh exists before running writeMeshObj
+            mesh_path = os.path.join(case_dir, "constant", "polyMesh")
+            if not os.path.exists(mesh_path):
+                self.log.error(f"Mesh not found at {mesh_path}. Run 'run:mesh' before 'setup:bc'.")
+                return False
+
             # Run writeMeshObj to get the inlet patch face centers
             run_command(
                 config=self.config,
@@ -284,6 +278,8 @@ class PrepareBoundaryDataTask(Task):
                         # Try to find CSV in patient case directory
                         csv_src = self._find_inlet_csv(csv_file, case_dir)
                         if csv_src:
+                            # Validate CSV format before copying
+                            self._validate_inlet_csv(csv_src)
                             shutil.copy(csv_src, csv_dest)
                             self.log.info(f"Copied inlet CSV file: {csv_file} -> {boundary_data_inlet_dir}")
                         else:
@@ -466,6 +462,79 @@ class PrepareBoundaryDataTask(Task):
         # Not found
         self.log.warning(f"Could not find inlet CSV file '{csv_filename}'")
         return None
+
+    def _validate_inlet_csv(self, csv_path: str) -> bool:
+        """
+        Validate inlet CSV file format and content.
+
+        Checks:
+        1. File is not empty
+        2. Has at least 2 columns (time, value)
+        3. Contains valid numeric data
+        4. Time values are monotonically increasing
+        5. Has reasonable number of data points
+
+        Args:
+            csv_path: Path to the CSV file
+
+        Returns:
+            bool: True if valid, raises ValueError if invalid
+        """
+        import numpy as np
+
+        try:
+            # Check file is not empty
+            if os.path.getsize(csv_path) == 0:
+                raise ValueError(f"CSV file is empty: {csv_path}")
+
+            # Read with numpy, handling comments and headers
+            comment_lines = 0
+            header_line = 0
+
+            with open(csv_path, 'r') as f:
+                for line in f:
+                    stripped = line.strip()
+                    if not stripped or stripped.startswith('#'):
+                        comment_lines += 1
+                    else:
+                        # First non-comment line - check if it's a header
+                        if any(c.isalpha() for c in stripped):
+                            header_line = 1
+                        break
+
+            skiprows = comment_lines + header_line
+            data = np.genfromtxt(csv_path, delimiter=',', skip_header=skiprows)
+
+            # Check shape
+            if data.ndim < 2:
+                raise ValueError(f"CSV must have at least 2 columns (time, value). Got 1D array.")
+            if data.shape[1] < 2:
+                raise ValueError(f"CSV must have at least 2 columns. Got {data.shape[1]} column(s).")
+            if data.shape[0] < 2:
+                raise ValueError(f"CSV must have at least 2 data points. Got {data.shape[0]} point(s).")
+
+            # Check for NaN values
+            if np.any(np.isnan(data)):
+                nan_count = np.sum(np.isnan(data))
+                raise ValueError(f"CSV contains {nan_count} NaN/invalid values. Check data format.")
+
+            # Check time column is monotonically increasing
+            times = data[:, 0]
+            if not np.all(np.diff(times) > 0):
+                raise ValueError("Time column must be monotonically increasing.")
+
+            # Validate time range
+            time_range = times[-1] - times[0]
+            if time_range <= 0:
+                raise ValueError(f"Invalid time range: {time_range}s")
+
+            self.log.info(f"CSV validation passed: {data.shape[0]} points, time range {times[0]:.4f} to {times[-1]:.4f}s")
+            return True
+
+        except ValueError:
+            raise  # Re-raise validation errors
+        except Exception as e:
+            raise ValueError(f"Error reading CSV file {csv_path}: {e}")
 
 
 class GenerateBCFilesTask(Task):

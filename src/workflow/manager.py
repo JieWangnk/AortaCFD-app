@@ -5,7 +5,10 @@ of simulation tasks based on predefined recipes (command sequences).
 """
 
 import os
-from typing import Any, Dict, List, Type, Union
+import json
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Type, Union
 
 try:
     from .base_task import logger, AortaCFDError, Task, ExecutionContext
@@ -79,6 +82,110 @@ class WorkflowManager:
         cardiac_cycle = self.config.get('cardiac_cycle')
         if cardiac_cycle and not self.context.cardiac_cycle:
             self.context.cardiac_cycle = cardiac_cycle
+
+    def _handle_workflow_failure(
+        self,
+        command: str,
+        failed_task: str,
+        completed_tasks: List[str],
+        error: Optional[Exception] = None
+    ) -> None:
+        """
+        Handle workflow failure by writing a failure marker and logging details.
+
+        Creates a .workflow_failed file in the case directory with details about
+        the failure, allowing users to understand what went wrong and potentially
+        resume or clean up.
+
+        Args:
+            command: The workflow command that was running
+            failed_task: Name of the task that failed
+            completed_tasks: List of tasks that completed successfully
+            error: Optional exception that caused the failure
+        """
+        case_dir = self.context.case_directory
+        if not case_dir:
+            logger.warning("No case directory set; cannot write failure marker")
+            return
+
+        case_path = Path(case_dir)
+        if not case_path.exists():
+            logger.warning(f"Case directory does not exist: {case_dir}")
+            return
+
+        # Write failure marker with details
+        failure_info = {
+            "timestamp": datetime.now().isoformat(),
+            "command": command,
+            "failed_task": failed_task,
+            "completed_tasks": completed_tasks,
+            "error_message": str(error) if error else "Task returned False",
+            "case_directory": str(case_dir),
+            "patient_name": self.context.patient_name,
+        }
+
+        failure_file = case_path / ".workflow_failed"
+        try:
+            with open(failure_file, 'w') as f:
+                json.dump(failure_info, f, indent=2)
+            logger.info(f"Failure marker written to: {failure_file}")
+        except Exception as e:
+            logger.warning(f"Could not write failure marker: {e}")
+
+        # Log recovery instructions
+        logger.info(
+            f"\n{'='*60}\n"
+            f"WORKFLOW FAILED at task: {failed_task}\n"
+            f"Completed tasks: {', '.join(completed_tasks) if completed_tasks else 'None'}\n"
+            f"\nTo resume, fix the issue and run:\n"
+            f"  - Full rerun: python run_case.py <patient> --workflow {command}\n"
+            f"  - Or continue from failed step if applicable\n"
+            f"\nFailure details saved to: {failure_file}\n"
+            f"{'='*60}"
+        )
+
+    def clear_failure_marker(self) -> bool:
+        """
+        Remove the failure marker file if it exists.
+
+        Call this after a successful workflow run or manual cleanup.
+
+        Returns:
+            True if marker was removed, False otherwise
+        """
+        case_dir = self.context.case_directory
+        if not case_dir:
+            return False
+
+        failure_file = Path(case_dir) / ".workflow_failed"
+        if failure_file.exists():
+            try:
+                failure_file.unlink()
+                logger.info("Cleared previous workflow failure marker")
+                return True
+            except Exception as e:
+                logger.warning(f"Could not remove failure marker: {e}")
+        return False
+
+    def get_previous_failure(self) -> Optional[Dict[str, Any]]:
+        """
+        Check for and return information about a previous workflow failure.
+
+        Returns:
+            Dict with failure info if a previous failure exists, None otherwise
+        """
+        case_dir = self.context.case_directory
+        if not case_dir:
+            return None
+
+        failure_file = Path(case_dir) / ".workflow_failed"
+        if failure_file.exists():
+            try:
+                with open(failure_file, 'r') as f:
+                    return json.load(f)
+            except Exception:
+                return {"error": "Could not read failure marker"}
+        return None
 
     def _register_tasks(self) -> None:
         """Create a complete library of all available tasks."""
@@ -213,15 +320,43 @@ class WorkflowManager:
         # Ensure context is initialized (idempotent - safe to call multiple times)
         self._initialize_context()
 
+        # Track completed tasks for failure handling
+        completed_tasks: List[str] = []
+
         logger.info(f"Starting workflow for command: '{command}'")
-        for task_name in task_sequence:
-            task_class = self.available_tasks.get(task_name)
-            if not task_class:
-                raise AortaCFDError(f"Task '{task_name}' is not registered in the manager.")
-            task_instance = task_class(self.config)
-            logger.info(f"--- Executing Task: {task_instance.__class__.__name__} ---")
-            success = task_instance.execute(self.context)
-            if not success:
-                logger.error(f"Task '{task_name}' failed. Aborting workflow.")
-                raise AortaCFDError(f"Workflow aborted due to failure in task: {task_name}")
-        logger.info("Workflow completed successfully.")
+        try:
+            for task_name in task_sequence:
+                task_class = self.available_tasks.get(task_name)
+                if not task_class:
+                    self._handle_workflow_failure(command, task_name, completed_tasks,
+                                                   Exception(f"Task not registered"))
+                    raise AortaCFDError(f"Task '{task_name}' is not registered in the manager.")
+
+                task_instance = task_class(self.config)
+                logger.info(f"--- Executing Task: {task_instance.__class__.__name__} ---")
+
+                try:
+                    success = task_instance.execute(self.context)
+                except Exception as task_error:
+                    self._handle_workflow_failure(command, task_name, completed_tasks, task_error)
+                    logger.error(f"Task '{task_name}' raised exception: {task_error}")
+                    raise AortaCFDError(f"Workflow aborted due to exception in task: {task_name}") from task_error
+
+                if not success:
+                    self._handle_workflow_failure(command, task_name, completed_tasks)
+                    logger.error(f"Task '{task_name}' failed. Aborting workflow.")
+                    raise AortaCFDError(f"Workflow aborted due to failure in task: {task_name}")
+
+                completed_tasks.append(task_name)
+
+            # Clear any previous failure marker on success
+            self.clear_failure_marker()
+            logger.info("Workflow completed successfully.")
+
+        except AortaCFDError:
+            # Re-raise workflow errors (already handled)
+            raise
+        except Exception as e:
+            # Handle unexpected errors
+            self._handle_workflow_failure(command, "unknown", completed_tasks, e)
+            raise AortaCFDError(f"Unexpected error during workflow: {e}") from e

@@ -7,6 +7,7 @@ import json
 import shutil
 from pathlib import Path
 from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
 
 # Add src to path for imports
 src_path = str(Path(__file__).parent.parent)
@@ -40,12 +41,12 @@ class PatientCaseRunner:
     Handles patient case validation, configuration, and workflow execution.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.logger = Logger("PatientCaseRunner").get_logger()
         self.cases_dir = Path('cases_input')
         self.output_dir = Path('output')
         
-    def run_patient_case(self, patient_id: str, options: dict = None) -> str:
+    def run_patient_case(self, patient_id: str, options: Optional[Dict[str, Any]] = None) -> str:
         """
         Run CFD analysis for a patient case.
         
@@ -74,7 +75,7 @@ class PatientCaseRunner:
         
         return results_path
     
-    def load_patient_case(self, patient_id: str, config_path: str | None = None) -> dict:
+    def load_patient_case(self, patient_id: str, config_path: Optional[str] = None) -> Dict[str, Any]:
         """Load and validate patient case.
 
         Args:
@@ -193,7 +194,7 @@ class PatientCaseRunner:
             'flow_data': flow_data
         }
     
-    def prepare_simulation(self, case_info: dict, options: dict = None) -> dict:
+    def prepare_simulation(self, case_info: Dict[str, Any], options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Prepare simulation configuration using new numerics system.
 
@@ -212,7 +213,7 @@ class PatientCaseRunner:
                 "This should have been converted in load_patient_case()."
             )
 
-    def _prepare_simulation_new_system(self, case_info: dict, options: dict = None) -> dict:
+    def _prepare_simulation_new_system(self, case_info: Dict[str, Any], options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Prepare simulation using NEW numerics system (physics/numerics/mesh).
 
@@ -250,7 +251,7 @@ class PatientCaseRunner:
             'parallel': merged_config['mesh']['SNAPPY_SETTINGS'].get('parallel', False)
         }
 
-    def _resolve_run_directory(self, patient_output_dir: Path, options: dict = None) -> Path:
+    def _resolve_run_directory(self, patient_output_dir: Path, options: Optional[Dict[str, Any]] = None) -> Path:
         """
         Determine the run directory based on options.
 
@@ -280,7 +281,7 @@ class PatientCaseRunner:
 
         return run_dir
 
-    def _build_numerics_config(self, config: dict) -> tuple:
+    def _build_numerics_config(self, config: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
         """
         Build numerics configuration from profile.
 
@@ -299,8 +300,8 @@ class PatientCaseRunner:
         except Exception as e:
             raise PatientConfigurationError(f"Failed to build numerics: {e}")
 
-    def _build_merged_config(self, case_info: dict, config: dict,
-                              numerics_config: dict, profile_name: str) -> dict:
+    def _build_merged_config(self, case_info: Dict[str, Any], config: Dict[str, Any],
+                              numerics_config: Dict[str, Any], profile_name: str) -> Dict[str, Any]:
         """
         Build the merged configuration from base, case-specific, and numerics configs.
 
@@ -356,7 +357,7 @@ class PatientCaseRunner:
 
         return merged_config
 
-    def _apply_time_stepping_settings(self, merged_config: dict, numerics_config: dict) -> None:
+    def _apply_time_stepping_settings(self, merged_config: Dict[str, Any], numerics_config: Dict[str, Any]) -> None:
         """Apply time stepping settings from numerics config to controlDict."""
         if 'time_stepping' not in numerics_config:
             return
@@ -387,7 +388,7 @@ class PatientCaseRunner:
             'runTimeModifiable': 'true'
         })
 
-    def _apply_physics_settings(self, merged_config: dict, config: dict) -> None:
+    def _apply_physics_settings(self, merged_config: Dict[str, Any], config: Dict[str, Any]) -> None:
         """Apply physics settings and simulation type mapping."""
         if 'physics' not in merged_config:
             merged_config['physics'] = {}
@@ -401,7 +402,7 @@ class PatientCaseRunner:
             model_value, 'laminar'
         )
 
-    def _apply_mesh_settings(self, merged_config: dict, config: dict) -> None:
+    def _apply_mesh_settings(self, merged_config: Dict[str, Any], config: Dict[str, Any]) -> None:
         """Apply mesh resolution and refinement settings."""
         if 'mesh' not in config:
             return
@@ -418,8 +419,8 @@ class PatientCaseRunner:
             if key in config['mesh']:
                 merged_config['mesh'][key] = config['mesh'][key]
 
-    def _store_config_metadata(self, merged_config: dict, config: dict,
-                                case_info: dict, profile_name: str) -> None:
+    def _store_config_metadata(self, merged_config: Dict[str, Any], config: Dict[str, Any],
+                                case_info: Dict[str, Any], profile_name: str) -> None:
         """Store metadata and config source information."""
         merged_config['profile_metadata'] = {
             'system': 'new',
@@ -440,7 +441,7 @@ class PatientCaseRunner:
         if '_config_file_path' in config:
             merged_config['_config_file_path'] = config['_config_file_path']
 
-    def run_workflow_step(self, sim_config: dict, workflow_step: str = 'runAll', case_dir: str = None) -> bool:
+    def run_workflow_step(self, sim_config: Dict[str, Any], workflow_step: str = 'runAll', case_dir: Optional[str] = None) -> bool:
         """Run specific workflow step.
 
         Args:
@@ -486,7 +487,7 @@ class PatientCaseRunner:
             self.logger.error(f"Workflow step '{workflow_step}' failed: {e}")
             return False
     
-    def generate_results_summary(self, case_info: dict, sim_config: dict) -> str:
+    def generate_results_summary(self, case_info: Dict[str, Any], sim_config: Dict[str, Any]) -> str:
         """Generate results summary and organization."""
         run_dir = sim_config['run_dir']
         patient_id = case_info['patient_id']
@@ -518,7 +519,7 @@ class PatientCaseRunner:
 
         return str(run_dir)
     
-    def list_available_patients(self) -> list:
+    def list_available_patients(self) -> List[str]:
         """List all available patient cases."""
         if not self.cases_dir.exists():
             return []
@@ -547,7 +548,7 @@ class PatientCaseRunner:
         return True
 
 
-    def _classify_stl_files(self, stl_files: list) -> dict:
+    def _classify_stl_files(self, stl_files: List[Path]) -> Dict[str, Path]:
         """Classify STL files by type."""
         classified = {}
         outlets = []
@@ -568,19 +569,32 @@ class PatientCaseRunner:
         
         return classified
     
-    def _apply_config_settings(self, config: dict, case_config: dict):
+    def _apply_config_settings(self, config: Dict[str, Any], case_config: Dict[str, Any]) -> None:
         """Apply case-specific configuration settings."""
-        # Apply physics settings
+        # Apply physics settings (blood density/viscosity)
+        self._apply_blood_properties(config, case_config)
+
+        # Apply computational/parallel settings
+        snappy_config = config.setdefault('mesh', {}).setdefault('SNAPPY_SETTINGS', {})
+        self._apply_parallel_settings(snappy_config, case_config)
+
+        # Apply mesh configuration (boundary layers, surface refinement)
+        mesh_config = case_config.get('mesh', {})
+        self._apply_boundary_layer_settings(snappy_config, mesh_config)
+        self._apply_surface_refinement_settings(snappy_config, mesh_config)
+
+    def _apply_blood_properties(self, config: Dict[str, Any], case_config: Dict[str, Any]) -> None:
+        """Apply blood density and viscosity from case config."""
         physics = case_config.get('physics', {})
         if 'blood_density' in physics:
             config['physics']['default_density'] = physics['blood_density']
         if 'blood_viscosity' in physics:
             config['physics']['default_viscosity'] = physics['blood_viscosity']
 
-        # Apply computational settings while respecting explicit mesh overrides
+    def _apply_parallel_settings(self, snappy_config: Dict[str, Any], case_config: Dict[str, Any]) -> None:
+        """Apply computational/parallel settings to SNAPPY_SETTINGS."""
         comp = case_config.get('computational', {})
         mesh_overrides = case_config.get('mesh', {}).get('SNAPPY_SETTINGS', {})
-        snappy_config = config.setdefault('mesh', {}).setdefault('SNAPPY_SETTINGS', {})
 
         if 'parallel' in mesh_overrides:
             snappy_config['parallel'] = mesh_overrides['parallel']
@@ -595,13 +609,15 @@ class PatientCaseRunner:
         elif comp.get('parallel') is True and 'max_processors' in comp and comp['max_processors'] != 'auto':
             snappy_config['nProcessors'] = comp['max_processors']
 
-        # Convert NEW config format (mesh.boundary_layers, mesh.surface_refinement) to SNAPPY_SETTINGS
-        # This allows users to write human-friendly configs that get mapped to OpenFOAM parameters
-        mesh_config = case_config.get('mesh', {})
+    def _apply_boundary_layer_settings(self, snappy_config: Dict[str, Any], mesh_config: Dict[str, Any]) -> None:
+        """
+        Map user-friendly mesh.boundary_layers config to SNAPPY_SETTINGS.
 
-        # Handle boundary_layers settings - traditional OpenFOAM addLayersControls style
-        # Maps user-friendly config keys to SNAPPY_SETTINGS
+        Supports both snake_case and camelCase for backward compatibility.
+        """
         boundary_layers = mesh_config.get('boundary_layers', {})
+        if not boundary_layers:
+            return
 
         # enabled -> addLayers
         if 'enabled' in boundary_layers:
@@ -614,18 +630,17 @@ class PatientCaseRunner:
             snappy_config['addLayer'] = num_layers
             self.logger.info(f"🔧 Mapped mesh.boundary_layers.num_layers={num_layers} → SNAPPY_SETTINGS.addLayer (nSurfaceLayers)")
 
-        # expansion_ratio -> expansionRatio (also accept camelCase)
+        # expansion_ratio -> expansionRatio
         expansion_ratio = boundary_layers.get('expansion_ratio') or boundary_layers.get('expansionRatio')
         if expansion_ratio is not None:
             snappy_config['expansionRatio'] = expansion_ratio
             self.logger.info(f"🔧 Mapped mesh.boundary_layers.expansion_ratio={expansion_ratio} → SNAPPY_SETTINGS.expansionRatio")
 
-        # final_layer_thickness -> finalLayerThickness (relative, when relativeSizes=true)
-        # Also accept camelCase 'finalLayerThickness' for backward compatibility
+        # final_layer_thickness -> finalLayerThickness (with relativeSizes=true)
         final_layer_thickness = boundary_layers.get('final_layer_thickness') or boundary_layers.get('finalLayerThickness')
         if final_layer_thickness is not None:
             snappy_config['finalLayerThickness'] = final_layer_thickness
-            snappy_config['relativeSizes'] = True  # Ensure relative sizing mode
+            snappy_config['relativeSizes'] = True
             self.logger.info(
                 f"🔧 Mapped mesh.boundary_layers.final_layer_thickness={final_layer_thickness} "
                 f"→ SNAPPY_SETTINGS.finalLayerThickness (relativeSizes=true)"
@@ -636,14 +651,13 @@ class PatientCaseRunner:
             snappy_config['minThickness'] = boundary_layers['min_thickness']
             self.logger.info(f"🔧 Mapped mesh.boundary_layers.min_thickness={boundary_layers['min_thickness']} → SNAPPY_SETTINGS.minThickness")
 
-        # relativeSizes option (default: true)
+        # relativeSizes option
         if 'relativeSizes' in boundary_layers:
             snappy_config['relativeSizes'] = boundary_layers['relativeSizes']
             self.logger.info(f"🔧 Mapped mesh.boundary_layers.relativeSizes={boundary_layers['relativeSizes']} → SNAPPY_SETTINGS.relativeSizes")
 
-        # Handle surface refinement configuration
-        # surfaceRefinementLevels: [min, max] direct snappy levels in SNAPPY_SETTINGS
-        # Also support legacy mesh.surface_refinement.levels for backward compatibility
+    def _apply_surface_refinement_settings(self, snappy_config: Dict[str, Any], mesh_config: Dict[str, Any]) -> None:
+        """Map surface refinement settings to SNAPPY_SETTINGS."""
         surface_refinement = mesh_config.get('surface_refinement', {})
 
         if 'surfaceRefinementLevels' in snappy_config:
@@ -657,7 +671,7 @@ class PatientCaseRunner:
                 snappy_config['surfaceRefinementLevels'] = levels
                 self.logger.info(f"Mapped mesh.surface_refinement.levels={levels} → SNAPPY_SETTINGS.surfaceRefinementLevels")
 
-    def _resolve_profile_choice(self, simulation_settings: dict, options: dict, catalog: dict):
+    def _resolve_profile_choice(self, simulation_settings: Dict[str, Any], options: Optional[Dict[str, Any]], catalog: Dict[str, Any]) -> Tuple[str, Dict[str, Any], Optional[str]]:
         """
         Resolve profile selection from solver/analysis settings and options.
         Simplified logic with clear fallback chain and helpful error messages.
@@ -732,7 +746,7 @@ class PatientCaseRunner:
 
         return fallback_key, catalog[fallback_key].copy(), None
 
-    def _profile_catalog(self) -> dict:
+    def _profile_catalog(self) -> Dict[str, Dict[str, Any]]:
         """Define all available simulation profiles and metadata."""
         publication_overrides = {
             'variant_label': 'publication',
@@ -905,7 +919,7 @@ class PatientCaseRunner:
             }
         }
 
-    def get_available_profiles(self) -> dict:
+    def get_available_profiles(self) -> Dict[str, Dict[str, str]]:
         """Expose available simulation profiles in a user-friendly format."""
         catalog = self._profile_catalog()
         profiles = {}
@@ -920,7 +934,7 @@ class PatientCaseRunner:
             }
         return profiles
 
-    def display_profile_selection(self):
+    def display_profile_selection(self) -> Dict[str, Dict[str, str]]:
         """Print a catalog of profiles for interactive selection."""
         catalog = self._profile_catalog()
         profiles = self.get_available_profiles()

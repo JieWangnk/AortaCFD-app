@@ -179,13 +179,17 @@ class TestPhysicalConstants:
     """Test physical constants used in calculations."""
 
     def test_pa_to_mmhg_conversion(self):
-        """Test Pa to mmHg conversion factor."""
+        """Test Pa to mmHg conversion factor from centralized constants."""
         # 1 mmHg = 133.322 Pa, so 1/133.322 Pa/mmHg
-        assert HemodynamicsPostProcessor.PA_TO_MMHG == pytest.approx(1/133.322, rel=1e-4)
+        # Constants are now centralized in aortacfd_lib.constants
+        from src.aortacfd_lib.constants import PA_TO_MMHG
+        assert PA_TO_MMHG == pytest.approx(1/133.322, rel=1e-4)
 
     def test_blood_density(self):
-        """Test default blood density."""
-        assert HemodynamicsPostProcessor.BLOOD_DENSITY == 1060.0
+        """Test default blood density from centralized constants."""
+        # Constants are now centralized in aortacfd_lib.constants
+        from src.aortacfd_lib.constants import BLOOD_DENSITY_DEFAULT
+        assert BLOOD_DENSITY_DEFAULT == 1060.0
 
 
 class TestTimeDirectoryHandling:

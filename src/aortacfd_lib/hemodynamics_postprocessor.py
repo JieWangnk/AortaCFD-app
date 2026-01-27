@@ -17,11 +17,14 @@ Author: AortaCFD Team
 
 import os
 import re
+import shlex
 import logging
 import numpy as np
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass, field
+
+from .constants import PA_TO_MMHG, BLOOD_DENSITY_DEFAULT
 
 try:
     import matplotlib.pyplot as plt
@@ -83,10 +86,6 @@ class HemodynamicsPostProcessor:
         processor.run_wss_postprocess()
     """
 
-    # Physical constants
-    PA_TO_MMHG = 1.0 / 133.322  # Convert Pa to mmHg
-    BLOOD_DENSITY = 1060.0  # kg/m³
-
     def __init__(self, case_dir: str, config: Dict[str, Any]):
         """
         Initialize hemodynamics post-processor.
@@ -138,7 +137,8 @@ class HemodynamicsPostProcessor:
         try:
             # OpenFOAM 12 uses foamPostProcess with solver specification
             # The solver is needed to provide turbulence model context
-            cmd = f"cd {self.case_dir} && foamPostProcess -solver incompressibleFluid -func wallShearStress"
+            # Use shlex.quote to prevent shell injection from case_dir paths
+            cmd = f"cd {shlex.quote(str(self.case_dir))} && foamPostProcess -solver incompressibleFluid -func wallShearStress"
             result = subprocess.run(
                 cmd,
                 shell=True,
@@ -255,7 +255,7 @@ class HemodynamicsPostProcessor:
             wss_data = self._read_vector_field(wss_file)
             if wss_data is not None:
                 # OpenFOAM outputs kinematic WSS (m²/s²), multiply by density for Pa
-                wss_mag = np.linalg.norm(wss_data, axis=1) * self.BLOOD_DENSITY
+                wss_mag = np.linalg.norm(wss_data, axis=1) * BLOOD_DENSITY_DEFAULT
                 results.wss_max = float(np.max(wss_mag))
                 results.wss_mean = float(np.mean(wss_mag))
                 results.wss_min = float(np.min(wss_mag))
@@ -301,7 +301,7 @@ class HemodynamicsPostProcessor:
             # For proper TAWSS, we need mean of magnitudes, not magnitude of means
             # This is an approximation if we only have the mean field
             # Multiply by density to convert from kinematic (m²/s²) to dynamic (Pa)
-            tawss = np.linalg.norm(wss_mean_vec, axis=1) * self.BLOOD_DENSITY
+            tawss = np.linalg.norm(wss_mean_vec, axis=1) * BLOOD_DENSITY_DEFAULT
 
             results.tawss_max = float(np.max(tawss))
             results.tawss_mean = float(np.mean(tawss))
@@ -318,7 +318,7 @@ class HemodynamicsPostProcessor:
                     wss_vec = self._read_vector_field(wss_file)
                     if wss_vec is not None:
                         # Multiply by density for Pa
-                        wss_mags.append(np.linalg.norm(wss_vec, axis=1) * self.BLOOD_DENSITY)
+                        wss_mags.append(np.linalg.norm(wss_vec, axis=1) * BLOOD_DENSITY_DEFAULT)
 
             if wss_mags:
                 # Proper TAWSS = time average of magnitudes (already in Pa)
@@ -388,7 +388,7 @@ class HemodynamicsPostProcessor:
                 if results.pressure_inlet > 0:
                     dp = results.pressure_inlet - results.pressure_outlets[outlet]
                     results.pressure_drops[outlet] = dp
-                    results.pressure_drop_mmhg[outlet] = dp * self.PA_TO_MMHG * self.BLOOD_DENSITY
+                    results.pressure_drop_mmhg[outlet] = dp * PA_TO_MMHG * BLOOD_DENSITY_DEFAULT
 
         if results.pressure_drops:
             self.log.info("Pressure drops (inlet → outlet):")
@@ -622,12 +622,12 @@ class HemodynamicsPostProcessor:
             f.write("PRESSURE DROP (Inlet → Outlets)\n")
             f.write("-" * 70 + "\n")
             if results.pressure_drops:
-                f.write(f"  Inlet pressure: {results.pressure_inlet * self.PA_TO_MMHG * self.BLOOD_DENSITY:.2f} mmHg\n")
+                f.write(f"  Inlet pressure: {results.pressure_inlet * PA_TO_MMHG * BLOOD_DENSITY_DEFAULT:.2f} mmHg\n")
                 f.write("\n")
                 for outlet in self.outlet_patches:
                     if outlet in results.pressure_drop_mmhg:
                         dp = results.pressure_drop_mmhg[outlet]
-                        p_out = results.pressure_outlets.get(outlet, 0) * self.PA_TO_MMHG * self.BLOOD_DENSITY
+                        p_out = results.pressure_outlets.get(outlet, 0) * PA_TO_MMHG * BLOOD_DENSITY_DEFAULT
                         f.write(f"  → {outlet}:\n")
                         f.write(f"      Outlet pressure: {p_out:.2f} mmHg\n")
                         f.write(f"      Pressure drop:   {dp:.2f} mmHg\n")
@@ -657,7 +657,7 @@ class HemodynamicsPostProcessor:
         times = np.array(results.time_series)
 
         # Convert to mmHg
-        p_inlet_mmhg = np.array(results.pressure_inlet_series) * self.PA_TO_MMHG * self.BLOOD_DENSITY
+        p_inlet_mmhg = np.array(results.pressure_inlet_series) * PA_TO_MMHG * BLOOD_DENSITY_DEFAULT
 
         # Top plot: Absolute pressures
         ax1.plot(times, p_inlet_mmhg, 'b-', linewidth=2, label='Inlet', zorder=10)
@@ -669,7 +669,7 @@ class HemodynamicsPostProcessor:
 
         for i, outlet in enumerate(self.outlet_patches):
             if outlet in results.pressure_outlet_series:
-                p_out = np.array(results.pressure_outlet_series[outlet]) * self.PA_TO_MMHG * self.BLOOD_DENSITY
+                p_out = np.array(results.pressure_outlet_series[outlet]) * PA_TO_MMHG * BLOOD_DENSITY_DEFAULT
                 # Use different line styles and sample markers to show overlapping lines
                 color = colors[i % len(colors)]
                 ls = linestyles[i % len(linestyles)]
@@ -688,7 +688,7 @@ class HemodynamicsPostProcessor:
         # Bottom plot: Pressure drops
         for i, outlet in enumerate(self.outlet_patches):
             if outlet in results.pressure_outlet_series:
-                p_out = np.array(results.pressure_outlet_series[outlet]) * self.PA_TO_MMHG * self.BLOOD_DENSITY
+                p_out = np.array(results.pressure_outlet_series[outlet]) * PA_TO_MMHG * BLOOD_DENSITY_DEFAULT
                 dp = p_inlet_mmhg - p_out
                 color = colors[i % len(colors)]
                 ls = linestyles[i % len(linestyles)]

@@ -16,6 +16,7 @@ Status: UNDER DEVELOPMENT - Features may change
 
 import re
 import os
+import shlex
 import numpy as np
 from enum import Enum
 from dataclasses import dataclass, field
@@ -188,10 +189,12 @@ class MeshQualityAnalyzer:
         metrics = MeshQualityMetrics()
 
         try:
+            # Use shlex.quote to prevent shell injection from case_dir paths
+            safe_case_dir = shlex.quote(str(self.case_dir))
             if parallel and n_procs > 1:
-                cmd = f"mpirun -np {n_procs} checkMesh -parallel -case {self.case_dir}"
+                cmd = f"mpirun -np {n_procs} checkMesh -parallel -case {safe_case_dir}"
             else:
-                cmd = f"checkMesh -case {self.case_dir}"
+                cmd = f"checkMesh -case {safe_case_dir}"
 
             result = subprocess.run(
                 cmd, shell=True, capture_output=True, text=True, timeout=300

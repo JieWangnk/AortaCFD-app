@@ -6,9 +6,20 @@ from scipy.spatial import ConvexHull
 import re
 import subprocess
 from paraview import servermanager
-from paraview.simple import *
+from paraview.simple import (
+    _DisableFirstRenderCameraReset,
+    GetColorTransferFunction,
+    GetScalarBar,
+    CreateView,
+    Show,
+    Hide,
+    OpenFOAMReader,
+    Calculator,
+    SaveScreenshot,
+    ColorBy,
+)
 
-paraview.simple._DisableFirstRenderCameraReset()
+_DisableFirstRenderCameraReset()
 
 def get_all_points_from_multiblock(mb_dataset):
     """

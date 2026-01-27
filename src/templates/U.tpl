@@ -61,7 +61,11 @@ boundaryField
     {% set stabilization_type = wk_settings.get('stabilization_type', 'simple') %}
     {% set beta = wk_settings.get('beta', 0.5) %}
     {% set damping_factor = wk_settings.get('damping_factor', 1.0) %}
-    {% for outlet in outlet_patches %}
+    {% if not outlet_patches %}
+    // WARNING: No outlet patches defined! Simulation will likely fail.
+    // Check that outlet_patches is set in the template context.
+    {% endif %}
+    {% for outlet in outlet_patches|default([]) %}
     {{ outlet }}
     {
         {% if outlet_type == "3EWINDKESSEL" and enable_stabilization %}

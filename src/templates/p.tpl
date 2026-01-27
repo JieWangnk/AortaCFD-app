@@ -40,7 +40,11 @@ boundaryField
     // The outlets are created dynamically based on the JSON settings
     {% set of_version = template_vars.openfoam_major_version if template_vars else openfoam_major_version %}
     {% set outlet_type = outlet_settings.get('type', '3EWINDKESSEL') %}
-    {% for outlet in outlet_patches %}
+    {% if not outlet_patches %}
+    // WARNING: No outlet patches defined! Simulation will likely fail.
+    // Check that outlet_patches is set in the template context.
+    {% endif %}
+    {% for outlet in outlet_patches|default([]) %}
     {{ outlet }}
     {
         {% if outlet_type == "3EWINDKESSEL" or outlet_type == "2EWINDKESSEL" %}

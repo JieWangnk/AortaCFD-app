@@ -248,29 +248,29 @@ def get_profile(name: str) -> Dict[str, Any]:
         >>> profile = get_profile("accurate")
         >>> profile = get_profile("precise")
     """
-    # Check if using deprecated profile name
+    # Check if using deprecated profile name - auto-migrate with warning
     if name in DEPRECATED_PROFILES:
         info = DEPRECATED_PROFILES[name]
-        error_msg = (
+        replacement = info['replacement']
+        warning_msg = (
             f"\n{'='*70}\n"
-            f"❌ PROFILE '{name}' HAS BEEN REMOVED\n"
+            f"⚠️  DEPRECATED PROFILE: '{name}' → auto-migrated to '{replacement}'\n"
             f"{'='*70}\n"
-            f"→ Use '{info['replacement']}' instead.\n\n"
             f"Reason: {info['reason']}\n"
         )
         if "note" in info:
-            error_msg += f"\nNote: {info['note']}\n"
+            warning_msg += f"Note: {info['note']}\n"
 
-        error_msg += (
-            f"\nUpdate your config:\n"
+        warning_msg += (
+            f"\nPlease update your config to silence this warning:\n"
             f'  "numerics": {{\n'
-            f'    "profile": "{info["replacement"]}"  // ← Change from "{name}"\n'
+            f'    "profile": "{replacement}"  // ← Change from "{name}"\n'
             f'  }}\n'
-            f"\nAvailable profiles: {', '.join(NUMERICS_PROFILES.keys())}\n"
             f"{'='*70}\n"
         )
-        logger.error(error_msg)
-        raise ValueError(f"Profile '{name}' has been deprecated. Use '{info['replacement']}' instead.")
+        logger.warning(warning_msg)
+        # Auto-migrate to replacement profile
+        name = replacement
 
     # Check if profile exists
     if name not in NUMERICS_PROFILES:
