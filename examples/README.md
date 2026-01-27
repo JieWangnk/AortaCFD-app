@@ -88,8 +88,8 @@ python run_patient.py MY_CASE --config cases_input/MY_CASE/config.json
 | Profile | Time | Convection | Use Case | Best For |
 |---------|------|------------|----------|----------|
 | **robust** | Euler (1st) | Upwind (1st) | Difficult meshes | Poor quality, debugging |
-| **standard** ⭐ | Backward (2nd) | linearUpwind (2nd) | Production | Most cases (recommended) |
-| **accurate** | CrankNicolson | LUST | Validation | Fine meshes, publications |
+| **standard** ⭐ | Backward (2nd) | limitedLinearV (2nd) | Production | Most cases (recommended) |
+| **precise** | CrankNicolson | LUST | Validation | LES, minimal diffusion |
 
 **Select profile in config:**
 ```json
@@ -604,13 +604,13 @@ checkMesh -allTopology -allGeometry
 }
 ```
 
-### Example 3: Convergence Study
+### Example 3: Convergence Study / LES
 
-**Use case:** Mesh independence verification
+**Use case:** Mesh independence verification or LES simulations
 
 ```json
 {
-  "numerics": {"profile": "accurate"},
+  "numerics": {"profile": "precise"},
   "mesh": {
     "cells_per_diameter": 20,
     "boundary_layers": {
@@ -646,7 +646,13 @@ Run with: 12, 15, 18, 20 cells/diameter and compare results.
 
 - **robust**: `src/config/profiles/numerics/robust.py`
 - **standard**: `src/config/profiles/numerics/standard.py`
-- **accurate**: `src/config/profiles/numerics/accurate.py`
+- **precise**: `src/config/profiles/numerics/precise.py`
+
+### Post-Processing
+
+- **Module**: `src/aortacfd_lib/post_processing/`
+- **Hemodynamics**: `src/aortacfd_lib/hemodynamics_postprocessor.py`
+- **Visualization**: `src/aortacfd_lib/post_processor.py`
 
 ---
 
@@ -676,6 +682,15 @@ Run with: 12, 15, 18, 20 cells/diameter and compare results.
 - Extract WSS, pressure distributions
 - Compare with literature values
 
+**Using the workflow:**
+```bash
+# Run post-processing step on existing case
+python run_patient.py BPM120 --case-dir output/BPM120/run_* --step post
+
+# Or include in full workflow (post runs automatically)
+python run_patient.py BPM120
+```
+
 ### 5. Documentation
 - Record all parameter choices
 - Document convergence criteria
@@ -692,8 +707,8 @@ Start
 ├─ Is mesh quality poor? (skewness >10, non-ortho >70)
 │  └─ YES → Use "robust" profile
 │
-├─ Need validation/publication quality?
-│  └─ YES → Use "accurate" profile (requires fine mesh)
+├─ LES simulation or need minimal numerical diffusion?
+│  └─ YES → Use "precise" profile (requires fine mesh, ortho >70°)
 │
 └─ Everything else → Use "standard" profile ⭐ (recommended)
 ```

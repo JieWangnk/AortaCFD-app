@@ -1,36 +1,160 @@
+"""
+OpenFOAM ParaView Post-Processor
+
+This module provides automated visualization of OpenFOAM CFD results using ParaView.
+It generates screenshots and animations for velocity, pressure, WSS, and hemodynamic
+metrics (TAWSS, OSI, RRT).
+
+Usage:
+    # Run with pvbatch
+    pvbatch post_processor.py /path/to/case last
+
+    # Python API
+    from aortacfd_lib.post_processor import OpenFOAMParaView
+    processor = OpenFOAMParaView(case_path, fields=['U', 'TAWSS'])
+    processor.generate_screenshots()
+"""
+
+from __future__ import annotations
+
+import glob
+import json
+import logging
 import os
-import vtk
-from vtk.util.numpy_support import vtk_to_numpy
-import numpy as np
-from scipy.spatial import ConvexHull
 import re
 import subprocess
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import numpy as np
+import vtk
+from scipy.spatial import ConvexHull
+from vtk.util.numpy_support import vtk_to_numpy
+
 from paraview import servermanager
 from paraview.simple import (
-    _DisableFirstRenderCameraReset,
-    GetColorTransferFunction,
-    GetScalarBar,
+    Calculator,
+    ColorBy,
     CreateView,
-    Show,
+    GetAnimationScene,
+    GetColorTransferFunction,
+    GetOpacityTransferFunction,
+    GetScalarBar,
+    GetTimeKeeper,
     Hide,
     OpenFOAMReader,
-    Calculator,
     SaveScreenshot,
-    ColorBy,
+    Show,
 )
 
-_DisableFirstRenderCameraReset()
+import paraview.simple
+paraview.simple._DisableFirstRenderCameraReset()
 
-def get_all_points_from_multiblock(mb_dataset):
+
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+BLOOD_DENSITY: float = 1060.0  # kg/m³
+PA_TO_MMHG: float = 1.0 / 133.322  # Conversion factor
+
+# Default property map for visualization fields
+DEFAULT_PROPERTY_MAP: Dict[str, Dict[str, Any]] = {
+    "U": {
+        "name": "U",
+        "derived": False,
+        "prefix": "Velocity",
+        "component": ('POINTS', 'U', 'Magnitude'),
+        "preset": "Rainbow Desaturated",
+        "representation": "Volume",
+        "unit": "m/s"
+    },
+    "p": {
+        "name": "Pressure",
+        "derived": True,
+        "prefix": "Pressure",
+        "component": ('POINTS', 'Pressure'),
+        "preset": "Blue - Green - Orange",
+        "representation": "Surface",
+        "unit": "mmHg"
+    },
+    "wallShearStress": {
+        "name": "WSS",
+        "derived": True,
+        "prefix": "WSS",
+        "component": ('POINTS', 'WSS'),
+        "preset": "Viridis (matplotlib)",
+        "representation": "Surface",
+        "unit": "Pa"
+    },
+    "TAWSS": {
+        "name": "TAWSS",
+        "derived": False,
+        "prefix": "TAWSS",
+        "component": ('POINTS', 'TAWSS'),
+        "preset": "Viridis (matplotlib)",
+        "representation": "Surface",
+        "unit": "Pa"
+    },
+    "OSI": {
+        "name": "OSI",
+        "derived": False,
+        "prefix": "OSI",
+        "component": ('POINTS', 'OSI'),
+        "preset": "Cool to Warm",
+        "representation": "Surface",
+        "unit": ""
+    },
+    "RRT": {
+        "name": "RRT",
+        "derived": False,
+        "prefix": "RRT",
+        "component": ('POINTS', 'RRT'),
+        "preset": "Plasma (matplotlib)",
+        "representation": "Surface",
+        "unit": "1/Pa"
+    },
+    "KE": {
+        "name": "KE",
+        "derived": True,
+        "prefix": "KE",
+        "component": ('POINTS', 'KE'),
+        "preset": "Inferno (matplotlib)",
+        "representation": "Volume",
+        "unit": "Pa"
+    }
+}
+
+# Default color ranges for each field
+DEFAULT_COLOR_RANGES: Dict[str, List[float]] = {
+    "U": [0, 1],
+    "KE": [0, 100],
+    "WSS": [0, 50],
+    "TAWSS": [0, 50],
+    "OSI": [0, 0.5],
+    "RRT": [0, 10],
+    "Pressure": [0, 20]
+}
+
+
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+
+def get_all_points_from_multiblock(mb_dataset: vtk.vtkMultiBlockDataSet) -> Optional[np.ndarray]:
     """
     Recursively collect all points from a vtkMultiBlockDataSet.
-    Returns a NumPy array of all points or None if no points found.
+
+    Args:
+        mb_dataset: VTK multi-block dataset to extract points from
+
+    Returns:
+        NumPy array of all points (N x 3), or None if no points found
     """
     points_list = []
     for i in range(mb_dataset.GetNumberOfBlocks()):
         block = mb_dataset.GetBlock(i)
         if block is not None:
-            # If the block itself is a MultiBlock, recurse
             if isinstance(block, vtk.vtkMultiBlockDataSet):
                 pts = get_all_points_from_multiblock(block)
                 if pts is not None:
@@ -43,460 +167,199 @@ def get_all_points_from_multiblock(mb_dataset):
                         points_list.append(numpy_pts)
     if points_list:
         return np.concatenate(points_list, axis=0)
-    else:
-        return None
+    return None
 
-def hideAllScalarBarsManually(renderView, arrayNames):
+
+def hide_all_scalar_bars(render_view: Any, array_names: List[str]) -> None:
     """
-    For each arrayName in arrayNames, get the color transfer function (LUT) and
-    retrieve its scalar bar in the given renderView. Then set the visibility to 0.
-    This effectively hides any previously visible legends for those arrays.
+    Hide all scalar bars for the specified arrays in the render view.
+
+    Args:
+        render_view: ParaView render view object
+        array_names: List of array names whose scalar bars should be hidden
     """
-    for arrayName in arrayNames:
-        ctf = GetColorTransferFunction(arrayName)
+    for array_name in array_names:
+        ctf = GetColorTransferFunction(array_name)
         if ctf is not None:
-            scalarBar = GetScalarBar(ctf, renderView)
-            if scalarBar is not None:
-                scalarBar.Visibility = 0
+            scalar_bar = GetScalarBar(ctf, render_view)
+            if scalar_bar is not None:
+                scalar_bar.Visibility = 0
+
+
+def check_ffmpeg_available() -> bool:
+    """
+    Check if ffmpeg is available for animation generation.
+
+    Returns:
+        True if ffmpeg is available, False otherwise
+    """
+    try:
+        subprocess.run(
+            ['ffmpeg', '-version'],
+            capture_output=True,
+            check=True
+        )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+
+# =============================================================================
+# MAIN CLASS
+# =============================================================================
 
 class OpenFOAMParaView:
-    def __init__(self, casePath, caseType='auto', timeSteps=None, fields=None, rescaleSettings=None):
+    """
+    OpenFOAM ParaView post-processor for generating CFD visualizations.
+
+    This class handles automated visualization of OpenFOAM simulation results,
+    including velocity fields, pressure, wall shear stress, and derived
+    hemodynamic metrics (TAWSS, OSI, RRT).
+
+    Attributes:
+        case_path: Path to OpenFOAM case directory
+        case_type: 'Reconstructed' or 'Decomposed'
+        image_dir: Directory for saving screenshots and animations
+        fields: List of fields to visualize
+        time_steps: Time steps to process
+        property_map: Mapping of field names to visualization properties
+        rescale_settings: Color range settings per field
+
+    Example:
+        >>> processor = OpenFOAMParaView(
+        ...     case_path="/path/to/case",
+        ...     fields=['U', 'TAWSS', 'OSI'],
+        ...     time_steps='last'
+        ... )
+        >>> processor.generate_screenshots()
+    """
+
+    def __init__(
+        self,
+        case_path: Union[str, Path],
+        case_type: str = 'auto',
+        time_steps: Optional[Union[str, List[float]]] = None,
+        fields: Optional[List[str]] = None,
+        rescale_settings: Optional[Dict[str, Dict[str, Any]]] = None,
+        resolution: Tuple[int, int] = (1600, 900)
+    ) -> None:
         """
         Initialize OpenFOAM ParaView post-processor.
 
         Args:
-            casePath: Path to OpenFOAM case directory
-            caseType: Case type - 'Reconstructed', 'Decomposed', or 'auto' (auto-detect, default)
-            timeSteps: List of time steps to process. Options:
-                      - None: Use all available time steps (default)
-                      - [t1, t2, ...]: Specific time steps
-                      - 'last': Only the last time step
-                      - 'peak': Only peak systole (maximum velocity time)
-            fields: List of fields to visualize ['U', 'p', 'wallShearStress']
-            rescaleSettings: Dictionary of rescale settings per field
-        """
-        self.casePath  = casePath
+            case_path: Path to OpenFOAM case directory
+            case_type: Case type - 'Reconstructed', 'Decomposed', or 'auto'
+            time_steps: Time selection:
+                - None: All available time steps (default)
+                - 'last': Only the last time step
+                - 'peak': Peak systole (maximum velocity)
+                - List[float]: Specific time values
+            fields: Fields to visualize. Default: ['U', 'p', 'wallShearStress']
+            rescale_settings: Per-field color range settings
+            resolution: Output image resolution (width, height)
 
-        # Auto-detect case type if set to 'auto'
-        if caseType == 'auto':
-            self.caseType = self._detect_case_type(casePath)
-            print(f"[INFO] Auto-detected case type: {self.caseType}")
+        Raises:
+            FileNotFoundError: If case_path doesn't exist
+            ValueError: If invalid case_type specified
+        """
+        self.case_path = str(case_path)
+        self.resolution = resolution
+
+        # Setup logging
+        self._setup_logging()
+
+        # Validate case path
+        if not os.path.exists(self.case_path):
+            raise FileNotFoundError(f"Case directory not found: {self.case_path}")
+
+        # Auto-detect case type
+        if case_type == 'auto':
+            self.case_type = self._detect_case_type()
+            self.logger.info(f"Auto-detected case type: {self.case_type}")
+        elif case_type in ('Reconstructed', 'Decomposed'):
+            self.case_type = case_type
         else:
-            self.caseType = caseType
+            raise ValueError(f"Invalid case_type: {case_type}. Use 'auto', 'Reconstructed', or 'Decomposed'")
 
-        self.foamFile  = f"{casePath}/f.foam"
+        self.foam_file = os.path.join(self.case_path, "f.foam")
 
-        # Place images directory at run level (one level up from openfoam/)
-        # e.g., output/patient1/run_*/images/ instead of output/patient1/run_*/openfoam/Images/
-        run_dir = os.path.dirname(os.path.abspath(casePath))
-        self.imageDir  = os.path.join(run_dir, "images")
+        # Place images directory at run level
+        run_dir = os.path.dirname(os.path.abspath(self.case_path))
+        self.image_dir = os.path.join(run_dir, "images")
+        os.makedirs(self.image_dir, exist_ok=True)
 
-        self.timeSteps = timeSteps
-        self.fields    = fields if fields else ["U", "p", "wallShearStress"]
+        self.time_steps = time_steps
+        self.fields = fields if fields else ["U", "p", "wallShearStress"]
 
-        # check the images folder
-        if not os.path.exists(self.imageDir):
-            os.makedirs(self.imageDir, exist_ok=True)
+        # Initialize property map (can be extended via config)
+        self.property_map = DEFAULT_PROPERTY_MAP.copy()
 
-        self.property_map = {
-            "U": {
-                "name": "U",
-                "derived": False,
-                "prefix": "Velocity",
-                "component": ('POINTS', 'U', 'Magnitude'),
-                "preset": "Rainbow Desaturated",
-                "representation": "Volume",
-                "unit": "m/s"
-            },
-            "p": {
-                "name": "Pressure",
-                "derived": True,
-                "prefix": "Pressure",
-                "component": ('POINTS', 'Pressure'),
-                "preset": "Blue - Green - Orange",
-                "representation": "Surface",
-                "unit": "Pa"
-            },
-            "wallShearStress": {
-                "name": "WSS",
-                "derived": True,
-                "prefix": "WSS",
-                "component": ('POINTS', 'WSS'),
-                "preset": "Viridis (matplotlib)",
-                "representation": "Surface",
-                "unit": "Pa"
-            },
-            "KE": {
-                "name": "KE",
-                "derived": True,
-                "prefix": "KE",
-                "component": ('POINTS', 'KE'),
-                "preset": "Inferno (matplotlib)",
-                "representation": "Volume",
-                "unit": "Pa"
-            }
-        }
+        # Initialize rescale settings
+        self.rescale_settings = self._build_rescale_settings(rescale_settings)
 
-        # Default: auto-scale to data range for each timestep
-        # This ensures the color scale adapts to the actual field values
-        default_ranges = {
-            "U": [0, 1],
-            "KE": [0, 100],
-            "WSS": [0, 10],
-            "Pressure": [0, 20]
-        }
-        self.rescaleSettings = rescaleSettings or {
-            key: {"rescaleToData": True, "rescaleRange": val} for key, val in default_ranges.items()
-        }
+        # ParaView pipeline objects (set during generate_screenshots)
+        self._render_view = None
+        self._foam_reader = None
+        self._final_display = None
 
-    def generate_screenshots(self):
+    def _setup_logging(self) -> None:
+        """Configure logging for post-processing."""
+        self.logger = logging.getLogger("AortaCFD.PostProcessor")
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            handler.setFormatter(logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            ))
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.INFO)
+
+    def _build_rescale_settings(
+        self,
+        custom_settings: Optional[Dict[str, Dict[str, Any]]] = None
+    ) -> Dict[str, Dict[str, Any]]:
         """
-        Build the pipeline, do PCA-based camera orientation, generate
-        new 'KE', 'WSS', and 'Pressure' fields, and save screenshots.
+        Build rescale settings from defaults and custom overrides.
 
-        Screenshots saved to: run_directory/images/
+        Args:
+            custom_settings: User-provided rescale settings
+
+        Returns:
+            Complete rescale settings dictionary
         """
-        # Ensure the images directory exists
-        if not os.path.exists(self.imageDir):
-            os.makedirs(self.imageDir, exist_ok=True)
-            print(f"[INFO] Created directory: {self.imageDir}\n")
+        # Start with defaults: WSS/TAWSS/OSI/RRT use fixed ranges, others auto-scale
+        settings = {
+            "U": {"rescaleToData": True, "rescaleRange": DEFAULT_COLOR_RANGES["U"]},
+            "KE": {"rescaleToData": True, "rescaleRange": DEFAULT_COLOR_RANGES["KE"]},
+            "WSS": {"rescaleToData": False, "rescaleRange": DEFAULT_COLOR_RANGES["WSS"]},
+            "TAWSS": {"rescaleToData": False, "rescaleRange": DEFAULT_COLOR_RANGES["TAWSS"]},
+            "OSI": {"rescaleToData": False, "rescaleRange": DEFAULT_COLOR_RANGES["OSI"]},
+            "RRT": {"rescaleToData": False, "rescaleRange": DEFAULT_COLOR_RANGES["RRT"]},
+            "Pressure": {"rescaleToData": True, "rescaleRange": DEFAULT_COLOR_RANGES["Pressure"]}
+        }
 
-        log_file = os.path.join(self.imageDir, "postProcessing.log")
+        if custom_settings:
+            settings.update(custom_settings)
 
-        # 1) Create the OpenFOAM reader
-        ffoam = OpenFOAMReader(FileName=self.foamFile)
-        ffoam.CaseType = self.caseType + " Case"
-        ffoam.MeshRegions = ['internalMesh']
+        return settings
 
-        # 2) Create one RenderView
-        renderView1 = CreateView('RenderView')
-        renderView1.ViewSize = [1600, 900]
-
-        # 3) Show the raw data first, so we can do camera PCA
-        ffoamDisplay = Show(ffoam, renderView1)
-        ffoamDisplay.SetScalarBarVisibility(renderView1, False)
-        renderView1.Update()
-
-        # 4) Attempt PCA for camera orientation
-        try:
-            data = servermanager.Fetch(ffoam)
-            pts = None
-            if hasattr(data, 'GetPoints') and data.GetPoints() is not None:
-                pts = vtk_to_numpy(data.GetPoints().GetData())
-            elif isinstance(data, vtk.vtkMultiBlockDataSet):
-                pts = get_all_points_from_multiblock(data)
-
-            if pts is None or len(pts) == 0:
-                raise Exception("No points found in dataset for camera PCA.")
-
-            mean = np.mean(pts, axis=0)
-            centered = pts - mean
-            cov = np.cov(centered, rowvar=False)
-            eigvals, eigvecs = np.linalg.eigh(cov)
-            sorted_indices = np.argsort(eigvals)[::-1]
-            eigenvectors = [eigvecs[:, sorted_indices[i]] for i in range(3)]
-
-            # Evaluate projected area in the plane perpendicular to each eigenvector
-            areas = []
-            for i, vec in enumerate(eigenvectors):
-                other_indices = [j for j in range(3) if j != i]
-                basis = np.column_stack([eigenvectors[j] for j in other_indices])
-                projected_points = pts.dot(basis)
-                try:
-                    hull = ConvexHull(projected_points)
-                    areas.append(hull.volume)  # 2D area
-                except Exception:
-                    areas.append(0)
-
-            best_index = np.argmax(areas)
-            best_axis = eigenvectors[best_index]
-
-            info = ffoam.GetDataInformation()
-            bounds = info.GetBounds()
-            xmin, xmax, ymin, ymax, zmin, zmax = bounds
-            dx = xmax - xmin
-            dy = ymax - ymin
-            dz = zmax - zmin
-            radius = max(dx, dy, dz) / 2.0
-
-            renderView1.CameraFocalPoint = mean.tolist()
-            camera_position = mean + 5 * radius * best_axis
-            renderView1.CameraPosition = camera_position.tolist()
-
-            # Compute a view-up vector
-            arbitrary = np.array([0, 1, 0])
-            if np.allclose(best_axis, arbitrary) or np.allclose(best_axis, -arbitrary):
-                arbitrary = np.array([1, 0, 0])
-            view_up = np.cross(best_axis, arbitrary)
-            norm = np.linalg.norm(view_up)
-            if norm == 0:
-                view_up = np.array([0, 0, 1])
-            else:
-                view_up /= norm
-            renderView1.CameraViewUp = view_up.tolist()
-            renderView1.CameraParallelScale = radius
-
-            with open(log_file, "a") as log:
-                log.write(f"[INFO] PCA camera axis={best_index}, area={areas[best_index]}, position={renderView1.CameraPosition}, up={renderView1.CameraViewUp}\n")
-
-        except Exception as e:
-            print(f"[WARNING] PCA-based camera failed: {e}")
-            with open(log_file, "a") as log:
-                log.write(f"[WARNING] PCA-based camera failed: {e}\n")
-            renderView1.ResetCamera()
-            renderView1.CameraViewUp = [0.0, 0.0, 1.0]
-
-        # ---------------------------------------------------------------------
-        # 5) Create new Calculator filters for KE, WSS, Pressure:
-        #    chain them so final pipeline is ffoam -> calcKE -> calcWSS -> calcP
-        calculatorKE = Calculator(Input=ffoam)
-        calculatorKE.ResultArrayName = 'KE'
-        calculatorKE.Function = '0.5*1060*(U_X^2 + U_Y^2 + U_Z^2)'
-
-        calculatorWSS = Calculator(Input=calculatorKE)
-        calculatorWSS.ResultArrayName = 'WSS'
-        calculatorWSS.Function = '1060*mag(wallShearStress)'
-
-        calculatorP = Calculator(Input=calculatorWSS)
-        calculatorP.ResultArrayName = 'Pressure'
-        calculatorP.Function = 'p*1060/133.32'
-
-        # 6) Create a single Display object for the final pipeline object
-        finalDisplay = Show(calculatorP, renderView1)
-        Hide(ffoam, renderView1)
-        renderView1.Update()
-
-        # 7) Construct new_properties dynamically based on fields
-        new_properties = []
-        for field in self.fields:
-            if field in self.property_map:
-                prop = self.property_map[field]
-                # Look up rescale settings by display name (e.g., "Pressure" not "p")
-                rescale_setting = self.rescaleSettings.get(
-                    prop["name"], {"rescaleToData": True, "rescaleRange": [0, 10]}
-                )
-
-                new_properties.append({
-                    "name": prop["name"],
-                    "component": prop["component"],
-                    "preset": prop["preset"],
-                    "representation": prop["representation"],
-                    "filePrefix": prop["prefix"],
-                    "unit": prop["unit"],
-                    "rescaleToData": rescale_setting.get("rescaleToData", False),
-                    "rescaleRange": rescale_setting.get("rescaleRange", [0, 1])
-                })
-        # We'll gather all array names for hideAllScalarBarsManually
-        arrayList = [prop["name"] for prop in new_properties]
-
-        # 8) Prepare time steps
-        animationScene1 = GetAnimationScene()
-        timeKeeper1 = GetTimeKeeper()
-
-        # Get all available time steps from OpenFOAM case
-        availableTimes = timeKeeper1.TimestepValues if timeKeeper1 else []
-
-        if not self.timeSteps:
-            # Default: use all available time steps
-            if availableTimes:
-                self.timeSteps = list(availableTimes)
-                with open(log_file, "a") as log:
-                    log.write(f"[INFO] Using all available time steps ({len(self.timeSteps)} total): {self.timeSteps[0]:.6f} to {self.timeSteps[-1]:.6f}\n")
-            else:
-                self.timeSteps = [0.0]
-                with open(log_file, "a") as log:
-                    log.write("[INFO] No available timesteps found. Using 0.0.\n")
-
-        elif self.timeSteps == 'last':
-            # Use only the last time step
-            if availableTimes:
-                self.timeSteps = [max(availableTimes)]
-                with open(log_file, "a") as log:
-                    log.write(f"[INFO] Using last time step only: {self.timeSteps[0]:.6f}\n")
-            else:
-                self.timeSteps = [0.0]
-                with open(log_file, "a") as log:
-                    log.write("[INFO] No available timesteps found. Using 0.0.\n")
-
-        elif self.timeSteps == 'peak':
-            # Use peak systole (time with maximum velocity)
-            if availableTimes:
-                max_vel = 0
-                peak_time = availableTimes[0]
-                for t in availableTimes:
-                    animationScene1.AnimationTime = t
-                    timeKeeper1.Time = t
-                    renderView1.Update()
-                    data = servermanager.Fetch(ffoam)
-                    try:
-                        if hasattr(data, 'GetPointData'):
-                            u_array = data.GetPointData().GetArray('U')
-                            if u_array:
-                                u_data = vtk_to_numpy(u_array)
-                                vel_mag = np.linalg.norm(u_data, axis=1).max()
-                                if vel_mag > max_vel:
-                                    max_vel = vel_mag
-                                    peak_time = t
-                    except Exception:
-                        pass
-                self.timeSteps = [peak_time]
-                with open(log_file, "a") as log:
-                    log.write(f"[INFO] Using peak systole time step: {peak_time:.6f} (max velocity: {max_vel:.4f} m/s)\n")
-            else:
-                self.timeSteps = [0.0]
-                with open(log_file, "a") as log:
-                    log.write("[INFO] No available timesteps found. Using 0.0.\n")
-
-        elif isinstance(self.timeSteps, (list, tuple)):
-            # User specified exact time steps
-            with open(log_file, "a") as log:
-                log.write(f"[INFO] Using user-specified time steps: {self.timeSteps}\n")
-
-        else:
-            # Invalid input - use last time step as fallback
-            if availableTimes:
-                self.timeSteps = [max(availableTimes)]
-                with open(log_file, "a") as log:
-                    log.write(f"[WARNING] Invalid timeSteps parameter. Using last time step: {self.timeSteps[0]:.6f}\n")
-            else:
-                self.timeSteps = [0.0]
-                with open(log_file, "a") as log:
-                    log.write("[INFO] No available timesteps found. Using 0.0.\n")
-
-        # 9) Loop over time steps and new properties, saving screenshots
-        for t in self.timeSteps:
-            animationScene1.AnimationTime = t
-            timeKeeper1.Time = t
-            renderView1.Update()
-
-            for prop in new_properties:
-                # Hide previously shown scalar bars
-                hideAllScalarBarsManually(renderView1, arrayList)
-
-                # Color by the new field
-                ColorBy(finalDisplay, prop["component"])
-                finalDisplay.SetRepresentationType(prop["representation"])
-
-                # Get the LUT and opacity transfer function
-                lut = GetColorTransferFunction(prop["name"])
-                pwf = GetOpacityTransferFunction(prop["name"])
-                lut.ApplyPreset(prop["preset"], True)
-
-                # Update display first to get correct data range
-                renderView1.Update()
-
-                # Rescale color map to current timestep data range
-                if prop["rescaleToData"]:
-                    # Use display's method to rescale to data range
-                    finalDisplay.RescaleTransferFunctionToDataRange(False, True)
-                else:
-                    lut.RescaleTransferFunction(*prop["rescaleRange"])
-                    pwf.RescaleTransferFunction(*prop["rescaleRange"])
-
-                # Show colorbar with units - positioned to avoid cropping
-                finalDisplay.SetScalarBarVisibility(renderView1, True)
-                scalarBar = GetScalarBar(lut, renderView1)
-                if scalarBar:
-                    # Position colorbar on left side to avoid cropping
-                    scalarBar.WindowLocation = 'Any Location'
-                    scalarBar.Position = [0.02, 0.25]  # Left side with margin
-                    scalarBar.ScalarBarLength = 0.5    # 50% of view height
-                    scalarBar.ScalarBarThickness = 16  # Width in pixels
-                    scalarBar.Orientation = 'Vertical'
-
-                    # Title and labels
-                    scalarBar.Title = f"{prop['name']} ({prop['unit']})"
-                    scalarBar.TitleBold = 1
-                    scalarBar.TitleFontSize = 16
-                    scalarBar.LabelBold = 1
-                    scalarBar.LabelFontSize = 14
-                    scalarBar.AddRangeLabels = 1
-                    scalarBar.RangeLabelFormat = '%.2f'
-                    scalarBar.Visibility = 1
-
-                # Final update
-                renderView1.Update()
-
-                # Build filename
-                formatted_t = f"{t:.6f}".rstrip('0').rstrip('.')
-                screenshotFile = f"{self.imageDir}/{prop['filePrefix']}_{formatted_t}.png"
-                SaveScreenshot(
-                    screenshotFile,
-                    renderView1,
-                    ImageResolution=[1600, 900],
-                    OverrideColorPalette='WhiteBackground',
-                    TransparentBackground=0
-                )
-
-                with open(log_file, "a") as log:
-                    log.write(f"[INFO] Saved screenshot for {prop['name']} at t={t}: {screenshotFile}\n")
-
-    def anima(self, fps=30):
-        log_file = os.path.join(self.imageDir, "postProcessing.log")
-
-        with open(log_file, "a") as log:
-            properties = [self.property_map[f]["prefix"] for f in self.fields if f in self.property_map]
-            for prop in properties:
-                pattern = re.compile(rf"{re.escape(prop)}_(\d+\.?\d*)\.png")
-                images = []
-                for filename in os.listdir(self.imageDir):
-                    match = pattern.match(filename)
-                    if match:
-                        time_step = float(match.group(1))
-                        images.append((time_step, filename))
-
-                if not images:
-                    log.write(f"[WARNING] No images found for property '{prop}'. Skipping animation.\n")
-                    continue
-
-                images.sort(key=lambda x: float(x[0]))
-                list_file = os.path.join(self.imageDir, f"{prop}_files.txt")
-                with open(list_file, "w") as lf:
-                    for _, filename in images:
-                        lf.write(f"file '{filename}'\n")
-
-                output_video = os.path.join(self.imageDir, f"{prop}.avi")
-                ffmpeg_cmd = [
-                    "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-r", str(fps),
-                    "-i", list_file, "-c:v", "mpeg4", "-q:v", "5", output_video
-                ]
-
-                try:
-                    log.write(f"[INFO] Creating animation for '{prop}'...\n")
-                    result = subprocess.run(ffmpeg_cmd, check=True, cwd=self.imageDir,
-                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    log.write(f"[INFO] Animation for '{prop}' saved as '{output_video}'.\n")
-                except subprocess.CalledProcessError as e:
-                    log.write(f"[ERROR] ffmpeg failed for property '{prop}': {e.stderr}\n")
-                finally:
-                    if os.path.exists(list_file):
-                        os.remove(list_file)
-
-            log.write("[INFO] Animation creation completed.\n")
-
-    def _detect_case_type(self, casePath: str) -> str:
+    def _detect_case_type(self) -> str:
         """
         Auto-detect whether the case is Reconstructed or Decomposed.
 
         Returns:
-            'Reconstructed' if time directories exist in case root
+            'Reconstructed' if time directories exist in case root,
             'Decomposed' if only processor directories exist
         """
-        import glob
-
-        # Check for processor directories
-        processor_dirs = glob.glob(os.path.join(casePath, "processor*"))
+        processor_dirs = glob.glob(os.path.join(self.case_path, "processor*"))
         has_processors = len(processor_dirs) > 0
 
-        # Check for time directories in case root (excluding 0/)
         time_dirs = []
-        for item in os.listdir(casePath):
-            item_path = os.path.join(casePath, item)
+        for item in os.listdir(self.case_path):
+            item_path = os.path.join(self.case_path, item)
             if os.path.isdir(item_path):
-                # Check if directory name is numeric (time directory)
                 try:
                     float(item)
-                    if item != '0':  # Ignore initial condition
+                    if item != '0':
                         time_dirs.append(item)
                 except ValueError:
                     pass
@@ -508,101 +371,718 @@ class OpenFOAMParaView:
         elif has_processors:
             return 'Decomposed'
         else:
-            # Default to Reconstructed (case might have only 0/ directory)
             return 'Reconstructed'
 
+    def _setup_render_view(self) -> Tuple[Any, Any, Any]:
+        """
+        Create OpenFOAM reader and render view.
 
-# Main execution block
+        Returns:
+            Tuple of (foam_reader, render_view, initial_display)
+        """
+        self.logger.info("Setting up ParaView render view...")
+
+        foam_reader = OpenFOAMReader(FileName=self.foam_file)
+        foam_reader.CaseType = self.case_type + " Case"
+        foam_reader.MeshRegions = ['internalMesh']
+
+        render_view = CreateView('RenderView')
+        render_view.ViewSize = list(self.resolution)
+
+        foam_display = Show(foam_reader, render_view)
+        foam_display.SetScalarBarVisibility(render_view, False)
+        render_view.Update()
+
+        return foam_reader, render_view, foam_display
+
+    def _configure_camera_pca(
+        self,
+        foam_reader: Any,
+        render_view: Any
+    ) -> None:
+        """
+        Configure camera using PCA-based orientation for optimal viewing angle.
+
+        Uses Principal Component Analysis to find the viewing direction that
+        shows the maximum projected area of the geometry.
+
+        Args:
+            foam_reader: OpenFOAM reader object
+            render_view: ParaView render view
+        """
+        self.logger.info("Configuring camera orientation (PCA-based)...")
+
+        try:
+            data = servermanager.Fetch(foam_reader)
+            pts = None
+
+            if hasattr(data, 'GetPoints') and data.GetPoints() is not None:
+                pts = vtk_to_numpy(data.GetPoints().GetData())
+            elif isinstance(data, vtk.vtkMultiBlockDataSet):
+                pts = get_all_points_from_multiblock(data)
+
+            if pts is None or len(pts) == 0:
+                raise ValueError("No points found in dataset for camera PCA")
+
+            # Compute PCA
+            mean = np.mean(pts, axis=0)
+            centered = pts - mean
+            cov = np.cov(centered, rowvar=False)
+            eigvals, eigvecs = np.linalg.eigh(cov)
+            sorted_indices = np.argsort(eigvals)[::-1]
+            eigenvectors = [eigvecs[:, sorted_indices[i]] for i in range(3)]
+
+            # Find axis with maximum projected area
+            areas = []
+            for i, vec in enumerate(eigenvectors):
+                other_indices = [j for j in range(3) if j != i]
+                basis = np.column_stack([eigenvectors[j] for j in other_indices])
+                projected_points = pts.dot(basis)
+                try:
+                    hull = ConvexHull(projected_points)
+                    areas.append(hull.volume)
+                except Exception:
+                    areas.append(0)
+
+            best_index = np.argmax(areas)
+            best_axis = eigenvectors[best_index]
+
+            # Compute camera distance
+            info = foam_reader.GetDataInformation()
+            bounds = info.GetBounds()
+            xmin, xmax, ymin, ymax, zmin, zmax = bounds
+            radius = max(xmax - xmin, ymax - ymin, zmax - zmin) / 2.0
+
+            # Set camera position
+            render_view.CameraFocalPoint = mean.tolist()
+            camera_position = mean + 5 * radius * best_axis
+            render_view.CameraPosition = camera_position.tolist()
+
+            # Compute view-up vector
+            arbitrary = np.array([0, 1, 0])
+            if np.allclose(best_axis, arbitrary) or np.allclose(best_axis, -arbitrary):
+                arbitrary = np.array([1, 0, 0])
+            view_up = np.cross(best_axis, arbitrary)
+            norm = np.linalg.norm(view_up)
+            if norm > 0:
+                view_up /= norm
+            else:
+                view_up = np.array([0, 0, 1])
+
+            render_view.CameraViewUp = view_up.tolist()
+            render_view.CameraParallelScale = radius
+
+            self.logger.info(f"PCA camera: axis={best_index}, area={areas[best_index]:.2f}")
+
+        except Exception as e:
+            self.logger.warning(f"PCA camera failed: {e}. Using default camera.")
+            render_view.ResetCamera()
+            render_view.CameraViewUp = [0.0, 0.0, 1.0]
+
+    def _create_calculator_pipeline(self, source: Any) -> Any:
+        """
+        Create chained Calculator filters for derived fields.
+
+        Creates calculators for:
+        - KE: Kinetic energy (0.5 * rho * |U|^2)
+        - WSS: Wall shear stress magnitude (rho * |tau_w|)
+        - TAWSS: Time-averaged WSS from fieldAverage
+        - Pressure: Converted to mmHg
+
+        Args:
+            source: Input source (OpenFOAM reader)
+
+        Returns:
+            Final calculator in the pipeline chain
+        """
+        self.logger.info("Creating calculator pipeline for derived fields...")
+
+        # KE = 0.5 * rho * |U|^2
+        calc_ke = Calculator(Input=source)
+        calc_ke.ResultArrayName = 'KE'
+        calc_ke.Function = f'0.5*{BLOOD_DENSITY}*(U_X^2 + U_Y^2 + U_Z^2)'
+
+        # WSS = rho * |wallShearStress|
+        calc_wss = Calculator(Input=calc_ke)
+        calc_wss.ResultArrayName = 'WSS'
+        calc_wss.Function = f'{BLOOD_DENSITY}*mag(wallShearStress)'
+
+        # TAWSS from wallShearStressMean
+        calc_tawss = Calculator(Input=calc_wss)
+        calc_tawss.ResultArrayName = 'TAWSS'
+        calc_tawss.Function = f'{BLOOD_DENSITY}*mag(wallShearStressMean)'
+
+        # Pressure in mmHg
+        calc_p = Calculator(Input=calc_tawss)
+        calc_p.ResultArrayName = 'Pressure'
+        calc_p.Function = f'p*{BLOOD_DENSITY}/{1/PA_TO_MMHG:.2f}'
+
+        return calc_p
+
+    def _build_property_list(self) -> List[Dict[str, Any]]:
+        """
+        Build visualization properties list from fields and rescale settings.
+
+        Returns:
+            List of property dictionaries for visualization
+        """
+        properties = []
+        for field in self.fields:
+            if field in self.property_map:
+                prop = self.property_map[field]
+                rescale = self.rescale_settings.get(
+                    prop["name"],
+                    {"rescaleToData": True, "rescaleRange": [0, 1]}
+                )
+                properties.append({
+                    "name": prop["name"],
+                    "component": prop["component"],
+                    "preset": prop["preset"],
+                    "representation": prop["representation"],
+                    "filePrefix": prop["prefix"],
+                    "unit": prop["unit"],
+                    "rescaleToData": rescale.get("rescaleToData", True),
+                    "rescaleRange": rescale.get("rescaleRange", [0, 1])
+                })
+        return properties
+
+    def _prepare_time_steps(
+        self,
+        available_times: List[float],
+        foam_reader: Any,
+        render_view: Any
+    ) -> List[float]:
+        """
+        Resolve time step selection to actual time values.
+
+        Args:
+            available_times: List of available time steps from case
+            foam_reader: OpenFOAM reader for peak velocity detection
+            render_view: Render view for updates
+
+        Returns:
+            List of resolved time steps to process
+        """
+        if not self.time_steps:
+            # Default: all available times
+            if available_times:
+                self.logger.info(f"Using all {len(available_times)} time steps")
+                return list(available_times)
+            else:
+                self.logger.info("No time steps found, using 0.0")
+                return [0.0]
+
+        elif self.time_steps == 'last':
+            if available_times:
+                last_time = max(available_times)
+                self.logger.info(f"Using last time step: {last_time:.6f}")
+                return [last_time]
+            return [0.0]
+
+        elif self.time_steps == 'peak':
+            return self._find_peak_systole(available_times, foam_reader, render_view)
+
+        elif isinstance(self.time_steps, (list, tuple)):
+            self.logger.info(f"Using user-specified time steps: {self.time_steps}")
+            return list(self.time_steps)
+
+        else:
+            self.logger.warning(f"Invalid time_steps: {self.time_steps}. Using last.")
+            if available_times:
+                return [max(available_times)]
+            return [0.0]
+
+    def _find_peak_systole(
+        self,
+        available_times: List[float],
+        foam_reader: Any,
+        render_view: Any
+    ) -> List[float]:
+        """
+        Find the time step with maximum velocity (peak systole).
+
+        Args:
+            available_times: List of available time steps
+            foam_reader: OpenFOAM reader
+            render_view: Render view
+
+        Returns:
+            List containing single peak systole time step
+        """
+        if not available_times:
+            return [0.0]
+
+        self.logger.info("Finding peak systole (maximum velocity)...")
+
+        animation_scene = GetAnimationScene()
+        time_keeper = GetTimeKeeper()
+
+        max_vel = 0
+        peak_time = available_times[0]
+
+        for t in available_times:
+            animation_scene.AnimationTime = t
+            time_keeper.Time = t
+            render_view.Update()
+
+            try:
+                data = servermanager.Fetch(foam_reader)
+                if hasattr(data, 'GetPointData'):
+                    u_array = data.GetPointData().GetArray('U')
+                    if u_array:
+                        u_data = vtk_to_numpy(u_array)
+                        vel_mag = np.linalg.norm(u_data, axis=1).max()
+                        if vel_mag > max_vel:
+                            max_vel = vel_mag
+                            peak_time = t
+            except Exception:
+                pass
+
+        self.logger.info(f"Peak systole at t={peak_time:.6f} (max velocity: {max_vel:.4f} m/s)")
+        return [peak_time]
+
+    def _render_and_save(
+        self,
+        render_view: Any,
+        display: Any,
+        properties: List[Dict[str, Any]],
+        time_steps: List[float]
+    ) -> None:
+        """
+        Render and save screenshots for all time steps and properties.
+
+        Args:
+            render_view: ParaView render view
+            display: Display object for the final pipeline
+            properties: List of visualization properties
+            time_steps: List of time steps to render
+        """
+        animation_scene = GetAnimationScene()
+        time_keeper = GetTimeKeeper()
+        array_list = [prop["name"] for prop in properties]
+
+        total_screenshots = len(time_steps) * len(properties)
+        self.logger.info(f"Rendering {total_screenshots} screenshots...")
+
+        for t in time_steps:
+            animation_scene.AnimationTime = t
+            time_keeper.Time = t
+            render_view.Update()
+
+            for prop in properties:
+                # Hide previous scalar bars
+                hide_all_scalar_bars(render_view, array_list)
+
+                # Color by field
+                ColorBy(display, prop["component"])
+                display.SetRepresentationType(prop["representation"])
+
+                # Configure color transfer function
+                lut = GetColorTransferFunction(prop["name"])
+                pwf = GetOpacityTransferFunction(prop["name"])
+                lut.ApplyPreset(prop["preset"], True)
+
+                render_view.Update()
+
+                # Apply rescale settings
+                if prop["rescaleToData"]:
+                    display.RescaleTransferFunctionToDataRange(False, True)
+                else:
+                    lut.RescaleTransferFunction(*prop["rescaleRange"])
+                    pwf.RescaleTransferFunction(*prop["rescaleRange"])
+
+                # Configure scalar bar
+                self._configure_scalar_bar(render_view, display, lut, prop)
+
+                render_view.Update()
+
+                # Save screenshot
+                formatted_t = f"{t:.6f}".rstrip('0').rstrip('.')
+                screenshot_file = os.path.join(
+                    self.image_dir,
+                    f"{prop['filePrefix']}_{formatted_t}.png"
+                )
+                SaveScreenshot(
+                    screenshot_file,
+                    render_view,
+                    ImageResolution=list(self.resolution),
+                    OverrideColorPalette='WhiteBackground',
+                    TransparentBackground=0
+                )
+
+                self.logger.debug(f"Saved: {screenshot_file}")
+
+    def _configure_scalar_bar(
+        self,
+        render_view: Any,
+        display: Any,
+        lut: Any,
+        prop: Dict[str, Any]
+    ) -> None:
+        """
+        Configure the scalar bar (color legend) appearance.
+
+        Args:
+            render_view: ParaView render view
+            display: Display object
+            lut: Color lookup table
+            prop: Property dictionary with name and unit
+        """
+        display.SetScalarBarVisibility(render_view, True)
+        scalar_bar = GetScalarBar(lut, render_view)
+
+        if scalar_bar:
+            scalar_bar.WindowLocation = 'Any Location'
+            scalar_bar.Position = [0.02, 0.25]
+            scalar_bar.ScalarBarLength = 0.5
+            scalar_bar.ScalarBarThickness = 16
+            scalar_bar.Orientation = 'Vertical'
+
+            unit_str = f" ({prop['unit']})" if prop['unit'] else ""
+            scalar_bar.Title = f"{prop['name']}{unit_str}"
+            scalar_bar.TitleBold = 1
+            scalar_bar.TitleFontSize = 16
+            scalar_bar.LabelBold = 1
+            scalar_bar.LabelFontSize = 14
+            scalar_bar.AddRangeLabels = 1
+            scalar_bar.RangeLabelFormat = '%.2f'
+            scalar_bar.Visibility = 1
+
+    def generate_screenshots(self) -> None:
+        """
+        Generate visualization screenshots for all configured fields and time steps.
+
+        This is the main entry point that orchestrates the visualization pipeline:
+        1. Setup render view and OpenFOAM reader
+        2. Configure camera using PCA
+        3. Create calculator pipeline for derived fields
+        4. Render and save screenshots
+
+        Screenshots are saved to: {run_directory}/images/
+        """
+        self.logger.info(f"Starting post-processing for: {self.case_path}")
+
+        # Setup pipeline
+        foam_reader, render_view, foam_display = self._setup_render_view()
+        self._foam_reader = foam_reader
+        self._render_view = render_view
+
+        # Configure camera
+        self._configure_camera_pca(foam_reader, render_view)
+
+        # Create calculator pipeline
+        final_calc = self._create_calculator_pipeline(foam_reader)
+        final_display = Show(final_calc, render_view)
+        Hide(foam_reader, render_view)
+        render_view.Update()
+        self._final_display = final_display
+
+        # Build properties and time steps
+        properties = self._build_property_list()
+
+        time_keeper = GetTimeKeeper()
+        available_times = list(time_keeper.TimestepValues) if time_keeper else []
+        time_steps = self._prepare_time_steps(available_times, foam_reader, render_view)
+
+        # Render and save
+        self._render_and_save(render_view, final_display, properties, time_steps)
+
+        self.logger.info(f"Screenshots saved to: {self.image_dir}")
+
+    def create_animations(self, fps: int = 30) -> None:
+        """
+        Create animations from generated screenshots.
+
+        Requires ffmpeg to be installed. Creates one animation per field.
+
+        Args:
+            fps: Frames per second for the animation
+        """
+        if not check_ffmpeg_available():
+            self.logger.warning("ffmpeg not found. Animation generation skipped.")
+            return
+
+        self.logger.info("Creating animations...")
+
+        for field in self.fields:
+            if field not in self.property_map:
+                continue
+
+            prefix = self.property_map[field]["prefix"]
+            pattern = re.compile(rf"{re.escape(prefix)}_(\d+\.?\d*)\.png")
+
+            # Find matching images
+            images = []
+            for filename in os.listdir(self.image_dir):
+                match = pattern.match(filename)
+                if match:
+                    time_step = float(match.group(1))
+                    images.append((time_step, filename))
+
+            if not images:
+                self.logger.warning(f"No images found for '{prefix}'. Skipping.")
+                continue
+
+            # Sort by time
+            images.sort(key=lambda x: x[0])
+
+            # Create file list for ffmpeg
+            list_file = os.path.join(self.image_dir, f"{prefix}_files.txt")
+            with open(list_file, "w") as lf:
+                for _, filename in images:
+                    lf.write(f"file '{filename}'\n")
+
+            # Run ffmpeg
+            output_video = os.path.join(self.image_dir, f"{prefix}.avi")
+            ffmpeg_cmd = [
+                "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                "-r", str(fps), "-i", list_file,
+                "-c:v", "mpeg4", "-q:v", "5", output_video
+            ]
+
+            try:
+                subprocess.run(
+                    ffmpeg_cmd,
+                    check=True,
+                    cwd=self.image_dir,
+                    capture_output=True,
+                    text=True
+                )
+                self.logger.info(f"Animation saved: {output_video}")
+            except subprocess.CalledProcessError as e:
+                self.logger.error(f"ffmpeg failed for '{prefix}': {e.stderr}")
+            finally:
+                if os.path.exists(list_file):
+                    os.remove(list_file)
+
+        self.logger.info("Animation creation completed.")
+
+    # Backwards compatibility alias
+    def anima(self, fps: int = 30) -> None:
+        """Legacy alias for create_animations(). Use create_animations() instead."""
+        self.create_animations(fps)
+
+    def load_custom_fields(self, config: Dict[str, Any]) -> None:
+        """
+        Load custom field definitions from configuration.
+
+        Allows users to extend the property_map with custom fields defined
+        in config.json without modifying the source code.
+
+        Args:
+            config: Configuration dictionary containing 'visualization.custom_fields'
+
+        Example config:
+            {
+                "visualization": {
+                    "custom_fields": {
+                        "helicity": {
+                            "name": "Helicity",
+                            "derived": true,
+                            "formula": "U_X*vorticity_X + U_Y*vorticity_Y + U_Z*vorticity_Z",
+                            "preset": "Diverging Blue-Red",
+                            "representation": "Volume",
+                            "unit": "m/s²"
+                        }
+                    }
+                }
+            }
+        """
+        custom_fields = config.get('visualization', {}).get('custom_fields', {})
+
+        for name, props in custom_fields.items():
+            self.property_map[name] = {
+                "name": props.get("name", name),
+                "derived": props.get("derived", True),
+                "prefix": props.get("name", name),
+                "component": ('POINTS', props.get("name", name)),
+                "preset": props.get("preset", "Rainbow Desaturated"),
+                "representation": props.get("representation", "Surface"),
+                "unit": props.get("unit", ""),
+                "formula": props.get("formula")
+            }
+            self.logger.info(f"Loaded custom field: {name}")
+
+
+# =============================================================================
+# PYTHON API
+# =============================================================================
+
+def post_process(
+    case_path: Union[str, Path],
+    fields: Optional[List[str]] = None,
+    time_steps: Optional[Union[str, List[float]]] = None,
+    color_ranges: Optional[Dict[str, List[float]]] = None,
+    create_animation: bool = False,
+    fps: int = 30
+) -> None:
+    """
+    Python API for post-processing OpenFOAM cases.
+
+    Convenience function for running post-processing without editing JSON config.
+
+    Args:
+        case_path: Path to OpenFOAM case directory
+        fields: Fields to visualize. Default: ['U', 'p', 'wallShearStress']
+        time_steps: Time selection - None (all), 'last', 'peak', or list
+        color_ranges: Per-field color ranges, e.g., {'WSS': [0, 50]}
+        create_animation: Whether to create animations
+        fps: Animation frames per second
+
+    Example:
+        >>> post_process(
+        ...     "/path/to/case",
+        ...     fields=['U', 'TAWSS'],
+        ...     time_steps='last',
+        ...     color_ranges={'WSS': [0, 50]}
+        ... )
+    """
+    # Build rescale settings from color_ranges
+    rescale_settings = None
+    if color_ranges:
+        rescale_settings = {}
+        for field, range_vals in color_ranges.items():
+            rescale_settings[field] = {
+                "rescaleToData": False,
+                "rescaleRange": range_vals
+            }
+
+    processor = OpenFOAMParaView(
+        case_path=case_path,
+        fields=fields,
+        time_steps=time_steps,
+        rescale_settings=rescale_settings
+    )
+
+    processor.generate_screenshots()
+
+    if create_animation:
+        processor.create_animations(fps=fps)
+
+
+# =============================================================================
+# CLI ENTRY POINT
+# =============================================================================
+
 if __name__ == "__main__":
     """
     Main execution when running with pvbatch.
 
     Usage:
-        # All time steps (default) with animations
-        pvbatch ../../../../src/aortacfd_lib/post_processor.py
+        pvbatch post_processor.py /path/to/case [time_option]
 
-        # All time steps explicitly
-        pvbatch ../../../../src/aortacfd_lib/post_processor.py . all
-
-        # Only last time step
-        pvbatch ../../../../src/aortacfd_lib/post_processor.py . last
-
-        # Only peak systole (max velocity)
-        pvbatch ../../../../src/aortacfd_lib/post_processor.py . peak
-
-        # Custom case path
-        pvbatch post_processor.py /path/to/case last
+    Time options:
+        all   - All available time steps (default)
+        last  - Only the last time step
+        peak  - Peak systole (maximum velocity)
     """
     import sys
 
-    # Get case path from command line argument or environment variable
+    # Parse case path
     if len(sys.argv) > 1:
         case_path = sys.argv[1]
     elif "CASE_PATH" in os.environ:
         case_path = os.environ["CASE_PATH"]
     else:
-        # Use current directory
         case_path = os.getcwd()
 
     print(f"[INFO] OpenFOAM Post-Processing with ParaView")
     print(f"[INFO] Case path: {case_path}")
 
-    # Check if case exists
+    # Validate case
     if not os.path.exists(case_path):
         print(f"[ERROR] Case directory not found: {case_path}")
         sys.exit(1)
 
-    # Look for .foam file
     foam_files = [f for f in os.listdir(case_path) if f.endswith('.foam')]
     if not foam_files:
         print(f"[ERROR] No .foam file found in {case_path}")
-        print("[INFO] Make sure meshing completed successfully")
         sys.exit(1)
 
     print(f"[INFO] Found {foam_files[0]}")
 
-    # Parse command-line options for time step selection
-    time_option = None
-    if len(sys.argv) > 2:
+    # Load config
+    run_dir = os.path.dirname(os.path.abspath(case_path))
+    config_path = os.path.join(run_dir, "reports", "merged_config.json")
+
+    viz_config = {}
+    rescale_settings = None
+    config_time_steps = None
+    config_fields = None
+
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r') as f:
+                full_config = json.load(f)
+            viz_config = full_config.get("visualization", {})
+
+            config_time_steps = viz_config.get("time_steps")
+            config_fields = viz_config.get("fields")
+
+            color_ranges = viz_config.get("color_ranges", {})
+            if color_ranges:
+                rescale_settings = {}
+                field_map = {
+                    "U": "U", "velocity": "U",
+                    "WSS": "WSS", "wss": "WSS",
+                    "TAWSS": "TAWSS", "tawss": "TAWSS",
+                    "OSI": "OSI", "osi": "OSI",
+                    "RRT": "RRT", "rrt": "RRT",
+                    "Pressure": "Pressure", "pressure": "Pressure",
+                    "KE": "KE"
+                }
+
+                for field in ["U", "WSS", "TAWSS", "OSI", "RRT", "Pressure", "KE"]:
+                    user_range = None
+                    for key, mapped in field_map.items():
+                        if mapped == field and key in color_ranges:
+                            user_range = color_ranges[key]
+                            break
+
+                    if user_range:
+                        rescale_settings[field] = {"rescaleToData": False, "rescaleRange": user_range}
+                        print(f"[INFO] {field}: fixed range {user_range}")
+                    else:
+                        rescale_settings[field] = {"rescaleToData": True, "rescaleRange": DEFAULT_COLOR_RANGES.get(field, [0, 1])}
+                        print(f"[INFO] {field}: auto-scale")
+        except Exception as e:
+            print(f"[WARNING] Could not load config: {e}")
+
+    # Parse CLI time option
+    time_option = config_time_steps
+    if time_option is None and len(sys.argv) > 2:
         time_arg = sys.argv[2].lower()
         if time_arg == 'last':
             time_option = 'last'
-            print("[INFO] Time step mode: Last time step only")
         elif time_arg == 'peak':
             time_option = 'peak'
-            print("[INFO] Time step mode: Peak systole (maximum velocity)")
         elif time_arg == 'all':
             time_option = None
-            print("[INFO] Time step mode: All available time steps")
-        else:
-            print(f"[WARNING] Unknown time option '{time_arg}'. Using default (all time steps)")
 
-    # Initialize post-processor
+    fields_to_use = config_fields if config_fields else ["U", "p", "wallShearStress"]
+
     try:
         processor = OpenFOAMParaView(
-            casePath=case_path,
-            caseType='auto',  # Auto-detect Reconstructed or Decomposed
-            timeSteps=time_option,  # None, 'last', or 'peak'
-            fields=["U", "p", "wallShearStress"]  # All available fields
+            case_path=case_path,
+            case_type='auto',
+            time_steps=time_option,
+            fields=fields_to_use,
+            rescale_settings=rescale_settings
         )
 
         print("[INFO] Generating visualizations...")
-
-        # Generate screenshots for specified time steps
         processor.generate_screenshots()
 
-        print(f"[INFO] Screenshots saved to: {processor.imageDir}")
+        print(f"[INFO] Screenshots saved to: {processor.image_dir}")
         print("[INFO] Post-processing completed successfully!")
 
-        # Optionally create animations if multiple time steps and ffmpeg available
-        if time_option is None:  # Only create animations for all time steps
+        if time_option is None:
             try:
                 print("[INFO] Creating animations...")
-                processor.anima(fps=30)
+                processor.create_animations(fps=30)
                 print("[INFO] Animations created successfully!")
             except Exception as e:
                 print(f"[WARNING] Could not create animations: {e}")
-                print("[INFO] Install ffmpeg to enable animation generation")
         else:
             print("[INFO] Skipping animation (single time step mode)")
 

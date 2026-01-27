@@ -31,7 +31,7 @@
   },
 
   "mesh": {
-    "cells_per_diameter": 15,
+    "cells_per_diameter": 14,
     "boundary_layers": {
       "enabled": true,
       "num_layers": 5,
@@ -42,7 +42,7 @@
     },
     "SNAPPY_SETTINGS": {
       "parallel": true,
-      "nProcessors": 16,
+      "nProcessors": 4,
       "surfaceRefinementLevels": [1, 2],
       "featureLevel": 2
     }
@@ -78,18 +78,12 @@
         "tau": 1.0,
         "initial_pressure_method": "diastolic",
 
-        "_backflow_stabilization_comment": "Maximum stability configuration for challenging geometry",
+        "_backflow_stabilization_comment": "Two-parameter directional backflow stabilization (Esmaily-Moghadam formulation)",
         "enable_stabilization": true,
-        "stabilization_type": "simple",
-        "_stabilization_types": {
-          "simple": "Uses only beta, most robust (RECOMMENDED for difficult cases)",
-          "fluxBased": "Uses beta×dampingFactor, FVM-consistent",
-          "traction": "Uses beta×dampingFactor, physics-based (Moghadam 2011)"
-        },
-        "beta": 1.0,
-        "_beta_comment": "beta=1.0 fully suppresses backflow (most robust for 50% flow split)",
-        "damping_factor": 1.0,
-        "_damping_factor_comment": "Only used by fluxBased/traction methods"
+        "betaT": 0.3,
+        "_betaT_comment": "Tangential damping (0-1). Suppresses spurious vortices during backflow. Recommended: 0.2-0.5",
+        "betaN": 0.0,
+        "_betaN_comment": "Normal damping (0-1). Keep at 0.0 to preserve Windkessel P-Q coupling. Only increase for severe instability."
       }
     },
 
@@ -98,15 +92,47 @@
     }
   },
 
+  "cardiac_cycle": 0.5,
+  "_cardiac_cycle_comment": "120 BPM = 0.5s per cycle",
+
+  "hemodynamics": {
+    "_comment": "Enable TAWSS/OSI/RRT computation",
+    "runtime_functions": {
+      "wallShearStress": true,
+      "fieldAverage": true,
+      "pressureMonitoring": true
+    },
+    "tawss_settings": {
+      "skip_cycles": 1,
+      "_skip_cycles_comment": "Skip 1st cycle for flow development, average cycles 2-3",
+      "periodicRestart": true,
+      "keep_all_cycles": true
+    }
+  },
+
   "simulation_control": {
     "end_time": 2.0,
-    "number_of_cycles": 5,
+    "number_of_cycles": 3,
     "writeInterval": 0.02
   },
 
   "run_settings": {
     "solution_type": "parallel",
-    "subdomains": 16,
+    "subdomains": 4,
     "decomposition_method": "scotch"
+  },
+
+  "visualization": {
+    "_comment": "Post-processing visualization settings",
+    "fields": ["U", "p", "wallShearStress", "TAWSS", "OSI", "RRT"],
+    "time_steps": "last",
+    "_time_steps_comment": "Options: 'last', 'all', 'peak', or list like [1.0, 1.5, 2.0]",
+    "color_ranges": {
+      "WSS": [0, 50],
+      "TAWSS": [0, 50],
+      "OSI": [0, 0.5],
+      "RRT": [0, 10],
+      "_comment": "Adjust ranges based on expected hemodynamic values"
+    }
   }
 }
