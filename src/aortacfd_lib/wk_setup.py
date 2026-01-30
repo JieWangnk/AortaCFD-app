@@ -5,7 +5,11 @@ import numpy as np
 
 from .utils.patch_processing import PatchProcessing
 from .utils.logger import Logger
-from .constants import MMHG_TO_PA, ML_TO_M3
+from .constants import (
+    MMHG_TO_PA, ML_TO_M3,
+    TAU_RC_DEFAULT, TAU_RC_MIN, TAU_RC_MAX,
+    MURRAY_LAW_EXPONENT, VENOUS_PRESSURE_DEFAULT,
+)
 
 class WkSetup:
     """
@@ -120,10 +124,13 @@ class WkSetup:
             use_2element = True
         elif inlet_type in ['CONSTANT', 'PARABOLIC'] and outlet_type == '3EWINDKESSEL' and auto_select:
             use_2element = True
-            self.log.info("CONSTANT inlet detected: Auto-selecting 2-element Windkessel (Z=0)")
-            self.log.info("  Reason: Characteristic impedance (Z) models wave propagation,")
-            self.log.info("          which is not physically relevant for steady-state flow.")
-            self.log.info("  To force 3-element, set 'auto_select_model': false in windkessel_settings")
+            self.log.warning(
+                "CONSTANT/PARABOLIC inlet detected: Auto-selecting 2-element Windkessel (Z=0). "
+                "Characteristic impedance (Z) models wave propagation, which is less relevant "
+                "for steady-state flow. Note: This is an approximation — reflected waves and "
+                "impedance mismatch can still affect outlet pressure even with constant inlet. "
+                "To force 3-element model, set 'auto_select_model': false in windkessel_settings."
+            )
         else:
             use_2element = False
 
@@ -193,9 +200,16 @@ class WkSetup:
         # Step 1: Calculate MAP from cuff pressures
         SP = self.wk_model_settings.get("systolic_pressure", 120)  # mmHg
         DP = self.wk_model_settings.get("diastolic_pressure", 80)  # mmHg
-        # Venous pressure: 0 mmHg = gauge pressure reference (typical CFD convention)
-        # Physiological venous pressure is ~5 mmHg, but 0 provides numerical stability
-        P_venous = self.wk_model_settings.get("venous_pressure", 0)  # mmHg (0-5 typical)
+        # Venous pressure: physiological default is 5 mmHg (central venous pressure).
+        # Historical CFD convention used 0 mmHg for numerical stability.
+        # Trade-off: P_venous=0 gives slightly higher R_total (conservative),
+        # while P_venous=5 is physiologically correct but reduces driving pressure gradient.
+        P_venous = self.wk_model_settings.get("venous_pressure", VENOUS_PRESSURE_DEFAULT)
+        if P_venous < 0 or P_venous > 10:
+            self.log.warning(
+                f"Venous pressure P_v={P_venous:.1f} mmHg outside typical range [0, 10] mmHg. "
+                f"Normal central venous pressure: 2-8 mmHg. Default: {VENOUS_PRESSURE_DEFAULT} mmHg."
+            )
 
         # Physiological MAP formula: MAP = DP + (SP-DP)/3 = (2*DP + SP)/3
         # Accounts for diastole being ~2/3 of cardiac cycle
@@ -290,7 +304,15 @@ class WkSetup:
             pwv_method = self.wk_model_settings.get('pwv_method', 'matlab')  # Default to MATLAB formula
             pwv_value = self.wk_model_settings.get('pwv', None)  # m/s, if specified
 
-            # MATLAB PWV formula parameters
+            # PWV Methods:
+            #   'matlab': c = a / (2*sqrt(A/pi))^b  (default a=13.3, b=0.3)
+            #       Ref: Olufsen MS. Structured tree outflow condition for blood flow
+            #       in larger systemic arteries. Am J Physiol. 1999;276(1):H257-H268.
+            #   'empirical': Diameter-based tiers (5/6/7 m/s for large/medium/small)
+            #       Limitation: Coarse approximation; ignores age, stiffness, pathology.
+            #   'physiological': Moens-Korteweg equation c = sqrt(E*h / (2*rho*R))
+            #       Ref: Moens AI (1878), Korteweg DJ (1878).
+            #       Requires wall_elastic_modulus (Pa) and wall_thickness (m).
             pwv_a = self.wk_model_settings.get('pwv_a', 13.3)
             pwv_b = self.wk_model_settings.get('pwv_b', 0.3)
 
@@ -304,13 +326,15 @@ class WkSetup:
                     c_i = pwv_value
                     method = "user-specified"
                 elif pwv_method == 'matlab':
-                    # MATLAB formula: c = a / (2*sqrt(A_mm²/π))^b
+                    # Olufsen (1999) empirical formula: c = a / (2*sqrt(A_mm²/π))^b
+                    # Limitation: Empirical fit to structured tree data; may not generalize
+                    # to pathological vessels (coarctation, aneurysm, calcification).
                     c_i = pwv_a / (2 * np.sqrt(A_mm2 / np.pi)) ** pwv_b
-                    method = f"MATLAB formula: {pwv_a}/(2√(A/π))^{pwv_b}"
+                    method = f"Olufsen formula: {pwv_a}/(2√(A/π))^{pwv_b}"
                 elif pwv_method == 'empirical':
-                    # Empirical PWV from diameter (typical aortic values)
-                    # Arch: 4-6 m/s, Thoracic: 5-7 m/s, Abdominal: 6-8 m/s
-                    # Use simple formula based on area
+                    # Diameter-based tiers (typical healthy adult aortic values)
+                    # Limitation: Coarse 3-tier approximation; ignores vessel wall
+                    # properties, patient age, and pathology (stiffening, stenosis).
                     diameter_mm = 2 * outlet_radii[outlet] * 1000
                     if diameter_mm > 15:
                         c_i = 5.0  # Large vessels (arch/thoracic)
@@ -319,6 +343,16 @@ class WkSetup:
                     else:
                         c_i = 7.0  # Smaller vessels (branches)
                     method = "empirical"
+                elif pwv_method == 'physiological':
+                    # Moens-Korteweg equation: c = sqrt(E * h / (2 * rho * R))
+                    # More physically grounded but requires vessel wall properties.
+                    # Limitation: Assumes thin-walled elastic tube; does not account
+                    # for viscoelasticity or non-uniform wall thickness.
+                    E_wall = self.wk_model_settings.get('wall_elastic_modulus', 500e3)  # Pa (default: 500 kPa, typical aorta)
+                    h_wall = self.wk_model_settings.get('wall_thickness', 0.002)  # m (default: 2mm)
+                    R_i_radius = outlet_radii[outlet]
+                    c_i = np.sqrt(E_wall * h_wall / (2.0 * rho * R_i_radius))
+                    method = f"Moens-Korteweg: E={E_wall/1e3:.0f}kPa, h={h_wall*1e3:.1f}mm"
                 else:
                     # Fallback: use fraction of R_total
                     R1[i] = 0.15 * R_total[i]
@@ -350,7 +384,15 @@ class WkSetup:
         else:
             self.log.info(f"\nStep 6: Compliance C = tau / R2 (3-element formula)")
 
-        tau_systemic = self.wk_model_settings.get('tau', 1.92)  # seconds, MATLAB default: 1.92
+        # RC time constant: controls diastolic pressure decay rate.
+        # Physiological default from constants.py. Historical MATLAB default was 1.92s.
+        # For pediatric patients, tau is typically shorter (0.5-1.0s) due to higher heart rate.
+        tau_systemic = self.wk_model_settings.get('tau', TAU_RC_DEFAULT)
+        if tau_systemic < TAU_RC_MIN or tau_systemic > TAU_RC_MAX:
+            self.log.warning(
+                f"RC time constant tau={tau_systemic:.2f}s outside physiological range "
+                f"[{TAU_RC_MIN}, {TAU_RC_MAX}]s. Typical adult: 1.0-2.0s, pediatric: 0.5-1.0s."
+            )
         C_distribution = self.wk_model_settings.get('compliance_distribution', 'uniform')  # MATLAB uses uniform
 
         C = np.zeros(num_outlets)
@@ -485,7 +527,10 @@ class WkSetup:
 
     def _calculate_murray_flow_split(self, outlet_radii: dict) -> dict:
         """
-        Calculate flow split using Murray's law: f_i = r³ / Σr³
+        Calculate flow split using Murray's law: f_i = r^n / Σr^n
+
+        The exponent n=3.0 corresponds to classical Murray's law for laminar flow.
+        For pulsatile arterial flow, n=2.6 is more appropriate (MURRAY_LAW_EXPONENT).
 
         Args:
             outlet_radii: Dictionary of outlet names to radii (m)
@@ -493,12 +538,12 @@ class WkSetup:
         Returns:
             Dictionary of flow split ratios (sum to 1.0)
         """
-        r_cubed = {name: r**3 for name, r in outlet_radii.items()}
-        total_r_cubed = sum(r_cubed.values())
+        r_powered = {name: r**MURRAY_LAW_EXPONENT for name, r in outlet_radii.items()}
+        total_r_powered = sum(r_powered.values())
 
-        flow_split = {name: r3 / total_r_cubed for name, r3 in r_cubed.items()}
+        flow_split = {name: rp / total_r_powered for name, rp in r_powered.items()}
 
-        self.log.info(f"  Murray's law (r³) distribution:")
+        self.log.info(f"  Murray's law (r^{MURRAY_LAW_EXPONENT}) distribution:")
         for name, ratio in flow_split.items():
             r_mm = outlet_radii[name] * 1000
             self.log.info(f"    {name}: r={r_mm:.2f} mm → {ratio*100:.1f}%")
@@ -594,11 +639,11 @@ class WkSetup:
 
                     # Calculate Murray distribution for remaining outlets only
                     remaining_radii = {name: outlet_radii[name] for name in remaining_outlets}
-                    r_cubed = {name: r**3 for name, r in remaining_radii.items()}
-                    total_r_cubed = sum(r_cubed.values())
+                    r_powered = {name: r**MURRAY_LAW_EXPONENT for name, r in remaining_radii.items()}
+                    total_r_powered = sum(r_powered.values())
 
                     for outlet in remaining_outlets:
-                        murray_fraction = r_cubed[outlet] / total_r_cubed
+                        murray_fraction = r_powered[outlet] / total_r_powered
                         result[outlet] = murray_fraction * (remaining_pct / 100.0)
                         r_mm = outlet_radii[outlet] * 1000
                         self.log.info(f"    {outlet}: r={r_mm:.2f}mm → {result[outlet]*100:.1f}%")
@@ -700,14 +745,14 @@ class WkSetup:
                 A_mm2 = branch_areas[name] * 1e6
                 self.log.info(f"    {name}: A={A_mm2:.2f}mm² → {flow_split_ratios[name]*100:.1f}%")
         else:
-            # Murray's law (r³) distribution among branches
-            r_cubed = {name: r**3 for name, r in branch_data.items()}
-            total_r_cubed = sum(r_cubed.values())
+            # Murray's law (r^n) distribution among branches
+            r_powered = {name: r**MURRAY_LAW_EXPONENT for name, r in branch_data.items()}
+            total_r_powered = sum(r_powered.values())
 
-            self.log.info(f"  Branch distribution by Murray's law (r³):")
+            self.log.info(f"  Branch distribution by Murray's law (r^{MURRAY_LAW_EXPONENT}):")
             for name in branch_outlets:
                 # Fraction within branches group
-                branch_fraction = r_cubed[name] / total_r_cubed
+                branch_fraction = r_powered[name] / total_r_powered
                 # Scale to overall branches allocation
                 flow_split_ratios[name] = branch_fraction * branches_fraction
                 r_mm = geometry_data[name] * 1000

@@ -40,6 +40,7 @@ class TestHemodynamicsResults:
         assert results.wss_max == 0.0
         assert results.wss_mean == 0.0
         assert results.tawss_max == 0.0
+        assert results.tawss_is_approximate == False
         assert results.osi_max == 0.0
         assert results.rrt_max == 0.0
         assert results.pressure_drops == {}
@@ -78,6 +79,18 @@ class TestHemodynamicsResults:
         assert results.osi_mean == 0.15
         assert results.rrt_max == 5.0
         assert results.rrt_mean == 1.2
+
+    def test_tawss_approximate_flag(self):
+        """Test tawss_is_approximate flag behavior."""
+        results = HemodynamicsResults()
+        assert results.tawss_is_approximate == False
+
+        results.tawss_is_approximate = True
+        assert results.tawss_is_approximate == True
+
+        # Can be initialized directly
+        results2 = HemodynamicsResults(tawss_is_approximate=True)
+        assert results2.tawss_is_approximate == True
 
     def test_pressure_drop_storage(self):
         """Test pressure drop results storage."""

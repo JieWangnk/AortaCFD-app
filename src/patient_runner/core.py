@@ -46,19 +46,21 @@ class PatientCaseRunner:
         self.cases_dir = Path('cases_input')
         self.output_dir = Path('output')
         
-    def run_patient_case(self, patient_id: str, options: Optional[Dict[str, Any]] = None) -> str:
+    def run_patient_case(self, patient_id: str, options: Optional[Dict[str, Any]] = None,
+                         output_id: Optional[str] = None) -> str:
         """
         Run CFD analysis for a patient case.
-        
+
         Args:
             patient_id: Patient identifier (e.g., 'patient1', 'patient2')
             options: Optional overrides including workflow_step
-        
+            output_id: Optional output directory name (defaults to patient_id)
+
         Returns:
             Path to results directory
         """
         # Validate and load patient case
-        case_info = self.load_patient_case(patient_id)
+        case_info = self.load_patient_case(patient_id, output_id=output_id)
         
         # Prepare simulation configuration  
         sim_config = self.prepare_simulation(case_info, options)
@@ -75,12 +77,16 @@ class PatientCaseRunner:
         
         return results_path
     
-    def load_patient_case(self, patient_id: str, config_path: Optional[str] = None) -> Dict[str, Any]:
+    def load_patient_case(self, patient_id: str, config_path: Optional[str] = None,
+                          output_id: Optional[str] = None) -> Dict[str, Any]:
         """Load and validate patient case.
 
         Args:
-            patient_id: Directory name under cases_input.
+            patient_id: Directory name under cases_input/ (used for STL/config discovery).
             config_path: Optional override path to a configuration JSON.
+            output_id: Optional output directory name (defaults to patient_id).
+                        Use this when running the same patient with different configs,
+                        e.g. output_id='PAT002_mesh10' while patient_id='PAT002'.
         """
         if not self._is_valid_patient_id(patient_id):
             raise PatientValidationError(f"Invalid patient ID format: {patient_id}")
@@ -187,6 +193,7 @@ class PatientCaseRunner:
         
         return {
             'patient_id': patient_id,
+            'output_id': output_id or patient_id,
             'patient_dir': patient_dir,
             'config': config,
             'config_file': str(config_file.resolve()),
@@ -228,7 +235,8 @@ class PatientCaseRunner:
             Simulation configuration dictionary with same structure as old system
         """
         config = case_info['config'].copy()
-        patient_output_dir = self.output_dir / case_info['patient_id']
+        # Use output_id for output directory (may differ from patient_id for multi-config runs)
+        patient_output_dir = self.output_dir / case_info['output_id']
         patient_output_dir.mkdir(parents=True, exist_ok=True)
 
         # Determine run directory
@@ -490,7 +498,7 @@ class PatientCaseRunner:
     def generate_results_summary(self, case_info: Dict[str, Any], sim_config: Dict[str, Any]) -> str:
         """Generate results summary and organization."""
         run_dir = sim_config['run_dir']
-        patient_id = case_info['patient_id']
+        output_id = case_info.get('output_id', case_info['patient_id'])
 
         # Create basic results structure
         results_dir = run_dir / "results"
@@ -501,7 +509,8 @@ class PatientCaseRunner:
 
         # Create basic summary file
         summary = {
-            'patient_id': patient_id,
+            'patient_id': case_info['patient_id'],
+            'output_id': output_id,
             'run_directory': str(run_dir),
             'analysis_completed': datetime.now().isoformat()
         }

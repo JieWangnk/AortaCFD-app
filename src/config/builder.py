@@ -60,6 +60,7 @@ class ConfigBuilder:
 
         # Validate physical parameters
         self._validate_physical_parameters(final_config)
+        self._validate_windkessel_parameters(final_config)
 
         # Schema validation (if pydantic available)
         if is_pydantic_available():
@@ -137,6 +138,7 @@ class ConfigBuilder:
 
         # Validate physical parameters
         self._validate_physical_parameters(final_config)
+        self._validate_windkessel_parameters(final_config)
 
         # Schema validation (if pydantic available)
         if is_pydantic_available():
@@ -441,6 +443,77 @@ class ConfigBuilder:
                 self.logger.warning(
                     f"⚠️  simulation_control.end_time must be positive, got: {end_time}"
                 )
+
+    def _validate_windkessel_parameters(self, config: dict) -> None:
+        """
+        Validate Windkessel model parameters are within physiological ranges.
+        Issues warnings (non-blocking) to avoid breaking existing workflows.
+        """
+        outlets = config.get('boundary_conditions', {}).get('outlets', {})
+        wk_settings = outlets.get('windkessel_settings', {})
+        if not wk_settings:
+            return
+
+        # Tau (RC time constant)
+        tau = wk_settings.get('tau')
+        if tau is not None and not (0.5 <= tau <= 3.0):
+            self.logger.warning(
+                f"Windkessel tau={tau:.2f}s outside physiological range [0.5, 3.0]s. "
+                f"Typical adult: 1.0-2.0s, pediatric: 0.5-1.0s."
+            )
+
+        # Stabilization parameters
+        for key in ['betaT', 'betaN']:
+            val = wk_settings.get(key)
+            if val is not None and not (0 <= val <= 1):
+                self.logger.warning(f"Windkessel {key}={val} outside valid range [0, 1].")
+
+        # Venous pressure
+        p_v = wk_settings.get('venous_pressure')
+        if p_v is not None and not (0 <= p_v <= 10):
+            self.logger.warning(
+                f"Venous pressure {p_v} mmHg outside typical range [0, 10] mmHg."
+            )
+
+        # Pressure consistency
+        sp = wk_settings.get('systolic_pressure')
+        dp = wk_settings.get('diastolic_pressure')
+        if sp is not None and dp is not None:
+            if sp <= dp:
+                self.logger.warning(
+                    f"Systolic pressure ({sp} mmHg) must exceed diastolic ({dp} mmHg)."
+                )
+            pulse = sp - dp
+            if not (20 <= pulse <= 80):
+                self.logger.warning(
+                    f"Pulse pressure ({pulse:.0f} mmHg) outside typical range [20, 80] mmHg."
+                )
+
+        # Murray's law exponent
+        murray_exp = wk_settings.get('murray_exponent')
+        if murray_exp is not None and not (2.0 <= murray_exp <= 3.5):
+            self.logger.warning(
+                f"Murray's law exponent {murray_exp} outside range [2.0, 3.5]."
+            )
+
+        # Pulse wave velocity
+        pwv = wk_settings.get('pwv')
+        if pwv is not None and not (2.0 <= pwv <= 15.0):
+            self.logger.warning(
+                f"Pulse wave velocity {pwv} m/s outside typical range [2.0, 15.0] m/s."
+            )
+
+        # Flow split sum
+        flow_split = wk_settings.get('flow_split')
+        if flow_split and isinstance(flow_split, dict):
+            numeric_vals = [v for v in flow_split.values() if isinstance(v, (int, float))]
+            if numeric_vals:
+                total = sum(numeric_vals)
+                # Check if values look like ratios (sum near 1.0)
+                if all(v <= 1.0 for v in numeric_vals) and abs(total - 1.0) > 0.05:
+                    self.logger.warning(
+                        f"Flow split fractions sum to {total:.3f}, expected ~1.0."
+                    )
 
     def _apply_mesh_quality_preset(self, config: dict) -> dict:
         """

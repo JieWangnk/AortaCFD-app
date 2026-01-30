@@ -18,6 +18,7 @@
 - [Usage](#usage)
   - [Basic Commands](#basic-commands)
   - [Workflow Steps](#workflow-steps)
+  - [Batch Execution](#batch-execution)
   - [Configuration](#configuration)
 - [Numerics Profiles](#numerics-profiles)
 - [Boundary Conditions](#boundary-conditions)
@@ -105,9 +106,12 @@ output/<patient_id>/           # Results
 
 ### Workflow & Execution
 - **Modular Architecture** - Task-based workflow system with step-by-step control
+- **Batch Execution** - Parallel multi-case runner (`run_batch.py`) with multiprocessing support
+- **Multi-Config Support** - Run same patient with different settings (mesh convergence studies)
 - **Parallel Execution** - Multi-core meshing and solver with smart processor allocation
 - **Resume Support** - Continue from existing runs with `--resume` flag
 - **Flexible Steps** - Run individual workflow steps (case/mesh/boundary/solver/reconstruct/post)
+- **HPC Integration** - SLURM job array script generation
 - **OpenFOAM 12 Native** - Uses `foamRun -solver incompressibleFluid`
 
 ### Analysis & Visualization
@@ -285,6 +289,122 @@ python run_patient.py BPM120 --quick --step case --step mesh
 python run_patient.py BPM120 --steps case,mesh,boundary
 # Equivalent to: --step case --step mesh --step boundary
 ```
+
+### Batch Execution
+
+AortaCFD includes `run_batch.py` for parallel execution of multiple cases or configuration variants using `multiprocessing`.
+
+**Use Cases:**
+- Run multiple patients in parallel
+- Compare mesh resolutions (same patient, different `cells_per_diameter`)
+- Parameter studies (e.g., varying Windkessel parameters)
+- HPC job array generation
+
+#### Basic Batch Execution
+
+```bash
+# Run multiple patients in parallel (2 workers)
+python run_batch.py --cases PAT002 BPM120 0014_H_AO_COA -w 2
+
+# Discover and run all valid cases in cases_input/
+python run_batch.py --discover -w 4
+
+# Run specific workflow step
+python run_batch.py --cases PAT002 BPM120 -s mesh -w 2
+
+# Dry run (see what would execute)
+python run_batch.py --cases PAT002 BPM120 --dry-run
+```
+
+#### Multi-Config Runs (Same Patient, Different Settings)
+
+For mesh convergence studies or parameter exploration, run the same patient with multiple config files:
+
+```bash
+# Create config variants
+# cases_input/PAT002/config.json         (original)
+# cases_input/PAT002/config_mesh10.json  (cells_per_diameter: 10)
+# cases_input/PAT002/config_mesh12.json  (cells_per_diameter: 12)
+# cases_input/PAT002/config_mesh14.json  (cells_per_diameter: 14)
+
+# Run all variants in parallel
+python run_batch.py --config-list \
+  PAT002:config_mesh10.json \
+  PAT002:config_mesh12.json \
+  PAT002:config_mesh14.json \
+  -w 2
+```
+
+**Output organization:**
+```
+output/
+├── PAT002_mesh10/run_20260130_150505/    # 10 cells/diameter
+├── PAT002_mesh12/run_20260130_150505/    # 12 cells/diameter
+└── PAT002_mesh14/run_20260130_150506/    # 14 cells/diameter
+```
+
+Each variant gets a separate output directory (e.g., `PAT002_mesh10`) to prevent collision.
+
+#### SLURM Job Array Generation
+
+For HPC clusters with SLURM, generate a job array script:
+
+```bash
+# Generate SLURM script (doesn't execute locally)
+python run_batch.py --cases PAT002 BPM120 -s all --slurm
+
+# Creates: batch_job_array.sh
+# Submit to SLURM: sbatch batch_job_array.sh
+```
+
+The generated script uses `--array=0-N` to parallelize across nodes.
+
+#### Multi-Step Workflows
+
+Run multiple workflow steps sequentially per case:
+
+```bash
+# Run setup + mesh + boundary in sequence
+python run_batch.py --cases PAT002 -s case,mesh,boundary -w 1
+```
+
+#### Batch Options
+
+| Flag | Description | Example |
+|------|-------------|---------|
+| `--cases` | List of patient IDs | `--cases PAT002 BPM120` |
+| `--config-list` | Patient:config pairs | `--config-list PAT002:config_mesh10.json` |
+| `--discover` | Auto-discover valid cases | `--discover` |
+| `-w, --workers` | Parallel workers (default: 1) | `-w 4` |
+| `-s, --steps` | Workflow steps (comma-separated) | `-s case,mesh,boundary` |
+| `--slurm` | Generate SLURM job array script | `--slurm` |
+| `--dry-run` | Show plan without execution | `--dry-run` |
+
+#### Batch Summary
+
+After execution, view the summary:
+
+```bash
+cat output/batch_summary.json
+```
+
+```json
+{
+  "total": 3,
+  "succeeded": 3,
+  "failed": 0,
+  "results": [
+    {
+      "case_id": "PAT002_mesh10",
+      "status": "success",
+      "runtime": 0.8,
+      "output": "output/PAT002_mesh10/run_20260130_150505"
+    }
+  ]
+}
+```
+
+Individual logs are saved per case: `output/<case_id>/batch_<case_id>.log`
 
 ### Configuration
 
@@ -884,7 +1004,8 @@ AortaCFD-app/
 │   └── config_full.json      # Complete reference
 ├── docs/                     # Documentation
 ├── scripts/                  # Utility scripts
-├── run_patient.py            # Main entry point
+├── run_patient.py            # Single case runner (main entry point)
+├── run_batch.py              # Batch/parallel multi-case runner
 ├── README.md                 # This file
 └── requirements.txt          # Python dependencies
 ```

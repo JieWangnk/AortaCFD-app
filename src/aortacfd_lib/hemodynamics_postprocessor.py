@@ -57,6 +57,11 @@ class HemodynamicsResults:
     rrt_max: float = 0.0
     rrt_mean: float = 0.0
 
+    # Flag: True if TAWSS was computed as |<tau>| (magnitude of mean) rather
+    # than proper <|tau|> (mean of magnitudes). The approximation can introduce
+    # 5-20% error in regions with oscillatory flow.
+    tawss_is_approximate: bool = False
+
     # Per-cycle TAWSS (for convergence checking)
     per_cycle_tawss: List[float] = field(default_factory=list)
 
@@ -296,15 +301,20 @@ class HemodynamicsPostProcessor:
             if wss_mean_vec is None:
                 return
 
-            # TAWSS = magnitude of time-averaged WSS vector
-            # Note: OpenFOAM's fieldAverage computes mean of the vector components
-            # For proper TAWSS, we need mean of magnitudes, not magnitude of means
-            # This is an approximation if we only have the mean field
-            # Multiply by density to convert from kinematic (m²/s²) to dynamic (Pa)
+            # |<tau>| = magnitude of time-averaged WSS vector (approximate TAWSS).
+            # Proper TAWSS = <|tau|> = mean of magnitudes. These differ for oscillatory flow.
+            # Multiply by density to convert from kinematic (m²/s²) to dynamic (Pa).
             tawss = np.linalg.norm(wss_mean_vec, axis=1) * BLOOD_DENSITY_DEFAULT
 
             results.tawss_max = float(np.max(tawss))
             results.tawss_mean = float(np.mean(tawss))
+            results.tawss_is_approximate = True
+            self.log.warning(
+                "TAWSS computed as |<tau>| (magnitude of time-averaged WSS vector). "
+                "Proper TAWSS = <|tau|> (mean of magnitudes) requires individual "
+                "wallShearStress fields at each time step. Approximation error can "
+                "be 5-20%% in regions with oscillatory flow."
+            )
 
             # For OSI, we need the time-averaged magnitude as well
             # OSI = 0.5 * (1 - |mean(WSS)| / TAWSS_proper)
@@ -329,7 +339,15 @@ class HemodynamicsPostProcessor:
                 osi = np.zeros_like(tawss_proper)
                 nonzero = tawss_proper > 1e-10
                 osi[nonzero] = 0.5 * (1.0 - tawss[nonzero] / tawss_proper[nonzero])
-                osi = np.clip(osi, 0, 0.5)  # OSI is bounded [0, 0.5]
+                # OSI is theoretically bounded [0, 0.5]; values outside indicate numerical issues
+                clipped_count = int(np.sum((osi < 0) | (osi > 0.5)))
+                osi = np.clip(osi, 0, 0.5)
+                if clipped_count > 0:
+                    total_cells = len(osi)
+                    self.log.warning(
+                        f"OSI clipped to [0, 0.5] for {clipped_count}/{total_cells} cells "
+                        f"({100*clipped_count/total_cells:.1f}%). This may indicate numerical artifacts."
+                    )
 
                 results.osi_max = float(np.max(osi))
                 results.osi_mean = float(np.mean(osi))
@@ -344,9 +362,42 @@ class HemodynamicsPostProcessor:
                 results.rrt_max = float(np.max(rrt[valid])) if np.any(valid) else 0.0
                 results.rrt_mean = float(np.mean(rrt[valid])) if np.any(valid) else 0.0
 
-                # Update TAWSS with proper calculation
+                # Update TAWSS with proper calculation (overrides approximate)
                 results.tawss_max = float(np.max(tawss_proper))
                 results.tawss_mean = float(np.mean(tawss_proper))
+                results.tawss_is_approximate = False
+
+                # Per-cycle TAWSS convergence check
+                if len(wss_mags) > 1 and self.cardiac_cycle > 0:
+                    cycle_groups = {}
+                    wss_dir_indices = []
+                    idx = 0
+                    for d in valid_dirs:
+                        wss_file = d / 'wallShearStress'
+                        if wss_file.exists():
+                            t = float(d.name)
+                            cycle_idx = int((t - skip_time) / self.cardiac_cycle)
+                            cycle_groups.setdefault(cycle_idx, []).append(idx)
+                            idx += 1
+
+                    cycle_tawss_values = []
+                    for cycle_idx in sorted(cycle_groups.keys()):
+                        indices = cycle_groups[cycle_idx]
+                        cycle_mags = [wss_mags[i] for i in indices if i < len(wss_mags)]
+                        if cycle_mags:
+                            cycle_tawss = float(np.mean([np.mean(m) for m in cycle_mags]))
+                            cycle_tawss_values.append(cycle_tawss)
+
+                    results.per_cycle_tawss = cycle_tawss_values
+                    if len(cycle_tawss_values) >= 2:
+                        mean_val = np.mean(cycle_tawss_values)
+                        cv = np.std(cycle_tawss_values) / mean_val if mean_val > 0 else 0
+                        self.log.info(f"TAWSS convergence: {len(cycle_tawss_values)} cycles, CV={cv:.4f}")
+                        if cv > 0.05:
+                            self.log.warning(
+                                f"TAWSS inter-cycle CV ({cv:.3f}) exceeds 5%. "
+                                "Results may not be fully converged. Consider running more cycles."
+                            )
 
             self.log.info(f"TAWSS: max={results.tawss_max:.4f}, mean={results.tawss_mean:.4f} Pa")
             self.log.info(f"OSI: max={results.osi_max:.4f}, mean={results.osi_mean:.4f}")
@@ -497,7 +548,10 @@ boundaryField
                 if results.pressure_inlet > 0:
                     dp = results.pressure_inlet - results.pressure_outlets[outlet]
                     results.pressure_drops[outlet] = dp
-                    results.pressure_drop_mmhg[outlet] = dp * PA_TO_MMHG * BLOOD_DENSITY_DEFAULT
+                    # Conversion: OpenFOAM kinematic pressure (p/rho, m²/s²)
+                    #   × BLOOD_DENSITY_DEFAULT → dynamic pressure (Pa)
+                    #   × PA_TO_MMHG → clinical units (mmHg)
+                    results.pressure_drop_mmhg[outlet] = dp * BLOOD_DENSITY_DEFAULT * PA_TO_MMHG
 
         if results.pressure_drops:
             self.log.info("Pressure drops (inlet → outlet):")
@@ -731,12 +785,14 @@ boundaryField
             f.write("PRESSURE DROP (Inlet → Outlets)\n")
             f.write("-" * 70 + "\n")
             if results.pressure_drops:
-                f.write(f"  Inlet pressure: {results.pressure_inlet * PA_TO_MMHG * BLOOD_DENSITY_DEFAULT:.2f} mmHg\n")
+                # Convert kinematic pressure (m²/s²) → Pa → mmHg
+                f.write(f"  Inlet pressure: {results.pressure_inlet * BLOOD_DENSITY_DEFAULT * PA_TO_MMHG:.2f} mmHg\n")
                 f.write("\n")
                 for outlet in self.outlet_patches:
                     if outlet in results.pressure_drop_mmhg:
                         dp = results.pressure_drop_mmhg[outlet]
-                        p_out = results.pressure_outlets.get(outlet, 0) * PA_TO_MMHG * BLOOD_DENSITY_DEFAULT
+                        # Convert kinematic pressure (m²/s²) → Pa → mmHg
+                        p_out = results.pressure_outlets.get(outlet, 0) * BLOOD_DENSITY_DEFAULT * PA_TO_MMHG
                         f.write(f"  → {outlet}:\n")
                         f.write(f"      Outlet pressure: {p_out:.2f} mmHg\n")
                         f.write(f"      Pressure drop:   {dp:.2f} mmHg\n")

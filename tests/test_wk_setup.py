@@ -83,13 +83,14 @@ class TestMurrayFlowSplit:
 
         flow_split = self.wk._calculate_murray_flow_split(outlet_radii)
 
-        # Larger vessels should get more flow (r³ relationship)
+        # Larger vessels should get more flow (r^n relationship)
         assert flow_split['outlet1'] > flow_split['outlet2'] > flow_split['outlet3']
 
-        # Check actual Murray's law: f_i = r³ / Σr³
-        r_cubed_sum = sum(r**3 for r in outlet_radii.values())
+        # Check actual Murray's law: f_i = r^n / Σr^n (n=MURRAY_LAW_EXPONENT)
+        from src.aortacfd_lib.constants import MURRAY_LAW_EXPONENT
+        r_powered_sum = sum(r**MURRAY_LAW_EXPONENT for r in outlet_radii.values())
         for name, radius in outlet_radii.items():
-            expected = radius**3 / r_cubed_sum
+            expected = radius**MURRAY_LAW_EXPONENT / r_powered_sum
             assert flow_split[name] == pytest.approx(expected, rel=1e-6)
 
         # Should sum to 1.0
@@ -104,7 +105,8 @@ class TestMurrayFlowSplit:
         assert flow_split['outlet1'] == pytest.approx(1.0, rel=1e-9)
 
     def test_murray_two_outlets_double_radius(self):
-        """Test that doubling radius increases flow by 8x (2³=8)."""
+        """Test that doubling radius increases flow by 2^n (n=MURRAY_LAW_EXPONENT)."""
+        from src.aortacfd_lib.constants import MURRAY_LAW_EXPONENT
         outlet_radii = {
             'small': 0.005,   # 5mm
             'large': 0.010    # 10mm (2x diameter)
@@ -112,9 +114,10 @@ class TestMurrayFlowSplit:
 
         flow_split = self.wk._calculate_murray_flow_split(outlet_radii)
 
-        # Large outlet should get 8/(8+1) = 8/9 ≈ 0.889
-        expected_large = 8.0 / 9.0
-        expected_small = 1.0 / 9.0
+        # Large outlet: (2^n) / (2^n + 1), where n = MURRAY_LAW_EXPONENT
+        ratio = 2.0 ** MURRAY_LAW_EXPONENT
+        expected_large = ratio / (ratio + 1.0)
+        expected_small = 1.0 / (ratio + 1.0)
 
         assert flow_split['large'] == pytest.approx(expected_large, rel=1e-4)
         assert flow_split['small'] == pytest.approx(expected_small, rel=1e-4)
@@ -495,8 +498,9 @@ class TestEdgeCases:
         }
 
         # Should not crash and should give valid ratios
-        r_cubed_sum = sum(r**3 for r in outlet_radii.values())
-        ratio_tiny = outlet_radii['tiny']**3 / r_cubed_sum
+        from src.aortacfd_lib.constants import MURRAY_LAW_EXPONENT
+        r_powered_sum = sum(r**MURRAY_LAW_EXPONENT for r in outlet_radii.values())
+        ratio_tiny = outlet_radii['tiny']**MURRAY_LAW_EXPONENT / r_powered_sum
 
         assert 0 < ratio_tiny < 0.001  # Very small but non-zero
 
