@@ -71,7 +71,8 @@
 
     "SNAPPY_SETTINGS": {
       "parallel": true,
-      "nProcessors": 12,
+      "nProcessors": 8,
+      "_nProcessors_comment": "8 cores for local meshing, solver will use 40 on HPC",
       "surfaceRefinementLevels": [1, 2],
       "featureLevel": 2
     }
