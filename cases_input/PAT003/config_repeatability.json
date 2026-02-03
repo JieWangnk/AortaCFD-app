@@ -1,0 +1,167 @@
+{
+  "_purpose": "REPEATABILITY DEMONSTRATION - Consistent medium-mesh RANS workflow",
+  "_framing": [
+    "This configuration demonstrates automated workflow reproducibility.",
+    "NOT a validated accuracy study - that requires case-specific verification.",
+    "Consistent settings across multi-patient demonstration (0014, PAT002, PAT003):",
+    "  • RANS k-omega SST (transitional flow, computationally efficient)",
+    "  • Standard numerical profile (backward + limitedLinearV, 2nd-order bounded)",
+    "  • Medium mesh ~1.5-2M cells (14 cells/diameter target)",
+    "  • 10 boundary layers (y+ ~15-30 for RANS wall functions)",
+    "  • 3 full cardiac cycles (periodic stability demonstration)",
+    "  • Backflow stabilization: betaT=0.3 (minimal dissipation, robust convergence)",
+    "  • Post-processing: TAWSS, OSI, RRT fields for hemodynamic comparison"
+  ],
+
+  "_physiology": [
+    "1-year-old infant (~10 kg body weight)",
+    "Heart rate: 120 bpm → cardiac cycle T = 0.5s",
+    "Cardiac output: ~1.0 L/min (100 ml/min/kg)",
+    "Blood pressure: 80/50 mmHg (normal for infants)"
+  ],
+
+  "case_info": {
+    "patient_id": "PAT003",
+    "description": "1-year-old infant - repeatability demonstration"
+  },
+
+  "physics": {
+    "model": "rans_komegasst",
+    "_physics_comment": "RANS k-omega SST for transitional aortic flows (Re~2000-5000)",
+    "transport_properties": {
+      "rho": 1060,
+      "nu": 3.7736e-6,
+      "_comment": "Standard blood properties"
+    }
+  },
+
+  "numerics": {
+    "profile": "standard",
+    "_profile_comment": "Standard profile: backward (2nd-order temporal) + limitedLinearV (TVD spatial), balanced cost-accuracy",
+    "max_co": 1.0,
+    "_max_co_comment": "Standard Courant number for backward scheme",
+
+    "correctors": {
+      "nOuterCorrectors": 10,
+      "nCorrectors": 3,
+      "nNonOrthogonalCorrectors": 2,
+      "_comment": "Sufficient for RANS with Windkessel coupling"
+    },
+
+    "relaxation_factors": {
+      "p": 0.3,
+      "U": 0.7,
+      "_comment": "Standard RANS relaxation factors"
+    }
+  },
+
+  "mesh": {
+    "cells_per_diameter": 14,
+    "_mesh_comment": "Target ~1.5-2M cells - verified medium-mesh resolution from BPM120 study",
+
+    "boundary_layers": {
+      "enabled": true,
+      "num_layers": 10,
+      "_num_layers_comment": "10 layers for RANS y+ ~15-30 wall treatment",
+      "expansion_ratio": 1.1,
+      "final_layer_thickness": 0.15,
+      "min_thickness": 0.01,
+      "relativeSizes": true
+    },
+
+    "SNAPPY_SETTINGS": {
+      "parallel": true,
+      "nProcessors": 12,
+      "surfaceRefinementLevels": [1, 2],
+      "featureLevel": 2
+    }
+  },
+
+  "geometry": {
+    "inlet_keywords_ordered": "PAT003inlet",
+    "outlet_keywords_ordered": ["PAT003outlet1", "PAT003outlet2", "PAT003outlet3", "PAT003outlet4"],
+    "wall_keywords_ordered": "PAT003wall_aorta",
+    "scale_factor": 0.001,
+    "_comment": "Geometry in mm, scale to meters"
+  },
+
+  "boundary_conditions": {
+    "inlet": {
+      "type": "TIMEVARYING",
+      "csv_file": "flowrate.csv",
+      "data_type": "flowrate",
+      "profile": "wall_distance",
+      "exponent": 2.0,
+      "_comment": "Pulsatile infant aortic flow, 120 bpm, parabolic-like profile"
+    },
+
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 80,
+        "diastolic_pressure": 50,
+        "venous_pressure": 0,
+        "methodology": "murray_law_automatic",
+        "tau": 0.5,
+        "_tau_comment": "tau = 0.5s matches cardiac cycle for infant HR 120 bpm",
+        "initial_pressure_method": "diastolic",
+
+        "enable_stabilization": true,
+        "betaT": 0.3,
+        "_betaT_comment": "Tangential damping = 0.3 (proven neutral for hemodynamics, necessary for convergence)",
+        "betaN": 0.0,
+        "_betaN_comment": "Normal damping = 0.0 (preserves Windkessel P-Q coupling)",
+        "_stabilization_reference": "Section 5.4: 37.5% failure without, 0.9% QoI impact with betaT=0.3"
+      }
+    },
+
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+
+  "cardiac_cycle": 0.5,
+  "_cardiac_cycle_comment": "Infant heart rate: 120 BPM = 0.5s per cycle",
+
+  "hemodynamics": {
+    "_comment": "Hemodynamic post-processing for TAWSS, OSI, RRT computation",
+    "runtime_functions": {
+      "wallShearStress": true,
+      "fieldAverage": true,
+      "pressureMonitoring": true
+    },
+    "tawss_settings": {
+      "skip_cycles": 1,
+      "_skip_cycles_comment": "Skip 1st cycle for flow development, average cycles 2-3",
+      "periodicRestart": true,
+      "keep_all_cycles": true
+    }
+  },
+
+  "simulation_control": {
+    "end_time": 1.5,
+    "_end_time_comment": "3 cardiac cycles (0.5s each)",
+    "number_of_cycles": 3,
+    "writeInterval": 0.02,
+    "_writeInterval_comment": "25 timesteps per cycle for adequate temporal resolution"
+  },
+
+  "run_settings": {
+    "solution_type": "parallel",
+    "subdomains": 40,
+    "_subdomains_comment": "40 cores for ~1.5-2M cell mesh, estimated 24-36 hr wall-clock",
+    "decomposition_method": "scotch"
+  },
+
+  "visualization": {
+    "_comment": "Post-processing visualization for repeatability comparison",
+    "fields": ["U", "p", "wallShearStress", "TAWSS", "OSI", "RRT"],
+    "time_steps": "last",
+    "color_ranges": {
+      "WSS": [0, 50],
+      "TAWSS": [0, 30],
+      "OSI": [0, 0.5],
+      "RRT": [0, 10]
+    }
+  }
+}
