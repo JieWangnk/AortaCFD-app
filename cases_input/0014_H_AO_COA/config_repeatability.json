@@ -75,6 +75,7 @@
       "surfaceRefinementLevels": [2, 3],
       "span_refinement_enabled": true,
       "cells_across_span": 15,
+      "span_refinement_level": 3,
       "_span_comment": "OpenFOAM v12 span-based refinement: guarantees 15 cells across vessel diameter at every cross-section"
     }
   },
@@ -97,9 +98,11 @@
 
   "boundary_conditions": {
     "inlet": {
-      "type": "MRI",
-      "file": "./inlet/",
-      "_comment": "4D flow MRI inlet data from SimVascular"
+      "type": "TIMEVARYING",
+      "csv_file": "inflow.csv",
+      "data_type": "flowrate",
+      "profile": "parabolic",
+      "_comment": "Pulsatile flowrate from SimVascular inflow data"
     },
 
     "outlets": {

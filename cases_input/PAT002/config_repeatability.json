@@ -15,10 +15,11 @@
 
   "case_info": {
     "patient_id": "PAT002",
-    "description": "Adult aortic case - repeatability demonstration",
+    "description": "Pediatric aortic case - repeatability demonstration",
     "source": "Clinical collaboration - University of Cape Town",
     "clinical_data": {
-      "age_group": "adult"
+      "age_group": "pediatric",
+      "_note": "Child patient - smaller anatomy than adult thoracic aorta"
     }
   },
 
