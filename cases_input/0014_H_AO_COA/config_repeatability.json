@@ -56,7 +56,7 @@
 
   "mesh": {
     "cells_per_diameter": 15,
-    "_mesh_comment": "Target ~1.5-2M cells based on BPM120 medium mesh scaling",
+    "_mesh_comment": "15 cells/diameter (matches BPM120 verified medium mesh) with span-based refinement",
 
     "boundary_layers": {
       "enabled": true,
@@ -72,7 +72,10 @@
       "parallel": true,
       "nProcessors": 8,
       "_nProcessors_comment": "8 cores for local meshing, solver will use 40 on HPC",
-      "surfaceRefinementLevels": [2, 3]
+      "surfaceRefinementLevels": [2, 3],
+      "span_refinement_enabled": true,
+      "cells_across_span": 15,
+      "_span_comment": "OpenFOAM v12 span-based refinement: guarantees 15 cells across vessel diameter at every cross-section"
     }
   },
 
