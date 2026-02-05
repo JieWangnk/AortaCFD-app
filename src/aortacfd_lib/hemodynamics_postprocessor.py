@@ -17,12 +17,14 @@ Author: AortaCFD Team
 
 import os
 import re
+import csv
+import json
 import shlex
 import logging
 import numpy as np
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 
 from .constants import PA_TO_MMHG, BLOOD_DENSITY_DEFAULT
 
@@ -48,14 +50,23 @@ class HemodynamicsResults:
     wss_max: float = 0.0
     wss_mean: float = 0.0
     wss_min: float = 0.0
+    wss_p99: float = 0.0  # 99th percentile (robust descriptor)
+    wss_p95: float = 0.0  # 95th percentile
 
     # Pulsatile-specific results (only for TIMEVARYING/WOMERSLEY)
     tawss_max: float = 0.0
     tawss_mean: float = 0.0
+    tawss_p99: float = 0.0  # 99th percentile (robust descriptor)
+    tawss_p95: float = 0.0  # 95th percentile
     osi_max: float = 0.0
     osi_mean: float = 0.0
+    osi_mean_masked: float = 0.0  # Mean OSI where OSI > 0.001 (clinically relevant)
     rrt_max: float = 0.0
     rrt_mean: float = 0.0
+
+    # Peak systole information
+    peak_systole_time: float = 0.0  # Time of peak inlet flow
+    peak_systole_detected: bool = False
 
     # Flag: True if TAWSS was computed as |<tau>| (magnitude of mean) rather
     # than proper <|tau|> (mean of magnitudes). The approximation can introduce
@@ -166,6 +177,65 @@ class HemodynamicsPostProcessor:
             self.log.error(f"foamPostProcess failed: {e}")
             return False
 
+    def _detect_peak_systole(self, results: HemodynamicsResults) -> None:
+        """
+        Detect peak systole time from inlet flowrate data.
+
+        Peak systole is defined as the time of maximum inlet flow rate.
+        This is useful for identifying the correct timestep for peak WSS visualization.
+        """
+        if not self.is_pulsatile:
+            return
+
+        # Try to find flowrate.csv in boundaryData
+        flowrate_file = None
+        boundary_data_dir = self.case_dir / 'constant' / 'boundaryData'
+        if boundary_data_dir.exists():
+            for inlet_dir in boundary_data_dir.iterdir():
+                if 'inlet' in inlet_dir.name.lower():
+                    candidate = inlet_dir / 'flowrate.csv'
+                    if candidate.exists():
+                        flowrate_file = candidate
+                        break
+
+        if flowrate_file is None:
+            self.log.debug("flowrate.csv not found, peak systole detection skipped")
+            return
+
+        try:
+            # Read flowrate CSV (format: time, flowrate)
+            import csv
+            times = []
+            flowrates = []
+            with open(flowrate_file, 'r') as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    if len(row) >= 2:
+                        try:
+                            t = float(row[0])
+                            q = abs(float(row[1]))  # Use absolute value
+                            times.append(t)
+                            flowrates.append(q)
+                        except ValueError:
+                            continue  # Skip header or invalid rows
+
+            if times and flowrates:
+                # Find time of maximum flow (within first cardiac cycle)
+                times = np.array(times)
+                flowrates = np.array(flowrates)
+                # Consider only first cardiac cycle for peak detection
+                cycle_mask = times <= self.cardiac_cycle
+                if np.any(cycle_mask):
+                    cycle_times = times[cycle_mask]
+                    cycle_flows = flowrates[cycle_mask]
+                    peak_idx = np.argmax(cycle_flows)
+                    results.peak_systole_time = float(cycle_times[peak_idx])
+                    results.peak_systole_detected = True
+                    self.log.info(f"Peak systole detected at t = {results.peak_systole_time:.4f} s")
+
+        except Exception as e:
+            self.log.warning(f"Failed to detect peak systole: {e}")
+
     def compute_all(self) -> HemodynamicsResults:
         """
         Compute all hemodynamic metrics.
@@ -178,6 +248,9 @@ class HemodynamicsPostProcessor:
             is_pulsatile=self.is_pulsatile,
             cardiac_cycle=self.cardiac_cycle
         )
+
+        # Detect peak systole from inlet flowrate
+        self._detect_peak_systole(results)
 
         # Always compute pressure drop
         self._compute_pressure_drop(results)
@@ -264,7 +337,10 @@ class HemodynamicsPostProcessor:
                 results.wss_max = float(np.max(wss_mag))
                 results.wss_mean = float(np.mean(wss_mag))
                 results.wss_min = float(np.min(wss_mag))
-                self.log.info(f"WSS: max={results.wss_max:.4f}, mean={results.wss_mean:.4f} Pa")
+                # Percentile-based descriptors (robust to mesh topology artifacts)
+                results.wss_p99 = float(np.percentile(wss_mag, 99))
+                results.wss_p95 = float(np.percentile(wss_mag, 95))
+                self.log.info(f"WSS: max={results.wss_max:.4f}, p99={results.wss_p99:.4f}, mean={results.wss_mean:.4f} Pa")
         except Exception as e:
             self.log.error(f"Failed to compute WSS: {e}")
 
@@ -351,6 +427,9 @@ class HemodynamicsPostProcessor:
 
                 results.osi_max = float(np.max(osi))
                 results.osi_mean = float(np.mean(osi))
+                # Masked OSI mean: only cells with OSI > 0.001 (clinically relevant regions)
+                osi_mask = osi > 0.001
+                results.osi_mean_masked = float(np.mean(osi[osi_mask])) if np.any(osi_mask) else 0.0
 
                 # RRT = 1 / ((1 - 2*OSI) * TAWSS), units are Pa⁻¹
                 # Avoid division by zero
@@ -365,6 +444,9 @@ class HemodynamicsPostProcessor:
                 # Update TAWSS with proper calculation (overrides approximate)
                 results.tawss_max = float(np.max(tawss_proper))
                 results.tawss_mean = float(np.mean(tawss_proper))
+                # Percentile-based descriptors (robust to mesh topology artifacts)
+                results.tawss_p99 = float(np.percentile(tawss_proper, 99))
+                results.tawss_p95 = float(np.percentile(tawss_proper, 95))
                 results.tawss_is_approximate = False
 
                 # Per-cycle TAWSS convergence check
@@ -399,8 +481,8 @@ class HemodynamicsPostProcessor:
                                 "Results may not be fully converged. Consider running more cycles."
                             )
 
-            self.log.info(f"TAWSS: max={results.tawss_max:.4f}, mean={results.tawss_mean:.4f} Pa")
-            self.log.info(f"OSI: max={results.osi_max:.4f}, mean={results.osi_mean:.4f}")
+            self.log.info(f"TAWSS: max={results.tawss_max:.4f}, p99={results.tawss_p99:.4f}, mean={results.tawss_mean:.4f} Pa")
+            self.log.info(f"OSI: max={results.osi_max:.4f}, mean={results.osi_mean:.4f}, mean_masked={results.osi_mean_masked:.4f}")
             self.log.info(f"RRT: max={results.rrt_max:.4f}, mean={results.rrt_mean:.4f} Pa⁻¹")
 
             # Save fields for ParaView visualization
@@ -746,26 +828,35 @@ boundaryField
             f.write(f"Flow Type: {'Pulsatile' if results.is_pulsatile else 'Steady'}\n")
             if results.is_pulsatile:
                 f.write(f"Cardiac Cycle: {results.cardiac_cycle:.3f} s\n")
+            if results.peak_systole_detected:
+                f.write(f"Peak Systole: t = {results.peak_systole_time:.4f} s\n")
             f.write("\n")
 
             f.write("-" * 70 + "\n")
-            f.write("WALL SHEAR STRESS (WSS)\n")
+            f.write("WALL SHEAR STRESS (WSS) - Peak Systole\n")
             f.write("-" * 70 + "\n")
-            f.write(f"  Maximum: {results.wss_max:.4f} Pa\n")
-            f.write(f"  Mean:    {results.wss_mean:.4f} Pa\n")
-            f.write(f"  Minimum: {results.wss_min:.4f} Pa\n")
+            f.write(f"  Maximum:        {results.wss_max:.4f} Pa\n")
+            f.write(f"  99th Percentile:{results.wss_p99:.4f} Pa  (robust descriptor)\n")
+            f.write(f"  95th Percentile:{results.wss_p95:.4f} Pa\n")
+            f.write(f"  Mean:           {results.wss_mean:.4f} Pa\n")
+            f.write(f"  Minimum:        {results.wss_min:.4f} Pa\n")
             f.write("\n")
 
             if results.is_pulsatile and results.tawss_mean > 0:
                 f.write("-" * 70 + "\n")
                 f.write("TIME-AVERAGED METRICS (Pulsatile Flow)\n")
                 f.write("-" * 70 + "\n")
-                f.write(f"  TAWSS Maximum: {results.tawss_max:.4f} Pa\n")
-                f.write(f"  TAWSS Mean:    {results.tawss_mean:.4f} Pa\n")
-                f.write(f"  OSI Maximum:   {results.osi_max:.4f}\n")
-                f.write(f"  OSI Mean:      {results.osi_mean:.4f}\n")
-                f.write(f"  RRT Maximum:   {results.rrt_max:.4f} Pa⁻¹\n")
-                f.write(f"  RRT Mean:      {results.rrt_mean:.4f} Pa⁻¹\n")
+                f.write(f"  TAWSS Maximum:        {results.tawss_max:.4f} Pa\n")
+                f.write(f"  TAWSS 99th Percentile:{results.tawss_p99:.4f} Pa  (robust descriptor)\n")
+                f.write(f"  TAWSS 95th Percentile:{results.tawss_p95:.4f} Pa\n")
+                f.write(f"  TAWSS Mean:           {results.tawss_mean:.4f} Pa\n")
+                f.write("\n")
+                f.write(f"  OSI Maximum:          {results.osi_max:.4f}\n")
+                f.write(f"  OSI Mean:             {results.osi_mean:.4f}\n")
+                f.write(f"  OSI Mean (masked):    {results.osi_mean_masked:.4f}  (where OSI > 0.001)\n")
+                f.write("\n")
+                f.write(f"  RRT Maximum:          {results.rrt_max:.4f} Pa⁻¹\n")
+                f.write(f"  RRT Mean:             {results.rrt_mean:.4f} Pa⁻¹\n")
                 f.write("\n")
                 f.write("  Clinical thresholds:\n")
                 f.write("    Low TAWSS (<0.4 Pa): Atherogenic phenotype risk\n")
@@ -801,6 +892,25 @@ boundaryField
                 f.write("    ΔP > 20 mmHg at rest: Significant coarctation\n")
             else:
                 f.write("  (No pressure data available)\n")
+
+            # QoI Summary section for verification studies
+            f.write("\n" + "-" * 70 + "\n")
+            f.write("QUANTITIES OF INTEREST (QoI) SUMMARY\n")
+            f.write("-" * 70 + "\n")
+            f.write("  Verification-oriented metrics using robust percentile descriptors:\n\n")
+
+            # Pressure QoI
+            if results.pressure_drop_mmhg:
+                mean_dp = sum(results.pressure_drop_mmhg.values()) / len(results.pressure_drop_mmhg)
+                f.write(f"  QoI-1: Pressure Drop (mean)     = {mean_dp:.2f} mmHg\n")
+
+            # WSS QoIs
+            f.write(f"  QoI-2: TAWSS p99                = {results.tawss_p99:.2f} Pa\n")
+            f.write(f"  QoI-3: WSS p99 (peak systole)   = {results.wss_p99:.2f} Pa\n")
+            f.write(f"  QoI-4: OSI mean (masked)        = {results.osi_mean_masked:.4f}\n")
+
+            f.write("\n  Note: p99 = 99th percentile (robust to mesh topology artifacts)\n")
+            f.write("        masked = OSI > 0.001 (clinically relevant regions only)\n")
 
             f.write("\n" + "=" * 70 + "\n")
 
@@ -879,6 +989,99 @@ boundaryField
 
         self.log.info(f"Pressure plot saved to: {plot_path}")
 
+    def export_qoi(self, results: HemodynamicsResults, output_dir: str) -> Tuple[str, str]:
+        """
+        Export QoI (Quantities of Interest) to JSON and CSV formats.
+
+        This provides machine-readable outputs for verification studies and
+        automated analysis pipelines. The QoIs are defined following cardiovascular
+        CFD verification best practices (percentile-based, cycle-averaged).
+
+        Args:
+            results: Computed hemodynamics results
+            output_dir: Directory for output files
+
+        Returns:
+            Tuple of (json_path, csv_path)
+        """
+        output_path = Path(output_dir)
+        results_dir = output_path / 'results'
+        results_dir.mkdir(parents=True, exist_ok=True)
+
+        # Build QoI dictionary with definitions
+        qoi_data = {
+            "_metadata": {
+                "description": "Hemodynamic Quantities of Interest for CFD verification",
+                "case_dir": str(self.case_dir),
+                "inlet_type": results.inlet_type,
+                "is_pulsatile": results.is_pulsatile,
+                "cardiac_cycle_s": results.cardiac_cycle,
+                "peak_systole_time_s": results.peak_systole_time if results.peak_systole_detected else None,
+            },
+            "qoi": {
+                "pressure_drop_mean_mmhg": {
+                    "value": float(np.mean(list(results.pressure_drop_mmhg.values()))) if results.pressure_drop_mmhg else 0.0,
+                    "unit": "mmHg",
+                    "definition": "Cycle-averaged pressure drop (inlet to outlets mean)",
+                },
+                "wss_p99_pa": {
+                    "value": results.wss_p99,
+                    "unit": "Pa",
+                    "definition": "99th percentile peak systolic wall shear stress",
+                },
+                "wss_p95_pa": {
+                    "value": results.wss_p95,
+                    "unit": "Pa",
+                    "definition": "95th percentile peak systolic wall shear stress",
+                },
+                "tawss_p99_pa": {
+                    "value": results.tawss_p99,
+                    "unit": "Pa",
+                    "definition": "99th percentile time-averaged wall shear stress",
+                },
+                "tawss_p95_pa": {
+                    "value": results.tawss_p95,
+                    "unit": "Pa",
+                    "definition": "95th percentile time-averaged wall shear stress",
+                },
+                "tawss_mean_pa": {
+                    "value": results.tawss_mean,
+                    "unit": "Pa",
+                    "definition": "Mean time-averaged wall shear stress",
+                },
+                "osi_mean": {
+                    "value": results.osi_mean,
+                    "unit": "-",
+                    "definition": "Mean oscillatory shear index (all cells)",
+                },
+                "osi_mean_masked": {
+                    "value": results.osi_mean_masked,
+                    "unit": "-",
+                    "definition": "Mean OSI where OSI > 0.001 (clinically relevant regions)",
+                },
+            },
+            "per_outlet_pressure_drop_mmhg": results.pressure_drop_mmhg,
+        }
+
+        # Write JSON
+        json_path = results_dir / 'qoi_summary.json'
+        with open(json_path, 'w') as f:
+            json.dump(qoi_data, f, indent=2)
+
+        # Write CSV (flat format for easy import to spreadsheets/scripts)
+        csv_path = results_dir / 'qoi_summary.csv'
+        with open(csv_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['metric', 'value', 'unit', 'definition'])
+            for key, data in qoi_data['qoi'].items():
+                writer.writerow([key, data['value'], data['unit'], data['definition']])
+            # Add per-outlet pressure drops
+            for outlet, dp in results.pressure_drop_mmhg.items():
+                writer.writerow([f'pressure_drop_{outlet}_mmhg', dp, 'mmHg', f'Pressure drop to {outlet}'])
+
+        self.log.info(f"QoI exported to: {json_path}, {csv_path}")
+        return str(json_path), str(csv_path)
+
 
 def run_hemodynamics_analysis(case_dir: str, config: Dict[str, Any], output_dir: str) -> HemodynamicsResults:
     """
@@ -904,6 +1107,9 @@ def run_hemodynamics_analysis(case_dir: str, config: Dict[str, Any], output_dir:
 
     # Generate report
     processor.generate_report(results, output_dir)
+
+    # Export QoI to JSON/CSV
+    processor.export_qoi(results, output_dir)
 
     return results
 
