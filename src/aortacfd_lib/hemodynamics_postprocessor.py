@@ -60,7 +60,7 @@ class HemodynamicsResults:
     tawss_p95: float = 0.0  # 95th percentile
     osi_max: float = 0.0
     osi_mean: float = 0.0
-    osi_mean_masked: float = 0.0  # Mean OSI where OSI > 0.001 (clinically relevant)
+    osi_mean_masked: float = 0.0  # Mean OSI where TAWSS > 0.5 Pa (Les et al. 2010)
     rrt_max: float = 0.0
     rrt_mean: float = 0.0
 
@@ -427,8 +427,9 @@ class HemodynamicsPostProcessor:
 
                 results.osi_max = float(np.max(osi))
                 results.osi_mean = float(np.mean(osi))
-                # Masked OSI mean: only cells with OSI > 0.001 (clinically relevant regions)
-                osi_mask = osi > 0.001
+                # Masked OSI mean: only cells with TAWSS > 0.5 Pa (Les et al. 2010)
+                # Low TAWSS regions have poor signal-to-noise for OSI calculation
+                osi_mask = tawss_proper > 0.5
                 results.osi_mean_masked = float(np.mean(osi[osi_mask])) if np.any(osi_mask) else 0.0
 
                 # RRT = 1 / ((1 - 2*OSI) * TAWSS), units are Pa⁻¹
@@ -853,7 +854,7 @@ boundaryField
                 f.write("\n")
                 f.write(f"  OSI Maximum:          {results.osi_max:.4f}\n")
                 f.write(f"  OSI Mean:             {results.osi_mean:.4f}\n")
-                f.write(f"  OSI Mean (masked):    {results.osi_mean_masked:.4f}  (where OSI > 0.001)\n")
+                f.write(f"  OSI Mean (masked):    {results.osi_mean_masked:.4f}  (where TAWSS > 0.5 Pa)\n")
                 f.write("\n")
                 f.write(f"  RRT Maximum:          {results.rrt_max:.4f} Pa⁻¹\n")
                 f.write(f"  RRT Mean:             {results.rrt_mean:.4f} Pa⁻¹\n")
@@ -910,7 +911,7 @@ boundaryField
             f.write(f"  QoI-4: OSI mean (masked)        = {results.osi_mean_masked:.4f}\n")
 
             f.write("\n  Note: p99 = 99th percentile (robust to mesh topology artifacts)\n")
-            f.write("        masked = OSI > 0.001 (clinically relevant regions only)\n")
+            f.write("        masked = TAWSS > 0.5 Pa (filters low-shear noise, Les et al. 2010)\n")
 
             f.write("\n" + "=" * 70 + "\n")
 
@@ -1057,7 +1058,7 @@ boundaryField
                 "osi_mean_masked": {
                     "value": results.osi_mean_masked,
                     "unit": "-",
-                    "definition": "Mean OSI where OSI > 0.001 (clinically relevant regions)",
+                    "definition": "Mean OSI where TAWSS > 0.5 Pa (Les et al. 2010)",
                 },
             },
             "per_outlet_pressure_drop_mmhg": results.pressure_drop_mmhg,

@@ -16,18 +16,19 @@ from unittest.mock import Mock, patch, MagicMock
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from aortacfd_lib.wk_setup import WkSetup
+from aortacfd_lib.constants import MMHG_TO_PA, ML_TO_M3, MURRAY_LAW_EXPONENT
 
 
 class TestWindkesselConstants:
-    """Test unit conversion constants."""
+    """Test unit conversion constants from constants module."""
 
     def test_mmhg_to_pa_conversion(self):
         """Test mmHg to Pascal conversion constant."""
-        assert WkSetup.MMHG_TO_PA == pytest.approx(133.322, rel=1e-4)
+        assert MMHG_TO_PA == pytest.approx(133.322, rel=1e-4)
 
     def test_ml_to_m3_conversion(self):
         """Test mL to m³ conversion constant."""
-        assert WkSetup.ML_TO_M3 == pytest.approx(1e-6, rel=1e-9)
+        assert ML_TO_M3 == pytest.approx(1e-6, rel=1e-9)
 
 
 class TestMurrayFlowSplit:
@@ -87,7 +88,7 @@ class TestMurrayFlowSplit:
         assert flow_split['outlet1'] > flow_split['outlet2'] > flow_split['outlet3']
 
         # Check actual Murray's law: f_i = r^n / Σr^n (n=MURRAY_LAW_EXPONENT)
-        from src.aortacfd_lib.constants import MURRAY_LAW_EXPONENT
+        # MURRAY_LAW_EXPONENT imported at top of file
         r_powered_sum = sum(r**MURRAY_LAW_EXPONENT for r in outlet_radii.values())
         for name, radius in outlet_radii.items():
             expected = radius**MURRAY_LAW_EXPONENT / r_powered_sum
@@ -106,7 +107,7 @@ class TestMurrayFlowSplit:
 
     def test_murray_two_outlets_double_radius(self):
         """Test that doubling radius increases flow by 2^n (n=MURRAY_LAW_EXPONENT)."""
-        from src.aortacfd_lib.constants import MURRAY_LAW_EXPONENT
+        # MURRAY_LAW_EXPONENT imported at top of file
         outlet_radii = {
             'small': 0.005,   # 5mm
             'large': 0.010    # 10mm (2x diameter)
@@ -248,7 +249,7 @@ class TestMAPCalculation:
     def test_map_conversion_to_pascal(self):
         """Test MAP conversion from mmHg to Pa."""
         MAP_mmHg = 100.0
-        MAP_Pa = MAP_mmHg * WkSetup.MMHG_TO_PA
+        MAP_Pa = MAP_mmHg * MMHG_TO_PA
 
         expected_Pa = 100.0 * 133.322
         assert MAP_Pa == pytest.approx(expected_Pa, rel=1e-6)
@@ -391,7 +392,7 @@ class TestUnitConversions:
     def test_pressure_mmhg_to_pa(self):
         """Test pressure conversion mmHg → Pa."""
         pressure_mmHg = 120
-        pressure_Pa = pressure_mmHg * WkSetup.MMHG_TO_PA
+        pressure_Pa = pressure_mmHg * MMHG_TO_PA
 
         expected_Pa = 120 * 133.322
         assert pressure_Pa == pytest.approx(expected_Pa, rel=1e-4)
@@ -498,7 +499,7 @@ class TestEdgeCases:
         }
 
         # Should not crash and should give valid ratios
-        from src.aortacfd_lib.constants import MURRAY_LAW_EXPONENT
+        # MURRAY_LAW_EXPONENT imported at top of file
         r_powered_sum = sum(r**MURRAY_LAW_EXPONENT for r in outlet_radii.values())
         ratio_tiny = outlet_radii['tiny']**MURRAY_LAW_EXPONENT / r_powered_sum
 

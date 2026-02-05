@@ -23,7 +23,7 @@ class TestMethodologyProfileTable:
 
     NOTE: The original table referenced old profiles (laminar_coarse, rans_medium, etc.)
     that were removed. The new system uses:
-    - Numerics profiles: robust, standard, accurate (3-profile system)
+    - Numerics profiles: robust, standard, precise (3-profile system)
     - Physics model: specified separately in config (laminar, rans, les)
     - Mesh resolution: specified via cells_per_diameter or target_cell_size_mm
     """
@@ -34,7 +34,7 @@ class TestMethodologyProfileTable:
 
     def test_numerics_profiles_exist(self):
         """Verify all numeric profiles mentioned in documentation exist."""
-        documented_profiles = ['robust', 'standard', 'accurate']
+        documented_profiles = ['robust', 'standard', 'precise']
 
         for profile in documented_profiles:
             assert profile in NUMERICS_PROFILES, \
@@ -58,9 +58,9 @@ class TestMethodologyProfileTable:
         assert 'outerCorrectorResidualControl' in profile['solvers']['PIMPLE'], \
             "Robust profile must have outerCorrectorResidualControl for early exit"
 
-        # Max Courant number
-        assert profile['time_stepping']['max_co'] == 0.5, \
-            "Robust profile should use max_co = 0.5 for stability"
+        # Max Courant number (1.0 - first-order schemes are inherently stable)
+        assert profile['time_stepping']['max_co'] == 1.0, \
+            "Robust profile uses max_co = 1.0 (first-order schemes are stable)"
 
         # Order of accuracy
         assert profile['_profile_metadata']['order_of_accuracy'] == 1, \
@@ -92,26 +92,26 @@ class TestMethodologyProfileTable:
         assert profile['_profile_metadata']['order_of_accuracy'] == 2, \
             "Standard profile should be second-order accurate"
 
-    def test_accurate_profile_specifications(self):
-        """Verify accurate profile matches methodology description."""
-        profile = NUMERICS_PROFILES['accurate']
+    def test_precise_profile_specifications(self):
+        """Verify precise profile matches methodology description."""
+        profile = NUMERICS_PROFILES['precise']
 
-        # Should use linearUpwind (low-diffusion scheme)
+        # Should use LUST (minimal diffusion scheme)
         conv_scheme = profile['divSchemes']['div(phi,U)']
-        assert 'linearUpwind' in conv_scheme, \
-            "Accurate profile should use linearUpwind (low-diffusion scheme)"
+        assert 'LUST' in conv_scheme, \
+            "Precise profile should use LUST (minimal diffusion scheme)"
 
-        # Time integration should be backward (stable 2nd order)
-        assert profile['ddtSchemes']['default'] == 'backward', \
-            "Accurate profile should use backward time integration"
+        # Time integration should be CrankNicolson 0.9 (2nd order implicit-explicit)
+        assert profile['ddtSchemes']['default'] == 'CrankNicolson 0.9', \
+            "Precise profile should use CrankNicolson 0.9 time integration"
 
-        # Should have tight tolerances
-        assert profile['solvers']['residualControl']['p'] <= 1e-7, \
-            "Accurate profile should have tight residual tolerances (≤1e-7)"
+        # Should have tight tolerances (1e-8)
+        assert profile['solvers']['residualControl']['p'] <= 1e-8, \
+            "Precise profile should have tight residual tolerances (≤1e-8)"
 
-        # Order of accuracy
-        assert profile['_profile_metadata']['order_of_accuracy'] == 2, \
-            "Accurate profile should be second-order accurate"
+        # Order of accuracy (formal_order_of_accuracy in precise profile)
+        assert profile['_profile_metadata']['formal_order_of_accuracy'] == 2, \
+            "Precise profile should be second-order accurate"
 
 
 class TestMethodologyPhysicsModels:
@@ -227,7 +227,7 @@ class TestMethodologyNumericalSchemes:
     @pytest.mark.parametrize("profile_name,expected_gradient", [
         ('robust', 'cellLimited Gauss linear'),
         ('standard', 'cellLimited Gauss linear'),
-        ('accurate', 'cellLimited Gauss linear'),
+        ('precise', 'cellLimited Gauss linear'),
     ])
     def test_gradient_schemes(self, profile_name, expected_gradient):
         """Verify gradient schemes match methodology."""
@@ -240,7 +240,7 @@ class TestMethodologyNumericalSchemes:
     @pytest.mark.parametrize("profile_name,expected_laplacian", [
         ('robust', 'Gauss linear limited corrected'),
         ('standard', 'Gauss linear limited corrected'),
-        ('accurate', 'Gauss linear corrected'),
+        ('precise', 'Gauss linear limited corrected'),  # All use limited corrected for stability
     ])
     def test_laplacian_schemes(self, profile_name, expected_laplacian):
         """Verify Laplacian schemes match methodology."""
@@ -289,7 +289,7 @@ def test_methodology_table_is_outdated():
     - les_medium, les_fine
 
     These were REMOVED in the new config system. The new system uses:
-    - Numerics profiles: robust, standard, accurate (3-profile system)
+    - Numerics profiles: robust, standard, precise (3-profile system)
     - Physics model: specified separately (laminar, rans, les)
     """
     old_profile_names = [
@@ -303,7 +303,7 @@ def test_methodology_table_is_outdated():
             f"Old profile '{old_profile}' should not exist in new system"
 
     # New 3-profile system should exist
-    new_profile_names = ['robust', 'standard', 'accurate']
+    new_profile_names = ['robust', 'standard', 'precise']
 
     for new_profile in new_profile_names:
         assert new_profile in NUMERICS_PROFILES, \

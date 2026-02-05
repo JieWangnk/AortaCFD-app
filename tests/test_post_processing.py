@@ -19,6 +19,19 @@ from unittest.mock import Mock, patch, MagicMock
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+
+def _paraview_module_available() -> bool:
+    """Check if paraview Python module is importable (not just pvbatch executable)."""
+    try:
+        import paraview.simple  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+# Cache the result since import checking is slow
+PARAVIEW_MODULE_AVAILABLE = _paraview_module_available()
+
 from aortacfd_lib.post_processing.config import (
     PostProcessingConfig,
     VisualizationConfig,
@@ -487,7 +500,8 @@ class TestCLI:
         from aortacfd_lib.post_processing.cli import main
 
         # Should run without error
-        with patch('aortacfd_lib.post_processing.cli.check_dependencies') as mock_check:
+        # Note: check_dependencies is imported inside the function, so we patch at the source
+        with patch('aortacfd_lib.post_processing.dependencies.check_dependencies') as mock_check:
             mock_check.return_value = DependencyReport()
             result = main(['--check-deps'])
 
@@ -744,6 +758,10 @@ class TestOSIRRTCalculations:
 class TestColorRangeHandling:
     """Test color range configuration handling."""
 
+    @pytest.mark.skipif(
+        not PARAVIEW_MODULE_AVAILABLE,
+        reason="ParaView Python module not available - post_processor requires paraview"
+    )
     def test_build_rescale_settings_defaults(self):
         """Test default rescale settings."""
         from aortacfd_lib.post_processor import DEFAULT_COLOR_RANGES
@@ -830,6 +848,10 @@ class TestPydanticValidation:
 class TestPropertyMap:
     """Test property map and field configuration."""
 
+    @pytest.mark.skipif(
+        not PARAVIEW_MODULE_AVAILABLE,
+        reason="ParaView Python module not available - post_processor requires paraview"
+    )
     def test_default_property_map_fields(self):
         """Test default property map contains expected fields."""
         from aortacfd_lib.post_processor import DEFAULT_PROPERTY_MAP
@@ -841,12 +863,20 @@ class TestPropertyMap:
             assert "preset" in DEFAULT_PROPERTY_MAP[field]
             assert "unit" in DEFAULT_PROPERTY_MAP[field]
 
+    @pytest.mark.skipif(
+        not PARAVIEW_MODULE_AVAILABLE,
+        reason="ParaView Python module not available - post_processor requires paraview"
+    )
     def test_property_map_osi_bounded(self):
         """Test OSI has correct bounds in color range."""
         from aortacfd_lib.post_processor import DEFAULT_COLOR_RANGES
 
         assert DEFAULT_COLOR_RANGES["OSI"] == [0, 0.5]
 
+    @pytest.mark.skipif(
+        not PARAVIEW_MODULE_AVAILABLE,
+        reason="ParaView Python module not available - post_processor requires paraview"
+    )
     def test_property_map_wss_unit(self):
         """Test WSS has correct unit."""
         from aortacfd_lib.post_processor import DEFAULT_PROPERTY_MAP
@@ -858,6 +888,10 @@ class TestPropertyMap:
 class TestHelperFunctions:
     """Test helper functions."""
 
+    @pytest.mark.skipif(
+        not PARAVIEW_MODULE_AVAILABLE,
+        reason="ParaView Python module not available - post_processor requires paraview"
+    )
     def test_check_ffmpeg_available_returns_bool(self):
         """Test check_ffmpeg_available returns boolean."""
         from aortacfd_lib.post_processor import check_ffmpeg_available
@@ -865,6 +899,10 @@ class TestHelperFunctions:
         result = check_ffmpeg_available()
         assert isinstance(result, bool)
 
+    @pytest.mark.skipif(
+        not PARAVIEW_MODULE_AVAILABLE,
+        reason="ParaView Python module not available - post_processor requires paraview"
+    )
     def test_hide_all_scalar_bars_handles_empty(self):
         """Test hide_all_scalar_bars handles empty list."""
         from aortacfd_lib.post_processor import hide_all_scalar_bars

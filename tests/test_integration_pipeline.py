@@ -62,10 +62,15 @@ class TestWorkflowManager:
 
     def test_workflow_manager_initialization(self, mock_config: Dict[str, Any]):
         """Test WorkflowManager initializes correctly."""
+        from workflow.base_task import ExecutionContext
+
         manager = WorkflowManager(mock_config)
 
         assert manager.config == mock_config
-        assert manager.context == {}
+        # Context is now an ExecutionContext dataclass, not an empty dict
+        assert isinstance(manager.context, ExecutionContext)
+        # Context should be initialized with case_directory from config
+        assert manager.context.case_directory != ""  # Should be set from geometry config
         assert len(manager.available_tasks) > 0
 
     def test_workflow_manager_has_required_tasks(self, mock_config: Dict[str, Any]):
@@ -132,7 +137,7 @@ class TestNumericsProfiles:
         builder = NumericsBuilder()
 
         # Test each known profile individually
-        for profile_name in ["robust", "standard", "accurate"]:
+        for profile_name in ["robust", "standard", "precise"]:
             profile = builder._load_profile(profile_name)
             assert profile is not None
 
@@ -160,7 +165,7 @@ class TestNumericsProfiles:
     @pytest.mark.parametrize("profile_name,expected_stability", [
         ("robust", "high"),
         ("standard", "medium"),
-        ("accurate", "medium"),
+        ("precise", "medium"),
     ])
     def test_profile_stability_levels(self, profile_name: str, expected_stability: str):
         """Test that profiles have expected stability characteristics."""

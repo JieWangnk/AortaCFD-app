@@ -165,13 +165,13 @@ class TestFvSchemesContext:
         result = prepare_fv_schemes_context(config)
         assert result['div_scheme_U'] == 'Gauss upwind'
 
-    def test_accurate_profile_linear_upwind(self):
-        """Test accurate profile uses linearUpwind."""
+    def test_precise_profile_lust(self):
+        """Test precise profile uses LUST (minimal diffusion)."""
         config = {
-            'numerics': {'profile': 'accurate'}
+            'numerics': {'profile': 'precise'}
         }
         result = prepare_fv_schemes_context(config)
-        assert 'linearUpwind' in result['div_scheme_U']
+        assert 'LUST' in result['div_scheme_U']
 
     def test_les_uses_lust(self):
         """Test LES uses LUST scheme."""
@@ -221,10 +221,10 @@ class TestFvSolutionContext:
         assert result['pimple']['nOuterCorrectors'] == 30
         assert result['pimple']['nNonOrthogonalCorrectors'] == 1
 
-    def test_accurate_profile_pimple(self):
-        """Test accurate profile PIMPLE settings."""
+    def test_precise_profile_pimple(self):
+        """Test precise profile PIMPLE settings."""
         config = {
-            'numerics': {'profile': 'accurate'}
+            'numerics': {'profile': 'precise'}
         }
         result = prepare_fv_solution_context(config)
         assert result['pimple']['nOuterCorrectors'] == 50
@@ -260,10 +260,10 @@ class TestFvSolutionContext:
         assert result['tolerances']['p'] == 1e-3
         assert result['tolerances']['U'] == 1e-3
 
-    def test_accurate_tolerances(self):
-        """Test accurate profile tolerances are tighter."""
+    def test_precise_tolerances(self):
+        """Test precise profile tolerances are tighter."""
         config = {
-            'numerics': {'profile': 'accurate'}
+            'numerics': {'profile': 'precise'}
         }
         result = prepare_fv_solution_context(config)
         assert result['tolerances']['p'] == 1e-5
