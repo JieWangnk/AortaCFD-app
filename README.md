@@ -185,6 +185,7 @@ python run_patient.py BPM120 --verbose
 | `--quick` | | Quick test mode (coarse mesh) |
 | `--run-name NAME` | `-n` | Custom run folder name |
 | `--update PATH` | `-u` | Update existing case (preserves mesh) |
+| `--postprocess PATH` | `-p` | Standalone post-processing on existing run |
 | `--verbose` | `-v` | Show detailed log output |
 
 ### Working with Existing Output Cases
@@ -210,6 +211,9 @@ python run_patient.py PAT002 --update output/PAT002/run_20251218_142530 --steps 
 
 # Run post-processing on completed simulation
 python run_patient.py BPM120 --update output/BPM120/run_20251220_093653 --steps post
+
+# Standalone post-processing (re-compute hemodynamics and export QoIs)
+python run_patient.py --postprocess output/BPM120/run_20251220_093653
 ```
 
 **How `--update` works:**
@@ -319,6 +323,16 @@ python run_patient.py BPM120 --quick --steps case,mesh
 ```bash
 python run_patient.py BPM120 --verbose
 # Shows detailed log output instead of clean summaries
+```
+
+**12. Standalone post-processing (re-compute hemodynamics):**
+```bash
+python run_patient.py --postprocess output/BPM120/run_20251220_093653
+# Re-runs hemodynamics analysis on existing simulation
+# Outputs:
+#   results/qoi_summary.json    - Structured QoI data with metadata
+#   results/qoi_summary.csv     - Flat CSV for spreadsheets
+#   reports/hemodynamics_report.txt - Human-readable report
 ```
 
 ### Batch Execution
