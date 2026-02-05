@@ -1,6 +1,16 @@
 {
   "_doc": "AortaCFD config reference v2.3 - Profiles: robust/standard/precise",
 
+  "_naming_convention": {
+    "_rule": "snake_case for app params, camelCase for OpenFOAM dict keys",
+    "_examples": {
+      "snake_case": "cells_per_diameter, cardiac_cycle, boundary_layers (our params)",
+      "camelCase": "nOuterCorrectors, writeInterval, nProcessors (OpenFOAM params)",
+      "UPPER_CASE": "SNAPPY_SETTINGS, TIMEVARYING (section headers, type values)"
+    },
+    "_tip": "When in doubt, check examples/ or use snake_case"
+  },
+
   "case_info": {
     "patient_id": "EXAMPLE",
     "description": "Patient-specific aortic CFD simulation",
