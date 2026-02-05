@@ -27,6 +27,7 @@
 
   "physics": {
     "model": "rans_komegasst",
+    "simulation_type": "RAS",
     "_physics_comment": "RANS k-omega SST for transitional aortic flows (Re~2000-5000)",
     "transport_properties": {
       "rho": 1060,

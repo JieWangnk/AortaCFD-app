@@ -43,7 +43,7 @@
       "surfaceRefinementLevels": [0, 1]
     },
     "mesh_resolution": {
-      "cells_per_diameter": 5
+      "cells_per_diameter": 15
     }
   },
 
@@ -88,29 +88,33 @@
       "pressureMonitoring": true
     },
     "tawss_settings": {
-      "skip_cycles": 2,
+      "skip_cycles": 0,
       "periodicRestart": true,
       "keep_all_cycles": true
     }
   },
 
   "simulation_control": {
-    "end_time": 2.5,
-    "_end_time_comment": "5 cardiac cycles (0.5s each) for TAWSS convergence",
-    "number_of_cycles": 5,
-    "writeInterval": 0.05,
-    "_writeInterval_comment": "10 outputs per cycle for smooth TAWSS"
+    "end_time": 0.5,
+    "_end_time_comment": "1 cardiac cycle (0.5s) - quick run for ~1 hour completion",
+    "number_of_cycles": 1,
+    "writeInterval": 0.1,
+    "_writeInterval_comment": "5 outputs per cycle"
   },
 
   "run_settings": {
     "solution_type": "parallel",
-    "subdomains": 8
+    "subdomains": 4
   },
 
   "visualization": {
-    "_comment": "Color ranges for ParaView screenshots (only specified fields use fixed range, others auto-scale)",
+    "fields": ["U", "p", "wallShearStress", "TAWSS", "OSI", "RRT"],
+    "time_steps": "last",
     "color_ranges": {
-      "WSS": [0, 50]
+      "WSS": [0, 50],
+      "TAWSS": [0, 50],
+      "OSI": [0, 0.5],
+      "RRT": [0, 10]
     }
   }
 }
