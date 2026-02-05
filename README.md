@@ -335,6 +335,33 @@ python run_patient.py --postprocess output/BPM120/run_20251220_093653
 #   reports/hemodynamics_report.txt - Human-readable report
 ```
 
+### QoI (Quantities of Interest) Export
+
+The `--steps postprocess` and `--postprocess` commands export verification-oriented QoI metrics:
+
+**Output Files:**
+| File | Format | Purpose |
+|------|--------|---------|
+| `results/qoi_summary.json` | JSON | Structured data with metadata and definitions |
+| `results/qoi_summary.csv` | CSV | Flat format for spreadsheets and scripts |
+| `reports/hemodynamics_report.txt` | Text | Human-readable report with clinical context |
+
+**QoI Metrics (percentile-based for mesh robustness):**
+| Metric | Unit | Description |
+|--------|------|-------------|
+| `pressure_drop_mean_mmhg` | mmHg | Cycle-averaged pressure drop (inlet to outlets) |
+| `tawss_p99_pa` | Pa | 99th percentile time-averaged wall shear stress |
+| `tawss_p95_pa` | Pa | 95th percentile TAWSS |
+| `wss_p99_pa` | Pa | 99th percentile peak systolic WSS |
+| `wss_p95_pa` | Pa | 95th percentile peak systolic WSS |
+| `osi_mean` | - | Mean oscillatory shear index (all cells) |
+| `osi_mean_masked` | - | Mean OSI where OSI > 0.001 (clinically relevant) |
+
+**Why percentile-based QoIs?**
+- Maximum values are sensitive to mesh topology artifacts (corner cells, refinement boundaries)
+- 99th/95th percentiles provide robust descriptors for verification studies
+- Better reproducibility across different mesh resolutions
+
 ### Batch Execution
 
 AortaCFD includes `run_batch.py` for parallel execution of multiple cases or configuration variants using `multiprocessing`.
