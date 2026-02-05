@@ -1,5 +1,10 @@
 {
-  "_doc": "Minimal AortaCFD config - uses defaults where possible",
+  "_doc": "Minimal AortaCFD config - bare minimum required parameters",
+
+  "case_info": {
+    "patient_id": "MY_CASE",
+    "description": "Minimal config example"
+  },
 
   "physics": {
     "model": "laminar"
@@ -10,9 +15,7 @@
   },
 
   "mesh": {
-    "SNAPPY_SETTINGS": {
-      "cells_across_span": 15
-    }
+    "cells_per_diameter": 15
   },
 
   "geometry": {
@@ -29,6 +32,9 @@
     },
     "outlets": {
       "type": "zeroGradient"
+    },
+    "walls": {
+      "type": "no_slip"
     }
   },
 

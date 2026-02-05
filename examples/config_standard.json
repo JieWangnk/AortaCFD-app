@@ -1,6 +1,13 @@
 {
   "_doc": "Standard aortic CFD config - Windkessel outlets, pulsatile flow",
 
+  "case_info": {
+    "patient_id": "MY_PATIENT",
+    "description": "Standard pulsatile aortic simulation with 3-element Windkessel"
+  },
+
+  "cardiac_cycle": 0.8,
+
   "physics": {
     "model": "laminar",
     "transport_properties": {
@@ -14,12 +21,15 @@
   },
 
   "mesh": {
+    "cells_per_diameter": 15,
     "boundary_layers": {
+      "enabled": true,
       "num_layers": 10,
-      "expansion_ratio": 1.2
+      "expansion_ratio": 1.2,
+      "final_layer_thickness": 0.3
     },
     "SNAPPY_SETTINGS": {
-      "cells_across_span": 20,
+      "parallel": true,
       "nProcessors": 8
     }
   },
@@ -27,13 +37,15 @@
   "geometry": {
     "inlet_keywords_ordered": "inlet",
     "outlet_keywords_ordered": ["outlet1", "outlet2", "outlet3", "outlet4"],
-    "wall_keywords_ordered": "wall"
+    "wall_keywords_ordered": "wall_aorta",
+    "scale_factor": 0.001
   },
 
   "boundary_conditions": {
     "inlet": {
       "type": "TIMEVARYING",
-      "csv_file": "flow_data.csv",
+      "csv_file": "flowrate.csv",
+      "data_type": "flowrate",
       "profile": "parabolic"
     },
     "outlets": {
@@ -41,21 +53,49 @@
       "windkessel_settings": {
         "systolic_pressure": 120,
         "diastolic_pressure": 80,
-        "flow_split": 70,
+        "venous_pressure": 0,
+        "methodology": "murray_law_automatic",
+        "tau": 1.0,
         "enable_stabilization": true,
-        "beta": 0.5
+        "betaT": 0.3,
+        "betaN": 0.0
       }
+    },
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+
+  "hemodynamics": {
+    "runtime_functions": {
+      "wallShearStress": true,
+      "fieldAverage": true,
+      "pressureMonitoring": true
+    },
+    "tawss_settings": {
+      "skip_cycles": 1,
+      "periodicRestart": true
     }
   },
 
   "simulation_control": {
-    "cardiac_cycle_period": 0.8,
     "number_of_cycles": 3,
     "writeInterval": 0.04
   },
 
   "run_settings": {
     "solution_type": "parallel",
-    "subdomains": 8
+    "subdomains": 8,
+    "decomposition_method": "scotch"
+  },
+
+  "visualization": {
+    "fields": ["U", "p", "wallShearStress", "TAWSS", "OSI", "RRT"],
+    "time_steps": "last",
+    "color_ranges": {
+      "TAWSS": [0, 50],
+      "OSI": [0, 0.5],
+      "RRT": [0, 10]
+    }
   }
 }
