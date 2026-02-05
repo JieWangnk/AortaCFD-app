@@ -25,10 +25,11 @@ class ValidationResult:
     """Container for validation results."""
 
     def __init__(self, is_valid: bool = True, errors: Optional[List[str]] = None,
-                 warnings: Optional[List[str]] = None):
+                 warnings: Optional[List[str]] = None, cell_count: int = 0):
         self.is_valid = is_valid
         self.errors = errors or []
         self.warnings = warnings or []
+        self.cell_count = cell_count  # For mesh quality results
 
     def add_error(self, message: str):
         """Add an error message."""
@@ -515,6 +516,9 @@ class MeshQualityChecker:
 
             # Parse mesh quality metrics
             metrics = self._parse_checkmesh_output(content)
+
+            # Store cell count in result
+            result.cell_count = int(metrics.get('num_cells', 0))
 
             # Check orthogonality
             ortho_result = self.check_orthogonality(metrics)

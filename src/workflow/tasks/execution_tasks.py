@@ -4,6 +4,7 @@ import shutil
 from ..base_task import Task, AortaCFDError, logger
 from aortacfd_lib.utils.runner import run_command, CommandExecutionError
 from aortacfd_lib.utils.validation import MeshQualityChecker
+from aortacfd_lib.utils.logger import Logger
 
 class ExecuteMeshingTask(Task):
     """Runs the external meshing commands. STLs are pre-scaled to meters during case setup."""
@@ -56,7 +57,9 @@ class ExecuteMeshingTask(Task):
             run_command(self.config, ["checkMesh"], case_dir, "log.checkMesh")
 
             # Analyze mesh quality and provide alerts
-            self._check_mesh_quality(case_dir)
+            mesh_result = self._check_mesh_quality(case_dir)
+            if mesh_result:
+                Logger.console(f"     Mesh: {mesh_result}")
 
             # NOTE: transformPoints is NO LONGER NEEDED
             # STL files are pre-scaled to meters during case setup (CreateCaseStructureTask)
@@ -87,10 +90,13 @@ class ExecuteMeshingTask(Task):
         except OSError as e:
             logger.warning(f"Could not create .foam file: {e}")
 
-    def _check_mesh_quality(self, case_dir: str):
+    def _check_mesh_quality(self, case_dir: str) -> str:
         """
         Analyze mesh quality and provide alerts/recommendations.
         This helps identify potential simulation stability issues early.
+
+        Returns:
+            Summary string for console output (e.g., "125,432 cells, quality OK")
         """
         try:
             # Use new validation-based quality checker
@@ -111,15 +117,19 @@ class ExecuteMeshingTask(Task):
                 logger.warning("  - Using 'draft' profile with 1st order numerics")
                 logger.warning("  - Reviewing geometry for sharp features")
                 # Don't abort - let user decide whether to proceed
+                return f"{result.cell_count:,} cells (quality issues)"
             else:
                 if len(result.warnings) == 0:
                     logger.info("Mesh quality validation passed - no issues detected")
+                    return f"{result.cell_count:,} cells, quality OK"
                 else:
                     logger.info("Mesh quality acceptable with minor warnings")
+                    return f"{result.cell_count:,} cells (minor warnings)"
 
         except Exception as e:
             logger.warning(f"Could not analyze mesh quality: {e}")
             logger.warning("Proceeding without mesh quality check")
+            return ""
 
     def _fix_closeness_file_names(self, case_dir: str):
         """
@@ -338,6 +348,7 @@ class ExecuteSolverTask(Task):
             return False
 
         logger.info("Solver execution completed successfully.")
+        Logger.console("     Solver completed")
         return True
 
     def _cleanup_processor_directories(self, case_dir: str):
@@ -529,6 +540,12 @@ class ExecuteHemodynamicsTask(Task):
 
             logger.info("-" * 60)
             logger.info(f"Full report: {reports_dir}/hemodynamics_report.txt")
+
+            # Clean console summary
+            if results.is_pulsatile and results.tawss_mean > 0:
+                Logger.console(f"     TAWSS: {results.tawss_mean:.2f} Pa (mean), OSI: {results.osi_mean:.3f}")
+            elif results.wss_mean > 0:
+                Logger.console(f"     WSS: {results.wss_mean:.2f} Pa (mean)")
             return True
 
         except ImportError as e:

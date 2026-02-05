@@ -265,24 +265,29 @@ class PatientCaseRunner:
 
         Args:
             patient_output_dir: Base output directory for the patient
-            options: Optional runtime overrides (case_dir, overwrite)
+            options: Optional runtime overrides (case_dir, run_name)
 
         Returns:
             Path to the run directory
         """
         if options and options.get('case_dir'):
+            # Update mode: use existing case directory
             case_dir_path = Path(options['case_dir'])
             if case_dir_path.name == 'openfoam':
                 run_dir = case_dir_path.parent
             else:
                 run_dir = case_dir_path
-            self.logger.info(f"Resuming: using existing run directory: {run_dir}")
-        elif options and options.get('overwrite'):
-            run_dir = patient_output_dir / "latest"
+            self.logger.info(f"Update mode: using existing directory: {run_dir}")
+        elif options and options.get('run_name'):
+            # Custom run name specified
+            run_name = options['run_name']
+            run_dir = patient_output_dir / run_name
             if run_dir.exists():
+                self.logger.info(f"Overwriting existing run: {run_dir}")
                 shutil.rmtree(run_dir)
             run_dir.mkdir(exist_ok=True)
         else:
+            # Default: timestamp-based run directory
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             run_dir = patient_output_dir / f"run_{timestamp}"
             run_dir.mkdir(exist_ok=True)
@@ -404,11 +409,15 @@ class PatientCaseRunner:
 
         # Map new model names to old simulation_type for BC generation compatibility
         # Use lowercase comparison for case-insensitive matching
-        model_to_sim_type = {'laminar': 'laminar', 'rans': 'RAS', 'les': 'LES'}
+        # Support both short names (rans, les) and full names (rans_komegasst, les_wale)
         model_value = config['physics'].get('model', 'laminar').lower()
-        merged_config['physics']['simulation_type'] = model_to_sim_type.get(
-            model_value, 'laminar'
-        )
+        if model_value.startswith('rans'):
+            sim_type = 'RAS'
+        elif model_value.startswith('les'):
+            sim_type = 'LES'
+        else:
+            sim_type = 'laminar'
+        merged_config['physics']['simulation_type'] = sim_type
 
     def _apply_mesh_settings(self, merged_config: Dict[str, Any], config: Dict[str, Any]) -> None:
         """Apply mesh resolution and refinement settings."""

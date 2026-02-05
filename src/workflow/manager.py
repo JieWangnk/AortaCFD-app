@@ -17,6 +17,8 @@ except ImportError:
     from workflow.base_task import logger, AortaCFDError, Task, ExecutionContext
     from workflow.tasks import setup_tasks, execution_tasks
 
+from aortacfd_lib.utils.logger import Logger
+
 
 class WorkflowManager:
     """
@@ -324,6 +326,7 @@ class WorkflowManager:
         completed_tasks: List[str] = []
 
         logger.info(f"Starting workflow for command: '{command}'")
+        Logger.console(f"\n📋 Running workflow: {command}")
         try:
             for task_name in task_sequence:
                 task_class = self.available_tasks.get(task_name)
@@ -334,6 +337,9 @@ class WorkflowManager:
 
                 task_instance = task_class(self.config)
                 logger.info(f"--- Executing Task: {task_instance.__class__.__name__} ---")
+                # Clean console output: show task name
+                task_display_name = task_name.replace("_", " ").title()
+                Logger.console(f"  → {task_display_name}...")
 
                 try:
                     success = task_instance.execute(self.context)
@@ -352,6 +358,7 @@ class WorkflowManager:
             # Clear any previous failure marker on success
             self.clear_failure_marker()
             logger.info("Workflow completed successfully.")
+            Logger.console(f"\n✅ Workflow '{command}' completed successfully")
 
         except AortaCFDError:
             # Re-raise workflow errors (already handled)

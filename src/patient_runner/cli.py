@@ -4,7 +4,8 @@ CLI interface for patient runner - handles command-line argument parsing
 
 import sys
 import argparse
-from .core import PatientCaseRunner
+
+# Delay PatientCaseRunner import until after Logger is configured
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -18,35 +19,37 @@ def create_parser() -> argparse.ArgumentParser:
 QUICK START EXAMPLES
 ═══════════════════════════════════════════════════════════════
 
-  # Run complete workflow
-  python run_patient.py patient1
+  # Run complete workflow (output: output/PAT003/run_YYYYMMDD_HHMMSS/)
+  python run_patient.py PAT003
+
+  # Custom run name (output: output/PAT003/my_test/)
+  python run_patient.py PAT003 --run-name my_test
 
   # Use custom config
-  python run_patient.py patient1 --config my_config.json
+  python run_patient.py PAT003 --config config_fine_mesh.json
 
-  # Run only specific steps (two syntaxes)
-  python run_patient.py patient1 --steps case,mesh          # comma-separated
-  python run_patient.py patient1 --step mesh --step solver  # multiple flags
+  # Run only specific steps
+  python run_patient.py PAT003 --steps case,mesh,boundary
 
-  # Mesh-only for testing different configs
-  python run_patient.py BPM120 -c cases_input/BPM120/config_mesh_span20.json -s case,mesh
+  # Update existing case (preserves mesh, regenerates BCs)
+  python run_patient.py PAT003 --update output/PAT003/run_xxx/openfoam
 
-  # Update existing case with new config (preserves mesh!)
-  python run_patient.py patient1 --update output/patient1/run_xxx/openfoam
+  # Update and run solver
+  python run_patient.py PAT003 --update output/PAT003/run_xxx/openfoam --steps solver
 
 ═══════════════════════════════════════════════════════════════
 WORKFLOW STEPS
 ═══════════════════════════════════════════════════════════════
 
-  case                → Generate OpenFOAM dictionaries (controlDict, fvSchemes, etc.)
-  mesh                → Create computational mesh (blockMesh + snappyHexMesh)
-  boundary            → Setup boundary conditions and inlet flow data
-  regenerate-numerics → Regenerate fvSchemes/fvSolution with mesh-adaptive adjustments
-  solver              → Run CFD solver (parallel execution)
-  reconstruct         → Reconstruct results from parallel decomposition
-  hemodynamics        → Compute WSS, TAWSS, OSI, RRT, pressure drop
-  post                → Post-processing and visualization (ParaView)
-  all                 → Run complete workflow (default)
+  case                → Generate OpenFOAM dictionaries
+  mesh                → Create computational mesh
+  boundary            → Setup boundary conditions
+  regenerate-numerics → Regenerate fvSchemes/fvSolution
+  solver              → Run CFD solver
+  reconstruct         → Reconstruct parallel case
+  hemodynamics        → Compute WSS, TAWSS, OSI, RRT
+  post                → ParaView visualization
+  all                 → Complete workflow (default)
 
 ═══════════════════════════════════════════════════════════════
         """
@@ -54,7 +57,7 @@ WORKFLOW STEPS
 
     # Positional argument
     parser.add_argument('patient_id', nargs='?',
-                       help='Patient case to run (e.g., patient1, BPM120)')
+                       help='Patient case to run (e.g., PAT003, BPM120)')
 
     # ═══ INFORMATIONAL ═══
     info_group = parser.add_argument_group('Information')
@@ -69,42 +72,54 @@ WORKFLOW STEPS
                                help='Run specific step(s), comma-separated (e.g., --steps case,mesh)')
     workflow_group.add_argument('--step', action='append', dest='step_list',
                                choices=['case', 'mesh', 'boundary', 'regenerate-numerics', 'solver', 'reconstruct', 'hemodynamics', 'post', 'all'],
-                               help='Run specific step (can use multiple times: --step case --step mesh)')
+                               help='Run specific step (can use multiple times)')
 
     # ═══ CONFIGURATION ═══
     config_group = parser.add_argument_group('Configuration')
     config_group.add_argument('--config', '-c', metavar='PATH',
                              help='Config JSON file (default: cases_input/<patient_id>/config.json)')
-    profile_choices = list(PatientCaseRunner().get_available_profiles().keys())
+    # Get profile choices dynamically - import here to avoid early Logger initialization
+    from .core import PatientCaseRunner as _PCR
+    profile_choices = list(_PCR().get_available_profiles().keys())
     config_group.add_argument('--profile', metavar='NAME',
                              choices=profile_choices,
                              help='Override simulation profile')
     config_group.add_argument('--quick', action='store_true',
                              help='Quick test mode (coarse mesh, fast settings)')
 
-    # ═══ RESUME / UPDATE ═══
-    resume_group = parser.add_argument_group('Resume & Update')
-    resume_group.add_argument('--resume', action='store_true',
-                             help='Resume from most recent run')
-    resume_group.add_argument('--update', metavar='CASE_PATH',
-                             help='Update existing case (preserves mesh, regenerates all else)')
+    # ═══ OUTPUT & UPDATE ═══
+    output_group = parser.add_argument_group('Output & Update')
+    output_group.add_argument('--run-name', '-n', metavar='NAME',
+                             help='Custom run folder name (default: run_YYYYMMDD_HHMMSS). '
+                                  'Output: output/<patient_id>/<NAME>/')
+    output_group.add_argument('--update', '-u', metavar='CASE_PATH',
+                             help='Update existing case at CASE_PATH. Preserves mesh, '
+                                  'regenerates specified --steps (default: case,boundary)')
 
-    # ═══ ADVANCED ═══
-    advanced_group = parser.add_argument_group('Advanced Options')
-    advanced_group.add_argument('--case-dir', metavar='PATH',
-                               help='Use specific case directory')
-    advanced_group.add_argument('--overwrite', action='store_true',
-                               help='Overwrite existing output')
+    # ═══ OTHER ═══
+    other_group = parser.add_argument_group('Other Options')
+    other_group.add_argument('--verbose', '-v', action='store_true',
+                            help='Show detailed log output (default: clean summary mode)')
 
     return parser
 
 
 def main():
     """Main CLI entry point."""
+    # Pre-parse just the --verbose flag before full parsing
+    # This ensures Logger is configured before any imports that use it
+    verbose = '-v' in sys.argv or '--verbose' in sys.argv
+
+    # Initialize logger with verbosity setting BEFORE anything else
+    from aortacfd_lib.utils.logger import Logger
+    Logger(verbose=verbose)
+
+    # Now safe to create parser and parse all args
     parser = create_parser()
     args = parser.parse_args()
 
-    # Initialize runner
+    # Initialize runner (import here to ensure Logger is configured first)
+    from .core import PatientCaseRunner
     runner = PatientCaseRunner()
 
     # List available patients
@@ -124,10 +139,10 @@ def main():
     if args.list_steps:
         from .steps import WorkflowSteps
         steps = WorkflowSteps()
-        
+
         print("\n🔧 Available Workflow Steps:")
         print("=" * 50)
-        
+
         step_info = {
             'case': ('Create case structure and configuration files', ['setup:dict']),
             'mesh': ('Generate mesh using blockMesh, surfaceFeatures, snappyHexMesh', ['run:mesh']),
@@ -139,16 +154,16 @@ def main():
             'post': ('Execute ParaView visualization', ['execute_post']),
             'all': ('Complete workflow (default)', ['runAll'])
         }
-        
+
         for step_name, (description, workflow_cmds) in step_info.items():
             deps = steps.get_step_dependencies(step_name)
             deps_str = f" (requires: {', '.join(deps)})" if deps else ""
             print(f"  🔸 {step_name:10} - {description}{deps_str}")
             print(f"     {'':10}   Workflow: {', '.join(workflow_cmds)}")
-        
+
         print(f"\nUsage Examples:")
         print(f"  python run_patient.py patient1 --step mesh")
-        print(f"  python run_patient.py patient1 --step case --step mesh")
+        print(f"  python run_patient.py patient1 --steps case,mesh,boundary")
         print(f"  python run_patient.py patient1  # (runs all steps)")
         return
 
@@ -163,98 +178,46 @@ def main():
         options['profile'] = 'sim_laminar_coarse'
     if args.profile:
         options['profile'] = args.profile
-    if args.overwrite:
-        options['overwrite'] = True
+    if args.run_name:
+        options['run_name'] = args.run_name
 
-    # Handle --resume flag
-    if args.resume:
-        from pathlib import Path
-        import glob
-
-        # Find most recent run directory for this patient
-        output_dir = Path('output') / args.patient_id
-        if output_dir.exists():
-            run_dirs = sorted(output_dir.glob('run_*'), key=lambda p: p.stat().st_mtime, reverse=True)
-            if run_dirs:
-                most_recent = run_dirs[0]
-                # Check if it's already an OpenFOAM case directory (has system/, constant/, 0/)
-                if (most_recent / 'system').exists() and (most_recent / 'constant').exists():
-                    # Direct OpenFOAM case directory
-                    options['case_dir'] = str(most_recent)
-                    print(f"🔄 Resuming from: {most_recent}")
-                elif (most_recent / 'openfoam').exists():
-                    # Nested structure with openfoam subdirectory
-                    options['case_dir'] = str(most_recent / 'openfoam')
-                    print(f"🔄 Resuming from: {most_recent / 'openfoam'}")
-                else:
-                    print(f"⚠️  Run directory exists but doesn't contain OpenFOAM case files")
-                    print(f"   Directory: {most_recent}")
-                    print(f"   Starting fresh run instead")
-                    options['case_dir'] = None
-
-                # If no specific steps provided, suggest what to run
-                if not args.step and options.get('case_dir'):
-                    print(f"\n💡 Tip: Specify which step to resume from, e.g.:")
-                    print(f"   --step boundary    (if mesh is done)")
-                    print(f"   --step solver      (if BC is done)")
-                    print(f"   --step reconstruct (if solver is done)")
-            else:
-                print(f"⚠️  No existing run directories found for {args.patient_id}")
-                print(f"   Starting fresh run instead")
-        else:
-            print(f"⚠️  No output directory found for {args.patient_id}")
-            print(f"   Starting fresh run instead")
-
-    # Get config override first (used in multiple paths below)
+    # Get config override
     config_override = args.config
 
-    # Handle --update: regenerate all files except polyMesh
+    # Handle --update mode
     if args.update:
         from pathlib import Path
-        import shutil
 
         update_case = Path(args.update)
         if not update_case.exists():
             print(f"❌ Update case not found: {update_case}")
             sys.exit(1)
 
-        # Check if it has polyMesh
-        polymesh_dir = update_case / 'constant' / 'polyMesh'
-        if not polymesh_dir.exists():
+        # Check if it has polyMesh (either directly or in openfoam subdir)
+        if (update_case / 'constant' / 'polyMesh').exists():
+            case_path = update_case
+        elif (update_case / 'openfoam' / 'constant' / 'polyMesh').exists():
+            case_path = update_case / 'openfoam'
+        else:
             print(f"❌ No polyMesh found in: {update_case}")
-            print(f"   Expected: {polymesh_dir}")
+            print(f"   Expected: {update_case}/constant/polyMesh or {update_case}/openfoam/constant/polyMesh")
             sys.exit(1)
 
         print(f"\n🔄 UPDATE MODE")
         print(f"=" * 60)
-        print(f"📁 Updating case: {update_case}")
-        print(f"✅ Preserving mesh: {polymesh_dir}")
-        print(f"🔧 Will regenerate: system/, 0/, controlDict, fvSchemes, fvSolution")
+        print(f"📁 Updating case: {case_path}")
+        print(f"✅ Mesh preserved: {case_path}/constant/polyMesh")
 
-        # Use config if specified
         if config_override:
             print(f"📝 Using config: {config_override}")
         else:
             print(f"📝 Using default config for {args.patient_id}")
 
-        # Backup polyMesh
-        backup_polymesh = update_case / 'constant' / 'polyMesh_BACKUP'
-        print(f"💾 Backing up polyMesh...")
-        if backup_polymesh.exists():
-            shutil.rmtree(backup_polymesh)
-        shutil.copytree(polymesh_dir, backup_polymesh)
-
-        # Set options to regenerate everything except mesh
-        options['case_dir'] = str(update_case)
+        options['case_dir'] = str(case_path)
         options['update_mode'] = True
-        options['preserve_polymesh'] = str(backup_polymesh)
-
         print(f"=" * 60)
-        print()
-    elif args.case_dir:
-        options['case_dir'] = args.case_dir
 
-    # Handle workflow steps - support both --steps (comma-separated) and --step (multiple)
+    # Handle workflow steps
     valid_steps = {'case', 'mesh', 'boundary', 'regenerate-numerics', 'solver', 'reconstruct', 'hemodynamics', 'post', 'all'}
     steps = []
 
@@ -272,9 +235,14 @@ def main():
     if args.step_list:
         steps.extend(args.step_list)
 
-    # Default to 'all' if no steps specified
+    # Default steps depend on mode
     if not steps:
-        steps = ['all']
+        if args.update:
+            # Update mode: regenerate case setup and boundary conditions, skip mesh
+            steps = ['case', 'boundary']
+            print(f"ℹ️  Update mode default: running steps [case, boundary]")
+        else:
+            steps = ['all']
 
     # Map CLI step names to workflow commands
     step_mapping = {
@@ -306,6 +274,10 @@ def main():
         # Prepare simulation
         sim_config = runner.prepare_simulation(case_info, options)
         print(f"✅ Configuration prepared - Profile: {sim_config['profile_name']}")
+
+        # Show output path
+        if not args.update:
+            print(f"📁 Output: {sim_config['run_dir']}")
 
         # Run workflow steps
         success = True

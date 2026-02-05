@@ -109,10 +109,11 @@ output/<patient_id>/           # Results
 - **Batch Execution** - Parallel multi-case runner (`run_batch.py`) with multiprocessing support
 - **Multi-Config Support** - Run same patient with different settings (mesh convergence studies)
 - **Parallel Execution** - Multi-core meshing and solver with smart processor allocation
-- **Resume Support** - Continue from existing runs with `--resume` flag
-- **Flexible Steps** - Run individual workflow steps (case/mesh/boundary/solver/reconstruct/post)
+- **Update Mode** - Update existing cases with `--update` flag (preserves mesh, regenerates BCs)
+- **Flexible Steps** - Run individual workflow steps (case/mesh/boundary/solver/reconstruct/hemodynamics/post)
 - **HPC Integration** - SLURM job array script generation
 - **OpenFOAM 12 Native** - Uses `foamRun -solver incompressibleFluid`
+- **Clean Console Output** - Minimal output by default, `--verbose` for detailed logs
 
 ### Analysis & Visualization
 - **Post-Processing** - Automated ParaView visualization
@@ -159,44 +160,63 @@ python run_patient.py --list
 # List available workflow steps
 python run_patient.py --list-steps
 
-# Run complete workflow (creates new timestamped run)
+# Run complete workflow (output: output/BPM120/run_YYYYMMDD_HHMMSS/)
 python run_patient.py BPM120
+
+# Custom run name (output: output/BPM120/my_test/)
+python run_patient.py BPM120 --run-name my_test
 
 # Run with specific config file
 python run_patient.py BPM120 --config config_mesh_fine.json
 
-# Resume from most recent run
-python run_patient.py BPM120 --resume
+# Show detailed output (default is clean/minimal)
+python run_patient.py BPM120 --verbose
 ```
+
+**CLI Options:**
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--list` | `-l` | List available patient cases |
+| `--list-steps` | | List all workflow steps |
+| `--steps STEPS` | `-s` | Run specific steps (comma-separated) |
+| `--step STEP` | | Run specific step (can use multiple times) |
+| `--config PATH` | `-c` | Use custom config JSON file |
+| `--profile NAME` | | Override simulation profile |
+| `--quick` | | Quick test mode (coarse mesh) |
+| `--run-name NAME` | `-n` | Custom run folder name |
+| `--update PATH` | `-u` | Update existing case (preserves mesh) |
+| `--verbose` | `-v` | Show detailed log output |
 
 ### Working with Existing Output Cases
 
-A powerful feature of AortaCFD is the ability to run workflow steps on **existing output directories**. This is useful for:
+The `--update` flag allows you to work with **existing output directories**. This is useful for:
 - Re-running the solver after parameter changes
 - Reconstructing parallel cases
 - Updating boundary conditions without regenerating mesh
 - Post-processing completed simulations
 
 ```bash
-# Point directly to an existing output case using --update (preserves mesh!)
-python run_patient.py BPM120 --update output/BPM120/run_20251220_093653 --step solver
+# Update existing case (preserves mesh, regenerates case+boundary by default)
+python run_patient.py BPM120 --update output/BPM120/run_20251220_093653
 
-# Or use --case-dir for full control
-python run_patient.py 0014_H_AO_COA --case-dir output/0014_H_AO_COA/testing_3M_laminar --step reconstruct
+# Update and run solver on existing mesh
+python run_patient.py BPM120 --update output/BPM120/run_20251220_093653 --steps solver
 
-# Common workflow: update BCs and re-run solver on existing mesh
-python run_patient.py BPM120 --update output/BPM120/run_20251220_093653 --step boundary --step solver
+# Update BCs and re-run solver
+python run_patient.py BPM120 --update output/BPM120/run_20251220_093653 --steps boundary,solver
 
 # Reconstruct a parallel case that finished on HPC
-python run_patient.py PAT002 --case-dir output/PAT002/run_20251218_142530 --step reconstruct
+python run_patient.py PAT002 --update output/PAT002/run_20251218_142530 --steps reconstruct
 
 # Run post-processing on completed simulation
-python run_patient.py BPM120 --case-dir output/BPM120/run_20251220_093653 --step post
+python run_patient.py BPM120 --update output/BPM120/run_20251220_093653 --steps post
 ```
 
-**Key difference between `--update` and `--case-dir`:**
-- `--update PATH`: Preserves mesh, regenerates boundary conditions and configs from current config.json
-- `--case-dir PATH`: Uses case directory as-is, only runs specified steps
+**How `--update` works:**
+- Preserves the existing mesh in `constant/polyMesh`
+- Default steps: `case,boundary` (regenerates config files and BCs)
+- Use `--steps` to override and run specific steps only
+- Looks for `polyMesh` in `<path>/constant/` or `<path>/openfoam/constant/`
 
 ### Workflow Steps
 
@@ -204,16 +224,20 @@ AortaCFD provides granular control over the simulation pipeline:
 
 ```bash
 # Run specific workflow steps (new run)
-python run_patient.py BPM120 --step mesh              # Only meshing
-python run_patient.py BPM120 --step solver            # Only solver
-python run_patient.py BPM120 --step reconstruct       # Reconstruct decomposed case
-python run_patient.py BPM120 --step post              # Post-processing
+python run_patient.py BPM120 --steps mesh              # Only meshing
+python run_patient.py BPM120 --steps solver            # Only solver
+python run_patient.py BPM120 --steps reconstruct       # Reconstruct decomposed case
+python run_patient.py BPM120 --steps hemodynamics      # Compute TAWSS, OSI, RRT
+python run_patient.py BPM120 --steps post              # Post-processing
 
-# Multiple steps in sequence
+# Multiple steps (comma-separated)
+python run_patient.py BPM120 --steps case,mesh,boundary
+
+# Or use --step multiple times
 python run_patient.py BPM120 --step case --step mesh --step boundary
 
-# Combine with --output to work on existing case
-python run_patient.py BPM120 --output output/BPM120/run_20251220_093653 --step boundary --step solver
+# Combine with --update to work on existing case
+python run_patient.py BPM120 --update output/BPM120/run_20251220_093653 --steps boundary,solver
 ```
 
 **Available Steps:**
@@ -225,7 +249,8 @@ python run_patient.py BPM120 --output output/BPM120/run_20251220_093653 --step b
 | **regenerate-numerics** | Regenerate fvSchemes/fvSolution with mesh-adaptive adjustments | After mesh quality check |
 | **solver** | Run CFD solver (foamRun) | Run/continue simulation |
 | **reconstruct** | Reconstruct parallel case from processor directories | Post-HPC processing |
-| **post** | Execute post-processing | Generate results/visualizations |
+| **hemodynamics** | Compute WSS, TAWSS, OSI, RRT, pressure drop | After solver completes |
+| **post** | Execute ParaView visualization | Generate screenshots/images |
 | **all** | Complete workflow (default) | Fresh simulation |
 
 ### Common Use Cases
@@ -235,59 +260,65 @@ python run_patient.py BPM120 --output output/BPM120/run_20251220_093653 --step b
 python run_patient.py BPM120
 ```
 
-**2. Test different mesh resolutions:**
+**2. Custom output folder name:**
 ```bash
-python run_patient.py BPM120 --config config_mesh_coarse.json
-python run_patient.py BPM120 --config config_mesh_fine.json
+python run_patient.py BPM120 --run-name mesh_study_fine
+# Output: output/BPM120/mesh_study_fine/
 ```
 
-**3. Re-run solver after editing fvSolution or boundary conditions:**
+**3. Test different mesh resolutions:**
+```bash
+python run_patient.py BPM120 --config config_mesh_coarse.json --run-name coarse
+python run_patient.py BPM120 --config config_mesh_fine.json --run-name fine
+```
+
+**4. Re-run solver after editing fvSolution or boundary conditions:**
 ```bash
 # Edit the files in output/BPM120/run_*/openfoam/system/ or 0/
-python run_patient.py BPM120 --case-dir output/BPM120/run_20251220_093653 --step solver
+python run_patient.py BPM120 --update output/BPM120/run_20251220_093653 --steps solver
 ```
 
-**4. Reconstruct HPC results locally:**
+**5. Reconstruct HPC results locally:**
 ```bash
 # After copying results from HPC
-python run_patient.py BPM120 --case-dir output/BPM120/hpc_run --step reconstruct --step post
+python run_patient.py BPM120 --update output/BPM120/hpc_run --steps reconstruct,hemodynamics,post
 ```
 
-**5. Update Windkessel parameters and re-run:**
+**6. Update Windkessel parameters and re-run:**
 ```bash
 # Edit 0/p to change R, C, Z values, then:
-python run_patient.py BPM120 --case-dir output/BPM120/run_20251220_093653 --step solver
+python run_patient.py BPM120 --update output/BPM120/run_20251220_093653 --steps solver
 ```
 
-**6. Continue from last saved timestep:**
+**7. Continue from last saved timestep:**
 ```bash
 # Modify controlDict to set startFrom latestTime, then:
-python run_patient.py BPM120 --case-dir output/BPM120/run_20251220_093653 --step solver
+python run_patient.py BPM120 --update output/BPM120/run_20251220_093653 --steps solver
 ```
 
-**7. Generate mesh only (for manual solver runs on HPC):**
+**8. Generate mesh only (for manual solver runs on HPC):**
 ```bash
-python run_patient.py BPM120 --step case --step mesh --step boundary
-# Then copy output/BPM120/run_*/openfoam to HPC
+python run_patient.py BPM120 --steps case,mesh,boundary --run-name hpc_prep
+# Then copy output/BPM120/hpc_prep/openfoam to HPC
 ```
 
-**8. Update case with new config but keep existing mesh:**
+**9. Update case with new config but keep existing mesh:**
 ```bash
 # After modifying config.json (e.g., changed BC settings):
 python run_patient.py BPM120 --update output/BPM120/run_20251220_093653
 # This regenerates 0/, system/ but preserves constant/polyMesh
 ```
 
-**9. Quick mesh test with coarse settings:**
+**10. Quick mesh test with coarse settings:**
 ```bash
-python run_patient.py BPM120 --quick --step case --step mesh
+python run_patient.py BPM120 --quick --steps case,mesh
 # Creates coarse mesh for geometry validation
 ```
 
-**10. Run with comma-separated steps (alternative syntax):**
+**11. Run with verbose output for debugging:**
 ```bash
-python run_patient.py BPM120 --steps case,mesh,boundary
-# Equivalent to: --step case --step mesh --step boundary
+python run_patient.py BPM120 --verbose
+# Shows detailed log output instead of clean summaries
 ```
 
 ### Batch Execution
@@ -674,10 +705,10 @@ AortaCFD includes comprehensive post-processing for visualization and hemodynami
 
 ```bash
 # Run post-processing as part of workflow
-python run_patient.py BPM120 --step post
+python run_patient.py BPM120 --steps post
 
 # Run post-processing on existing case
-python run_patient.py BPM120 --case-dir output/BPM120/run_20251220_093653 --step post
+python run_patient.py BPM120 --update output/BPM120/run_20251220_093653 --steps post
 
 # Include post-processing in full workflow
 python run_patient.py BPM120  # post-processing runs automatically at end
@@ -1095,4 +1126,4 @@ For questions or support:
 
 ---
 
-**Last Updated:** 2025-12-22
+**Last Updated:** 2026-02-05
