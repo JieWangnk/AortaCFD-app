@@ -1,16 +1,24 @@
 {
-  "_doc": "AortaCFD config reference v2.2 - Profiles: robust/standard/precise",
+  "_doc": "AortaCFD config reference v2.3 - Profiles: robust/standard/precise",
 
   "case_info": {
     "patient_id": "EXAMPLE",
+    "description": "Patient-specific aortic CFD simulation",
     "notes": "Optional metadata for tracking"
   },
 
+  "cardiac_cycle": 0.8,
+  "_cardiac_cycle_comment": "Top-level cardiac cycle period in seconds (alternative to simulation_control.cardiac_cycle_period)",
+
   "physics": {
     "_comment": "Physics model and fluid properties",
-    "model": "RAS",
-    "_model_options": ["laminar", "RAS", "LES"],
-    "_model_notes": "laminar: No turbulence model; RAS: RANS (k-omega SST); LES: Large Eddy Simulation (WALE)",
+    "model": "laminar",
+    "_model_options": ["laminar", "rans", "les", "rans_komegasst"],
+    "_model_notes": "laminar: No turbulence; rans/rans_komegasst: RANS k-omega SST; les: LES WALE. Use lowercase.",
+
+    "simulation_type": "laminar",
+    "_simulation_type_options": ["laminar", "RAS", "LES"],
+    "_simulation_type_comment": "OpenFOAM simulation type. Auto-set from model, or override explicitly.",
 
     "transport_properties": {
       "rho": 1060,
@@ -42,14 +50,14 @@
 
     "correctors": {
       "_comment": "PIMPLE algorithm corrector settings",
-      "nOuterCorrectors": 5,
-      "_nOuterCorrectors_comment": "Outer correctors (robust: 25, standard: 50, precise: 50 with residual control)",
+      "nOuterCorrectors": 10,
+      "_nOuterCorrectors_comment": "Outer correctors (typical: 3-10 for Windkessel coupling)",
 
-      "nCorrectors": 2,
-      "_nCorrectors_comment": "Inner pressure correctors (robust: 3, standard: 2, precise: 3)",
+      "nCorrectors": 3,
+      "_nCorrectors_comment": "Inner pressure correctors (typical: 2-3)",
 
       "nNonOrthogonalCorrectors": 2,
-      "_nNonOrthogonalCorrectors_comment": "Non-orthogonal correctors (typical: 2)"
+      "_nNonOrthogonalCorrectors_comment": "Non-orthogonal correctors (typical: 1-2)"
     },
 
     "relaxation_factors": {
@@ -84,13 +92,21 @@
   },
 
   "mesh": {
-    "_comment": "Mesh generation parameters (v2.0: cells_across_span is now primary method)",
+    "_comment": "Mesh generation parameters",
 
-    "_legacy_mesh_resolution": {
-      "_comment": "DEPRECATED (v1.0): Old method based on cells_per_diameter",
-      "_note": "These parameters still work but cells_across_span is recommended",
-      "_cells_per_diameter": 20,
-      "_target_cell_size_mm": 1.0
+    "cells_per_diameter": 15,
+    "_cells_per_diameter_comment": "Cells across inlet diameter. Can also use mesh.mesh_resolution.cells_per_diameter",
+    "_cells_per_diameter_guidelines": {
+      "coarse": "10-12 cells - initial exploration, geometry checks",
+      "standard": "15-20 cells - production simulations (RECOMMENDED)",
+      "fine": "25-30 cells - mesh independence studies, publications"
+    },
+
+    "_alternative_location": {
+      "_comment": "cells_per_diameter can also be specified as:",
+      "mesh_resolution": {
+        "cells_per_diameter": 15
+      }
     },
 
     "boundary_layers": {
@@ -272,7 +288,8 @@
         },
 
         "exponent": 2.0,
-        "_exponent_comment": "For wall_distance profile: 2.0 = parabolic-like, 1.0 = linear, 1/7 = turbulent"
+        "_exponent_comment": "For wall_distance profile: 2.0 = parabolic-like, 1.0 = linear, 0.143 (1/7) = turbulent",
+        "_exponent_required": "REQUIRED when profile='wall_distance'"
       },
 
       "_WOMERSLEY_parameters": {
@@ -671,6 +688,30 @@
         "tolerance": 0.01,
         "_tolerance_comment": "Maximum allowable mass imbalance (1% default)"
       }
+    }
+  },
+
+  "visualization": {
+    "_comment": "ParaView post-processing visualization settings",
+
+    "fields": ["U", "p", "wallShearStress", "TAWSS", "OSI", "RRT"],
+    "_fields_comment": "Fields to visualize. TAWSS/OSI/RRT require hemodynamics post-processing first.",
+    "_available_fields": ["U", "p", "wallShearStress", "TAWSS", "OSI", "RRT", "k", "omega", "nut"],
+
+    "time_steps": "last",
+    "_time_steps_options": ["last", "all", [0.5, 1.0, 1.5]],
+    "_time_steps_comment": "'last' for final timestep, 'all' for every saved time, or list of specific times",
+
+    "color_ranges": {
+      "_comment": "Fixed color ranges for consistent visualization (auto-scale if not specified)",
+      "WSS": [0, 50],
+      "_WSS_comment": "Instantaneous wall shear stress [Pa]",
+      "TAWSS": [0, 50],
+      "_TAWSS_comment": "Time-averaged WSS [Pa]. Low <0.4 Pa indicates atherogenic risk",
+      "OSI": [0, 0.5],
+      "_OSI_comment": "Oscillatory shear index [-]. High >0.3 indicates disturbed flow",
+      "RRT": [0, 10],
+      "_RRT_comment": "Relative residence time [1/Pa]. High >10 indicates particle trapping"
     }
   },
 
