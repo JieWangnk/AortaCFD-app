@@ -515,5 +515,616 @@ class TestEdgeCases:
         assert MAP == pytest.approx(100.0, rel=1e-6)
 
 
+class TestCheckDirectRCZMode:
+    """Test direct RCZ mode detection."""
+
+    def setup_method(self):
+        """Setup config for testing."""
+        self.config = {
+            'geometry': {
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1', 'outlet2']
+            },
+            'boundary_conditions': {
+                'inlet': {'type': 'CONSTANT'},
+                'outlets': {
+                    'windkessel_settings': {
+                        'systolic_pressure': 120,
+                        'diastolic_pressure': 80
+                    }
+                }
+            },
+            'physics': {'blood_density': 1060}
+        }
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_direct_rcz_mode_enabled(self, mock_logger):
+        """Test direct RCZ mode enabled when all outlets have R, C, Z."""
+        self.config['boundary_conditions']['outlets']['windkessel_settings']['outlet_parameters'] = {
+            'outlet1': {'R': 1.5e9, 'C': 1.0e-9, 'Z': 1.5e8},
+            'outlet2': {'R': 2.0e9, 'C': 0.8e-9, 'Z': 2.0e8}
+        }
+
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+        outlet_patches = ['outlet1', 'outlet2']
+
+        result = wk._check_direct_rcz_mode(outlet_patches)
+
+        assert result is True
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_direct_rcz_mode_missing_outlet(self, mock_logger):
+        """Test direct RCZ mode disabled when outlet is missing."""
+        self.config['boundary_conditions']['outlets']['windkessel_settings']['outlet_parameters'] = {
+            'outlet1': {'R': 1.5e9, 'C': 1.0e-9, 'Z': 1.5e8}
+            # outlet2 missing
+        }
+
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+        outlet_patches = ['outlet1', 'outlet2']
+
+        result = wk._check_direct_rcz_mode(outlet_patches)
+
+        assert result is False
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_direct_rcz_mode_missing_parameter(self, mock_logger):
+        """Test direct RCZ mode disabled when R, C, or Z is missing."""
+        self.config['boundary_conditions']['outlets']['windkessel_settings']['outlet_parameters'] = {
+            'outlet1': {'R': 1.5e9, 'C': 1.0e-9},  # Z missing
+            'outlet2': {'R': 2.0e9, 'C': 0.8e-9, 'Z': 2.0e8}
+        }
+
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+        outlet_patches = ['outlet1', 'outlet2']
+
+        result = wk._check_direct_rcz_mode(outlet_patches)
+
+        assert result is False
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_direct_rcz_mode_non_numeric_value(self, mock_logger):
+        """Test direct RCZ mode disabled when value is non-numeric."""
+        self.config['boundary_conditions']['outlets']['windkessel_settings']['outlet_parameters'] = {
+            'outlet1': {'R': 'invalid', 'C': 1.0e-9, 'Z': 1.5e8},
+            'outlet2': {'R': 2.0e9, 'C': 0.8e-9, 'Z': 2.0e8}
+        }
+
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+        outlet_patches = ['outlet1', 'outlet2']
+
+        result = wk._check_direct_rcz_mode(outlet_patches)
+
+        assert result is False
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_direct_rcz_mode_empty_params(self, mock_logger):
+        """Test direct RCZ mode disabled when outlet_parameters is empty."""
+        self.config['boundary_conditions']['outlets']['windkessel_settings']['outlet_parameters'] = {}
+
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+        outlet_patches = ['outlet1', 'outlet2']
+
+        result = wk._check_direct_rcz_mode(outlet_patches)
+
+        assert result is False
+
+
+class TestParseCustomFlowSplit:
+    """Test custom flow split parsing."""
+
+    def setup_method(self):
+        """Setup mock config."""
+        self.config = {
+            'geometry': {
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1', 'outlet2', 'outlet3']
+            },
+            'boundary_conditions': {
+                'inlet': {'type': 'CONSTANT'},
+                'outlets': {
+                    'windkessel_settings': {
+                        'systolic_pressure': 120,
+                        'diastolic_pressure': 80
+                    }
+                }
+            },
+            'physics': {'blood_density': 1060}
+        }
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_parse_complete_ratios(self, mock_logger):
+        """Test parsing when values are complete ratios summing to 1.0."""
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+
+        flow_split_config = {'outlet1': 0.2, 'outlet2': 0.3, 'outlet3': 0.5}
+        outlet_patches = ['outlet1', 'outlet2', 'outlet3']
+        outlet_radii = {'outlet1': 0.005, 'outlet2': 0.006, 'outlet3': 0.008}
+
+        result = wk._parse_custom_flow_split(flow_split_config, outlet_patches, outlet_radii)
+
+        assert result['outlet1'] == pytest.approx(0.2, rel=1e-6)
+        assert result['outlet2'] == pytest.approx(0.3, rel=1e-6)
+        assert result['outlet3'] == pytest.approx(0.5, rel=1e-6)
+        assert sum(result.values()) == pytest.approx(1.0, rel=1e-6)
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_parse_percentages_mode(self, mock_logger):
+        """Test parsing when values are percentages (> 1.0 or don't sum to 1)."""
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+
+        flow_split_config = {'outlet1': 20, 'outlet2': 30, 'outlet3': 50}
+        outlet_patches = ['outlet1', 'outlet2', 'outlet3']
+        outlet_radii = {'outlet1': 0.005, 'outlet2': 0.006, 'outlet3': 0.008}
+
+        result = wk._parse_custom_flow_split(flow_split_config, outlet_patches, outlet_radii)
+
+        assert result['outlet1'] == pytest.approx(0.2, rel=1e-6)
+        assert result['outlet2'] == pytest.approx(0.3, rel=1e-6)
+        assert result['outlet3'] == pytest.approx(0.5, rel=1e-6)
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_parse_with_rest_murray(self, mock_logger):
+        """Test parsing with _rest='murray' for remaining outlets."""
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+
+        flow_split_config = {'outlet3': 50, '_rest': 'murray'}
+        outlet_patches = ['outlet1', 'outlet2', 'outlet3']
+        outlet_radii = {'outlet1': 0.005, 'outlet2': 0.005, 'outlet3': 0.008}
+
+        result = wk._parse_custom_flow_split(flow_split_config, outlet_patches, outlet_radii)
+
+        # outlet3 gets 50%
+        assert result['outlet3'] == pytest.approx(0.5, rel=1e-6)
+        # outlet1 and outlet2 share 50% by Murray's law (equal radii = equal share)
+        assert result['outlet1'] == pytest.approx(0.25, rel=1e-2)
+        assert result['outlet2'] == pytest.approx(0.25, rel=1e-2)
+
+
+class TestNormalizeDataType:
+    """Test data type normalization."""
+
+    def setup_method(self):
+        """Setup minimal config."""
+        self.config = {
+            'geometry': {
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1']
+            },
+            'boundary_conditions': {
+                'inlet': {'type': 'CONSTANT'},
+                'outlets': {
+                    'windkessel_settings': {'systolic_pressure': 120, 'diastolic_pressure': 80}
+                }
+            },
+            'physics': {'blood_density': 1060}
+        }
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_normalize_flowrate_variants(self, mock_logger):
+        """Test normalization of flowrate variants."""
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+
+        assert wk._normalize_data_type('flowrate') == 'flowrate'
+        assert wk._normalize_data_type('flowRate') == 'flowrate'
+        assert wk._normalize_data_type('FLOWRATE') == 'flowrate'
+        assert wk._normalize_data_type('flow_rate') == 'flowrate'
+        assert wk._normalize_data_type('flow') == 'flowrate'
+        assert wk._normalize_data_type('Q') == 'flowrate'
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_normalize_velocity_variants(self, mock_logger):
+        """Test normalization of velocity variants."""
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+
+        assert wk._normalize_data_type('velocity') == 'velocity'
+        assert wk._normalize_data_type('Velocity') == 'velocity'
+        assert wk._normalize_data_type('VELOCITY') == 'velocity'
+        assert wk._normalize_data_type('vel') == 'velocity'
+        assert wk._normalize_data_type('u') == 'velocity'
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_normalize_pressure_variants(self, mock_logger):
+        """Test normalization of pressure variants."""
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+
+        assert wk._normalize_data_type('pressure') == 'pressure'
+        assert wk._normalize_data_type('PRESSURE') == 'pressure'
+        assert wk._normalize_data_type('p') == 'pressure'
+        assert wk._normalize_data_type('press') == 'pressure'
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_normalize_none_input(self, mock_logger):
+        """Test normalization with None input."""
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+
+        assert wk._normalize_data_type(None) is None
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_normalize_unknown_type(self, mock_logger):
+        """Test normalization of unknown type returns as-is."""
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+
+        assert wk._normalize_data_type('unknown_type') == 'unknown_type'
+
+
+class TestReadInletFlow:
+    """Test reading inlet flow data from CSV."""
+
+    def setup_method(self):
+        """Setup minimal config."""
+        self.config = {
+            'geometry': {
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1']
+            },
+            'boundary_conditions': {
+                'inlet': {'type': 'CONSTANT'},
+                'outlets': {
+                    'windkessel_settings': {'systolic_pressure': 120, 'diastolic_pressure': 80}
+                }
+            },
+            'physics': {'blood_density': 1060}
+        }
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_read_flowrate_data(self, mock_logger, tmp_path):
+        """Test reading flow rate CSV data."""
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+
+        # Create CSV file
+        csv_content = """time,flowrate
+0.0,1.0e-5
+0.4,2.0e-5
+0.8,1.0e-5"""
+        csv_file = tmp_path / "inlet.csv"
+        csv_file.write_text(csv_content)
+
+        inlet_area = 1e-4  # 1 cm²
+        times, flow = wk._read_inlet_flow(str(csv_file), 'flowrate', inlet_area)
+
+        assert len(times) == 3
+        assert len(flow) == 3
+        assert times[0] == pytest.approx(0.0)
+        assert flow[1] == pytest.approx(2.0e-5)
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_read_velocity_data(self, mock_logger, tmp_path):
+        """Test reading velocity CSV data (converts to flow rate)."""
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+
+        csv_content = """time,velocity
+0.0,0.5
+0.4,1.0
+0.8,0.5"""
+        csv_file = tmp_path / "inlet.csv"
+        csv_file.write_text(csv_content)
+
+        inlet_area = 1e-4  # 1 cm²
+        times, flow = wk._read_inlet_flow(str(csv_file), 'velocity', inlet_area)
+
+        assert len(times) == 3
+        # Flow = velocity * area
+        assert flow[0] == pytest.approx(0.5 * 1e-4)
+        assert flow[1] == pytest.approx(1.0 * 1e-4)
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_read_csv_with_comments(self, mock_logger, tmp_path):
+        """Test reading CSV with comment lines."""
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+
+        csv_content = """# This is a comment
+# Another comment
+time,flowrate
+0.0,1.0e-5
+0.8,2.0e-5"""
+        csv_file = tmp_path / "inlet.csv"
+        csv_file.write_text(csv_content)
+
+        times, flow = wk._read_inlet_flow(str(csv_file), 'flowrate', 1e-4)
+
+        assert len(times) == 2
+        assert times[0] == pytest.approx(0.0)
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_read_missing_file(self, mock_logger, tmp_path):
+        """Test error when file doesn't exist."""
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+
+        with pytest.raises(FileNotFoundError, match="Could not find inlet data file"):
+            wk._read_inlet_flow('/nonexistent/file.csv', 'flowrate', 1e-4)
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_read_unknown_data_type(self, mock_logger, tmp_path):
+        """Test error with unknown data type."""
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+
+        csv_content = """time,value
+0.0,1.0
+0.8,2.0"""
+        csv_file = tmp_path / "inlet.csv"
+        csv_file.write_text(csv_content)
+
+        with pytest.raises(ValueError, match="Unknown data type"):
+            wk._read_inlet_flow(str(csv_file), 'unknown_type', 1e-4)
+
+
+class TestCalculatePercentageFlowSplit:
+    """Test percentage-based flow split with area or Murray method."""
+
+    def setup_method(self):
+        """Setup minimal config."""
+        self.config = {
+            'geometry': {
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['branch1', 'branch2', 'main']
+            },
+            'boundary_conditions': {
+                'inlet': {'type': 'CONSTANT'},
+                'outlets': {
+                    'windkessel_settings': {'systolic_pressure': 120, 'diastolic_pressure': 80}
+                }
+            },
+            'physics': {'blood_density': 1060}
+        }
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_area_method_split(self, mock_logger):
+        """Test percentage split using area method."""
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+
+        outlet_patches = ['branch1', 'branch2', 'main']
+        outlet_radii = {
+            'branch1': 0.003,  # Area = π * 9e-6
+            'branch2': 0.003,  # Area = π * 9e-6
+            'main': 0.010
+        }
+
+        result = wk._parse_flow_split_percentage(
+            60.0,  # 60% to branches
+            outlet_patches,
+            method='area',
+            geometry_data=outlet_radii
+        )
+
+        # Main gets 40%
+        assert result['main'] == pytest.approx(0.40, rel=1e-6)
+        # Branches share 60% equally (same area)
+        assert result['branch1'] == pytest.approx(0.30, rel=1e-6)
+        assert result['branch2'] == pytest.approx(0.30, rel=1e-6)
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_murray_method_split(self, mock_logger):
+        """Test percentage split using Murray method."""
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+
+        outlet_patches = ['branch1', 'branch2', 'main']
+        outlet_radii = {
+            'branch1': 0.003,
+            'branch2': 0.006,  # Twice the radius
+            'main': 0.010
+        }
+
+        result = wk._parse_flow_split_percentage(
+            60.0,  # 60% to branches
+            outlet_patches,
+            method='murray',
+            geometry_data=outlet_radii
+        )
+
+        # Main gets 40%
+        assert result['main'] == pytest.approx(0.40, rel=1e-6)
+        # Branch2 should get more than branch1 (larger radius)
+        assert result['branch2'] > result['branch1']
+        # Should sum to 1.0
+        assert sum(result.values()) == pytest.approx(1.0, rel=1e-6)
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_no_geometry_data_raises(self, mock_logger):
+        """Test error when geometry_data is missing."""
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+
+        outlet_patches = ['branch1', 'main']
+
+        with pytest.raises(ValueError, match="Geometry data"):
+            wk._parse_flow_split_percentage(
+                60.0,
+                outlet_patches,
+                method='area',
+                geometry_data=None
+            )
+
+
+class TestPlotFlowDistribution:
+    """Test flow distribution plotting (with matplotlib mock)."""
+
+    def setup_method(self):
+        """Setup minimal config."""
+        self.config = {
+            'geometry': {
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1', 'outlet2']
+            },
+            'boundary_conditions': {
+                'inlet': {'type': 'CONSTANT'},
+                'outlets': {
+                    'windkessel_settings': {'systolic_pressure': 120, 'diastolic_pressure': 80}
+                }
+            },
+            'physics': {'blood_density': 1060}
+        }
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_plot_flow_distribution_no_matplotlib(self, mock_logger, tmp_path):
+        """Test graceful handling when matplotlib is not available."""
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+
+        # Mock import error for matplotlib
+        with patch.dict('sys.modules', {'matplotlib': None, 'matplotlib.pyplot': None}):
+            # Should not raise, just log warning
+            times = np.array([0.0, 0.4, 0.8])
+            flow_inlet = np.array([1e-5, 2e-5, 1e-5])
+            flow_splits = {'outlet1': 0.6, 'outlet2': 0.4}
+
+            # This shouldn't crash even without matplotlib
+            try:
+                wk.plot_flow_distribution(times, flow_inlet, flow_splits, str(tmp_path / "plot.png"))
+            except ImportError:
+                pass  # Expected if matplotlib is truly unavailable
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    def test_plot_flow_distribution_steady_no_matplotlib(self, mock_logger, tmp_path):
+        """Test steady flow plot graceful handling."""
+        wk = WkSetup(self.config, [], '/tmp/test', 1.0)
+
+        with patch.dict('sys.modules', {'matplotlib': None, 'matplotlib.pyplot': None}):
+            mean_Q = 1e-5
+            flow_splits = {'outlet1': 0.6, 'outlet2': 0.4}
+            outlet_params = {
+                'outlet1': {'R': 1e9, 'C': 1e-9, 'Z': 1e8},
+                'outlet2': {'R': 2e9, 'C': 0.5e-9, 'Z': 2e8}
+            }
+
+            try:
+                wk.plot_flow_distribution_steady(mean_Q, flow_splits, outlet_params, str(tmp_path / "plot.png"))
+            except ImportError:
+                pass
+
+
+class TestExecuteMethod:
+    """Test the main execute() method."""
+
+    def setup_method(self):
+        """Setup config for execute tests."""
+        self.config = {
+            'geometry': {
+                'case_name': 'test_case',
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1', 'outlet2'],
+                'scale_factor': 0.001
+            },
+            'boundary_conditions': {
+                'inlet': {
+                    'type': 'CONSTANT',
+                    'csv_file': 'inlet.csv',
+                    'data_type': 'flowrate',
+                    'cardiac_output': 5.0
+                },
+                'outlets': {
+                    'windkessel_settings': {
+                        'systolic_pressure': 120,
+                        'diastolic_pressure': 80,
+                        'tau': 1.8,
+                        'venous_pressure': 5,
+                        'pwv': 6.0
+                    }
+                }
+            },
+            'physics': {'blood_density': 1060}
+        }
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    @patch('aortacfd_lib.wk_setup.PatchProcessing')
+    def test_execute_direct_rcz_mode(self, mock_pp, mock_logger, tmp_path):
+        """Test execute() with direct RCZ mode."""
+        # Add direct RCZ parameters
+        self.config['boundary_conditions']['outlets']['windkessel_settings']['outlet_parameters'] = {
+            'outlet1': {'R': 1.5e9, 'C': 1.0e-9, 'Z': 1.5e8},
+            'outlet2': {'R': 2.0e9, 'C': 0.8e-9, 'Z': 2.0e8}
+        }
+
+        wk = WkSetup(self.config, [], str(tmp_path), 0.8)
+
+        # Should return immediately due to direct RCZ mode
+        wk.execute()
+
+        # Config should still have the outlet_parameters
+        assert 'outlet_parameters' in self.config['boundary_conditions']['outlets']['windkessel_settings']
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    @patch('aortacfd_lib.wk_setup.PatchProcessing')
+    def test_execute_2element_windkessel(self, mock_pp, mock_logger, tmp_path):
+        """Test execute() with 2-element Windkessel (CONSTANT inlet)."""
+        # Setup mocks
+        mock_instance = MagicMock()
+        mock_instance.calculate_inlet_center_radius.return_value = (
+            np.array([0, 0, 0]), 0.01, np.array([0, 0, 1])
+        )
+        mock_instance.calculate_surface_area.return_value = np.pi * 0.005**2
+        mock_pp.return_value = mock_instance
+
+        # Create directories
+        case_dir = tmp_path / "case"
+        tri_surface = case_dir / "constant" / "triSurface"
+        boundary_data = case_dir / "constant" / "boundaryData" / "inlet"
+        tri_surface.mkdir(parents=True)
+        boundary_data.mkdir(parents=True)
+
+        # Create STL files
+        for name in ['outlet1.stl', 'outlet2.stl']:
+            (tri_surface / name).write_text("solid\nendsolid")
+
+        self.config['boundary_conditions']['inlet']['type'] = 'CONSTANT'
+        self.config['boundary_conditions']['outlets']['type'] = '2EWINDKESSEL'
+
+        wk = WkSetup(self.config, ['outlet1.stl', 'outlet2.stl'], str(case_dir), 0.8)
+
+        # Execute should complete without error
+        wk.execute()
+
+
+class TestWkSetupInit:
+    """Test WkSetup initialization."""
+
+    def test_init_with_nested_config(self):
+        """Test initialization with nested boundary_conditions config."""
+        config = {
+            'geometry': {
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1']
+            },
+            'boundary_conditions': {
+                'inlet': {'type': 'CONSTANT'},
+                'outlets': {
+                    'windkessel_settings': {
+                        'systolic_pressure': 120,
+                        'diastolic_pressure': 80
+                    }
+                }
+            },
+            'physics': {'blood_density': 1060}
+        }
+
+        with patch('aortacfd_lib.wk_setup.Logger'):
+            wk = WkSetup(config, [], '/tmp/test', 1.0)
+
+        assert wk.inlet_settings == config['boundary_conditions']['inlet']
+        assert wk.outlet_settings == config['boundary_conditions']['outlets']
+
+    def test_init_with_flat_config(self):
+        """Test initialization with flattened inlet/outlets config."""
+        config = {
+            'geometry': {
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1']
+            },
+            'inlet': {'type': 'CONSTANT'},
+            'outlets': {
+                'windkessel_settings': {
+                    'systolic_pressure': 120,
+                    'diastolic_pressure': 80
+                }
+            },
+            'boundary_conditions': {},
+            'physics': {'blood_density': 1060}
+        }
+
+        with patch('aortacfd_lib.wk_setup.Logger'):
+            wk = WkSetup(config, [], '/tmp/test', 1.0)
+
+        assert wk.inlet_settings == config['inlet']
+        assert wk.outlet_settings == config['outlets']
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

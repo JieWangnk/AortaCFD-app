@@ -439,6 +439,136 @@ class TestEstimateFromConfig:
         assert results['firstLayerThickness'] > 0
 
 
+class TestPrintReport:
+    """Test print_report method."""
+
+    def setup_method(self):
+        self.estimator = YPlusEstimator(
+            density=1060.0,
+            viscosity=0.004,
+            flow_regime='auto'
+        )
+
+    def test_print_report_without_characteristic_length(self, capsys):
+        """Test print_report without characteristic_length (no validation)."""
+        results = self.estimator.estimate_first_layer_thickness(
+            target_yplus=1.0,
+            mean_velocity=0.5,
+            characteristic_length=0.025,
+            n_layers=5,
+            expansion_ratio=1.2
+        )
+
+        self.estimator.print_report(
+            results=results,
+            target_yplus=1.0,
+            n_layers=5,
+            expansion_ratio=1.2,
+            solver_type='RANS',
+            characteristic_length=None
+        )
+
+        captured = capsys.readouterr()
+        assert 'Y+ ESTIMATOR RESULTS' in captured.out
+        assert 'Target y+:' in captured.out
+        assert 'RECOMMENDED MESH SETTINGS' in captured.out
+        assert 'firstLayerThickness' in captured.out
+
+    def test_print_report_with_characteristic_length(self, capsys):
+        """Test print_report with characteristic_length (runs validation)."""
+        results = self.estimator.estimate_first_layer_thickness(
+            target_yplus=1.0,
+            mean_velocity=0.5,
+            characteristic_length=0.025,
+            n_layers=5,
+            expansion_ratio=1.2
+        )
+
+        self.estimator.print_report(
+            results=results,
+            target_yplus=1.0,
+            n_layers=5,
+            expansion_ratio=1.2,
+            solver_type='RANS',
+            characteristic_length=0.025
+        )
+
+        captured = capsys.readouterr()
+        assert 'Y+ ESTIMATOR RESULTS' in captured.out
+        assert 'Reynolds number' in captured.out
+        # Should have validation output
+        assert 'Settings appear reasonable' in captured.out or 'WARNINGS' in captured.out
+
+    def test_print_report_with_warnings(self, capsys):
+        """Test print_report when validation generates warnings."""
+        results = self.estimator.estimate_first_layer_thickness(
+            target_yplus=30.0,  # Wall functions y+
+            mean_velocity=0.5,
+            characteristic_length=0.025,
+            n_layers=5,
+            expansion_ratio=1.2
+        )
+
+        # Use laminar solver with turbulent Re to trigger warning
+        self.estimator.print_report(
+            results=results,
+            target_yplus=30.0,
+            n_layers=5,
+            expansion_ratio=1.2,
+            solver_type='laminar',
+            characteristic_length=0.025
+        )
+
+        captured = capsys.readouterr()
+        assert 'WARNINGS' in captured.out
+
+    def test_print_report_with_recommendations(self, capsys):
+        """Test print_report when validation provides recommendations."""
+        results = self.estimator.estimate_first_layer_thickness(
+            target_yplus=0.1,  # Very small y+ target
+            mean_velocity=0.5,
+            characteristic_length=0.025,
+            n_layers=5,
+            expansion_ratio=1.2
+        )
+
+        self.estimator.print_report(
+            results=results,
+            target_yplus=0.1,
+            n_layers=5,
+            expansion_ratio=1.2,
+            solver_type='LES',
+            characteristic_length=0.025
+        )
+
+        captured = capsys.readouterr()
+        assert 'Y+ ESTIMATOR RESULTS' in captured.out
+        # May have recommendations for very small first layer
+
+    def test_print_report_shows_friction_info(self, capsys):
+        """Test that print_report shows friction factor and velocity."""
+        results = self.estimator.estimate_first_layer_thickness(
+            target_yplus=1.0,
+            mean_velocity=0.5,
+            characteristic_length=0.025,
+            n_layers=5,
+            expansion_ratio=1.2
+        )
+
+        self.estimator.print_report(
+            results=results,
+            target_yplus=1.0,
+            n_layers=5,
+            expansion_ratio=1.2,
+            solver_type='RANS',
+            characteristic_length=0.025
+        )
+
+        captured = capsys.readouterr()
+        assert 'Friction factor' in captured.out
+        assert 'Friction velocity' in captured.out
+
+
 class TestEdgeCases:
     """Test edge cases and boundary conditions."""
 

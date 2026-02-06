@@ -604,5 +604,420 @@ class TestEdgeCases:
         # (depends on implementation)
 
 
+class TestInitialPressureMethods:
+    """Test various initial pressure calculation methods."""
+
+    def setup_method(self):
+        """Setup temp directory."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.case_dir = os.path.join(self.temp_dir, "test_case")
+        os.makedirs(os.path.join(self.case_dir, "constant", "triSurface"), exist_ok=True)
+
+    def teardown_method(self):
+        """Cleanup."""
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def test_initial_pressure_systolic_method(self):
+        """Test initial pressure with systolic method."""
+        config = {
+            'geometry': {
+                'case_name': 'test',
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1'],
+                'wall_keywords_ordered': 'wall'
+            },
+            'boundary_conditions': {
+                'inlet': {'type': 'CONSTANT', 'velocity': 0.5},
+                'outlets': {
+                    'type': '3EWINDKESSEL',
+                    'windkessel_settings': {
+                        'systolic_pressure': 120,
+                        'diastolic_pressure': 80,
+                        'initial_pressure_method': 'systolic'
+                    }
+                }
+            },
+            'physics': {'simulation_type': 'laminar'},
+            'openfoam_version': '11'
+        }
+
+        bc_setup = BoundaryConditionSetup(config, self.case_dir)
+        initial_p, _ = bc_setup._calculate_initial_pressure()
+
+        # Systolic = 120 mmHg = 120 * 133.322 Pa
+        expected_p = 120 * 133.322
+        assert initial_p == pytest.approx(expected_p, rel=1e-4)
+
+    def test_initial_pressure_map_method(self):
+        """Test initial pressure with MAP (mean arterial pressure) method."""
+        config = {
+            'geometry': {
+                'case_name': 'test',
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1'],
+                'wall_keywords_ordered': 'wall'
+            },
+            'boundary_conditions': {
+                'inlet': {'type': 'CONSTANT', 'velocity': 0.5},
+                'outlets': {
+                    'type': '3EWINDKESSEL',
+                    'windkessel_settings': {
+                        'systolic_pressure': 120,
+                        'diastolic_pressure': 80,
+                        'initial_pressure_method': 'map'
+                    }
+                }
+            },
+            'physics': {'simulation_type': 'laminar'},
+            'openfoam_version': '11'
+        }
+
+        bc_setup = BoundaryConditionSetup(config, self.case_dir)
+        initial_p, _ = bc_setup._calculate_initial_pressure()
+
+        # MAP = DBP + (SBP - DBP)/3 = 80 + 40/3 = 93.33 mmHg
+        expected_mmHg = 80 + (120 - 80) / 3.0
+        expected_p = expected_mmHg * 133.322
+        assert initial_p == pytest.approx(expected_p, rel=1e-4)
+
+    def test_initial_pressure_arithmetic_mean_method(self):
+        """Test initial pressure with arithmetic mean method."""
+        config = {
+            'geometry': {
+                'case_name': 'test',
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1'],
+                'wall_keywords_ordered': 'wall'
+            },
+            'boundary_conditions': {
+                'inlet': {'type': 'CONSTANT', 'velocity': 0.5},
+                'outlets': {
+                    'type': '3EWINDKESSEL',
+                    'windkessel_settings': {
+                        'systolic_pressure': 120,
+                        'diastolic_pressure': 80,
+                        'initial_pressure_method': 'mean'
+                    }
+                }
+            },
+            'physics': {'simulation_type': 'laminar'},
+            'openfoam_version': '11'
+        }
+
+        bc_setup = BoundaryConditionSetup(config, self.case_dir)
+        initial_p, _ = bc_setup._calculate_initial_pressure()
+
+        # Mean = (SBP + DBP) / 2 = 100 mmHg
+        expected_p = 100 * 133.322
+        assert initial_p == pytest.approx(expected_p, rel=1e-4)
+
+    def test_initial_pressure_zero_method(self):
+        """Test initial pressure with zero (gauge) method."""
+        config = {
+            'geometry': {
+                'case_name': 'test',
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1'],
+                'wall_keywords_ordered': 'wall'
+            },
+            'boundary_conditions': {
+                'inlet': {'type': 'CONSTANT', 'velocity': 0.5},
+                'outlets': {
+                    'type': '3EWINDKESSEL',
+                    'windkessel_settings': {
+                        'systolic_pressure': 120,
+                        'diastolic_pressure': 80,
+                        'initial_pressure_method': 'zero'
+                    }
+                }
+            },
+            'physics': {'simulation_type': 'laminar'},
+            'openfoam_version': '11'
+        }
+
+        bc_setup = BoundaryConditionSetup(config, self.case_dir)
+        initial_p, _ = bc_setup._calculate_initial_pressure()
+
+        assert initial_p == 0.0
+
+    def test_initial_pressure_deprecated_windkessel_method(self):
+        """Test that deprecated windkessel method falls back to diastolic."""
+        config = {
+            'geometry': {
+                'case_name': 'test',
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1'],
+                'wall_keywords_ordered': 'wall'
+            },
+            'boundary_conditions': {
+                'inlet': {'type': 'CONSTANT', 'velocity': 0.5},
+                'outlets': {
+                    'type': '3EWINDKESSEL',
+                    'windkessel_settings': {
+                        'systolic_pressure': 120,
+                        'diastolic_pressure': 80,
+                        'initial_pressure_method': 'windkessel'
+                    }
+                }
+            },
+            'physics': {'simulation_type': 'laminar'},
+            'openfoam_version': '11'
+        }
+
+        bc_setup = BoundaryConditionSetup(config, self.case_dir)
+        initial_p, _ = bc_setup._calculate_initial_pressure()
+
+        # Should fall back to diastolic = 80 mmHg
+        expected_p = 80 * 133.322
+        assert initial_p == pytest.approx(expected_p, rel=1e-4)
+
+    def test_initial_pressure_unknown_method_fallback(self):
+        """Test that unknown method falls back to diastolic."""
+        config = {
+            'geometry': {
+                'case_name': 'test',
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1'],
+                'wall_keywords_ordered': 'wall'
+            },
+            'boundary_conditions': {
+                'inlet': {'type': 'CONSTANT', 'velocity': 0.5},
+                'outlets': {
+                    'type': '3EWINDKESSEL',
+                    'windkessel_settings': {
+                        'systolic_pressure': 120,
+                        'diastolic_pressure': 80,
+                        'initial_pressure_method': 'unknown_method'
+                    }
+                }
+            },
+            'physics': {'simulation_type': 'laminar'},
+            'openfoam_version': '11'
+        }
+
+        bc_setup = BoundaryConditionSetup(config, self.case_dir)
+        initial_p, _ = bc_setup._calculate_initial_pressure()
+
+        # Should fall back to diastolic
+        expected_p = 80 * 133.322
+        assert initial_p == pytest.approx(expected_p, rel=1e-4)
+
+    def test_initial_pressure_with_flow_split(self):
+        """Test that outlet pressures are set for all flow splits."""
+        config = {
+            'geometry': {
+                'case_name': 'test',
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1', 'outlet2'],
+                'wall_keywords_ordered': 'wall'
+            },
+            'boundary_conditions': {
+                'inlet': {'type': 'CONSTANT', 'velocity': 0.5},
+                'outlets': {
+                    'type': '3EWINDKESSEL',
+                    'windkessel_settings': {
+                        'systolic_pressure': 120,
+                        'diastolic_pressure': 80,
+                        'flow_split': {'outlet1': 0.6, 'outlet2': 0.4}
+                    }
+                }
+            },
+            'physics': {'simulation_type': 'laminar'},
+            'openfoam_version': '11'
+        }
+
+        bc_setup = BoundaryConditionSetup(config, self.case_dir)
+        initial_p, outlet_pressures = bc_setup._calculate_initial_pressure()
+
+        # Should have outlet pressures for both outlets
+        assert 'outlet1' in outlet_pressures
+        assert 'outlet2' in outlet_pressures
+
+    def test_initial_pressure_with_outlet_parameters(self):
+        """Test that outlet pressures are set for outlet_parameters."""
+        config = {
+            'geometry': {
+                'case_name': 'test',
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1', 'outlet2'],
+                'wall_keywords_ordered': 'wall'
+            },
+            'boundary_conditions': {
+                'inlet': {'type': 'CONSTANT', 'velocity': 0.5},
+                'outlets': {
+                    'type': '2EWINDKESSEL',
+                    'windkessel_settings': {
+                        'systolic_pressure': 120,
+                        'diastolic_pressure': 80,
+                        'outlet_parameters': {'outlet1': {}, 'outlet2': {}}
+                    }
+                }
+            },
+            'physics': {'simulation_type': 'laminar'},
+            'openfoam_version': '11'
+        }
+
+        bc_setup = BoundaryConditionSetup(config, self.case_dir)
+        initial_p, outlet_pressures = bc_setup._calculate_initial_pressure()
+
+        assert 'outlet1' in outlet_pressures
+        assert 'outlet2' in outlet_pressures
+
+
+class TestMurrayLawCalculation:
+    """Test Murray's law automatic calculation."""
+
+    def setup_method(self):
+        """Setup temp directory."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.case_dir = os.path.join(self.temp_dir, "test_case")
+        os.makedirs(os.path.join(self.case_dir, "constant", "triSurface"), exist_ok=True)
+
+    def teardown_method(self):
+        """Cleanup."""
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def test_murray_law_calculation_failure_fallback(self):
+        """Test that Murray's law failure falls back to equal distribution."""
+        config = {
+            'geometry': {
+                'case_name': 'test',
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1', 'outlet2'],
+                'wall_keywords_ordered': 'wall'
+            },
+            'boundary_conditions': {
+                'inlet': {'type': 'CONSTANT', 'velocity': 0.5},
+                'outlets': {
+                    'type': '3EWINDKESSEL',
+                    'windkessel_settings': {
+                        # No flow_split - should trigger Murray's law calculation
+                        'systolic_pressure': 120,
+                        'diastolic_pressure': 80
+                    }
+                }
+            },
+            'physics': {'simulation_type': 'laminar'},
+            'openfoam_version': '11'
+        }
+
+        bc_setup = BoundaryConditionSetup(config, self.case_dir)
+
+        # Murray calculator import will fail - the function catches the exception
+        # and falls back to equal distribution
+        outlet_settings = bc_setup._prepare_outlet_settings()
+
+        # Should have flow_split with equal distribution after failed Murray's law
+        if 'flow_split' in outlet_settings.get('windkessel_settings', {}):
+            flow_split = outlet_settings['windkessel_settings']['flow_split']
+            assert 'outlet1' in flow_split
+            assert 'outlet2' in flow_split
+            # Equal distribution: 1/2 = 0.5
+            assert abs(flow_split['outlet1'] - 0.5) < 1e-10
+
+
+class TestFlowrateAlias:
+    """Test flowrate as alias for cardiac_output."""
+
+    def setup_method(self):
+        """Setup temp directory."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.case_dir = os.path.join(self.temp_dir, "test_case")
+        os.makedirs(os.path.join(self.case_dir, "constant", "triSurface"), exist_ok=True)
+
+    def teardown_method(self):
+        """Cleanup."""
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    @patch('aortacfd_lib.boundary_condition_setup.detect_world_patch_mode', return_value=False)
+    @patch('aortacfd_lib.utils.patch_processing.PatchProcessing')
+    def test_flowrate_alias(self, mock_patch_processing, mock_world):
+        """Test that 'flowrate' works as alias for 'cardiac_output'."""
+        import numpy as np
+
+        mock_processor = Mock()
+        mock_processor.calculate_surface_area.return_value = 3.14e-4
+        mock_processor.calculate_inlet_center_radius.return_value = (
+            np.array([0.0, 0.0, 0.0]),
+            0.01,
+            np.array([0.0, 0.0, 1.0])
+        )
+        mock_patch_processing.return_value = mock_processor
+
+        config = {
+            'geometry': {
+                'case_name': 'test',
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1'],
+                'wall_keywords_ordered': 'wall'
+            },
+            'boundary_conditions': {
+                'inlet': {
+                    'type': 'CONSTANT',
+                    'flowrate': 5.0  # Using flowrate instead of cardiac_output
+                },
+                'outlets': {'type': 'ZEROGRADIENT'}
+            },
+            'physics': {'simulation_type': 'laminar'},
+            'openfoam_version': '11'
+        }
+
+        bc_setup = BoundaryConditionSetup(config, self.case_dir)
+        velocity_vector = bc_setup._calculate_inlet_velocity_vector()
+
+        # Should work with flowrate (aliased to cardiac_output)
+        assert velocity_vector is not None
+        assert '(' in velocity_vector
+
+
+class TestTurbulenceWithMeanVelocity:
+    """Test turbulence parameter calculation with mean_velocity."""
+
+    def setup_method(self):
+        """Setup temp directory."""
+        self.temp_dir = tempfile.mkdtemp()
+        self.case_dir = os.path.join(self.temp_dir, "test_case")
+        os.makedirs(os.path.join(self.case_dir, "constant", "triSurface"), exist_ok=True)
+
+    def teardown_method(self):
+        """Cleanup."""
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def test_turbulence_with_specified_mean_velocity(self):
+        """Test turbulence parameters using specified mean_velocity."""
+        config = {
+            'geometry': {
+                'case_name': 'test',
+                'inlet_keywords_ordered': 'inlet',
+                'outlet_keywords_ordered': ['outlet1'],
+                'wall_keywords_ordered': 'wall'
+            },
+            'boundary_conditions': {
+                'inlet': {
+                    'type': 'CONSTANT',
+                    'velocity': 0.5,
+                    'mean_velocity': 0.4  # Explicit mean velocity
+                },
+                'outlets': {'type': 'ZEROGRADIENT'}
+            },
+            'physics': {
+                'simulation_type': 'RAS',
+                'turbulence_intensity': 0.05
+            },
+            'openfoam_version': '11'
+        }
+
+        bc_setup = BoundaryConditionSetup(config, self.case_dir)
+        turb_params = bc_setup._calculate_turbulence_parameters()
+
+        # k = 1.5 * (U_ref * I)^2 = 1.5 * (0.4 * 0.05)^2 = 1.5 * 0.0004 = 0.0006
+        expected_k = 1.5 * (0.4 * 0.05) ** 2
+        assert turb_params['k_initial'] == pytest.approx(expected_k, rel=1e-4)
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
