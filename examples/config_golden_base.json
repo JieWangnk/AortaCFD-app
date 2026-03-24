@@ -1,0 +1,60 @@
+{
+  "_description": "Golden base: guaranteed to converge on any aortic geometry. Start here, then upgrade to config_standard.json once mesh quality is verified.",
+
+  "case_info": {
+    "patient_id": "CHANGE_ME",
+    "description": "Golden base - robust first run"
+  },
+
+  "physics": {
+    "model": "laminar",
+    "transport_properties": {
+      "rho": 1060,
+      "nu": 3.7736e-6
+    }
+  },
+
+  "numerics": {
+    "profile": "robust"
+  },
+
+  "mesh": {
+    "cells_per_diameter": 12,
+    "boundary_layers": {
+      "enabled": true,
+      "num_layers": 3,
+      "expansion_ratio": 1.3,
+      "final_layer_thickness": 0.4
+    }
+  },
+
+  "geometry": {
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": ["outlet1", "outlet2"],
+    "wall_keywords_ordered": "wall_aorta",
+    "scale_factor": 0.001
+  },
+
+  "boundary_conditions": {
+    "inlet": {
+      "type": "CONSTANT",
+      "cardiac_output": 5.0,
+      "profile": "parabolic"
+    },
+    "outlets": {
+      "type": "zeroGradient"
+    },
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+
+  "simulation_control": {
+    "end_time": 0.5,
+    "writeInterval": 0.1
+  },
+
+  "run_settings": {
+    "solution_type": "serial"
+  }
+}

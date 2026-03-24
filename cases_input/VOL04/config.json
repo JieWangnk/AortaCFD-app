@@ -1,0 +1,134 @@
+{
+  "case_info": {
+    "patient_id": "VOL04",
+    "description": "Aortic coarctation validation case — laminar standard profile"
+  },
+
+  "provenance": {
+    "geometry_source": "CT angiography — VOL04 (anonymised volunteer dataset)",
+    "segmentation_tool": "SimVascular",
+    "inlet_data_source": "4D flow MRI — phase-contrast velocity mapping",
+    "created_by": "mchi4jw4",
+    "created_date": "2026-03-16",
+    "notes": "VOL04 validation with standard profile (laminar). Previous LES-WALE precise profile crashed due to mesh quality mismatch (69deg non-ortho, 654K:1 volume ratio). Laminar standard is the robust baseline."
+  },
+
+  "cardiac_cycle": 0.81,
+
+  "physics": {
+    "model": "laminar",
+    "transport_properties": {
+      "rho": 1060,
+      "nu": 3.3e-6
+    }
+  },
+
+  "numerics": {
+    "profile": "standard",
+    "correctors": {
+      "nOuterCorrectors": 30,
+      "nCorrectors": 3,
+      "nNonOrthogonalCorrectors": 2
+    }
+  },
+
+  "mesh": {
+    "cells_per_diameter": 44,
+    "boundary_layers": {
+      "enabled": true,
+      "num_layers": 5,
+      "expansion_ratio": 1.2,
+      "final_layer_thickness": 0.4,
+      "min_thickness": 0.15,
+      "relativeSizes": true
+    },
+    "SNAPPY_SETTINGS": {
+      "parallel": true,
+      "nProcessors": 8,
+      "surfaceRefinementLevels": [1, 1]
+    }
+  },
+
+  "geometry": {
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": ["outlet1", "outlet2", "outlet3", "outlet4"],
+    "wall_keywords_ordered": "wall_aorta",
+    "scale_factor": 0.001
+  },
+
+  "boundary_conditions": {
+    "inlet": {
+      "type": "MRI",
+      "file": "./inlet/"
+    },
+
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80,
+        "venous_pressure": 0,
+        "initial_pressure_method": "map",
+
+        "outlet_parameters": {
+          "outlet1": {
+            "_name": "RCC (right common carotid)",
+            "Z": 1.2076e8,
+            "C": 1.6767e-9,
+            "R": 1.0243e9
+          },
+          "outlet2": {
+            "_name": "LCC (left common carotid)",
+            "Z": 5.5269e8,
+            "C": 4.4676e-10,
+            "R": 3.7449e9
+          },
+          "outlet3": {
+            "_name": "LSA (left subclavian artery)",
+            "Z": 1.8581e8,
+            "C": 1.1528e-9,
+            "R": 1.4798e9
+          },
+          "outlet4": {
+            "_name": "OUTLET (descending aorta)",
+            "Z": 2.2121e7,
+            "C": 7.6446e-9,
+            "R": 2.2904e8
+          }
+        },
+
+        "enable_stabilization": true,
+        "betaT": 0.3,
+        "betaN": 0.0
+      }
+    },
+
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+
+  "hemodynamics": {
+    "runtime_functions": {
+      "wallShearStress": true,
+      "fieldAverage": true,
+      "pressureMonitoring": true
+    },
+    "tawss_settings": {
+      "skip_cycles": 1,
+      "periodicRestart": true
+    }
+  },
+
+  "simulation_control": {
+    "cardiac_cycle_period": 0.81,
+    "number_of_cycles": 3,
+    "writeInterval": 0.01
+  },
+
+  "run_settings": {
+    "solution_type": "parallel",
+    "subdomains": 8,
+    "decomposition_method": "scotch"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "_doc": "Tutorial simple case - zeroGradient outlets, guaranteed to run on any mesh",
+  "case_info": {
+    "patient_id": "BPM120",
+    "description": "Tutorial demo - simple BCs, coarse mesh, robust profile"
+  },
+  "physics": {
+    "model": "laminar",
+    "transport_properties": { "rho": 1060, "nu": 3.7736e-6 }
+  },
+  "numerics": { "profile": "robust" },
+  "mesh": {
+    "cells_per_diameter": 12,
+    "boundary_layers": {
+      "enabled": true, "num_layers": 3, "expansion_ratio": 1.2,
+      "final_layer_thickness": 0.4, "min_thickness": 0.15
+    },
+    "SNAPPY_SETTINGS": { "parallel": false, "surfaceRefinementLevels": [1, 1] }
+  },
+  "geometry": {
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": ["outlet1", "outlet2", "outlet3", "outlet4"],
+    "wall_keywords_ordered": "wall_aorta",
+    "scale_factor": 0.001
+  },
+  "boundary_conditions": {
+    "inlet": {
+      "type": "CONSTANT",
+      "cardiac_output": 5.0,
+      "profile": "parabolic"
+    },
+    "outlets": {
+      "type": "zeroGradient"
+    },
+    "walls": { "type": "no_slip" }
+  },
+  "simulation_control": { "end_time": 0.1, "writeInterval": 0.01 },
+  "run_settings": { "solution_type": "serial" }
+}
