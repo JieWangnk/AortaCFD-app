@@ -4,13 +4,13 @@
 
 ```bash
 # Step 1: Create case and generate mesh
-python run_patient.py BPM120 --step case --step mesh
+python run_patient.py BPM120 --steps case,mesh
 
 # Step 2: Regenerate numerics with mesh-adaptive adjustments
-python run_patient.py BPM120 --step regenerate-numerics
+python run_patient.py BPM120 --steps regenerate-numerics
 
 # Step 3: Continue with simulation
-python run_patient.py BPM120 --step boundary --step solver
+python run_patient.py BPM120 --steps boundary,solver
 ```
 
 ## BPM120 Case Study - Before and After
@@ -35,12 +35,12 @@ The counter-intuitive truth: **Poor mesh needs LOOSER settings, not tighter**.
 1. **Generate mesh normally**:
 ```bash
 python run_patient.py BPM120 --config cases_input/BPM120/config_mesh_fine.json \
-    --step case --step mesh
+    --steps case,mesh
 ```
 
 2. **Regenerate numerics** (activates mesh-adaptive system):
 ```bash
-python run_patient.py BPM120 --step regenerate-numerics
+python run_patient.py BPM120 --steps regenerate-numerics
 ```
 
 3. **Review quality report** in terminal output:
@@ -63,7 +63,7 @@ Adjustments Applied:
 
 4. **Run simulation**:
 ```bash
-python run_patient.py BPM120 --step boundary --step solver
+python run_patient.py BPM120 --steps boundary,solver
 ```
 
 #### Expected Results
@@ -98,7 +98,7 @@ PIMPLE: iteration 4
 
 ```bash
 python run_patient.py BPM120 --config cases_input/BPM120/config_mesh_coarse.json \
-    --step case --step mesh --step regenerate-numerics
+    --steps case,mesh,regenerate-numerics
 ```
 
 **Quality Report**:
@@ -119,7 +119,7 @@ Adjustments Applied:
 
 ```bash
 python run_patient.py BPM120 --config cases_input/BPM120/config_mesh_fine.json \
-    --step case --step mesh --step regenerate-numerics
+    --steps case,mesh,regenerate-numerics
 ```
 
 **Quality Report**:
@@ -155,13 +155,13 @@ for level in coarse medium fine; do
     # Generate case and mesh
     python run_patient.py BPM120 \
         --config cases_input/BPM120/config_mesh_$level.json \
-        --step case --step mesh
+        --steps case,mesh
 
     # Apply mesh-adaptive adjustments
-    python run_patient.py BPM120 --step regenerate-numerics
+    python run_patient.py BPM120 --steps regenerate-numerics
 
     # Run simulation
-    python run_patient.py BPM120 --step boundary --step solver
+    python run_patient.py BPM120 --steps boundary,solver
 
     # Extract results
     echo "Completed $level mesh"
@@ -177,8 +177,8 @@ If you have an old case with mesh already generated:
 
 ```bash
 # Point to existing case directory
-python run_patient.py BPM120 --step regenerate-numerics \
-    --case-dir output/OPENFOAM/BPM120_medium/
+python run_patient.py BPM120 --update output/BPM120/run_xxx \
+  --steps regenerate-numerics
 ```
 
 This will:
@@ -203,10 +203,10 @@ while (( $(echo "$max_skewness > 3.0" | bc -l) )); do
     python scripts/adjust_snappy_settings.py --iteration $iteration
 
     # Generate mesh
-    python run_patient.py BPM120 --step case --step mesh
+    python run_patient.py BPM120 --steps case,mesh
 
     # Analyze with mesh-adaptive system
-    python run_patient.py BPM120 --step regenerate-numerics
+    python run_patient.py BPM120 --steps regenerate-numerics
 
     # Extract skewness from log
     max_skewness=$(grep "Max skewness" logs/log.checkMesh | awk '{print $4}')

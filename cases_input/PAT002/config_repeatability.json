@@ -3,13 +3,13 @@
   "_framing": [
     "This configuration demonstrates automated workflow reproducibility.",
     "NOT a validated accuracy study - that requires case-specific verification.",
-    "Consistent settings across multi-patient demonstration (0014, PAT002, PAT003):",
+    "PAT002 requires ROBUST profile due to early-systole stability issues (t~0.068s):",
     "  • RANS k-omega SST (transitional flow, computationally efficient)",
-    "  • Standard numerical profile (backward + limitedLinearV, 2nd-order bounded)",
-    "  • Medium mesh ~1.5-2M cells (14 cells/diameter target)",
+    "  • ROBUST numerical profile (Euler + upwind, 1st-order for stability)",
+    "  • Medium mesh ~1.5M cells (18 cells/diameter target)",
     "  • 10 boundary layers (y+ ~15-30 for RANS wall functions)",
     "  • 3 full cardiac cycles (periodic stability demonstration)",
-    "  • Backflow stabilization: betaT=0.3 (minimal dissipation, robust convergence)",
+    "  • Increased stabilization: betaT=0.5 (stronger damping for this geometry)",
     "  • Post-processing: TAWSS, OSI, RRT fields for hemodynamic comparison"
   ],
 
@@ -35,10 +35,10 @@
   },
 
   "numerics": {
-    "profile": "standard",
-    "_profile_comment": "Standard profile: backward (2nd-order temporal) + limitedLinearV (TVD spatial), balanced cost-accuracy",
+    "profile": "robust",
+    "_profile_comment": "ROBUST profile: Euler + upwind (1st-order) for PAT002 stability - standard profile failed at t~0.068s",
     "max_co": 1.0,
-    "_max_co_comment": "Standard Courant number for backward scheme",
+    "_max_co_comment": "Standard Courant number",
 
     "correctors": {
       "nOuterCorrectors": 10,
@@ -111,8 +111,8 @@
         "initial_pressure_method": "diastolic",
 
         "enable_stabilization": true,
-        "betaT": 0.3,
-        "_betaT_comment": "Tangential damping = 0.3 (proven neutral for hemodynamics, necessary for convergence)",
+        "betaT": 0.5,
+        "_betaT_comment": "Tangential damping = 0.5 (increased from 0.3 for PAT002 stability)",
         "betaN": 0.0,
         "_betaN_comment": "Normal damping = 0.0 (preserves Windkessel P-Q coupling)",
         "_stabilization_reference": "Section 5.4: 37.5% failure without, 0.9% QoI impact with betaT=0.3"

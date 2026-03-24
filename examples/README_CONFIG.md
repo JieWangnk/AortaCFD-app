@@ -109,11 +109,9 @@ AortaCFD uses a **hierarchical configuration system** with a new **3-profile num
 
 | File | Description | Profile | Complexity |
 |------|-------------|---------|------------|
-| **config_full.json** | Complete reference with ALL parameters | standard | ⭐⭐⭐⭐⭐ |
-| *(To be created)* **config_minimal.json** | Simplest working configuration | standard | ⭐ |
-| *(To be created)* **config_laminar.json** | Laminar flow example | standard | ⭐⭐ |
-| *(To be created)* **config_rans.json** | RANS turbulence example | standard | ⭐⭐⭐ |
-| *(To be created)* **config_windkessel.json** | 3-element Windkessel | standard | ⭐⭐⭐⭐ |
+| **config_minimal.json** | Simplest working serial laminar configuration | standard | ⭐ |
+| **config_standard.json** | Practical pulsatile aortic case with Windkessel outlets | standard | ⭐⭐⭐ |
+| **config_full.json** | Extended reference showing the broader option set | standard | ⭐⭐⭐⭐⭐ |
 
 ---
 
@@ -171,6 +169,12 @@ AortaCFD uses a **hierarchical configuration system** with a new **3-profile num
 ```bash
 # Using the patient runner
 python run_patient.py CASE_NAME --config cases_input/CASE_NAME/config.json
+
+# Prepare setup only
+python run_patient.py CASE_NAME --steps case,mesh,boundary
+
+# Re-run post-processing on an existing run
+python run_patient.py --postprocess output/CASE_NAME/run_xxx
 
 # View available options
 python run_patient.py --help
@@ -434,14 +438,14 @@ cases_input/<case>/inlet/
 **A. Zero Gradient (Simplest)**
 ```json
 "outlets": {
-  "type": "ZEROGRADIENT"
+  "type": "zeroGradient"
 }
 ```
 
 **B. Fixed Pressure**
 ```json
 "outlets": {
-  "type": "FIXEDPRESSURE",
+  "type": "fixedValue",
   "pressure_pa": 10000  // Pascals
 }
 ```
@@ -549,7 +553,7 @@ Runtime hemodynamic metric computation.
   "mesh": {"cells_per_diameter": 12},
   "boundary_conditions": {
     "inlet": {"type": "CONSTANT", "velocity": 0.5},
-    "outlets": {"type": "ZEROGRADIENT"}
+    "outlets": {"type": "zeroGradient"}
   }
 }
 ```
@@ -559,7 +563,7 @@ Runtime hemodynamic metric computation.
 ```json
 {
   "physics": {
-    "model": "RAS",
+    "model": "rans",
     "turbulence_intensity": 0.05
   },
   "numerics": {"profile": "standard"},

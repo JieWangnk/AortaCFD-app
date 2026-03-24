@@ -1,25 +1,12 @@
 #!/usr/bin/env python3
-"""
-AortaCFD Patient Runner - Modular CFD Workflow
-===============================================
+"""AortaCFD single-case entrypoint.
 
-Clean interface for patient-specific CFD simulations with step-by-step control:
-
-WORKFLOW STEPS:
-1. case        - Create case structure and configuration files
-2. mesh        - Generate mesh (blockMesh, surfaceFeatures, snappyHexMesh)
-3. boundary    - Setup boundary conditions and flow data
-4. solver      - Run CFD solver (pimpleFoam/foamRun)
-5. reconstruct - Reconstruct parallel case from processor directories
-6. post        - Execute post-processing
-7. all         - Complete workflow (default)
-
-EXAMPLES:
-    python run_patient.py patient1                          # Complete workflow
-    python run_patient.py patient1 --step mesh              # Only meshing
-    python run_patient.py patient1 --step case --step mesh  # Multiple steps
-    python run_patient.py patient1 --step reconstruct       # Reconstruct decomposed case
-    python run_patient.py --list                            # List available patients
+Examples:
+    python run_patient.py BPM120
+    python run_patient.py BPM120 --steps case,mesh,boundary
+    python run_patient.py BPM120 --update output/BPM120/run_xxx --steps solver
+    python run_patient.py --postprocess output/BPM120/run_xxx
+    python run_patient.py --list
 """
 
 import sys

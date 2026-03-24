@@ -1,25 +1,16 @@
 #!/usr/bin/env python3
-"""
-AortaCFD Batch Runner - Parallel Multi-Case Execution
-======================================================
+"""AortaCFD batch entrypoint.
 
-Run multiple patient cases in parallel using multiprocessing.Pool (local/single-node)
-or generate a SLURM job array script for HPC cluster submission.
+Runs multiple cases locally with multiprocessing or generates a SLURM job-array
+script for cluster execution. Successful local runs are followed by cohort QoI
+aggregation scoped to the current batch outputs.
 
-LOCAL EXECUTION:
-    python run_batch.py                              # All cases, auto-detect CPUs
-    python run_batch.py --cases PAT002 PAT003        # Specific cases
-    python run_batch.py --workers 4                   # Limit parallel workers
-    python run_batch.py --steps case,mesh,boundary    # Specific workflow steps
-    python run_batch.py --config my_config.json       # Override config for all cases
-
-MULTI-CONFIG (same patient, different configs):
-    python run_batch.py --config-list PAT002:config_mesh10.json PAT002:config_mesh12.json PAT002:config_mesh14.json -w 2
-
-HPC (SLURM) EXECUTION:
-    python run_batch.py --slurm                       # Generate SLURM job array script
-    python run_batch.py --slurm --partition gpu        # Custom partition
-    sbatch batch_submit.sh                            # Submit generated script
+Examples:
+    python run_batch.py
+    python run_batch.py --cases PAT002 PAT003 --workers 2
+    python run_batch.py --steps case,mesh,boundary
+    python run_batch.py --config-list PAT002:config_mesh10.json PAT002:config_mesh12.json -w 2
+    python run_batch.py --slurm
 """
 
 import sys
@@ -465,6 +456,16 @@ def main() -> None:
 
     # Print summary
     _print_summary(results)
+
+    # Aggregate QoI across succeeded cases (scoped to this batch only)
+    succeeded_dirs = [f'output/{r["output_id"]}' for r in results if r['success']]
+    if succeeded_dirs:
+        try:
+            from scripts.compare_cohort import aggregate_qoi
+            path = aggregate_qoi('output', run_dirs=succeeded_dirs)
+            print(f'\nCohort QoI comparison: {path}')
+        except Exception as e:
+            print(f'\nNote: QoI comparison skipped ({e})')
 
     # Exit with error code if any case failed
     any_failed = any(not r['success'] for r in results)
