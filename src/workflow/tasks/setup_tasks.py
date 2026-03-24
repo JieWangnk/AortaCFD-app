@@ -1,6 +1,7 @@
 import os
 import shutil
 import numpy as np
+from pathlib import Path
 from stl import mesh as np_stl_mesh
 
 # Use centralized import resolver to avoid duplicate try/except blocks
@@ -264,10 +265,45 @@ class PrepareBoundaryDataTask(Task):
 
                 self.log.info(f"Copied {len(source_time_dirs)} time directories to boundaryData")
 
+                # Interpolate MRI velocity data from MRI source points onto mesh face centres.
+                # The mesh face centres were already written to boundaryData/inlet/points (line 210).
+                # This ensures the flowrate is preserved regardless of mesh resolution.
+                mri_points_file = os.path.join(mri_source_dir, 'points')
+                if os.path.exists(mri_points_file):
+                    self.log.info("Interpolating MRI velocity data onto mesh face centres...")
+                    self._interpolate_mri_to_mesh_faces(
+                        mri_points_file, boundary_data_inlet_dir, source_time_dirs
+                    )
+
                 # Set up data for multiple cycles using symbolic links
                 self.log.info("Setting up data for multiple cardiac cycles...")
                 cycle_setup = CycleDataSetup(config=self.config, cardiac_cycle=cardiac_cycle, case_directory=case_dir)
                 cycle_setup.execute()
+
+                # Save MRI inlet audit
+                try:
+                    from aortacfd_lib.inlet_qc import InletAudit
+                    # Read spatial point count from the mesh face centres file
+                    mesh_pts_file = os.path.join(boundary_data_inlet_dir, 'points')
+                    n_spatial_points = len(self._read_bare_points(mesh_pts_file)) if os.path.exists(mesh_pts_file) else 0
+                    audit = InletAudit(
+                        inlet_area_m2=0.0, inlet_radius_eq_m=0.0,
+                        inlet_center=[0, 0, 0], inlet_normal=[0, 0, 0],
+                        csv_file=str(mri_source_dir),
+                        data_type="MRI_4D_flow",
+                        n_points=n_spatial_points,
+                        detected_period_s=cardiac_cycle,
+                        inlet_type="MRI",
+                        profile="patient-specific",
+                        orientation="from_data",
+                        n_output_timesteps=len(source_time_dirs),
+                    )
+                    reports_dir = os.path.join(os.path.dirname(case_dir), "reports")
+                    os.makedirs(reports_dir, exist_ok=True)
+                    audit.save_json(Path(os.path.join(reports_dir, "inlet_audit.json")))
+                    self.log.info(f"MRI inlet audit saved: {reports_dir}/inlet_audit.json")
+                except Exception as e:
+                    self.log.warning(f"InletQC audit skipped: {e}")
 
             elif inlet_type in ['TIMEVARYING', 'WOMERSLEY']:
                 # Copy inlet CSV file to boundaryData directory if not already present
@@ -300,6 +336,19 @@ class PrepareBoundaryDataTask(Task):
                 self.log.info("Setting up data for multiple cardiac cycles...")
                 cycle_setup = CycleDataSetup(config=self.config, cardiac_cycle=cardiac_cycle, case_directory=case_dir)
                 cycle_setup.execute()
+
+                # Save inlet QC audit
+                try:
+                    from aortacfd_lib.inlet_qc import InletQC
+                    inlet_qc = InletQC(self.config, case_dir)
+                    audit = inlet_qc.run_full_qc()
+                    reports_dir = os.path.join(os.path.dirname(case_dir), "reports")
+                    os.makedirs(reports_dir, exist_ok=True)
+                    audit.save_json(Path(os.path.join(reports_dir, "inlet_audit.json")))
+                    self.log.info(f"Inlet QC audit saved: {reports_dir}/inlet_audit.json")
+                except Exception as e:
+                    self.log.warning(f"InletQC audit skipped: {e}")
+
             else:
                 # For CONSTANT/PARABOLIC inlets
                 cardiac_cycle = 1.0  # Default 1.0s (not used for steady inlet)
@@ -324,6 +373,51 @@ class PrepareBoundaryDataTask(Task):
                     self.log.info(f"Non-uniform profile generated. Will use timeVaryingMappedFixedValue BC.")
                 else:
                     self.log.info(f"Inlet type is {inlet_type} with {inlet_profile} profile (uniform). Using fixedValue BC.")
+
+                # Save steady inlet audit
+                try:
+                    from aortacfd_lib.inlet_qc import InletAudit
+                    from aortacfd_lib.utils.patch_processing import PatchProcessing
+
+                    # Get inlet geometry from triSurface STL
+                    tri_surface_dir = os.path.join(case_dir, "constant", "triSurface")
+                    inlet_name = self.config['geometry']['inlet_keywords_ordered']
+                    patch_proc = PatchProcessing(tri_surface_dir, inlet_name)
+                    inlet_area = patch_proc.calculate_surface_area()
+                    inlet_radius = np.sqrt(inlet_area / np.pi)
+
+                    # Derive mean velocity and flow rate from whichever is configured
+                    raw_velocity = inlet_config.get('velocity')
+                    raw_flowrate_lmin = inlet_config.get('flowrate') or inlet_config.get('cardiac_output')
+                    if raw_velocity:
+                        mean_vel = float(raw_velocity)
+                        mean_flow = mean_vel * inlet_area
+                    elif raw_flowrate_lmin:
+                        mean_flow = float(raw_flowrate_lmin) / 60.0 / 1000.0
+                        mean_vel = mean_flow / inlet_area if inlet_area > 0 else None
+                    else:
+                        mean_vel = None
+                        mean_flow = None
+
+                    audit = InletAudit(
+                        inlet_area_m2=inlet_area, inlet_radius_eq_m=inlet_radius,
+                        inlet_center=[0, 0, 0], inlet_normal=[0, 0, 0],
+                        csv_file="N/A",
+                        data_type="constant",
+                        n_points=0,
+                        detected_period_s=0.0,
+                        inlet_type=inlet_type,
+                        profile=inlet_profile,
+                        orientation="normal",
+                        mean_velocity_ms=mean_vel,
+                        mean_flow_m3s=mean_flow,
+                    )
+                    reports_dir = os.path.join(os.path.dirname(case_dir), "reports")
+                    os.makedirs(reports_dir, exist_ok=True)
+                    audit.save_json(Path(os.path.join(reports_dir, "inlet_audit.json")))
+                    self.log.info(f"Inlet audit saved: {reports_dir}/inlet_audit.json")
+                except Exception as e:
+                    self.log.warning(f"InletQC audit skipped: {e}")
 
             # Set up Windkessel if needed (case-insensitive) - supports both 2-element and 3-element
             # Support both nested (boundary_conditions.outlets) and flattened (outlets) config structures
@@ -409,6 +503,88 @@ class PrepareBoundaryDataTask(Task):
             self.log.info("Temporary .obj files cleanup completed.")
         else:
             self.log.debug("No .obj files found to clean up.")
+
+    def _interpolate_mri_to_mesh_faces(self, mri_points_file, boundary_data_dir, time_dirs):
+        """Interpolate MRI velocity data from MRI source points onto mesh face centres.
+
+        The mesh face centres (already in boundaryData/points) are used as target points.
+        MRI source points and velocity data are used as source. This ensures the flowrate
+        is conserved regardless of mesh resolution.
+        """
+        from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
+
+        # Read MRI source points
+        mri_pts = self._read_bare_points(mri_points_file)
+
+        # Read mesh face centres (already written to boundaryData/points by the mesh step)
+        mesh_pts_file = os.path.join(boundary_data_dir, 'points')
+        mesh_pts = self._read_bare_points(mesh_pts_file)
+
+        self.log.info(f"Mapping {len(mri_pts)} MRI points → {len(mesh_pts)} mesh face centres")
+
+        # Build interpolators lazily (reuse across timesteps for the same component)
+        # Process all time directories
+        for time_str in sorted(time_dirs):
+            u_file = os.path.join(boundary_data_dir, time_str, 'U')
+            if not os.path.exists(u_file):
+                continue
+
+            # Read MRI velocity at this timestep
+            mri_vels = self._read_bare_velocities(u_file)
+
+            # Interpolate each component: linear with nearest-neighbor fallback
+            interp_vels = np.zeros((len(mesh_pts), 3))
+            for comp in range(3):
+                lin = LinearNDInterpolator(mri_pts, mri_vels[:, comp])
+                vals = lin(mesh_pts)
+                nan_mask = np.isnan(vals)
+                if nan_mask.any():
+                    near = NearestNDInterpolator(mri_pts, mri_vels[:, comp])
+                    vals[nan_mask] = near(mesh_pts[nan_mask])
+                interp_vels[:, comp] = vals
+
+            # Write interpolated velocity (bare format, matching mesh face count)
+            n = len(interp_vels)
+            lines = [str(n), '(']
+            lines.extend(f'({v[0]:.6e} {v[1]:.6e} {v[2]:.6e})' for v in interp_vels)
+            lines.append(')')
+            with open(u_file, 'w') as f:
+                f.write('\n'.join(lines) + '\n')
+
+        self.log.info(f"Interpolated {len(time_dirs)} timesteps onto mesh face centres")
+
+    @staticmethod
+    def _read_bare_points(filepath):
+        """Read OpenFOAM points file (bare or with FoamFile header)."""
+        with open(filepath) as f:
+            content = f.read()
+        lines = content.strip().splitlines()
+        # Skip any header lines to find the count line
+        for i, line in enumerate(lines):
+            if line.strip().isdigit():
+                break
+        n = int(lines[i].strip())
+        pts = []
+        for l in lines[i + 2:i + 2 + n]:
+            vals = l.strip().strip('()').split()
+            pts.append([float(v) for v in vals])
+        return np.array(pts)
+
+    @staticmethod
+    def _read_bare_velocities(filepath):
+        """Read OpenFOAM velocity file (bare or with FoamFile header)."""
+        with open(filepath) as f:
+            lines = f.readlines()
+        # Skip any header lines to find the count line
+        for i, line in enumerate(lines):
+            if line.strip().isdigit():
+                break
+        n = int(lines[i].strip())
+        vels = []
+        for l in lines[i + 2:i + 2 + n]:
+            vals = l.strip().strip('()').split()
+            vels.append([float(v) for v in vals])
+        return np.array(vels)
 
     def _find_inlet_csv(self, csv_filename: str, case_dir: str = None) -> str:
         """

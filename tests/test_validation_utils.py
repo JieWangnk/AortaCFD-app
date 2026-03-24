@@ -343,7 +343,9 @@ Max aspect ratio = 45.6
     def test_validate_mesh_quality_with_failures(self):
         """Test mesh quality validation with failed mesh."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            log_path = Path(tmpdir) / "log.checkMesh"
+            logs_dir = Path(tmpdir) / "logs"
+            logs_dir.mkdir()
+            log_path = logs_dir / "log.checkMesh"
             log_path.write_text("""
 Mesh stats
     cells: 50000
@@ -975,7 +977,9 @@ Max non-orthogonality = 45.0
     def test_validate_boundary_layer_coverage_not_found(self):
         """Test when no boundary layer info in log."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            log_path = Path(tmpdir) / "log.checkMesh"
+            logs_dir = Path(tmpdir) / "logs"
+            logs_dir.mkdir()
+            log_path = logs_dir / "log.checkMesh"
             log_path.write_text("""
 Mesh stats
     cells: 100000

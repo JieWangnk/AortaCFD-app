@@ -284,7 +284,8 @@ class WorkflowManager:
                 "execute_meshing",
                 "prepare_boundary_data",
                 "generate_bc_files",
-                "update_control_dict"
+                "update_control_dict",
+                "generate_simulation_report"   # Report after final controlDict + boundary data
             ],
 
             # COMMAND 9: The full end-to-end run.
@@ -296,11 +297,11 @@ class WorkflowManager:
                 "generate_solver_settings",
                 "generate_decompose_par_dict",
                 "generate_control_dict",
-                "generate_simulation_report",  # Generate report after setup
                 "execute_meshing",
                 "prepare_boundary_data",
                 "generate_bc_files",
                 "update_control_dict",
+                "generate_simulation_report",  # Report after final controlDict + boundary data
                 "execute_solver",
                 "execute_hemodynamics",        # Compute WSS, TAWSS, OSI, RRT, pressure drop
                 "execute_post",                # ParaView visualization

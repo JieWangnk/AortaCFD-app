@@ -279,13 +279,13 @@ class PatientCaseRunner:
                 run_dir = case_dir_path
             self.logger.info(f"Update mode: using existing directory: {run_dir}")
         elif options and options.get('run_name'):
-            # Custom run name specified
+            # Custom run name specified — reuse existing directory if present
             run_name = options['run_name']
             run_dir = patient_output_dir / run_name
             if run_dir.exists():
-                self.logger.info(f"Overwriting existing run: {run_dir}")
-                shutil.rmtree(run_dir)
-            run_dir.mkdir(exist_ok=True)
+                self.logger.info(f"Resuming existing run: {run_dir}")
+            else:
+                run_dir.mkdir(exist_ok=True)
         else:
             # Default: timestamp-based run directory
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -355,6 +355,18 @@ class PatientCaseRunner:
         # Apply physics settings
         self._apply_physics_settings(merged_config, config)
 
+        # Re-map transport properties after user physics merge
+        # (_apply_openfoam_12_settings ran before user physics was merged,
+        #  so nu/rho/mu may still reflect base config defaults)
+        physics = merged_config.get('physics', {})
+        transport = physics.get('transport_properties', {})
+        if 'nu' in transport:
+            physics['nu'] = transport['nu']
+        if 'rho' in transport:
+            physics['rho'] = transport['rho']
+        if 'nu' in transport and 'rho' in transport:
+            physics['mu'] = transport['nu'] * transport['rho']
+
         # Apply mesh settings
         self._apply_mesh_settings(merged_config, config)
 
@@ -365,8 +377,16 @@ class PatientCaseRunner:
         if 'simulation_control' in config and 'writeInterval' in config['simulation_control']:
             merged_config['simulation_control']['controlDict']['writeInterval'] = config['simulation_control']['writeInterval']
 
+        # Handle delta_t from user config (e.g., fixed timestep for validation cases)
+        if 'simulation_control' in config and 'delta_t' in config['simulation_control']:
+            merged_config['simulation_control']['controlDict']['deltaT'] = config['simulation_control']['delta_t']
+            merged_config['simulation_control']['controlDict']['adjustTimeStep'] = 'no'
+
         # Store metadata and config source
         self._store_config_metadata(merged_config, config, case_info, profile_name)
+
+        # Pass patient directory for resolving relative paths (e.g., MRI inlet data)
+        merged_config['patient_case_directory'] = str(case_info['patient_dir'])
 
         return merged_config
 

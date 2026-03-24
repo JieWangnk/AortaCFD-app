@@ -378,7 +378,9 @@ Checking topology...
 
 Mesh OK.
 """
-        log_path = tmp_path / "log.checkMesh"
+        logs_dir = tmp_path / "logs"
+        logs_dir.mkdir()
+        log_path = logs_dir / "log.checkMesh"
         log_path.write_text(log_content)
 
         with patch('aortacfd_lib.mesh_improvement.MeshQualityAnalyzer') as mock_analyzer:

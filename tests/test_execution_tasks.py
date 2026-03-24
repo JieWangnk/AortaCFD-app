@@ -142,7 +142,9 @@ Max skewness = 2.0
 Max aspect ratio = 50.0
 Mesh OK.
 """
-            with open(os.path.join(tmpdir, "log.checkMesh"), 'w') as f:
+            logs_dir = os.path.join(tmpdir, "logs")
+            os.makedirs(logs_dir)
+            with open(os.path.join(logs_dir, "log.checkMesh"), 'w') as f:
                 f.write(log_content)
 
             config = {}
@@ -531,10 +533,10 @@ class TestMeshDistribution:
             tri_surface_dir = os.path.join(tmpdir, "constant", "triSurface")
             os.makedirs(tri_surface_dir)
 
-            # Create closeness files
+            # Create closeness files (already renamed with .stl, as _rename does before _distribute)
             closeness_files = [
-                "wall_aorta.closeness.internalPointCloseness",
-                "wall_aorta.closeness.cellPointCloseness"
+                "wall_aorta.stl.closeness.internalPointCloseness",
+                "wall_aorta.stl.closeness.cellPointCloseness"
             ]
             for f in closeness_files:
                 with open(os.path.join(tri_surface_dir, f), 'w') as fh:
@@ -552,11 +554,8 @@ class TestMeshDistribution:
                 proc_tri_dir = os.path.join(tmpdir, f"processor{i}", "constant", "triSurface")
                 assert os.path.exists(proc_tri_dir)
 
-                # Check files exist with .stl added
                 for f in closeness_files:
-                    # Files should have .stl inserted
-                    expected_file = f.replace(".closeness.", ".stl.closeness.")
-                    assert os.path.exists(os.path.join(proc_tri_dir, expected_file))
+                    assert os.path.exists(os.path.join(proc_tri_dir, f))
 
 
 if __name__ == '__main__':

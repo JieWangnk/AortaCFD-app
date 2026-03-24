@@ -502,7 +502,7 @@ class MeshQualityChecker:
         result = ValidationResult()
 
         if log_file is None:
-            log_file = self.case_directory / "log.checkMesh"
+            log_file = self.case_directory / "logs" / "log.checkMesh"
         else:
             log_file = Path(log_file)
 
@@ -708,7 +708,7 @@ class MeshQualityChecker:
         result = ValidationResult()
 
         if log_file is None:
-            log_file = self.case_directory / "log.checkMesh"
+            log_file = self.case_directory / "logs" / "log.checkMesh"
         else:
             log_file = Path(log_file)
 
@@ -750,7 +750,7 @@ class BoundaryConditionValidator:
     """
 
     # Valid inlet types
-    VALID_INLET_TYPES = ['TIMEVARYING', 'CONSTANT', 'WOMERSLEY']
+    VALID_INLET_TYPES = ['TIMEVARYING', 'CONSTANT', 'WOMERSLEY', 'MRI']
 
     # Valid outlet types
     VALID_OUTLET_TYPES = ['ZEROGRADIENT', 'FIXEDVALUE', '2EWINDKESSEL', '3EWINDKESSEL', 'RCRLUMPED']

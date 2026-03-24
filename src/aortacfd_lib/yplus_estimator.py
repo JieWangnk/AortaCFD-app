@@ -1,7 +1,7 @@
 """
 Y+ Estimator for Boundary Layer Mesh Generation
 
-This module provides utilities to estimate the first layer thickness (finalLayerThickness)
+This module provides utilities to estimate the first layer thickness (firstLayerThickness)
 required to achieve a target y+ value in OpenFOAM simulations.
 
 The estimator uses empirical correlations to predict wall shear stress before simulation,
@@ -71,7 +71,7 @@ class YPlusEstimator:
 
         Returns:
             Dictionary containing:
-                - finalLayerThickness: Recommended value for snappyHexMesh
+                - firstLayerThickness: Recommended value for snappyHexMesh
                 - estimated_yplus: Expected y+ with this layer thickness
                 - reynolds_number: Flow Reynolds number
                 - friction_velocity: Estimated u_τ (m/s)
@@ -231,7 +231,7 @@ class YPlusEstimator:
         print("-"*60)
         print("RECOMMENDED MESH SETTINGS:")
         print("-"*60)
-        print(f"  finalLayerThickness:      {results['finalLayerThickness']:.6f}  ({results['finalLayerThickness']*1000:.4f} mm)")
+        print(f"  firstLayerThickness:      {results['firstLayerThickness']:.6f}  ({results['firstLayerThickness']*1000:.4f} mm)")
         print(f"  nSurfaceLayers:           {n_layers}")
         print(f"  expansionRatio:           {expansion_ratio}")
         print(f"  Total BL thickness:       {results['total_layer_thickness']*1000:.4f} mm")
@@ -241,7 +241,7 @@ class YPlusEstimator:
         # Validation
         if characteristic_length:
             validation = self.validate_settings(
-                results['finalLayerThickness'],
+                results['firstLayerThickness'],
                 results['total_layer_thickness'],
                 characteristic_length,
                 solver_type,

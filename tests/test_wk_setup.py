@@ -1026,20 +1026,107 @@ class TestExecuteMethod:
     @patch('aortacfd_lib.wk_setup.Logger')
     @patch('aortacfd_lib.wk_setup.PatchProcessing')
     def test_execute_direct_rcz_mode(self, mock_pp, mock_logger, tmp_path):
-        """Test execute() with direct RCZ mode."""
+        """Test execute() injects q_init for direct RCZ mode."""
         # Add direct RCZ parameters
         self.config['boundary_conditions']['outlets']['windkessel_settings']['outlet_parameters'] = {
             'outlet1': {'R': 1.5e9, 'C': 1.0e-9, 'Z': 1.5e8},
             'outlet2': {'R': 2.0e9, 'C': 0.8e-9, 'Z': 2.0e8}
         }
 
-        wk = WkSetup(self.config, [], str(tmp_path), 0.8)
+        mock_instance = MagicMock()
+        mock_instance.calculate_surface_area.side_effect = [
+            np.pi * 0.01**2,
+            np.pi * 0.006**2,
+            np.pi * 0.004**2,
+        ]
+        mock_pp.return_value = mock_instance
 
-        # Should return immediately due to direct RCZ mode
+        wk = WkSetup(self.config, [], str(tmp_path), 0.8)
         wk.execute()
 
-        # Config should still have the outlet_parameters
-        assert 'outlet_parameters' in self.config['boundary_conditions']['outlets']['windkessel_settings']
+        outlet_parameters = self.config['boundary_conditions']['outlets']['windkessel_settings']['outlet_parameters']
+        assert outlet_parameters['outlet1']['q_init'] > 0
+        assert outlet_parameters['outlet2']['q_init'] > 0
+        assert outlet_parameters['outlet1']['q_init'] + outlet_parameters['outlet2']['q_init'] == pytest.approx(
+            5.0 / 60.0 / 1000.0,
+            rel=1e-9,
+        )
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    @patch('aortacfd_lib.wk_setup.PatchProcessing')
+    def test_execute_direct_rcz_preserves_existing_q_init(self, mock_pp, mock_logger, tmp_path):
+        """Test execute() does not overwrite user-specified q_init in direct RCZ mode."""
+        self.config['boundary_conditions']['outlets']['windkessel_settings']['outlet_parameters'] = {
+            'outlet1': {'R': 1.5e9, 'C': 1.0e-9, 'Z': 1.5e8, 'q_init': 1.2e-5},
+            'outlet2': {'R': 2.0e9, 'C': 0.8e-9, 'Z': 2.0e8}
+        }
+
+        mock_instance = MagicMock()
+        mock_instance.calculate_surface_area.side_effect = [
+            np.pi * 0.01**2,
+            np.pi * 0.006**2,
+            np.pi * 0.004**2,
+        ]
+        mock_pp.return_value = mock_instance
+
+        wk = WkSetup(self.config, [], str(tmp_path), 0.8)
+        wk.execute()
+
+        outlet_parameters = self.config['boundary_conditions']['outlets']['windkessel_settings']['outlet_parameters']
+        assert outlet_parameters['outlet1']['q_init'] == pytest.approx(1.2e-5)
+        assert outlet_parameters['outlet2']['q_init'] > 0
+
+    @patch('aortacfd_lib.wk_setup.Logger')
+    @patch('aortacfd_lib.wk_setup.PatchProcessing')
+    def test_execute_direct_rcz_mode_with_mri_inlet(self, mock_pp, mock_logger, tmp_path):
+        """Test direct RCZ q_init injection for MRI inlet data."""
+        self.config['boundary_conditions']['inlet'] = {
+            'type': 'MRI',
+            'file': './inlet',
+            'orientation': 'out',
+        }
+        self.config['boundary_conditions']['outlets']['windkessel_settings']['outlet_parameters'] = {
+            'outlet1': {'R': 1.5e9, 'C': 1.0e-9, 'Z': 1.5e8},
+            'outlet2': {'R': 2.0e9, 'C': 0.8e-9, 'Z': 2.0e8}
+        }
+
+        mock_instance = MagicMock()
+        mock_instance.calculate_surface_area.side_effect = [
+            np.pi * 0.01**2,
+            np.pi * 0.006**2,
+            np.pi * 0.004**2,
+        ]
+        mock_instance.calculate_inlet_center_radius.return_value = (
+            np.array([0.0, 0.0, 0.0]),
+            0.01,
+            np.array([0.0, 0.0, 1.0]),
+        )
+        mock_pp.return_value = mock_instance
+
+        boundary_data = tmp_path / 'constant' / 'boundaryData' / 'inlet'
+        for time_name, values in {
+            '0': [(0.0, 0.0, 2.0), (0.0, 0.0, 4.0)],
+            '0.5': [(0.0, 0.0, 4.0), (0.0, 0.0, 6.0)],
+        }.items():
+            time_dir = boundary_data / time_name
+            time_dir.mkdir(parents=True, exist_ok=True)
+            with open(time_dir / 'U', 'w') as handle:
+                handle.write('2\n(\n')
+                for value in values:
+                    handle.write(f'({value[0]} {value[1]} {value[2]})\n')
+                handle.write(')\n')
+
+        wk = WkSetup(self.config, [], str(tmp_path), 0.8)
+        wk.execute()
+
+        outlet_parameters = self.config['boundary_conditions']['outlets']['windkessel_settings']['outlet_parameters']
+        expected_mean_q = np.pi * 0.01**2 * 4.0
+        assert outlet_parameters['outlet1']['q_init'] > 0
+        assert outlet_parameters['outlet2']['q_init'] > 0
+        assert outlet_parameters['outlet1']['q_init'] + outlet_parameters['outlet2']['q_init'] == pytest.approx(
+            expected_mean_q,
+            rel=1e-9,
+        )
 
     @patch('aortacfd_lib.wk_setup.Logger')
     @patch('aortacfd_lib.wk_setup.PatchProcessing')

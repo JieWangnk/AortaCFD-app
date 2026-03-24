@@ -624,9 +624,10 @@ class MeshConvergenceRunner:
         """
         try:
             # Look for checkMesh log
-            log_file = case_dir / 'log.checkMesh'
+            log_file = case_dir / 'logs' / 'log.checkMesh'
             if not log_file.exists():
-                log_file = case_dir / 'logs' / 'checkMesh.log'
+                # Fallback to old location for compatibility
+                log_file = case_dir / 'log.checkMesh'
 
             if log_file.exists():
                 with open(log_file, 'r') as f:
@@ -650,9 +651,10 @@ class MeshConvergenceRunner:
         Compute representative cell spacing h = (V_total / N_cells)^(1/3)
         """
         try:
-            log_file = case_dir / 'log.checkMesh'
+            log_file = case_dir / 'logs' / 'log.checkMesh'
             if not log_file.exists():
-                log_file = case_dir / 'logs' / 'checkMesh.log'
+                # Fallback to old location for compatibility
+                log_file = case_dir / 'log.checkMesh'
 
             if log_file.exists():
                 with open(log_file, 'r') as f:

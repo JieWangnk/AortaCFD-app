@@ -90,6 +90,11 @@ class Config:
         """Get case notes/description."""
         return self.case_info.get('notes', '')
 
+    @property
+    def provenance(self) -> Dict[str, Any]:
+        """Get provenance metadata for reproducibility tracking."""
+        return self._config.get('provenance', {})
+
     # =========================================================================
     # GEOMETRY
     # =========================================================================

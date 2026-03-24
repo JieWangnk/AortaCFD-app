@@ -115,7 +115,7 @@ class MeshImprovementWorkflow:
             MeshAttemptResult with current quality assessment
         """
         analyzer = MeshQualityAnalyzer(self.case_dir)
-        log_path = os.path.join(self.case_dir, "log.checkMesh")
+        log_path = os.path.join(self.case_dir, "logs", "log.checkMesh")
 
         if not os.path.exists(log_path):
             self.log.warning(f"checkMesh log not found: {log_path}")

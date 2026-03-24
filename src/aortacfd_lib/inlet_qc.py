@@ -32,15 +32,17 @@ class InletAudit:
     data_type: str
     n_points: int
     detected_period_s: float
+
+    # Configuration (required fields - must come before optional fields)
+    inlet_type: str
+    profile: str
+    orientation: str
+
+    # Optional fields with defaults
     mean_flow_m3s: Optional[float] = None
     mean_velocity_ms: Optional[float] = None
     peak_systolic: float = 0.0
     backflow_fraction: float = 0.0
-
-    # Configuration
-    inlet_type: str
-    profile: str
-    orientation: str
 
     # Physics
     nu_m2s: Optional[float] = None
@@ -79,8 +81,12 @@ class InletAudit:
 
     def save_json(self, filepath: Path):
         """Save audit to JSON file."""
+        def _default(obj):
+            if isinstance(obj, np.generic):
+                return obj.item()
+            raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
         with open(filepath, 'w') as f:
-            json.dump(self.to_dict(), f, indent=2)
+            json.dump(self.to_dict(), f, indent=2, default=_default)
 
     def get_summary_report(self) -> str:
         """Generate human-readable summary report."""
@@ -103,7 +109,7 @@ class InletAudit:
             "",
             "WAVEFORM STATISTICS:",
             f"  Number of points: {self.n_points}",
-            f"  Detected period: {self.detected_period_s:.3f} s ({60/self.detected_period_s:.1f} bpm)",
+            f"  Detected period: {self.detected_period_s:.3f} s" + (f" ({60/self.detected_period_s:.1f} bpm)" if self.detected_period_s > 0 else " (N/A)"),
         ]
 
         if self.mean_flow_m3s is not None:
@@ -478,6 +484,9 @@ class InletQC:
 
         # Womersley analysis
         nu = self.physics.get('nu')
+        if nu is None:
+            transport = self.physics.get('transport_properties', {})
+            nu = transport.get('nu')
         if nu and audit.detected_period_s > 0:
             try:
                 audit.nu_m2s = nu

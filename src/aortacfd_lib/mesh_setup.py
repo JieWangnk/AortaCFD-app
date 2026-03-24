@@ -133,6 +133,63 @@ class GeometryAnalyzer:
         if relative_sizes is not None:
             self.snappy_settings['relativeSizes'] = relative_sizes
 
+        # Adapt nCellsBetweenLevels and layer thickness based on refinement level jump
+        self._adapt_mesh_transitions()
+
+    def _adapt_mesh_transitions(self):
+        """
+        Adapt nCellsBetweenLevels and layer thickness based on refinement level jump.
+
+        Prevents the common failure mode where large refinement jumps create
+        polyhedral transition cells with extreme volume ratios (8:1 per level,
+        compounding to 64:1 or worse). Also adjusts boundary layer thickness
+        so the last layer cell is not too small relative to the volume mesh.
+
+        Rules:
+        - nCellsBetweenLevels scales with refinement level jump (each level is 8:1 volume)
+        - finalLayerThickness increases with max refinement to avoid layer-to-volume mismatch
+        - Only applies if the user has NOT explicitly set these values
+        """
+        levels = self.snappy_settings.get('surfaceRefinementLevels', [1, 2])
+        if not levels or len(levels) < 2:
+            return
+
+        level_jump = levels[1] - levels[0]
+        max_level = levels[1]
+
+        # --- nCellsBetweenLevels: scale with level jump ---
+        # User explicitly set in mesh.SNAPPY_SETTINGS → respect it
+        user_ncbl = self.mesh_settings.get('SNAPPY_SETTINGS', {}).get('nCellsBetweenLevels')
+        if user_ncbl is None:
+            # Auto-adapt: base 3, add 2 per extra level of jump
+            recommended = 3 + max(0, level_jump - 1) * 2
+            current = self.snappy_settings.get('nCellsBetweenLevels', 3)
+            if recommended > current:
+                self.snappy_settings['nCellsBetweenLevels'] = recommended
+                self.log.info(
+                    f"Auto-adapted nCellsBetweenLevels: {current} -> {recommended} "
+                    f"(refinement jump {levels[0]}->{levels[1]}, volume ratio {8**level_jump}:1)"
+                )
+
+        # --- finalLayerThickness: increase with max refinement ---
+        # Higher refinement = smaller surface cells = layers need to be thicker
+        # relative to cell size so the last layer connects smoothly to volume mesh
+        user_flt = (
+            self.mesh_settings.get('boundary_layers', {}).get('final_layer_thickness')
+            or self.mesh_settings.get('boundary_layers', {}).get('finalLayerThickness')
+        )
+        if user_flt is None:
+            # Auto-adapt: base 0.4, add 0.1 per refinement level above 1
+            base_flt = 0.4
+            recommended_flt = min(0.8, base_flt + max(0, max_level - 1) * 0.1)
+            current_flt = self.snappy_settings.get('finalLayerThickness', base_flt)
+            if recommended_flt > current_flt:
+                self.snappy_settings['finalLayerThickness'] = recommended_flt
+                self.log.info(
+                    f"Auto-adapted finalLayerThickness: {current_flt} -> {recommended_flt} "
+                    f"(max refinement level {max_level})"
+                )
+
     def _calculate_patch_properties(self):
         """
         Calculate geometric properties of inlet/outlet patches from STL files.
@@ -726,14 +783,91 @@ class GeometryAnalyzer:
         self.log.info(f"  Base cell size: {cell_size_mm:.3f} mm")
         self.log.info(f"  Surface cell size: {surface_cell_size_mm:.3f} mm (after {snappy_levels[1]}× subdivision)")
 
-        # Expected final mesh
+        # Expected final mesh (geometry-aware estimation)
         max_ref_level = max(snappy_levels) if snappy_levels else 1
-        estimated_final = int(total_bg_cells * 0.25 * (1 + 0.3 * (8**max_ref_level - 1)))
-        self.log.info(f"Expected final mesh: ~{estimated_final/1e6:.2f}M cells")
+        fluid_fraction = self._estimate_fluid_fraction()
+        n_bl_layers = self.snappy_settings.get('addLayer', 5)
+        bl_enabled = self.snappy_settings.get('addLayers', True)
+
+        # Interior cells: background cells inside geometry
+        interior_cells = total_bg_cells * fluid_fraction
+        # Surface refinement adds cells in a shell around walls
+        # Each refinement level doubles resolution; refined region ~2 cell layers deep
+        surface_multiplier = 1.0 + 0.15 * (4**max_ref_level - 1)
+        refined_cells = interior_cells * surface_multiplier
+        # Boundary layers add prismatic cells proportional to existing surface cells
+        bl_multiplier = 1.0 + (0.08 * n_bl_layers if bl_enabled else 0)
+        estimated_final = int(refined_cells * bl_multiplier)
+
+        self.log.info(f"Fluid fraction of bounding box: ~{fluid_fraction:.0%}")
+        self.log.info(f"Expected final mesh: ~{estimated_final/1e6:.1f}M cells")
+        if self.reference_radius_m:
+            self._log_cpd_suggestions(cell_size_m, fluid_fraction, n_bl_layers,
+                                      bl_enabled, max_ref_level, ranges)
 
         self.log.info("="*70)
 
         return {"x": num_cells[0], "y": num_cells[1], "z": num_cells[2]}
+
+    def _estimate_fluid_fraction(self) -> float:
+        """Estimate the fraction of the bounding box occupied by the fluid domain.
+
+        Tries to compute the enclosed volume of the wall STL using trimesh.
+        Falls back to a conservative empirical estimate if that fails.
+
+        Returns:
+            float: Estimated ratio of fluid volume to bounding box volume (0.05 - 0.50).
+        """
+        wall_stl = os.path.join(self.tri_surface_path, f"{self.wall_patch}.stl")
+        if os.path.exists(wall_stl):
+            try:
+                import trimesh
+                mesh = trimesh.load(wall_stl)
+                if mesh.is_watertight:
+                    # Combine wall + inlet/outlet caps for a closed volume
+                    all_stls = [wall_stl]
+                    for patch in [self.inlet_patch] + self.outlet_patches:
+                        p = os.path.join(self.tri_surface_path, f"{patch}.stl")
+                        if os.path.exists(p):
+                            all_stls.append(p)
+                    combined = trimesh.util.concatenate([trimesh.load(s) for s in all_stls])
+                    if combined.is_watertight and combined.volume > 0:
+                        bbox = combined.bounding_box.volume
+                        fraction = combined.volume / bbox if bbox > 0 else 0.20
+                        fraction = max(0.05, min(0.50, fraction))
+                        self.log.info(f"Geometry volume: {combined.volume * 1e9:.1f} mL (from STL)")
+                        return fraction
+                    # Non-watertight combined; try wall alone as approximation
+                    if mesh.volume > 0:
+                        bbox_vol = np.prod(mesh.bounding_box.extents)
+                        fraction = abs(mesh.volume) / bbox_vol if bbox_vol > 0 else 0.20
+                        return max(0.05, min(0.50, fraction))
+            except Exception as e:
+                self.log.debug(f"trimesh volume estimation failed: {e}")
+
+        # Fallback: empirical estimate for tubular vascular geometries
+        # Typical aortic anatomy occupies 15-25% of its bounding box
+        self.log.debug("Using empirical fluid fraction estimate (0.20)")
+        return 0.20
+
+    def _log_cpd_suggestions(self, current_cell_size_m: float, fluid_fraction: float,
+                             n_bl_layers: int, bl_enabled: bool,
+                             max_ref_level: int, bbox_ranges_m: np.ndarray) -> None:
+        """Log a quick-reference table: cpd -> estimated cell count."""
+        D_ref = 2.0 * self.reference_radius_m
+        bbox_vol = bbox_ranges_m[0] * bbox_ranges_m[1] * bbox_ranges_m[2]
+        surface_mult = 1.0 + 0.15 * (4**max_ref_level - 1)
+        bl_mult = 1.0 + (0.08 * n_bl_layers if bl_enabled else 0)
+
+        self.log.info("")
+        self.log.info("CPD quick-reference (estimated final cells):")
+        self.log.info(f"  {'cpd':>5}  {'cell size':>10}  {'est. cells':>12}")
+        for cpd in [8, 10, 12, 15, 20, 25, 30]:
+            h = D_ref / cpd
+            bg = bbox_vol / (h ** 3)
+            est = int(bg * fluid_fraction * surface_mult * bl_mult)
+            marker = " <-- current" if abs(h - current_cell_size_m) / max(h, 1e-9) < 0.05 else ""
+            self.log.info(f"  {cpd:>5}  {h*1000:>8.2f} mm  {est/1e6:>10.1f}M{marker}")
 
     def _get_internal_point_for_snappy(self) -> np.ndarray:
         """

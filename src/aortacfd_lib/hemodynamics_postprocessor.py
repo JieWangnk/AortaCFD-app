@@ -1010,9 +1010,11 @@ boundaryField
         results_dir.mkdir(parents=True, exist_ok=True)
 
         # Build QoI dictionary with definitions
+        patient_id = self.config.get('case_info', {}).get('patient_id', '')
         qoi_data = {
             "_metadata": {
                 "description": "Hemodynamic Quantities of Interest for CFD verification",
+                "patient_id": patient_id,
                 "case_dir": str(self.case_dir),
                 "inlet_type": results.inlet_type,
                 "is_pulsatile": results.is_pulsatile,

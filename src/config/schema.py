@@ -203,6 +203,18 @@ if PYDANTIC_AVAILABLE:
         time_constant: float = Field(default=1.0, gt=0)
 
 
+    class ProvenanceConfig(BaseModel):
+        """Provenance metadata for reproducibility tracking."""
+
+        geometry_source: Optional[str] = Field(default=None, description="Origin of the geometry (e.g. CT scan ID, STL source)")
+        segmentation_tool: Optional[str] = Field(default=None, description="Tool used for segmentation (e.g. SimVascular, 3D Slicer)")
+        inlet_data_source: Optional[str] = Field(default=None, description="Source of inlet boundary data (e.g. 4D flow MRI, Doppler)")
+        created_by: Optional[str] = Field(default=None, description="Author or operator")
+        created_date: Optional[str] = Field(default=None, description="Date config was created (ISO 8601)")
+        aortacfd_version: Optional[str] = Field(default=None, description="AortaCFD version used")
+        notes: Optional[str] = Field(default=None, description="Free-text notes")
+
+
     class SimulationConfig(BaseModel):
         """
         Complete simulation configuration with validation.
@@ -221,6 +233,7 @@ if PYDANTIC_AVAILABLE:
         numerics: Optional[NumericsConfig] = None
         boundary_conditions: Optional[BoundaryConditionsConfig] = None
         windkessel: Optional[WindkesselConfig] = None
+        provenance: Optional[ProvenanceConfig] = None
 
         # Run settings
         run_settings: Optional[Dict[str, Any]] = None
