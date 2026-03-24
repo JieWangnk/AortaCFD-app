@@ -243,8 +243,8 @@ config: Dict[str, Any] = {
 
     # Gradient discretization
     "gradSchemes": {
-        "default": "cellLimited Gauss linear 0.5",
-        "grad(U)": "cellLimited Gauss linear 0.5",
+        "default": "cellLimited Gauss linear 1",
+        "grad(U)": "cellLimited Gauss linear 1",
         "_comment": (
             "Tighter limiting (0.5) than standard (1.0). "
             "Reduces overshoots on complex geometries. "
@@ -273,7 +273,7 @@ config: Dict[str, Any] = {
 
     # Laplacian discretization
     "laplacianSchemes": {
-        "default": "Gauss linear limited corrected 0.33",
+        "default": "Gauss linear limited 0.5",
         "_comment": (
             "Second-order with limited non-orthogonal correction. "
             "Coefficient 0.33 limits correction for stability. "
@@ -290,39 +290,48 @@ config: Dict[str, Any] = {
 
     # Surface-normal gradients
     "snGradSchemes": {
-        "default": "limited corrected 0.33",
+        "default": "limited 0.5",
         "_comment": "Limited correction matching Laplacian scheme"
     },
 
     # Solver settings
+    # Updated March 2026: Same PIMPLE philosophy as standard but with tighter
+    # U target for LES/validation accuracy. User can override all values.
     "solvers": {
         "PIMPLE": {
-            "nOuterCorrectors": 50,
-            "nCorrectors": 3,
-            "nNonOrthogonalCorrectors": 2,
+            "nOuterCorrectors": 10,
+            "nCorrectors": 2,
+            "nNonOrthogonalCorrectors": 0,
             "_comment": (
-                "HIGH nOuterCorrectors (50) with convergence-based early exit. "
-                "Per OpenFOAM Wiki: 'Set nOuterCorrectors to high value (~50) and control with residual control.' "
-                "Maximum safety margin for validation studies and pulsatile Windkessel simulations."
+                "Same PIMPLE as standard profile. Typically converges in 2-5 iterations. "
+                "User can override via numerics.correctors in config.json."
             ),
             "outerCorrectorResidualControl": {
-                "p": {"tolerance": 1e-5, "relTol": 0},
-                "U": {"tolerance": 1e-6, "relTol": 0},
-                "(k|epsilon|omega)": {"tolerance": 1e-6, "relTol": 0},
-                "_comment": "Tight tolerances (1e-5/1e-6) for accurate convergence-based early exit"
+                "p": {"tolerance": 1e-3, "relTol": 0},
+                "U": {"tolerance": 1e-4, "relTol": 0},
+                "(k|epsilon|omega)": {"tolerance": 1e-3, "relTol": 0},
+                "_comment": (
+                    "Same reachable targets as standard. "
+                    "User can tighten via numerics.correctors in config.json."
+                )
             }
         },
         "relaxationFactors": {
             "fields": {
                 "p": 0.5,
-                "_comment": "Light pressure relaxation (rely on correctors)"
+                "pFinal": 1.0,
+                "_comment": "Same as standard. User can override via numerics.relaxation_factors."
             },
             "equations": {
-                "U": 0.9,
+                "U": 0.8,
+                "UFinal": 1.0,
                 "k": 0.8,
+                "kFinal": 1.0,
                 "omega": 0.8,
+                "omegaFinal": 1.0,
                 "epsilon": 0.8,
-                "_comment": "Light equation relaxation for faster convergence with many correctors"
+                "epsilonFinal": 1.0,
+                "_comment": "Same as standard. User can override via numerics.relaxation_factors."
             }
         },
         "residualControl": {
@@ -336,7 +345,7 @@ config: Dict[str, Any] = {
 
     # Time stepping
     "time_stepping": {
-        "max_co": 0.8,
+        "max_co": 0.5,
         "initial_delta_t": 1e-6,  # Safe startup timestep to avoid Courant spike
         "max_delta_t": 0.0008,    # Maximum allowed timestep after flow develops
         "adjustable_time_step": True,

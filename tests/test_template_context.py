@@ -209,8 +209,8 @@ class TestFvSolutionContext:
         }
         result = prepare_fv_solution_context(config)
         assert result['profile'] == 'robust'
-        assert result['pimple']['nOuterCorrectors'] == 20
-        assert result['pimple']['nNonOrthogonalCorrectors'] == 3
+        assert result['pimple']['nOuterCorrectors'] == 25
+        assert result['pimple']['nNonOrthogonalCorrectors'] == 2
 
     def test_standard_profile_pimple(self):
         """Test standard profile PIMPLE settings."""
@@ -218,8 +218,8 @@ class TestFvSolutionContext:
             'numerics': {'profile': 'standard'}
         }
         result = prepare_fv_solution_context(config)
-        assert result['pimple']['nOuterCorrectors'] == 30
-        assert result['pimple']['nNonOrthogonalCorrectors'] == 1
+        assert result['pimple']['nOuterCorrectors'] == 10
+        assert result['pimple']['nNonOrthogonalCorrectors'] == 0
 
     def test_precise_profile_pimple(self):
         """Test precise profile PIMPLE settings."""
@@ -227,8 +227,8 @@ class TestFvSolutionContext:
             'numerics': {'profile': 'precise'}
         }
         result = prepare_fv_solution_context(config)
-        assert result['pimple']['nOuterCorrectors'] == 50
-        assert result['pimple']['nNonOrthogonalCorrectors'] == 2
+        assert result['pimple']['nOuterCorrectors'] == 10
+        assert result['pimple']['nNonOrthogonalCorrectors'] == 0
 
     def test_robust_relaxation_factors(self):
         """Test robust profile relaxation factors."""
@@ -236,9 +236,9 @@ class TestFvSolutionContext:
             'numerics': {'profile': 'robust'}
         }
         result = prepare_fv_solution_context(config)
-        assert result['relaxation']['p'] == 0.15
+        assert result['relaxation']['p'] == 0.3
         assert result['relaxation']['pFinal'] == 1.0
-        assert result['relaxation']['U'] == 0.4
+        assert result['relaxation']['U'] == 0.7
         assert result['relaxation']['UFinal'] == 1.0
 
     def test_standard_relaxation_factors(self):
@@ -247,9 +247,9 @@ class TestFvSolutionContext:
             'numerics': {'profile': 'standard'}
         }
         result = prepare_fv_solution_context(config)
-        assert result['relaxation']['p'] == 0.3
+        assert result['relaxation']['p'] == 0.5
         assert result['relaxation']['pFinal'] == 1.0
-        assert result['relaxation']['U'] == 0.7
+        assert result['relaxation']['U'] == 0.8
 
     def test_robust_tolerances(self):
         """Test robust profile tolerances."""
@@ -261,13 +261,13 @@ class TestFvSolutionContext:
         assert result['tolerances']['U'] == 1e-3
 
     def test_precise_tolerances(self):
-        """Test precise profile tolerances are tighter."""
+        """Test precise profile tolerances match standard (convergence-based exit)."""
         config = {
             'numerics': {'profile': 'precise'}
         }
         result = prepare_fv_solution_context(config)
-        assert result['tolerances']['p'] == 1e-5
-        assert result['tolerances']['U'] == 1e-6
+        assert result['tolerances']['p'] == 1e-3
+        assert result['tolerances']['U'] == 1e-4
 
     def test_default_profile(self):
         """Test default profile when not specified."""
@@ -459,7 +459,7 @@ class TestEdgeCases:
         }
         result = prepare_fv_solution_context(config)
         # Should use standard defaults
-        assert result['pimple']['nOuterCorrectors'] == 30
+        assert result['pimple']['nOuterCorrectors'] == 10
 
 
 if __name__ == '__main__':

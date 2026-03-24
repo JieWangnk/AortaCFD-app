@@ -137,13 +137,13 @@ def prepare_fv_schemes_context(config: Dict[str, Any]) -> Dict[str, Any]:
     is_steady = physics.get('steady_state', False)
     profile = numerics.get('profile', 'standard')
 
-    # Determine time discretization
+    # Determine time discretization — read from profile config
     if is_steady:
         ddt_scheme = 'steadyState'
-    elif profile == 'robust':
-        ddt_scheme = 'Euler'
     else:
-        ddt_scheme = 'backward'
+        from config.profiles.numerics import NUMERICS_PROFILES
+        profile_config = NUMERICS_PROFILES.get(profile, {})
+        ddt_scheme = profile_config.get('ddtSchemes', {}).get('default', 'Euler')
 
     # Determine convection scheme based on profile
     if profile == 'robust':
@@ -201,49 +201,50 @@ def prepare_fv_solution_context(config: Dict[str, Any]) -> Dict[str, Any]:
     profile = numerics.get('profile', 'standard')
 
     # PIMPLE settings by profile
+    # Updated March 2026 to match proven cardiovascular CFD settings
     pimple_settings = {
         'robust': {
-            'nOuterCorrectors': 20,
+            'nOuterCorrectors': 25,
             'nCorrectors': 3,
-            'nNonOrthogonalCorrectors': 3,
+            'nNonOrthogonalCorrectors': 2,
         },
         'standard': {
-            'nOuterCorrectors': 30,
+            'nOuterCorrectors': 10,
             'nCorrectors': 2,
-            'nNonOrthogonalCorrectors': 1,
+            'nNonOrthogonalCorrectors': 0,
         },
         'accurate': {
-            'nOuterCorrectors': 50,
-            'nCorrectors': 3,
-            'nNonOrthogonalCorrectors': 2,
+            'nOuterCorrectors': 10,
+            'nCorrectors': 2,
+            'nNonOrthogonalCorrectors': 0,
         },
         'precise': {
-            'nOuterCorrectors': 50,
-            'nCorrectors': 3,
-            'nNonOrthogonalCorrectors': 2,
+            'nOuterCorrectors': 10,
+            'nCorrectors': 2,
+            'nNonOrthogonalCorrectors': 0,
         },
     }
 
     # Relaxation factors by profile
     relaxation_settings = {
         'robust': {
-            'p': 0.15, 'pFinal': 1.0,
-            'U': 0.4, 'UFinal': 1.0,
-            'k': 0.4, 'kFinal': 1.0,
-        },
-        'standard': {
             'p': 0.3, 'pFinal': 1.0,
             'U': 0.7, 'UFinal': 1.0,
             'k': 0.7, 'kFinal': 1.0,
         },
+        'standard': {
+            'p': 0.5, 'pFinal': 1.0,
+            'U': 0.8, 'UFinal': 1.0,
+            'k': 0.7, 'kFinal': 1.0,
+        },
         'accurate': {
             'p': 0.5, 'pFinal': 1.0,
-            'U': 0.9, 'UFinal': 1.0,
+            'U': 0.8, 'UFinal': 1.0,
             'k': 0.8, 'kFinal': 1.0,
         },
         'precise': {
             'p': 0.5, 'pFinal': 1.0,
-            'U': 0.9, 'UFinal': 1.0,
+            'U': 0.8, 'UFinal': 1.0,
             'k': 0.8, 'kFinal': 1.0,
         },
     }
@@ -251,9 +252,9 @@ def prepare_fv_solution_context(config: Dict[str, Any]) -> Dict[str, Any]:
     # Convergence tolerances by profile
     tolerance_settings = {
         'robust': {'p': 1e-3, 'U': 1e-3},
-        'standard': {'p': 1e-4, 'U': 1e-5},
-        'accurate': {'p': 1e-5, 'U': 1e-6},
-        'precise': {'p': 1e-5, 'U': 1e-6},
+        'standard': {'p': 1e-3, 'U': 1e-4},
+        'accurate': {'p': 1e-3, 'U': 1e-4},
+        'precise': {'p': 1e-3, 'U': 1e-4},
     }
 
     pimple = pimple_settings.get(profile, pimple_settings['standard'])

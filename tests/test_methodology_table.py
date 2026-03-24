@@ -70,23 +70,23 @@ class TestMethodologyProfileTable:
         """Verify standard profile matches methodology description."""
         profile = NUMERICS_PROFILES['standard']
 
-        # Should be second-order bounded (limitedLinearV TVD)
-        assert 'limitedLinear' in profile['divSchemes']['div(phi,U)'], \
-            "Standard profile should use limitedLinearV (2nd order TVD bounded)"
+        # Should be second-order bounded (linearUpwind)
+        assert 'linearUpwind' in profile['divSchemes']['div(phi,U)'], \
+            "Standard profile should use linearUpwind (2nd order bounded)"
 
         # Time integration should be backward (second-order)
         assert profile['ddtSchemes']['default'] == 'backward', \
             "Standard profile should use backward time integration"
 
-        # Correctors - high max with convergence-based exit (50 max outer correctors)
-        assert profile['solvers']['PIMPLE']['nOuterCorrectors'] == 50, \
-            "Standard profile should use 50 max outer correctors (convergence-based exit)"
+        # Correctors - convergence-based exit (10 max outer correctors)
+        assert profile['solvers']['PIMPLE']['nOuterCorrectors'] == 10, \
+            "Standard profile should use 10 max outer correctors (convergence-based exit)"
         assert 'outerCorrectorResidualControl' in profile['solvers']['PIMPLE'], \
             "Standard profile must have outerCorrectorResidualControl for early exit"
 
         # Max Courant number
-        assert profile['time_stepping']['max_co'] == 1.0, \
-            "Standard profile should use max_co = 1.0"
+        assert profile['time_stepping']['max_co'] == 0.8, \
+            "Standard profile should use max_co = 0.8"
 
         # Order of accuracy
         assert profile['_profile_metadata']['order_of_accuracy'] == 2, \
@@ -105,9 +105,13 @@ class TestMethodologyProfileTable:
         assert profile['ddtSchemes']['default'] == 'CrankNicolson 0.9', \
             "Precise profile should use CrankNicolson 0.9 time integration"
 
-        # Should have tight tolerances (1e-8)
+        # Should have tight residual tolerances (1e-8)
         assert profile['solvers']['residualControl']['p'] <= 1e-8, \
-            "Precise profile should have tight residual tolerances (≤1e-8)"
+            "Precise profile should have tight residual tolerances (<=1e-8)"
+
+        # Max Courant number (0.5 for temporal accuracy)
+        assert profile['time_stepping']['max_co'] == 0.5, \
+            "Precise profile should use max_co = 0.5 for temporal accuracy"
 
         # Order of accuracy (formal_order_of_accuracy in precise profile)
         assert profile['_profile_metadata']['formal_order_of_accuracy'] == 2, \
@@ -238,9 +242,9 @@ class TestMethodologyNumericalSchemes:
             f"Profile '{profile_name}' should use '{expected_gradient}' for gradients"
 
     @pytest.mark.parametrize("profile_name,expected_laplacian", [
-        ('robust', 'Gauss linear limited corrected'),
-        ('standard', 'Gauss linear limited corrected'),
-        ('precise', 'Gauss linear limited corrected'),  # All use limited corrected for stability
+        ('robust', 'Gauss linear limited'),
+        ('standard', 'Gauss linear limited'),
+        ('precise', 'Gauss linear limited'),  # All use limited for stability
     ])
     def test_laplacian_schemes(self, profile_name, expected_laplacian):
         """Verify Laplacian schemes match methodology."""

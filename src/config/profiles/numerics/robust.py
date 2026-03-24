@@ -128,8 +128,8 @@ config: Dict[str, Any] = {
         "relaxationFactors": {
             "fields": {
                 "p": 0.3,
-                "pFinal": 0.9,
-                "_comment": "STABILITY FIX: pFinal reduced from 1.0 to 0.9. Full 1.0 causes 3x pressure shock in PIMPLE final iteration that destabilizes Windkessel BCs. 0.9 maintains 97% mass conservation while preventing instability."
+                "pFinal": 1.0,
+                "_comment": "pFinal MUST be 1.0 for Windkessel outlets. Under-relaxation on final corrector causes WK ODE state to drift from applied pressure field."
             },
             "equations": {
                 "U": 0.7,

@@ -25,7 +25,7 @@ This profile combines 2nd order accuracy with robust stability measures:
 1. limitedLinearV (TVD bounded) - Prevents oscillations at boundaries/outlets
 2. cellLimited 0.5 - Tighter gradient limiting than traditional 1.0
 3. limited corrected 0.5 - Non-orthogonal correction with stability limiting
-4. pFinal = 0.9, UFinal = 1 - Slight under-relaxation on final p to prevent Windkessel instability
+4. pFinal = 1.0, UFinal = 1.0 - Full correction on final PIMPLE iteration (required for Windkessel)
 5. nOuterCorrectors = 50 - High with convergence-based early exit
 
 TRADE-OFFS
@@ -94,8 +94,8 @@ config: Dict[str, Any] = {
 
     # Gradient discretization
     "gradSchemes": {
-        "default": "cellLimited Gauss linear 0.5",
-        "grad(U)": "cellLimited Gauss linear 0.5",
+        "default": "cellLimited Gauss linear 1",
+        "grad(U)": "cellLimited Gauss linear 1",
         "grad(p)": "Gauss linear",
         "_comment": "Bounded gradient with limiter=0.5 - tighter than 1.0 for enhanced stability"
     },
@@ -103,7 +103,7 @@ config: Dict[str, Any] = {
     # Convection discretization
     "divSchemes": {
         "default": "none",
-        "div(phi,U)": "Gauss limitedLinearV 1",
+        "div(phi,U)": "Gauss linearUpwind default",
         "div(phi,k)": "Gauss limitedLinear 1",
         "div(phi,omega)": "Gauss limitedLinear 1",
         "div(phi,epsilon)": "Gauss limitedLinear 1",
@@ -117,7 +117,7 @@ config: Dict[str, Any] = {
 
     # Laplacian discretization
     "laplacianSchemes": {
-        "default": "Gauss linear limited corrected 0.777",
+        "default": "Gauss linear limited 0.5",
         "_comment": "Second-order with non-orthogonal correction. Coefficient 0.777 optimal for typical cardiovascular mesh orthogonality (65-75°)"
     },
 
@@ -129,37 +129,51 @@ config: Dict[str, Any] = {
 
     # Surface-normal gradients
     "snGradSchemes": {
-        "default": "limited corrected 0.777",
-        "_comment": "Coefficient 0.777 matches laplacianSchemes for consistency"
+        "default": "limited 0.5",
+        "_comment": "Coefficient 0.5 matches laplacianSchemes for consistency"
     },
 
     # Solver settings
+    # Updated March 2026: Previous settings (nOuter=50, p=0.3, targets=1e-4/1e-5)
+    # caused PIMPLE outer loop divergence during diastolic flow reversal on all
+    # tested cases (VOL04, 0023_H_AO_MFS). New settings match proven working
+    # cardiovascular CFD configuration. User can override via config.json
+    # numerics.correctors and numerics.relaxation_factors.
     "solvers": {
         "PIMPLE": {
-            "nOuterCorrectors": 50,
+            "nOuterCorrectors": 10,
             "nCorrectors": 2,
-            "nNonOrthogonalCorrectors": 1,
+            "nNonOrthogonalCorrectors": 0,
             "momentumPredictor": True,
             "_comment": (
-                "HIGH nOuterCorrectors (50) with convergence-based early exit. "
-                "Per OpenFOAM Wiki: 'Set nOuterCorrectors to high value (~50) and control with residual control.' "
-                "Most timesteps exit early; peak systole uses more iterations if needed."
+                "nOuterCorrectors=10 with targets 1e-3. Typically converges in 2-5 iterations. "
+                "Previous value of 50 with tight targets caused every timestep to burn all iterations "
+                "due to explicit p relaxation creating a residual floor above the target. "
+                "User can override via numerics.correctors.nOuterCorrectors in config.json."
             ),
             "outerCorrectorResidualControl": {
-                "p": {"tolerance": 1e-4, "relTol": 0},
-                "U": {"tolerance": 1e-5, "relTol": 0},
-                "(k|epsilon|omega)": {"tolerance": 1e-5, "relTol": 0},
-                "_comment": "Standard tolerances for convergence-based early exit"
+                "p": {"tolerance": 1e-3, "relTol": 0},
+                "U": {"tolerance": 1e-4, "relTol": 0},
+                "(k|epsilon|omega)": {"tolerance": 1e-3, "relTol": 0},
+                "_comment": (
+                    "p target 1e-3 is reachable with p relaxation 0.5 (floor ~2e-4). "
+                    "U target 1e-4 for better velocity accuracy. "
+                    "User can override via numerics.correctors in config.json."
+                )
             }
         },
         "relaxationFactors": {
             "fields": {
-                "p": 0.3,
-                "pFinal": 0.9,
-                "_comment": "STABILITY FIX: pFinal reduced from 1.0 to 0.9. Full 1.0 causes pressure shocks in PIMPLE final iteration that destabilize Windkessel BCs."
+                "p": 0.5,
+                "pFinal": 1.0,
+                "_comment": (
+                    "p=0.5 (was 0.3): lower residual floor, faster convergence. "
+                    "pFinal MUST be 1.0 for Windkessel outlets. "
+                    "User can override via numerics.relaxation_factors.p in config.json."
+                )
             },
             "equations": {
-                "U": 0.7,
+                "U": 0.8,
                 "UFinal": 1.0,
                 "k": 0.7,
                 "kFinal": 1.0,
@@ -167,7 +181,7 @@ config: Dict[str, Any] = {
                 "omegaFinal": 1.0,
                 "epsilon": 0.7,
                 "epsilonFinal": 1.0,
-                "_comment": "Moderate relaxation with full correction on final PIMPLE iteration"
+                "_comment": "U=0.8 (was 0.7) for faster convergence. User can override via numerics.relaxation_factors."
             }
         },
         "residualControl": {
@@ -181,7 +195,7 @@ config: Dict[str, Any] = {
 
     # Time stepping
     "time_stepping": {
-        "max_co": 1.0,
+        "max_co": 0.8,
         "initial_delta_t": 1e-6,  # Safe startup timestep to avoid Courant spike
         "max_delta_t": 1e-3,      # Maximum allowed timestep after flow develops
         "adjustable_time_step": True,
@@ -201,7 +215,7 @@ config: Dict[str, Any] = {
             "limitedLinearV for TVD bounded convection",
             "cellLimited 0.5 for tighter gradient limiting",
             "limited corrected 0.5 for stable non-orthogonal correction",
-            "pFinal = 0.9 for stable Windkessel coupling (UFinal = 1)"
+            "pFinal = 1.0 for correct Windkessel coupling (UFinal = 1.0)"
         ],
         "literature": [
             "OpenFOAM User Guide v11, Section 4.4 (Numerical Schemes)",
