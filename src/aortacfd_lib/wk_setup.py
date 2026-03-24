@@ -112,6 +112,7 @@ class WkSetup:
         # Check for direct RCZ mode first
         if self._check_direct_rcz_mode(outlet_patches):
             self.log.info("Using DIRECT RCZ mode - skipping coefficient calculation")
+            self._inject_q_init_for_direct_rcz(outlet_patches)
             return
 
         # Determine whether to use 2-element or 3-element Windkessel
@@ -140,62 +141,8 @@ class WkSetup:
             self.log.info("Calculating 3-Element Windkessel Coefficients (Clinical Method)")
         self.log.info("-" * 80)
 
-        tri_surface_dir = os.path.join(self.case_dir, "constant", "triSurface")
-
-        # STL files in constant/triSurface/ are PRE-SCALED to meters during case setup
-        # No scale_factor needed - areas returned directly in m²
-        inlet_patch_name = self.geom_settings['inlet_keywords_ordered']
-        area_inlet = PatchProcessing(tri_surface_dir, inlet_patch_name).calculate_surface_area()
-
-        outlet_patches = self.geom_settings['outlet_keywords_ordered']
-        outlet_areas = {name: PatchProcessing(tri_surface_dir, name).calculate_surface_area()
-                       for name in outlet_patches}
-
-        # Calculate outlet radii for Murray's law
-        outlet_radii = {name: math.sqrt(area / math.pi) for name, area in outlet_areas.items()}
-
-        # Determine mean inlet flow
-        inlet_type = self.inlet_settings.get('type', 'TIMEVARYING').upper()
-
-        if inlet_type in ['TIMEVARYING', 'WOMERSLEY']:
-            # Read inlet flow from CSV
-            inlet_csv_path = os.path.join("cases_input", self.geom_settings['case_name'], self.inlet_settings['csv_file'])
-            times, flow_inlet = self._read_inlet_flow(inlet_csv_path, self.inlet_settings['data_type'], area_inlet)
-            mean_Q_inlet = np.mean(flow_inlet)
-        elif inlet_type in ['CONSTANT', 'PARABOLIC']:
-            # Calculate flow from either velocity, flowrate, or cardiac_output
-            # Note: flowrate is an alias for cardiac_output
-            if 'flowrate' in self.inlet_settings and 'cardiac_output' not in self.inlet_settings:
-                self.inlet_settings['cardiac_output'] = self.inlet_settings['flowrate']
-
-            if 'cardiac_output' in self.inlet_settings:
-                # Cardiac output specified directly (L/min)
-                cardiac_output_Lmin = self.inlet_settings['cardiac_output']
-                mean_Q_inlet = cardiac_output_Lmin / 60.0 / 1000.0  # Convert L/min to m³/s
-                mean_velocity = mean_Q_inlet / area_inlet
-
-                self.log.info(f"Constant inlet: cardiac_output = {cardiac_output_Lmin:.2f} L/min → "
-                             f"velocity = {mean_velocity:.3f} m/s, mean flow Q = {mean_Q_inlet*1e6:.2f} mL/s")
-
-                if 'velocity' in self.inlet_settings:
-                    self.log.warning(f"Both 'velocity' and 'cardiac_output' specified. Using cardiac_output.")
-
-            elif 'velocity' in self.inlet_settings:
-                # Velocity specified
-                velocity = self.inlet_settings['velocity']
-
-                # For parabolic profile, velocity is centerline, mean is v_centerline/2
-                if inlet_type == 'PARABOLIC':
-                    mean_velocity = velocity / 2.0
-                else:
-                    mean_velocity = velocity
-
-                mean_Q_inlet = mean_velocity * area_inlet
-                self.log.info(f"Constant inlet: velocity = {velocity:.3f} m/s, mean flow Q = {mean_Q_inlet*1e6:.2f} mL/s")
-            else:
-                raise ValueError(f"CONSTANT/PARABOLIC inlet requires either 'velocity' (m/s), 'flowrate' (L/min), or 'cardiac_output' (L/min) parameter")
-        else:
-            raise ValueError(f"Unknown inlet type: {inlet_type}")
+        area_inlet, outlet_areas, outlet_radii = self._compute_patch_geometry(outlet_patches)
+        mean_Q_inlet, times, flow_inlet = self._compute_mean_inlet_flow(area_inlet)
 
         # Step 1: Calculate MAP from cuff pressures
         SP = self.wk_model_settings.get("systolic_pressure", 120)  # mmHg
@@ -461,6 +408,224 @@ class WkSetup:
         else:
             # Steady-state plot with pie chart, bar chart, and WK parameters table
             self.plot_flow_distribution_steady(mean_Q_inlet, flow_split_ratios, outlet_parameters, plot_path)
+
+    def _compute_patch_geometry(self, outlet_patches: list) -> tuple[float, dict, dict]:
+        """Compute inlet area, outlet areas, and outlet radii from the generated triSurface."""
+        tri_surface_dir = os.path.join(self.case_dir, "constant", "triSurface")
+
+        # STL files in constant/triSurface/ are pre-scaled to meters during case setup.
+        inlet_patch_name = self.geom_settings['inlet_keywords_ordered']
+        area_inlet = PatchProcessing(tri_surface_dir, inlet_patch_name).calculate_surface_area()
+        outlet_areas = {
+            name: PatchProcessing(tri_surface_dir, name).calculate_surface_area()
+            for name in outlet_patches
+        }
+        outlet_radii = {name: math.sqrt(area / math.pi) for name, area in outlet_areas.items()}
+        return area_inlet, outlet_areas, outlet_radii
+
+    def _compute_mean_inlet_flow(self, area_inlet: float) -> tuple[float, np.ndarray | None, np.ndarray | None]:
+        """Compute mean inlet flow in m^3/s from the configured inlet boundary condition."""
+        inlet_type = self.inlet_settings.get('type', 'TIMEVARYING').upper()
+
+        if inlet_type in ['TIMEVARYING', 'WOMERSLEY']:
+            inlet_csv_path = os.path.join("cases_input", self.geom_settings['case_name'], self.inlet_settings['csv_file'])
+            times, flow_inlet = self._read_inlet_flow(inlet_csv_path, self.inlet_settings['data_type'], area_inlet)
+            return float(np.mean(flow_inlet)), times, flow_inlet
+
+        if inlet_type == 'MRI':
+            mean_q_inlet = self._compute_mri_mean_inlet_flow(area_inlet)
+            return mean_q_inlet, None, None
+
+        if inlet_type in ['CONSTANT', 'PARABOLIC']:
+            if 'flowrate' in self.inlet_settings and 'cardiac_output' not in self.inlet_settings:
+                self.inlet_settings['cardiac_output'] = self.inlet_settings['flowrate']
+
+            if 'cardiac_output' in self.inlet_settings:
+                cardiac_output_lmin = self.inlet_settings['cardiac_output']
+                mean_q_inlet = cardiac_output_lmin / 60.0 / 1000.0
+                mean_velocity = mean_q_inlet / area_inlet
+                self.log.info(
+                    f"Constant inlet: cardiac_output = {cardiac_output_lmin:.2f} L/min → "
+                    f"velocity = {mean_velocity:.3f} m/s, mean flow Q = {mean_q_inlet*1e6:.2f} mL/s"
+                )
+                if 'velocity' in self.inlet_settings:
+                    self.log.warning("Both 'velocity' and 'cardiac_output' specified. Using cardiac_output.")
+                return float(mean_q_inlet), None, None
+
+            if 'velocity' in self.inlet_settings:
+                velocity = self.inlet_settings['velocity']
+                mean_velocity = velocity / 2.0 if inlet_type == 'PARABOLIC' else velocity
+                mean_q_inlet = mean_velocity * area_inlet
+                self.log.info(
+                    f"Constant inlet: velocity = {velocity:.3f} m/s, mean flow Q = {mean_q_inlet*1e6:.2f} mL/s"
+                )
+                return float(mean_q_inlet), None, None
+
+            raise ValueError(
+                "CONSTANT/PARABOLIC inlet requires either 'velocity' (m/s), "
+                "'flowrate' (L/min), or 'cardiac_output' (L/min) parameter"
+            )
+
+        raise ValueError(f"Unknown inlet type: {inlet_type}")
+
+    def _compute_mri_mean_inlet_flow(self, area_inlet: float) -> float:
+        """Compute mean inlet flow from prepared MRI boundaryData velocity fields."""
+        mri_velocity_dir = self._resolve_mri_velocity_directory()
+        flow_direction = self._compute_inlet_flow_direction()
+        time_dirs = [
+            entry for entry in os.listdir(mri_velocity_dir)
+            if os.path.isdir(os.path.join(mri_velocity_dir, entry)) and entry.replace('.', '', 1).isdigit()
+        ]
+
+        if not time_dirs:
+            raise ValueError(f"No MRI time directories found in {mri_velocity_dir}")
+
+        flow_samples = []
+        for time_dir in sorted(time_dirs, key=float):
+            velocity_file = os.path.join(mri_velocity_dir, time_dir, 'U')
+            if not os.path.exists(velocity_file):
+                continue
+
+            velocities = self._read_openfoam_vectors(velocity_file)
+            if velocities.size == 0:
+                continue
+
+            normal_velocity = velocities @ flow_direction
+            flow_samples.append(float(np.mean(normal_velocity) * area_inlet))
+
+        if not flow_samples:
+            raise ValueError(f"No MRI velocity samples found in {mri_velocity_dir}")
+
+        mean_q_inlet = float(np.mean(flow_samples))
+        if mean_q_inlet < 0:
+            self.log.warning(
+                f"MRI inlet mean flow projected negative ({mean_q_inlet*1e6:.2f} mL/s); using magnitude for q_init"
+            )
+            mean_q_inlet = abs(mean_q_inlet)
+
+        self.log.info(
+            f"MRI inlet: mean flow Q = {mean_q_inlet*1e6:.2f} mL/s from {len(flow_samples)} time steps"
+        )
+        return mean_q_inlet
+
+    def _resolve_mri_velocity_directory(self) -> str:
+        """Resolve the MRI velocity directory, preferring prepared boundaryData in the case directory."""
+        inlet_patch_name = self.geom_settings['inlet_keywords_ordered']
+        boundary_data_dir = os.path.join(self.case_dir, 'constant', 'boundaryData', inlet_patch_name)
+        if os.path.isdir(boundary_data_dir):
+            return boundary_data_dir
+
+        mri_source_dir = self.inlet_settings.get('file', self.inlet_settings.get('source_dir', ''))
+        if not mri_source_dir:
+            raise ValueError("MRI inlet type requires 'file' or 'source_dir' to locate velocity data")
+
+        if os.path.isabs(mri_source_dir) and os.path.isdir(mri_source_dir):
+            return mri_source_dir
+
+        patient_case_dir = self.config.get('patient_case_directory', '')
+        if patient_case_dir:
+            candidate = os.path.join(patient_case_dir, mri_source_dir)
+            if os.path.isdir(candidate):
+                return candidate
+
+        candidate = os.path.join('cases_input', self.geom_settings['case_name'], mri_source_dir)
+        if os.path.isdir(candidate):
+            return candidate
+
+        if os.path.isdir(mri_source_dir):
+            return mri_source_dir
+
+        raise FileNotFoundError(f"MRI inlet source directory not found: {mri_source_dir}")
+
+    def _compute_inlet_flow_direction(self) -> np.ndarray:
+        """Compute the positive inlet flow direction based on orientation settings and outlet geometry."""
+        tri_surface_dir = os.path.join(self.case_dir, 'constant', 'triSurface')
+        inlet_name = self.geom_settings['inlet_keywords_ordered']
+        inlet_center, _, inlet_normal = PatchProcessing(tri_surface_dir, inlet_name).calculate_inlet_center_radius()
+        orientation = self.inlet_settings.get('orientation', 'auto').lower()
+
+        if orientation == 'out':
+            return inlet_normal
+        if orientation == 'in':
+            return -inlet_normal
+
+        outlet_centers = []
+        for outlet_name in self.geom_settings['outlet_keywords_ordered']:
+            outlet_center, _, _ = PatchProcessing(tri_surface_dir, outlet_name).calculate_inlet_center_radius()
+            outlet_centers.append(outlet_center)
+
+        if not outlet_centers:
+            self.log.warning("MRI inlet flow direction: no outlet centers found, using inlet normal as-is")
+            return inlet_normal
+
+        flow_direction = np.mean(outlet_centers, axis=0) - inlet_center
+        flow_direction = flow_direction / np.linalg.norm(flow_direction)
+        if np.dot(inlet_normal, flow_direction) < 0:
+            return -inlet_normal
+        return inlet_normal
+
+    @staticmethod
+    def _read_openfoam_vectors(filepath: str) -> np.ndarray:
+        """Read a bare OpenFOAM vector field file and return an Nx3 array."""
+        with open(filepath) as handle:
+            lines = handle.readlines()
+
+        count_index = None
+        for index, line in enumerate(lines):
+            if line.strip().isdigit():
+                count_index = index
+                break
+
+        if count_index is None:
+            raise ValueError(f"Could not find vector count in OpenFOAM file: {filepath}")
+
+        n_vectors = int(lines[count_index].strip())
+        vectors = []
+        for line in lines[count_index + 2:count_index + 2 + n_vectors]:
+            values = line.strip().strip('()').split()
+            vectors.append([float(value) for value in values])
+
+        return np.array(vectors)
+
+    def _inject_q_init_for_direct_rcz(self, outlet_patches: list) -> None:
+        """Populate missing q_init values for direct RCZ cases to stabilize WK startup."""
+        outlet_params = self.wk_model_settings.get('outlet_parameters', {})
+        missing_q_init = [
+            outlet for outlet in outlet_patches
+            if outlet in outlet_params and 'q_init' not in outlet_params[outlet]
+        ]
+
+        if not missing_q_init:
+            self.log.info("Direct RCZ mode: all outlets already define q_init; preserving configured values")
+            return
+
+        try:
+            area_inlet, _, outlet_radii = self._compute_patch_geometry(outlet_patches)
+            mean_q_inlet, _, _ = self._compute_mean_inlet_flow(area_inlet)
+            flow_split_ratios = self._calculate_murray_flow_split(outlet_radii)
+            split_method = "Murray's law"
+        except Exception as exc:
+            self.log.warning(
+                f"Direct RCZ mode: failed to compute geometry-based q_init ({exc}); using equal outlet split"
+            )
+            mean_q_inlet, _, _ = self._compute_mean_inlet_flow(1.0)
+            equal_fraction = 1.0 / len(outlet_patches)
+            flow_split_ratios = {outlet: equal_fraction for outlet in outlet_patches}
+            split_method = "equal split"
+
+        self.log.info(
+            f"Direct RCZ mode: injecting q_init from mean inlet flow {mean_q_inlet*1e6:.2f} mL/s "
+            f"using {split_method}"
+        )
+        for outlet in outlet_patches:
+            params = outlet_params[outlet]
+            if 'q_init' in params:
+                self.log.info(f"  {outlet}: preserving configured q_init = {params['q_init']*1e6:.2f} mL/s")
+                continue
+
+            q_init = float(mean_q_inlet * flow_split_ratios[outlet])
+            params['q_init'] = q_init
+            self.log.info(f"  {outlet}: q_init = {q_init*1e6:.2f} mL/s")
 
     def _check_direct_rcz_mode(self, outlet_patches: list) -> bool:
         """
@@ -821,6 +986,22 @@ class WkSetup:
         if data_type_norm == "flowrate":
             times = Q_data[:, 0]
             flow_inlet = Q_data[:, 1]
+
+            # Auto-detect L/min vs m³/s: clinical flowrate data is typically in L/min
+            # (values > 1.0), while m³/s values for aortic flows are O(1e-5) to O(1e-4).
+            # This matches the same logic used in inlet_mapping.py.
+            max_abs_flow = np.max(np.abs(flow_inlet))
+            if max_abs_flow > 1.0:
+                self.log.info(
+                    f"Flowrate CSV auto-detected as L/min (max={max_abs_flow:.2f}). "
+                    f"Converting to m³/s."
+                )
+                flow_inlet = flow_inlet * 1e-3 / 60.0  # L/min -> m³/s
+            else:
+                self.log.info(
+                    f"Flowrate CSV auto-detected as m³/s (max={max_abs_flow:.2e})"
+                )
+
         elif data_type_norm == "velocity":
             times = Q_data[:, 0]
             flow_inlet = Q_data[:, 1] * inlet_area
