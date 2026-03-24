@@ -57,6 +57,9 @@ class BoundaryConditionSetup:
         """A single method to generate all necessary boundary condition files."""
         self.log.info("Generating all boundary condition files...")
 
+        # Auto-adjust stabilisation for LES
+        self._apply_les_stabilisation_override()
+
         # Check if we need to calculate Murray's law flow distribution
         outlet_settings = self._prepare_outlet_settings()
 
@@ -113,6 +116,52 @@ class BoundaryConditionSetup:
             context['header'] = self.version_adapter.get_foam_file_header("volScalarField", "omega")
             self._write_file_from_template("omega.tpl", os.path.join(zero_dir, "omega"), context)
     
+    def _apply_les_stabilisation_override(self):
+        """
+        Auto-disable hard backflow stabilisation for LES simulations.
+
+        The stabilizedWindkesselVelocity BC uses a Heaviside step function
+        H(-phi) to detect backflow. In LES, resolved turbulent fluctuations
+        at outlet patches trigger the Heaviside frequently, creating
+        discontinuous velocity gradients that feed into the subgrid model
+        and cause nut blowup.
+
+        For LES with Windkessel outlets:
+        - Disable stabilisation (use pressureInletOutletVelocity instead)
+        - This preserves the Windkessel pressure-flow coupling
+        - Backflow is handled naturally by the pressure BC
+
+        The user can override this by explicitly setting enable_stabilization: true
+        in their config (the override only applies when not explicitly set).
+        """
+        sim_type = self.physics_settings.get('simulation_type', '').upper()
+        if sim_type != "LES":
+            return
+
+        outlet_type = self.outlet_settings.get('type', 'zeroGradient').upper()
+        if 'WINDKESSEL' not in outlet_type:
+            return
+
+        wk_settings = self.outlet_settings.get('windkessel_settings', {})
+
+        # Only override if user hasn't explicitly set it
+        if 'enable_stabilization' not in wk_settings:
+            self.log.warning(
+                "LES detected: auto-disabling hard backflow stabilisation at "
+                "Windkessel outlets. The Heaviside step function in "
+                "stabilizedWindkesselVelocity creates velocity gradient "
+                "discontinuities that cause nut blowup in LES. "
+                "Using pressureInletOutletVelocity instead."
+            )
+            wk_settings['enable_stabilization'] = False
+            self.outlet_settings.setdefault('windkessel_settings', {}).update(wk_settings)
+        elif wk_settings.get('enable_stabilization', False):
+            self.log.warning(
+                "LES with hard backflow stabilisation enabled. This can cause "
+                "nut blowup from Heaviside-induced velocity gradient discontinuities. "
+                "Consider enable_stabilization: false for LES."
+            )
+
     def _prepare_outlet_settings(self):
         """
         Prepare outlet settings, automatically calculating Murray's law if needed.

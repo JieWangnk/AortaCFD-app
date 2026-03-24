@@ -62,6 +62,9 @@ class ConfigBuilder:
         self._validate_physical_parameters(final_config)
         self._validate_windkessel_parameters(final_config)
 
+        # Physics model advisory (warns if RANS/LES may be inappropriate)
+        self._validate_physics_model(final_config)
+
         # Schema validation (if pydantic available)
         if is_pydantic_available():
             try:
@@ -139,6 +142,9 @@ class ConfigBuilder:
         # Validate physical parameters
         self._validate_physical_parameters(final_config)
         self._validate_windkessel_parameters(final_config)
+
+        # Physics model advisory (warns if RANS/LES may be inappropriate)
+        self._validate_physics_model(final_config)
 
         # Schema validation (if pydantic available)
         if is_pydantic_available():
@@ -514,6 +520,36 @@ class ConfigBuilder:
                     self.logger.warning(
                         f"Flow split fractions sum to {total:.3f}, expected ~1.0."
                     )
+
+    def _validate_physics_model(self, config: dict) -> None:
+        """
+        Check if the selected physics model is appropriate for the flow conditions
+        and mesh settings. Issues warnings (non-blocking) for potential issues.
+
+        Warns when:
+        - RANS/LES selected but estimated Re is in the laminar regime (< 4000)
+        - Mesh refinement level jumps create volume ratio risks for turbulence models
+        - LES selected without adequate boundary layer resolution
+        """
+        physics = config.get('physics', {})
+        sim_type = physics.get('simulation_type', 'laminar').lower()
+
+        if sim_type == 'laminar':
+            return  # No warnings needed for laminar
+
+        try:
+            from aortacfd_lib.physics_advisor import (
+                recommend_physics_model,
+                log_physics_advice,
+            )
+
+            advice = recommend_physics_model(config)
+            log_physics_advice(advice, sim_type)
+
+        except ImportError:
+            self.logger.debug("Physics advisor not available, skipping model check")
+        except Exception as e:
+            self.logger.debug(f"Physics model check skipped: {e}")
 
     def _apply_mesh_quality_preset(self, config: dict) -> dict:
         """

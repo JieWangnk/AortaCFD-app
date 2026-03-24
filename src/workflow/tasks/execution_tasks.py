@@ -1,5 +1,8 @@
 import os
+import re
 import shutil
+import threading
+import time
 
 from ..base_task import Task, AortaCFDError, logger
 from aortacfd_lib.utils.runner import run_command, CommandExecutionError
@@ -19,10 +22,12 @@ class ExecuteMeshingTask(Task):
             run_command(self.config, ["blockMesh"], case_dir, "log.blockMesh")
             run_command(self.config, ["surfaceFeatures"], case_dir, "log.surfaceFeatures")
 
-            # Note: surfaceFeatures creates closeness files with .stl in name
-            # e.g., wall_aorta.stl.closeness.internalPointCloseness
-            # snappyHexMesh expects this format when geometry is named "wall_aorta.stl"
-            # So we do NOT rename them - just distribute to processor directories
+            # surfaceFeatures creates closeness files WITHOUT .stl in name:
+            #   wall_aorta.closeness.internalPointCloseness
+            # But snappyHexMesh expects .stl in name (matching geometry entry):
+            #   wall_aorta.stl.closeness.internalPointCloseness
+            # Rename them here so both serial and parallel paths work.
+            self._rename_closeness_files_for_snappy(case_dir)
 
             if snappy_settings.get("parallel"):
                 n_proc = snappy_settings.get("nProcessors", 1)
@@ -56,14 +61,20 @@ class ExecuteMeshingTask(Task):
 
             run_command(self.config, ["checkMesh"], case_dir, "log.checkMesh")
 
-            # Analyze mesh quality and provide alerts
+            # Analyze mesh quality; if layers caused problems, retry with relaxed settings
             mesh_result = self._check_mesh_quality(case_dir)
             if mesh_result:
                 Logger.console(f"     Mesh: {mesh_result}")
 
-            # NOTE: transformPoints is NO LONGER NEEDED
-            # STL files are pre-scaled to meters during case setup (CreateCaseStructureTask)
-            # Mesh is generated directly in SI units (meters)
+            if self._mesh_needs_layer_retry(case_dir):
+                self._retry_with_relaxed_layers(case_dir, snappy_settings)
+
+            # Check if mesh quality is compatible with requested numerics profile
+            self._check_numerics_compatibility(case_dir)
+
+            # Check if mesh quality supports the selected turbulence model
+            self._check_turbulence_model_compatibility(case_dir)
+
             logger.info("Mesh is already in SI units (meters) - no post-mesh scaling needed")
 
         except CommandExecutionError as e:
@@ -131,58 +142,283 @@ class ExecuteMeshingTask(Task):
             logger.warning("Proceeding without mesh quality check")
             return ""
 
-    def _fix_closeness_file_names(self, case_dir: str):
+    def _check_numerics_compatibility(self, case_dir: str):
         """
-        Fix closeness file names for snappyHexMesh compatibility.
+        Check if mesh quality supports the requested numerics profile.
 
-        OpenFOAM 12's surfaceFeatures creates files like:
-            wall_aorta.stl.closeness.internalPointCloseness
-        But snappyHexMesh with insideSpan refinement expects:
-            wall_aorta.closeness.internalPointCloseness
-
-        This renames the files to remove the .stl extension.
+        Warns if the mesh is too poor for 2nd-order schemes. This prevents
+        the common failure mode: user requests 'standard' or 'precise' but
+        the mesh has high skewness/non-orthogonality and the solver diverges.
         """
-        import glob
+        profile = self.config.get("numerics", {}).get("profile", "standard")
+        if profile == "robust":
+            return  # Robust handles any mesh
 
-        tri_surface_dir = os.path.join(case_dir, "constant", "triSurface")
+        try:
+            quality_checker = MeshQualityChecker(case_dir)
+            result = quality_checker.validate_mesh_quality()
 
-        # Find all closeness files with .stl in the name
-        closeness_files = glob.glob(os.path.join(tri_surface_dir, "*.stl.closeness.*"))
+            if not result.is_valid:
+                logger.warning("=" * 60)
+                logger.warning(f"MESH QUALITY vs NUMERICS MISMATCH")
+                logger.warning(f"  Profile '{profile}' uses 2nd-order schemes")
+                logger.warning(f"  but mesh quality has issues that may cause divergence.")
+                logger.warning(f"  Consider: --steps regenerate-numerics (auto-adjusts)")
+                logger.warning(f"  Or switch to: \"profile\": \"robust\" in config.json")
+                logger.warning("=" * 60)
+                Logger.console(f"     WARNING: mesh quality may be too poor for '{profile}' profile")
+        except Exception:
+            pass  # Don't block meshing for QC failures
 
-        fixed_count = 0
-        for old_path in closeness_files:
-            # Remove .stl from the filename
-            new_path = old_path.replace(".stl.closeness.", ".closeness.")
-            if old_path != new_path:
-                try:
-                    os.rename(old_path, new_path)
-                    fixed_count += 1
-                except OSError as e:
-                    logger.warning(f"Could not rename {old_path}: {e}")
-
-        if fixed_count > 0:
-            logger.info(f"Fixed {fixed_count} closeness file names for snappyHexMesh compatibility")
-
-    def _distribute_closeness_files(self, case_dir: str, n_proc: int):
+    def _check_turbulence_model_compatibility(self, case_dir: str):
         """
-        Copy closeness files to processor directories for parallel meshing.
+        Check if mesh quality supports the selected turbulence model (RANS/LES).
 
-        For parallel snappyHexMesh with insideSpan refinement, each processor
-        needs access to the closeness files in its own triSurface directory.
+        RANS k-omega SST has a production term P_k = nut * |S|^2 that amplifies
+        any mesh-induced velocity gradient error. On snappyHexMesh meshes with
+        polyhedral transition cells, this is a guaranteed instability source.
 
-        Note: surfaceFeatures creates files like wall_aorta.closeness.internalPointCloseness
-        But snappyHexMesh (when geometry is named "wall_aorta.stl") expects:
-        wall_aorta.stl.closeness.internalPointCloseness
+        LES subgrid models (WALE, Smagorinsky) compute eddy viscosity from velocity
+        gradients — poor mesh quality corrupts the estimate and causes nut blowup.
 
-        So we need to copy with renamed files adding .stl before .closeness
+        This check runs after checkMesh and provides actionable warnings.
+        """
+        physics = self.config.get("physics", {})
+        sim_type = physics.get("simulation_type", "laminar").lower()
+        if sim_type == "laminar":
+            return
+
+        try:
+            from aortacfd_lib.physics_advisor import (
+                check_mesh_turbulence_compatibility,
+                estimate_reynolds_number,
+            )
+
+            # Parse mesh metrics from checkMesh
+            quality_checker = MeshQualityChecker(case_dir)
+            result = quality_checker.validate_mesh_quality()
+
+            # Build metrics dict from checkMesh
+            checkmesh_log = os.path.join(case_dir, "logs", "log.checkMesh")
+            mesh_metrics = None
+            if os.path.exists(checkmesh_log):
+                with open(checkmesh_log, 'r') as f:
+                    content = f.read()
+                mesh_metrics = quality_checker._parse_checkmesh_output(content)
+
+            # Run compatibility check
+            warnings = check_mesh_turbulence_compatibility(
+                self.config, sim_type, mesh_metrics
+            )
+
+            if warnings:
+                logger.warning("=" * 65)
+                logger.warning(f"MESH QUALITY vs {sim_type.upper()} COMPATIBILITY")
+                logger.warning("=" * 65)
+                for w in warnings:
+                    logger.warning(f"  {w}")
+
+                # Also check Re
+                Re = estimate_reynolds_number(self.config)
+                if Re is not None and Re < 4000:
+                    logger.warning(
+                        f"  Estimated Re_peak = {Re:.0f}. Consider switching to "
+                        f"laminar (scientifically defensible for aortic Re < 4000)."
+                    )
+
+                logger.warning("=" * 65)
+                Logger.console(
+                    f"     WARNING: mesh quality may cause {sim_type.upper()} instability "
+                    f"(see log for details)"
+                )
+
+        except Exception as e:
+            logger.debug(f"Turbulence model compatibility check skipped: {e}")
+
+    def _mesh_needs_layer_retry(self, case_dir: str) -> bool:
+        """Check if mesh quality issues are likely caused by boundary layer extrusion."""
+        snappy_log = os.path.join(case_dir, "logs", "log.snappyHexMesh")
+        if not os.path.exists(snappy_log):
+            return False
+
+        try:
+            content = open(snappy_log, errors="replace").read()
+            # snappyHexMesh reports these when layers cause problems
+            layer_issues = [
+                "Illegal cells after layer addition",
+                "Could not find a surface",
+                "negative volume",
+                "Reducing layer thickness",
+            ]
+            has_layer_problem = any(msg in content for msg in layer_issues)
+
+            # Also check if checkMesh found failed cells
+            checkmesh_log = os.path.join(case_dir, "logs", "log.checkMesh")
+            has_failed_mesh = False
+            if os.path.exists(checkmesh_log):
+                cm = open(checkmesh_log, errors="replace").read()
+                has_failed_mesh = "***FAILED***" in cm or "Mesh has" not in cm
+
+            # Only retry if layers are enabled
+            layers_enabled = self.config.get("mesh", {}).get("SNAPPY_SETTINGS", {}).get("addLayers", True)
+
+            return layers_enabled and (has_layer_problem or has_failed_mesh)
+        except Exception:
+            return False
+
+    def _retry_with_relaxed_layers(self, case_dir: str, snappy_settings: dict):
+        """
+        Re-run snappyHexMesh with progressively relaxed boundary layer settings.
+
+        Strategy:
+          Attempt 1 (already done): original settings
+          Attempt 2: reduce layers by 30%, increase finalLayerThickness by 30%
+          Attempt 3: reduce layers by 60%, relax quality constraints
+          Attempt 4: disable layers entirely
+
+        Each attempt re-runs snappyHexMesh and checkMesh. Stops at first success.
+        """
+        snappy_dict_path = os.path.join(case_dir, "system", "snappyHexMeshDict")
+        if not os.path.exists(snappy_dict_path):
+            return
+
+        original_content = open(snappy_dict_path).read()
+        original_layers = snappy_settings.get("addLayer", 5)
+
+        retry_configs = [
+            {
+                "label": "reduce layers 30%",
+                "n_layers": max(2, int(original_layers * 0.7)),
+                "final_thickness_factor": 1.3,
+                "disable": False,
+            },
+            {
+                "label": "reduce layers 60% + relax quality",
+                "n_layers": max(1, int(original_layers * 0.4)),
+                "final_thickness_factor": 1.6,
+                "disable": False,
+            },
+            {
+                "label": "disable boundary layers",
+                "n_layers": 0,
+                "final_thickness_factor": 1.0,
+                "disable": True,
+            },
+        ]
+
+        for attempt, cfg in enumerate(retry_configs, start=2):
+            logger.info("=" * 60)
+            logger.info(f"MESH LAYER RETRY (attempt {attempt}/4): {cfg['label']}")
+            logger.info("=" * 60)
+            Logger.console(f"     Mesh retry #{attempt}: {cfg['label']}")
+
+            # Modify snappyHexMeshDict on disk
+            modified = original_content
+            if cfg["disable"]:
+                modified = re.sub(
+                    r'(addLayers\s+)(true|false)',
+                    r'\g<1>false',
+                    modified,
+                    flags=re.IGNORECASE,
+                )
+            else:
+                # Reduce nSurfaceLayers
+                modified = re.sub(
+                    r'(nSurfaceLayers\s+)\d+',
+                    rf'\g<1>{cfg["n_layers"]}',
+                    modified,
+                )
+                # Increase finalLayerThickness (more room for layers to fit)
+                def _scale_thickness(m):
+                    old_val = float(m.group(2))
+                    new_val = min(0.8, old_val * cfg["final_thickness_factor"])
+                    return f'{m.group(1)}{new_val:.4f}'
+                modified = re.sub(
+                    r'(finalLayerThickness\s+)([\d.]+)',
+                    _scale_thickness,
+                    modified,
+                )
+
+            with open(snappy_dict_path, "w") as f:
+                f.write(modified)
+
+            # Re-run snappyHexMesh
+            try:
+                if snappy_settings.get("parallel"):
+                    n_proc = snappy_settings.get("nProcessors", 1)
+                    run_command(self.config, ["decomposePar", "-force", "-noFields"], case_dir, "log.decomposePar.preMesh")
+                    self._distribute_closeness_files(case_dir, n_proc)
+                    run_command(
+                        self.config,
+                        ["mpirun", "-np", str(n_proc), "snappyHexMesh", "-parallel", "-overwrite"],
+                        case_dir, f"log.snappyHexMesh.retry{attempt}",
+                    )
+                    run_command(self.config, ["reconstructPar", "-constant"], case_dir, "log.reconstructPar")
+                    self._cleanup_processor_directories(case_dir)
+                else:
+                    run_command(self.config, ["snappyHexMesh", "-overwrite"], case_dir, f"log.snappyHexMesh.retry{attempt}")
+
+                run_command(self.config, ["checkMesh"], case_dir, "log.checkMesh")
+
+                # Check if quality is now acceptable
+                if not self._mesh_needs_layer_retry(case_dir):
+                    mesh_result = self._check_mesh_quality(case_dir)
+                    Logger.console(f"     Mesh retry #{attempt} succeeded: {mesh_result}")
+                    logger.info(f"Layer retry attempt {attempt} succeeded")
+                    return
+                else:
+                    logger.info(f"Layer retry attempt {attempt}: still has issues, trying next")
+
+            except CommandExecutionError:
+                logger.warning(f"Layer retry attempt {attempt} failed, trying next")
+
+        # All retries exhausted; restore original and proceed with whatever we have
+        with open(snappy_dict_path, "w") as f:
+            f.write(original_content)
+        logger.warning("All layer retry attempts exhausted. Proceeding with current mesh.")
+        Logger.console("     WARNING: mesh layer issues not fully resolved")
+
+    def _rename_closeness_files_for_snappy(self, case_dir: str):
+        """
+        Rename closeness files so snappyHexMesh can find them.
+
+        surfaceFeatures creates:  wall_aorta.closeness.internalPointCloseness
+        snappyHexMesh expects:    wall_aorta.stl.closeness.internalPointCloseness
+        (because geometry is referenced as "wall_aorta.stl" in snappyHexMeshDict)
         """
         import glob
         import re
 
         tri_surface_dir = os.path.join(case_dir, "constant", "triSurface")
-
-        # Find all closeness files
         closeness_files = glob.glob(os.path.join(tri_surface_dir, "*.closeness.*"))
+
+        renamed = 0
+        for old_path in closeness_files:
+            basename = os.path.basename(old_path)
+            if ".stl.closeness." in basename:
+                continue  # Already has .stl
+            new_basename = re.sub(r'\.closeness\.', '.stl.closeness.', basename)
+            new_path = os.path.join(tri_surface_dir, new_basename)
+            try:
+                os.rename(old_path, new_path)
+                renamed += 1
+            except OSError as e:
+                logger.warning(f"Could not rename {old_path}: {e}")
+
+        if renamed > 0:
+            logger.info(f"Renamed {renamed} closeness files for snappyHexMesh compatibility")
+
+    def _distribute_closeness_files(self, case_dir: str, n_proc: int):
+        """
+        Copy closeness files to processor directories for parallel meshing.
+
+        Files are already renamed with .stl by _rename_closeness_files_for_snappy(),
+        so we just copy them as-is to each processor's triSurface directory.
+        """
+        import glob
+
+        tri_surface_dir = os.path.join(case_dir, "constant", "triSurface")
+        closeness_files = glob.glob(os.path.join(tri_surface_dir, "*.stl.closeness.*"))
 
         if not closeness_files:
             logger.warning("No closeness files found - span refinement may not work")
@@ -192,20 +428,10 @@ class ExecuteMeshingTask(Task):
 
         for i in range(n_proc):
             proc_tri_dir = os.path.join(case_dir, f"processor{i}", "constant", "triSurface")
-
-            # Create directory if it doesn't exist
             os.makedirs(proc_tri_dir, exist_ok=True)
 
-            # Copy each closeness file with .stl added to name
             for src_file in closeness_files:
-                src_basename = os.path.basename(src_file)
-                # Convert: wall_aorta.closeness.xyz -> wall_aorta.stl.closeness.xyz
-                # Use regex to insert .stl before .closeness
-                if ".stl.closeness." not in src_basename:
-                    dst_basename = re.sub(r'\.closeness\.', '.stl.closeness.', src_basename)
-                else:
-                    dst_basename = src_basename
-                dst_file = os.path.join(proc_tri_dir, dst_basename)
+                dst_file = os.path.join(proc_tri_dir, os.path.basename(src_file))
                 try:
                     shutil.copy2(src_file, dst_file)
                 except OSError as e:
@@ -309,10 +535,13 @@ class ExecuteSolverTask(Task):
     """Runs the OpenFOAM 12 solver (foamRun with incompressibleFluid)."""
 
     def execute(self, context: dict) -> bool:
-        """This task contains the execution logic from your original run_simulation method."""
+        """Run the OpenFOAM solver with pre-flight validation."""
         logger.info("Executing OpenFOAM 12 solver...")
         case_dir = context["case_directory"]
         run_settings = self.config.get("run_settings", {})
+
+        # Pre-flight: check that boundary conditions are physically valid
+        self._preflight_check(case_dir)
 
         solver_cmd = self.config["simulation_control"]["controlDict"].get("application", "foamRun")
         logger.info(f"Using OpenFOAM 12 solver: {solver_cmd} (incompressibleFluid)")
@@ -345,11 +574,120 @@ class ExecuteSolverTask(Task):
 
         except CommandExecutionError as e:
             logger.error(f"Solver execution failed: {e}")
+            # Check log for specific failure reason
+            diagnosis = self._diagnose_solver_failure(case_dir)
+            if diagnosis:
+                logger.error(f"Diagnosis: {diagnosis}")
+                Logger.console(f"     SOLVER FAILED: {diagnosis}")
             return False
 
-        logger.info("Solver execution completed successfully.")
-        Logger.console("     Solver completed")
+        # Post-solver health check: scan log for hidden divergence
+        diagnosis = self._diagnose_solver_failure(case_dir)
+        if diagnosis:
+            logger.warning(f"Solver completed but with issues: {diagnosis}")
+            Logger.console(f"     WARNING: {diagnosis}")
+        else:
+            logger.info("Solver execution completed successfully.")
+            Logger.console("     Solver completed")
         return True
+
+    def _diagnose_solver_failure(self, case_dir: str) -> str:
+        """
+        Scan solver log for divergence indicators and return a human-readable diagnosis.
+
+        Checks for:
+        - NaN / Infinity in solution fields
+        - FOAM FATAL ERROR
+        - Extreme Courant numbers
+        - Solver not converging (residuals stuck)
+        - Very few timesteps completed
+
+        Returns:
+            Diagnosis string, or empty string if log looks healthy.
+        """
+        log_path = os.path.join(case_dir, "logs", "log.solver")
+        if not os.path.exists(log_path):
+            return ""
+
+        try:
+            # Read last portion of log (divergence happens at the end)
+            with open(log_path, "r", errors="replace") as f:
+                # Read last 500KB to catch end-of-run issues
+                f.seek(0, 2)
+                size = f.tell()
+                f.seek(max(0, size - 512_000))
+                tail = f.read()
+
+            # Check for fatal indicators
+            if "FOAM FATAL ERROR" in tail or "FOAM FATAL IO ERROR" in tail:
+                # Extract the error message
+                m = re.search(r'FOAM FATAL (?:IO )?ERROR[:\s]*\n(.*?)(?:\n\n|\nFrom )', tail, re.DOTALL)
+                msg = m.group(1).strip()[:200] if m else "see log.solver"
+                return f"OpenFOAM fatal error: {msg}"
+
+            if "nan" in tail.lower() or "Nan" in tail:
+                # Find which field diverged
+                nan_fields = set()
+                for m in re.finditer(r'Solving for (\w+).*?Initial residual = [Nn]a[Nn]', tail):
+                    nan_fields.add(m.group(1))
+                if nan_fields:
+                    return f"Divergence detected (NaN in: {', '.join(nan_fields)})"
+                return "Divergence detected (NaN in solution)"
+
+            if "Floating point exception" in tail:
+                return "Floating point exception (likely divergence)"
+
+            # Check for very high Courant numbers (sign of instability)
+            co_values = re.findall(r'Courant Number mean:\s*([\d.e+-]+)\s*max:\s*([\d.e+-]+)', tail)
+            if co_values:
+                last_co_max = float(co_values[-1][1])
+                if last_co_max > 100:
+                    return f"Extreme Courant number ({last_co_max:.0f}) - likely unstable"
+
+            # Check if simulation actually progressed
+            time_matches = re.findall(r'^Time = ([\d.e+-]+)', tail, re.MULTILINE)
+            if time_matches:
+                end_time_cfg = self.config.get("simulation_control", {}).get("controlDict", {}).get("endTime", 0)
+                last_time = float(time_matches[-1])
+                if end_time_cfg and last_time < float(end_time_cfg) * 0.1:
+                    return f"Solver stopped early at t={last_time}s (target: {end_time_cfg}s)"
+
+        except Exception as e:
+            logger.debug(f"Could not analyze solver log: {e}")
+
+        return ""
+
+    def _preflight_check(self, case_dir: str):
+        """
+        Quick sanity checks before launching the solver.
+
+        Catches common misconfigurations that would cause divergence,
+        giving the user an actionable warning instead of a cryptic OpenFOAM crash.
+        """
+        import re
+
+        # Check controlDict endTime > 0
+        control_dict = os.path.join(case_dir, "system", "controlDict")
+        if os.path.exists(control_dict):
+            try:
+                content = open(control_dict).read()
+                m = re.search(r'endTime\s+([\d.e+-]+)', content)
+                if m and float(m.group(1)) <= 0:
+                    logger.warning("endTime is 0 or negative -- solver will exit immediately")
+            except Exception:
+                pass
+
+        # Check 0/U exists (boundary conditions written)
+        u_file = os.path.join(case_dir, "0", "U")
+        if not os.path.exists(u_file):
+            logger.warning("0/U not found -- boundary conditions may not be set up")
+            logger.warning("Run --steps boundary first, or check setup:bc output")
+
+        # Check mesh exists
+        poly_mesh = os.path.join(case_dir, "constant", "polyMesh", "points")
+        if not os.path.exists(poly_mesh):
+            logger.warning("constant/polyMesh/points not found -- mesh may not exist")
+            logger.warning("Run --steps mesh first")
 
     def _cleanup_processor_directories(self, case_dir: str):
         """
