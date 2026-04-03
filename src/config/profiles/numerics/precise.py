@@ -15,7 +15,7 @@ If your mesh does not meet these requirements:
 IMPORTANT DISCLAIMER
 ====================
 
-"Precise" refers to MINIMAL NUMERICAL DIFFUSION (CrankNicolson + LUST),
+"Precise" refers to MINIMAL NUMERICAL DIFFUSION (backward + LUST),
 NOT guaranteed solution accuracy. Solution accuracy depends on:
 
 - Mesh resolution and quality (requires convergence study)
@@ -38,7 +38,7 @@ INTENDED USE
 
 CHARACTERISTICS
 ===============
-Time Integration:    CrankNicolson 0.9 (2nd order, implicit-explicit blend)
+Time Integration:    backward (2nd order, A-stable)
 Convection:          Gauss LUST grad(U) (hybrid: 75% central + 25% upwind, low diffusion)
 Gradients:           cellLimited Gauss linear 0.5 (tighter limiting than standard)
 Laplacian:           Gauss linear limited corrected 0.33 (bounded non-orthogonal correction)
@@ -176,7 +176,7 @@ You MUST also perform:
 
 4. ✅ Scheme Documentation:
    - State: "LUST convection (bounded 2nd order)"
-   - State: "CrankNicolson 0.9 time integration"
+   - State: "backward time integration (changed from CN0.9)"
    - Cite relevant literature
 
 5. ✅ Validation (if available):
@@ -232,12 +232,13 @@ from typing import Any, Dict
 config: Dict[str, Any] = {
     # Time discretization
     "ddtSchemes": {
-        "default": "CrankNicolson 0.9",
+        "default": "backward",
         "_comment": (
-            "Second-order implicit-explicit blend (α=0.9). "
-            "Better phase accuracy than backward scheme. "
-            "90% implicit (stable), 10% explicit (accurate). "
-            "Use 1.0 if stability issues arise."
+            "Second-order implicit, A-stable. "
+            "Changed from CrankNicolson 0.9 based on empirical testing: "
+            "CN0.9 crashed 0/3 cases with Windkessel BCs due to pressure "
+            "oscillation amplification from the 10% explicit component. "
+            "backward is unconditionally stable and pairs reliably with LUST."
         )
     },
 
@@ -350,7 +351,7 @@ config: Dict[str, Any] = {
         "max_delta_t": 0.0008,    # Maximum allowed timestep after flow develops
         "adjustable_time_step": True,
         "_comment": (
-            "Co=0.8 for accuracy with CrankNicolson. "
+            "Co=0.5 for accuracy with LUST. "
             "Smaller than standard (Co=1.0) for temporal accuracy. "
             "Larger than aggressive/LES-only profiles (Co=0.3-0.5). "
             "Suitable for laminar, RANS, and LES."
@@ -372,7 +373,7 @@ config: Dict[str, Any] = {
             "Solution accuracy requires mesh independence verification (GCI analysis)."
         ),
         "improvements_over_standard": [
-            "CrankNicolson time integration (better phase accuracy)",
+            "backward time integration (A-stable, reliable with Windkessel BCs)",
             "LUST convection (less diffusion than linearUpwind)",
             "Tighter tolerances (1e-8 vs 1e-6)",
             "More correctors (3/3 vs 2/2)",

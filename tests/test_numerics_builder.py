@@ -213,13 +213,13 @@ class TestApplyOverrides:
             'physics': {'model': 'laminar'},
             'numerics': {
                 'profile': 'standard',
-                'time_discretization': 'CrankNicolson 0.9'
+                'time_discretization': 'backward'
             }
         }
 
         result = builder.build(config)
 
-        assert result['ddtSchemes']['default'] == 'CrankNicolson 0.9'
+        assert result['ddtSchemes']['default'] == 'backward'
 
     def test_override_correctors(self):
         """Test overriding PIMPLE corrector settings."""

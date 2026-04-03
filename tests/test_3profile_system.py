@@ -172,9 +172,9 @@ class TestPreciseProfile:
         self.profile = NUMERICS_PROFILES['precise']
 
     def test_crank_nicolson_time_integration(self):
-        """Precise should use CrankNicolson 0.9 (2nd order, implicit-explicit blend)."""
-        assert self.profile['ddtSchemes']['default'] == 'CrankNicolson 0.9', \
-            "Precise must use CrankNicolson 0.9 time integration"
+        """Precise should use backward (2nd order, implicit-explicit blend)."""
+        assert self.profile['ddtSchemes']['default'] == 'backward', \
+            "Precise must use backward time integration"
 
     def test_lust_convection(self):
         """Precise should use LUST (75% central + 25% upwind, minimal diffusion)."""
@@ -373,7 +373,7 @@ class TestMethodologyTableSpecs:
         p = NUMERICS_PROFILES['precise']
 
         # Time integration (CrankNicolson for better phase accuracy)
-        assert p['ddtSchemes']['default'] == 'CrankNicolson 0.9'
+        assert p['ddtSchemes']['default'] == 'backward'
 
         # Convection (LUST for minimal diffusion)
         assert 'LUST' in p['divSchemes']['div(phi,U)']

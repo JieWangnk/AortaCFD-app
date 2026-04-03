@@ -101,9 +101,9 @@ class TestMethodologyProfileTable:
         assert 'LUST' in conv_scheme, \
             "Precise profile should use LUST (minimal diffusion scheme)"
 
-        # Time integration should be CrankNicolson 0.9 (2nd order implicit-explicit)
-        assert profile['ddtSchemes']['default'] == 'CrankNicolson 0.9', \
-            "Precise profile should use CrankNicolson 0.9 time integration"
+        # Time integration should be backward (2nd order implicit-explicit)
+        assert profile['ddtSchemes']['default'] == 'backward', \
+            "Precise profile should use backward time integration"
 
         # Should have tight residual tolerances (1e-8)
         assert profile['solvers']['residualControl']['p'] <= 1e-8, \
