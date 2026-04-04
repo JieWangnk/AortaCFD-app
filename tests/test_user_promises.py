@@ -666,6 +666,141 @@ class TestMeshGoalPresets:
 
 
 # ============================================================================
+# Public API — span_target, layers, mode
+# ============================================================================
+
+
+class TestPublicMeshAPI:
+    """Test the clean public API (app language, not SNAPPY_SETTINGS)."""
+
+    def test_span_target_sets_resolution(self):
+        """mesh.span_target maps to cells_across_span."""
+        from aortacfd_lib.utils.mesh_constants import resolve_mesh_config
+
+        resolved = resolve_mesh_config({"span_target": 20, "SNAPPY_SETTINGS": {}})
+        assert resolved["cells_across_span"] == 20
+        assert resolved["span_refinement_enabled"] is True
+        assert resolved["mesh_strategy"] == "adaptive_span"
+
+    def test_span_target_overrides_goal(self):
+        """Explicit span_target wins over goal preset value."""
+        from aortacfd_lib.utils.mesh_constants import resolve_mesh_config
+
+        resolved = resolve_mesh_config({
+            "goal": "pressure_fast",  # would set span=10
+            "span_target": 25,        # explicit override
+            "SNAPPY_SETTINGS": {},
+        })
+        assert resolved["cells_across_span"] == 25
+
+    def test_layers_mode_standard(self):
+        """mesh.layers.mode = 'standard' applies 3-layer profile."""
+        from aortacfd_lib.utils.mesh_constants import resolve_mesh_config
+
+        resolved = resolve_mesh_config({
+            "layers": {"mode": "standard"},
+            "SNAPPY_SETTINGS": {},
+        })
+        assert resolved["addLayers"] is True
+        assert resolved["addLayer"] == 3
+
+    def test_layers_mode_off(self):
+        """mesh.layers.mode = 'off' disables layers."""
+        from aortacfd_lib.utils.mesh_constants import resolve_mesh_config
+
+        resolved = resolve_mesh_config({
+            "layers": {"mode": "off"},
+            "SNAPPY_SETTINGS": {},
+        })
+        assert resolved["addLayers"] is False
+        assert resolved["addLayer"] == 0
+
+    def test_layers_num_layers_override(self):
+        """mesh.layers.num_layers overrides goal and mode."""
+        from aortacfd_lib.utils.mesh_constants import resolve_mesh_config
+
+        resolved = resolve_mesh_config({
+            "goal": "routine_hemodynamics",  # would set 3 layers
+            "layers": {"num_layers": 5},
+            "SNAPPY_SETTINGS": {},
+        })
+        assert resolved["addLayer"] == 5
+
+    def test_layers_expansion_ratio(self):
+        """mesh.layers.expansion_ratio maps to expansionRatio."""
+        from aortacfd_lib.utils.mesh_constants import resolve_mesh_config
+
+        resolved = resolve_mesh_config({
+            "layers": {"mode": "standard", "expansion_ratio": 1.15},
+            "SNAPPY_SETTINGS": {},
+        })
+        assert resolved["expansionRatio"] == 1.15
+
+    def test_mode_legacy(self):
+        """mesh.mode = 'legacy' activates legacy_surface strategy."""
+        from aortacfd_lib.utils.mesh_constants import resolve_mesh_config
+
+        resolved = resolve_mesh_config({
+            "mode": "legacy",
+            "SNAPPY_SETTINGS": {},
+        })
+        assert resolved["mesh_strategy"] == "legacy_surface"
+
+    def test_mode_legacy_ignores_goal(self):
+        """Legacy mode takes precedence — goal is ignored."""
+        from aortacfd_lib.utils.mesh_constants import resolve_mesh_config
+
+        resolved = resolve_mesh_config({
+            "mode": "legacy",
+            "goal": "routine_hemodynamics",
+            "SNAPPY_SETTINGS": {},
+        })
+        assert resolved["mesh_strategy"] == "legacy_surface"
+        assert "cells_across_span" not in resolved
+
+    def test_full_public_api(self):
+        """All public API keys together."""
+        from aortacfd_lib.utils.mesh_constants import resolve_mesh_config
+
+        resolved = resolve_mesh_config({
+            "span_target": 18,
+            "layers": {
+                "enabled": True,
+                "num_layers": 4,
+                "expansion_ratio": 1.15,
+                "final_layer_thickness": 0.35,
+            },
+            "SNAPPY_SETTINGS": {},
+        })
+        assert resolved["cells_across_span"] == 18
+        assert resolved["addLayers"] is True
+        assert resolved["addLayer"] == 4
+        assert resolved["expansionRatio"] == 1.15
+        assert resolved["finalLayerThickness"] == 0.35
+
+    def test_public_api_integrates_with_analyzer(self, mock_geometry):
+        """span_target flows through GeometryAnalyzer correctly."""
+        from aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        config = {
+            "geometry": {"wall_keywords_ordered": "wall", "inlet_keywords_ordered": "inlet", "outlet_keywords_ordered": []},
+            "mesh": {
+                "span_target": 14,
+                "layers": {"mode": "off"},
+                "SNAPPY_SETTINGS": {},
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "constant" / "triSurface").mkdir(parents=True)
+            analyzer = GeometryAnalyzer(config, tmpdir)
+
+            assert analyzer.snappy_settings.get("cells_across_span") == 14
+            assert analyzer.snappy_settings.get("addLayers") is False
+            assert analyzer.mesh_strategy == "adaptive_span"
+
+
+# ============================================================================
 # Failure cases — bad inputs should fail clearly
 # ============================================================================
 

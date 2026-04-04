@@ -183,55 +183,102 @@ LAYER_PROFILES = {
 }
 
 
-def resolve_mesh_goal(mesh_config: dict) -> dict:
+def resolve_mesh_config(mesh_config: dict) -> dict:
     """
-    Resolve mesh_goal preset into concrete settings.
+    Resolve public mesh API into SNAPPY_SETTINGS overrides.
 
-    Fills missing values from the goal preset. Explicit user settings
-    always take precedence over preset defaults.
+    Public API keys (app language):
+        mesh.goal              — preset name (pressure_fast, routine_hemodynamics, wall_sensitive)
+        mesh.span_target       — cells across lumen (integer)
+        mesh.mode              — "legacy" for old cells_per_diameter approach
+        mesh.layers.mode       — "off", "standard"
+        mesh.layers.enabled    — bool
+        mesh.layers.num_layers — integer
+        mesh.layers.expansion_ratio, final_layer_thickness, min_thickness
+
+    Expert keys (pass-through):
+        mesh.SNAPPY_SETTINGS.* — raw snappyHexMesh parameters
+
+    Precedence: explicit user keys > public API > goal preset > base defaults.
 
     Args:
         mesh_config: The mesh section of the config dict.
-                     May contain 'goal' and/or explicit SNAPPY_SETTINGS.
 
     Returns:
         Dict of resolved SNAPPY_SETTINGS overrides to apply.
-        Empty dict if no goal is set or goal is unknown.
     """
-    goal_name = mesh_config.get("goal")
-    if not goal_name or goal_name not in MESH_GOAL_PRESETS:
-        return {}
-
-    preset = MESH_GOAL_PRESETS[goal_name]
+    resolved = {}
     snappy = mesh_config.get("SNAPPY_SETTINGS", {})
     user_keys = snappy.get("_user_provided_keys", [])
 
-    resolved = {}
+    # --- Legacy mode ---
+    if mesh_config.get("mode") == "legacy":
+        resolved["mesh_strategy"] = "legacy_surface"
+        return resolved
 
-    # mesh_strategy: fill if not explicitly set by user
-    if "mesh_strategy" not in user_keys:
-        resolved["mesh_strategy"] = preset["mesh_strategy"]
+    # --- Goal preset ---
+    goal_name = mesh_config.get("goal")
+    if goal_name and goal_name in MESH_GOAL_PRESETS:
+        preset = MESH_GOAL_PRESETS[goal_name]
 
-    # cells_across_span: fill if user hasn't set span params
-    if "cells_across_span" not in user_keys and "span_refinement_enabled" not in user_keys:
+        if "mesh_strategy" not in user_keys:
+            resolved["mesh_strategy"] = preset["mesh_strategy"]
+
+        if "cells_across_span" not in user_keys and "span_refinement_enabled" not in user_keys:
+            resolved["span_refinement_enabled"] = True
+            resolved["cells_across_span"] = preset["cells_across_span"]
+
+        if "surfaceRefinementLevels" not in user_keys:
+            resolved["surfaceRefinementLevels"] = preset["surfaceRefinementLevels"]
+
+        # throat_uplift: store but don't auto-apply
+        if "throat_uplift" in preset:
+            resolved["_throat_uplift_reserved"] = preset["throat_uplift"]
+
+        # Layers from preset (can be overridden by mesh.layers below)
+        layers_mode = preset.get("layers_mode", "off")
+        layer_user_keys = {"addLayers", "addLayer", "nSurfaceLayers"} & set(user_keys)
+        if not layer_user_keys and layers_mode in LAYER_PROFILES:
+            resolved.update(LAYER_PROFILES[layers_mode])
+
+    # --- Public API: span_target ---
+    span_target = mesh_config.get("span_target")
+    if span_target is not None:
         resolved["span_refinement_enabled"] = True
-        resolved["cells_across_span"] = preset["cells_across_span"]
+        resolved["cells_across_span"] = int(span_target)
+        if "mesh_strategy" not in resolved:
+            resolved["mesh_strategy"] = "adaptive_span"
 
-    # surfaceRefinementLevels: fill if not user-set
-    if "surfaceRefinementLevels" not in user_keys:
-        resolved["surfaceRefinementLevels"] = preset["surfaceRefinementLevels"]
-
-    # layers_mode: apply layer profile if user hasn't set layer params
-    layers_mode = preset.get("layers_mode", "off")
-    layer_user_keys = {"addLayers", "addLayer", "nSurfaceLayers"} & set(user_keys)
-    if not layer_user_keys and layers_mode in LAYER_PROFILES:
-        resolved.update(LAYER_PROFILES[layers_mode])
-
-    # throat_uplift: store but don't auto-apply (future: needs throat detection)
-    if "throat_uplift" in preset:
-        resolved["_throat_uplift_reserved"] = preset["throat_uplift"]
+    # --- Public API: layers ---
+    layers_config = mesh_config.get("layers", {})
+    if layers_config:
+        # layers.mode
+        lmode = layers_config.get("mode")
+        if lmode and lmode in LAYER_PROFILES:
+            resolved.update(LAYER_PROFILES[lmode])
+        # layers.enabled
+        if "enabled" in layers_config:
+            resolved["addLayers"] = layers_config["enabled"]
+            if not layers_config["enabled"]:
+                resolved["addLayer"] = 0
+        # layers.num_layers
+        if "num_layers" in layers_config:
+            resolved["addLayer"] = layers_config["num_layers"]
+            resolved["addLayers"] = True
+        # layers.expansion_ratio, final_layer_thickness, min_thickness
+        for key_map in [("expansion_ratio", "expansionRatio"),
+                        ("final_layer_thickness", "finalLayerThickness"),
+                        ("min_thickness", "minThickness")]:
+            if key_map[0] in layers_config:
+                resolved[key_map[1]] = layers_config[key_map[0]]
 
     return resolved
+
+
+# Backward compatibility alias
+def resolve_mesh_goal(mesh_config: dict) -> dict:
+    """Backward-compatible alias for resolve_mesh_config."""
+    return resolve_mesh_config(mesh_config)
 
 
 # =============================================================================
