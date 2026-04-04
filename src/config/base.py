@@ -65,6 +65,11 @@ config = {
             # Refinement transition
             "nCellsBetweenLevels": 3,       # OpenFOAM recommended: 3 (balances transitions)
 
+            # Mesh strategy: 'adaptive_span' uses span-based refinement with coarse
+            # blockMesh; 'legacy_surface' uses cpd-driven blockMesh + fixed surface levels
+            "mesh_strategy": "adaptive_span",   # 'adaptive_span' | 'legacy_surface'
+            "default_cells_across_span": 12,    # fallback target when adaptive_span + no explicit resolution
+
             # Surface refinement
             "surfaceRefinementLevels": [1, 2],  # [min, max] - conservative for cardiovascular
 

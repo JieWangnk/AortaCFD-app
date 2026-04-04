@@ -117,6 +117,79 @@ MAX_BLOCKMESH_CELLS_WARNING = 10_000_000  # 10M cells - inform user it's large
 MAX_BLOCKMESH_CELLS_LARGE = 25_000_000    # 25M cells - warn may cause OOM
 MAX_BLOCKMESH_CELLS_HUGE = 50_000_000     # 50M cells - strongly warn
 
+import math
+
+
+# =============================================================================
+# SPAN REFINEMENT PLANNER
+# =============================================================================
+# Determines coarse blockMesh background and span refinement level to achieve
+# a target cells-across-span. Used by both production (mesh_setup.py) and
+# benchmark (generate_case.py) to ensure identical planning logic.
+
+# Background blockMesh limits (cells per reference diameter)
+MIN_BLOCKMESH_CPD = 4   # Below this, snappy struggles with castellated mesh quality
+MAX_BLOCKMESH_CPD = 8   # Above this, cubic scaling waste becomes significant
+
+
+def plan_span_background(
+    cells_across_span: int,
+    min_blockmesh: int = MIN_BLOCKMESH_CPD,
+    max_blockmesh: int = MAX_BLOCKMESH_CPD,
+    max_span_level: int = 4,
+) -> dict:
+    """
+    Determine coarse background cpd and span refinement level to achieve
+    a target cells-across-span.
+
+    Strategy: find the lowest span_level where the required background cpd
+    falls within [min_blockmesh, max_blockmesh]. This minimises refinement
+    depth while keeping blockMesh coarse.
+
+    Args:
+        cells_across_span: Target cells across vessel lumen
+        min_blockmesh: Minimum background cells/D (quality floor)
+        max_blockmesh: Maximum background cells/D (waste ceiling)
+        max_span_level: Maximum span refinement level to try
+
+    Returns:
+        dict with keys:
+            background_cpd: int — coarse blockMesh cells per diameter
+            span_level: int — insideSpan refinement level
+            theoretical_cells_across: int — bg_cpd * 2^span_level
+            warning: str or None — set if target exceeds preferred range
+    """
+    best = None
+    for try_level in range(1, max_span_level + 1):
+        mult = 2 ** try_level
+        required_bg = int(math.ceil(cells_across_span / mult))
+        if min_blockmesh <= required_bg <= max_blockmesh:
+            best = (required_bg, try_level)
+            break
+
+    if best is None:
+        # Edge case: target too high or too low for preferred range
+        required_at_max = int(math.ceil(cells_across_span / (2 ** max_span_level)))
+        chosen_bg = max(min_blockmesh, min(required_at_max, max_blockmesh))
+        best = (chosen_bg, max_span_level)
+        warning = (
+            f"cells_across_span={cells_across_span} exceeds preferred background/span range; "
+            f"using capped background={chosen_bg} with span_level={max_span_level}"
+        )
+    else:
+        warning = None
+
+    bg_cpd, span_level = best
+    theoretical = bg_cpd * (2 ** span_level)
+
+    return {
+        "background_cpd": bg_cpd,
+        "span_level": span_level,
+        "theoretical_cells_across": theoretical,
+        "warning": warning,
+    }
+
+
 def compute_cell_size(cells_per_diameter: float, reference_diameter_mm: float) -> float:
     """
     Compute actual cell size in mm from cells/diameter specification.

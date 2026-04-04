@@ -249,6 +249,11 @@ class ConfigBuilder:
         # Extract mesh settings from unified config
         mesh_settings = case_config.get('mesh', {})
 
+        # Tag user-provided SNAPPY keys so downstream code can distinguish
+        # user overrides from base.py defaults after deep merge
+        if 'SNAPPY_SETTINGS' in mesh_settings:
+            mesh_settings['SNAPPY_SETTINGS']['_user_provided_keys'] = list(mesh_settings['SNAPPY_SETTINGS'].keys())
+
         # Extract run settings from unified config
         run_settings = case_config.get('run_settings', {})
 

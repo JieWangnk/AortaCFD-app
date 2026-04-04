@@ -84,6 +84,14 @@ class GeometryAnalyzer:
         # Track if deprecation warning has been shown (prevent spam)
         self._deprecated_warning_shown = False
 
+        # Mesh strategy: 'adaptive_span' or 'legacy_surface'
+        self.mesh_strategy = self.snappy_settings.get('mesh_strategy', 'legacy_surface')
+
+        # Track whether user explicitly set surfaceRefinementLevels
+        # (_user_provided_keys is tagged by ConfigBuilder before deep merge)
+        user_keys = self.snappy_settings.get('_user_provided_keys', [])
+        self._surface_levels_user_set = 'surfaceRefinementLevels' in user_keys
+
         # Process user-friendly config options into SNAPPY_SETTINGS
         self._process_mesh_config_options()
         self._calculate_patch_properties()
@@ -105,6 +113,12 @@ class GeometryAnalyzer:
         else:
             levels = self.snappy_settings['surfaceRefinementLevels']
             self.log.info(f"surfaceRefinementLevels: {levels}")
+
+        # Adaptive span: reduce surface refinement to support role (snapping only)
+        # unless user explicitly set their own levels
+        if self.mesh_strategy == 'adaptive_span' and not self._surface_levels_user_set:
+            self.snappy_settings['surfaceRefinementLevels'] = [0, 1]
+            self.log.info("adaptive_span: surface refinement reduced to [0, 1] (support role)")
 
         # Process boundary_layers config (accept both snake_case and camelCase)
         boundary_layers = self.mesh_settings.get('boundary_layers', {})
@@ -453,6 +467,14 @@ class GeometryAnalyzer:
         span_refinement_enabled = self.snappy_settings.get('span_refinement_enabled', False)
         cells_across_span = self.snappy_settings.get('cells_across_span', 0)
 
+        # Strategy-driven: adaptive_span auto-enables span when no explicit resolution given
+        if self.mesh_strategy == 'adaptive_span' and not span_refinement_enabled and cells_across_span <= 0:
+            span_refinement_enabled = True
+            cells_across_span = self.snappy_settings.get('default_cells_across_span', 12)
+            self.snappy_settings['span_refinement_enabled'] = True
+            self.snappy_settings['cells_across_span'] = cells_across_span
+            self.log.info(f"adaptive_span: auto-enabled span refinement with target={cells_across_span}")
+
         if self.reference_radius_m is not None and self.reference_radius_m > 0:
             D_ref_m = 2.0 * self.reference_radius_m
             D_ref_mm = D_ref_m * 1000  # For display
@@ -499,39 +521,25 @@ class GeometryAnalyzer:
                             f"      Consider increasing span_refinement_level to {span_level + 1}"
                         )
                 else:
-                    # Auto-calculate optimal span_level to achieve target
-                    # Strategy: Find minimum span_level that achieves target with reasonable blockMesh
+                    # Auto-calculate optimal span_level using shared planner
+                    from .utils.mesh_constants import plan_span_background
 
-                    best_blockmesh = None
-                    best_span_level = None
-
-                    # Try span levels 1, 2, 3, 4 and find the one that achieves target
-                    for try_span_level in range(1, 5):
-                        span_mult = 2 ** try_span_level
-                        required_blockmesh = int(np.ceil(cells_across_span / span_mult))
-
-                        if required_blockmesh >= MIN_BLOCKMESH:
-                            best_blockmesh = required_blockmesh
-                            best_span_level = try_span_level
-                            break
-
-                    if best_blockmesh is None:
-                        # Fallback: use minimum blockMesh with span level 3
-                        best_blockmesh = MIN_BLOCKMESH
-                        best_span_level = 3
-
-                    blockmesh_cells_per_d = best_blockmesh
-                    span_level = best_span_level
+                    plan = plan_span_background(cells_across_span)
+                    blockmesh_cells_per_d = plan['background_cpd']
+                    span_level = plan['span_level']
                     span_multiplier = 2 ** span_level
-                    achievable_cells = blockmesh_cells_per_d * span_multiplier
+                    achievable_cells = plan['theoretical_cells_across']
+
+                    if plan['warning']:
+                        self.log.warning(plan['warning'])
 
                     self.log.info(
-                        f"SPAN REFINEMENT: Auto-calculated settings\n"
+                        f"SPAN REFINEMENT: Planner output\n"
                         f"  Target: {cells_across_span} cells across span\n"
-                        f"  Auto-calculated span level: {span_level} (2^{span_level} = {span_multiplier}x)\n"
+                        f"  Background: {blockmesh_cells_per_d} cells/D\n"
+                        f"  Span level: {span_level} (2^{span_level} = {span_multiplier}x)\n"
                         f"  Surface refinement level: {surface_level} (separate, near-surface only)\n"
-                        f"  BlockMesh: {blockmesh_cells_per_d} cells/D\n"
-                        f"  Achievable: {blockmesh_cells_per_d} × {span_multiplier} = {achievable_cells} cells across span"
+                        f"  Theoretical: {achievable_cells} cells across span"
                     )
 
                 cell_size_m = D_ref_m / blockmesh_cells_per_d
@@ -690,6 +698,12 @@ class GeometryAnalyzer:
         """
         raw_mesh_resolution = self.mesh_settings.get('mesh_resolution', {})
         mesh_resolution = raw_mesh_resolution if isinstance(raw_mesh_resolution, dict) else {}
+
+        # Migration: support top-level cells_per_diameter (common in user configs)
+        if 'cells_per_diameter' not in mesh_resolution:
+            top_level_cpd = self.mesh_settings.get('cells_per_diameter')
+            if top_level_cpd is not None:
+                mesh_resolution['cells_per_diameter'] = top_level_cpd
 
         # Validate configuration (warn if multiple parameters set)
         self._validate_resolution_config(mesh_resolution)
@@ -962,26 +976,15 @@ class GeometryAnalyzer:
             self.log.info(f"Using user-specified span refinement level: {user_span_level}")
             return user_span_level
 
-        # Auto-calculate span level (surface refinement is SEPARATE, not included)
-        # This must match the logic in _cell_size_from_default_fallback
-        MIN_BLOCKMESH = 4
+        # Auto-calculate using shared planner (same logic as _cell_size_from_default_fallback)
+        from .utils.mesh_constants import plan_span_background
 
-        # Try span levels 1, 2, 3, 4 and find the one that achieves target with reasonable blockMesh
-        for try_span_level in range(1, 5):
-            span_mult = 2 ** try_span_level
-            required_blockmesh = int(np.ceil(cells_across_span / span_mult))
-
-            if required_blockmesh >= MIN_BLOCKMESH:
-                achievable = required_blockmesh * span_mult
-                self.log.info(
-                    f"Auto-calculated span refinement level: {try_span_level}\n"
-                    f"  (blockMesh={required_blockmesh} cells/D × 2^{try_span_level} = {achievable} cells across span)"
-                )
-                return try_span_level
-
-        # Fallback
-        self.log.info(f"Using fallback span refinement level: 3")
-        return 3
+        plan = plan_span_background(cells_across_span)
+        self.log.info(
+            f"Auto-calculated span refinement level: {plan['span_level']}\n"
+            f"  (blockMesh={plan['background_cpd']} cells/D × 2^{plan['span_level']} = {plan['theoretical_cells_across']} cells across span)"
+        )
+        return plan['span_level']
 
     def _write_surfacefeatures_dict(self):
         context = {

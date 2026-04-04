@@ -362,6 +362,80 @@ class TestMeshConstants:
         assert result['message'] is not None
 
 
+class TestPlanSpanBackground:
+    """Test plan_span_background() shared planner function."""
+
+    def test_span_12(self):
+        """cells_across_span=12 → bg=6, level=1, theoretical=12."""
+        from aortacfd_lib.utils.mesh_constants import plan_span_background
+
+        result = plan_span_background(12)
+        assert result['background_cpd'] == 6
+        assert result['span_level'] == 1
+        assert result['theoretical_cells_across'] == 12
+        assert result['warning'] is None
+
+    def test_span_20(self):
+        """cells_across_span=20 → bg=5, level=2, theoretical=20."""
+        from aortacfd_lib.utils.mesh_constants import plan_span_background
+
+        result = plan_span_background(20)
+        assert result['background_cpd'] == 5
+        assert result['span_level'] == 2
+        assert result['theoretical_cells_across'] == 20
+        assert result['warning'] is None
+
+    def test_span_16(self):
+        """cells_across_span=16 → bg=8, level=1, theoretical=16."""
+        from aortacfd_lib.utils.mesh_constants import plan_span_background
+
+        result = plan_span_background(16)
+        assert result['background_cpd'] == 8
+        assert result['span_level'] == 1
+        assert result['theoretical_cells_across'] == 16
+        assert result['warning'] is None
+
+    def test_span_8_low_target(self):
+        """cells_across_span=8 → bg=4, level=1, theoretical=8."""
+        from aortacfd_lib.utils.mesh_constants import plan_span_background
+
+        result = plan_span_background(8)
+        assert result['background_cpd'] == 4
+        assert result['span_level'] == 1
+        assert result['theoretical_cells_across'] == 8
+        assert result['warning'] is None
+
+    def test_span_high_target_capped(self):
+        """High target exceeding range produces warning and caps."""
+        from aortacfd_lib.utils.mesh_constants import plan_span_background
+
+        result = plan_span_background(200)
+        assert result['background_cpd'] >= 4
+        assert result['background_cpd'] <= 8
+        assert result['span_level'] == 4  # max
+        assert result['warning'] is not None
+        assert 'exceeds' in result['warning']
+
+    def test_always_returns_valid(self):
+        """Planner always returns a valid result regardless of input."""
+        from aortacfd_lib.utils.mesh_constants import plan_span_background
+
+        for target in [4, 8, 12, 16, 20, 25, 30, 40, 50, 100]:
+            result = plan_span_background(target)
+            assert result['background_cpd'] >= 4
+            assert result['background_cpd'] <= 8
+            assert 1 <= result['span_level'] <= 4
+            assert result['theoretical_cells_across'] == result['background_cpd'] * (2 ** result['span_level'])
+
+    def test_theoretical_ge_target_when_possible(self):
+        """Theoretical cells should meet or exceed target when within range."""
+        from aortacfd_lib.utils.mesh_constants import plan_span_background
+
+        for target in [8, 12, 16, 20]:
+            result = plan_span_background(target)
+            assert result['theoretical_cells_across'] >= target
+
+
 class TestPatchProperties:
     """Test patch property calculations."""
 
@@ -1124,6 +1198,95 @@ class TestResolveCellSize:
             assert "FALLBACK" in source or "cells/D" in source
 
 
+class TestTopLevelCellsPerDiameterMigration:
+    """Test that top-level mesh.cells_per_diameter is migrated to mesh_resolution."""
+
+    @patch('aortacfd_lib.mesh_setup.PatchProcessing')
+    @patch('aortacfd_lib.mesh_setup.Logger')
+    @patch('aortacfd_lib.mesh_setup.Environment')
+    @patch('aortacfd_lib.mesh_setup.FileSystemLoader')
+    @patch('aortacfd_lib.mesh_setup.check_blockmesh_size')
+    def test_top_level_cpd_used(self, mock_check, mock_loader, mock_env, mock_logger, mock_patch):
+        """Top-level cells_per_diameter should be picked up by _calculate_blockmesh_cells."""
+        from aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        mock_patch_instance = MagicMock()
+        mock_patch_instance.calculate_inlet_center_radius.return_value = (
+            np.array([0.0, 0.0, 0.0]), 0.010, np.array([0.0, 0.0, 1.0])  # 10mm radius = 20mm diameter
+        )
+        mock_patch.return_value = mock_patch_instance
+        mock_check.return_value = {'warning_level': 'ok', 'message': ''}
+
+        config = {
+            'geometry': {'wall_keywords_ordered': 'wall', 'inlet_keywords_ordered': 'inlet', 'outlet_keywords_ordered': []},
+            'mesh': {
+                'SNAPPY_SETTINGS': {},
+                'cells_per_diameter': 15,  # Top-level — this is how JSON configs set it
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tri_path = Path(tmpdir) / "constant" / "triSurface"
+            tri_path.mkdir(parents=True)
+
+            analyzer = GeometryAnalyzer(config, tmpdir)
+            bounds = {
+                'min': np.array([0.0, 0.0, 0.0]),
+                'max': np.array([0.1, 0.05, 0.05]),  # 100x50x50 mm
+            }
+            result = analyzer._calculate_blockmesh_cells(bounds)
+
+            # 20mm diameter / 15 cells = 1.333mm cell size
+            # 100mm / 1.333 = 75 cells in x
+            assert result['x'] == 75
+            assert result['y'] == 38  # 50/1.333 ≈ 37.5 → round to 38
+            assert result['z'] == 38
+
+    @patch('aortacfd_lib.mesh_setup.PatchProcessing')
+    @patch('aortacfd_lib.mesh_setup.Logger')
+    @patch('aortacfd_lib.mesh_setup.Environment')
+    @patch('aortacfd_lib.mesh_setup.FileSystemLoader')
+    @patch('aortacfd_lib.mesh_setup.check_blockmesh_size')
+    def test_nested_cpd_takes_precedence(self, mock_check, mock_loader, mock_env, mock_logger, mock_patch):
+        """Nested mesh_resolution.cells_per_diameter should take precedence over top-level."""
+        from aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        mock_patch_instance = MagicMock()
+        mock_patch_instance.calculate_inlet_center_radius.return_value = (
+            np.array([0.0, 0.0, 0.0]), 0.010, np.array([0.0, 0.0, 1.0])
+        )
+        mock_patch.return_value = mock_patch_instance
+        mock_check.return_value = {'status': 'ok'}
+
+        config = {
+            'geometry': {'wall_keywords_ordered': 'wall', 'inlet_keywords_ordered': 'inlet', 'outlet_keywords_ordered': []},
+            'mesh': {
+                'SNAPPY_SETTINGS': {},
+                'cells_per_diameter': 15,  # Top-level
+                'mesh_resolution': {'cells_per_diameter': 20},  # Nested — should win
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tri_path = Path(tmpdir) / "constant" / "triSurface"
+            tri_path.mkdir(parents=True)
+
+            analyzer = GeometryAnalyzer(config, tmpdir)
+
+            # Directly test _resolve_cell_size to confirm nested wins
+            raw_mr = analyzer.mesh_settings.get('mesh_resolution', {})
+            mr = raw_mr if isinstance(raw_mr, dict) else {}
+            if 'cells_per_diameter' not in mr:
+                top_cpd = analyzer.mesh_settings.get('cells_per_diameter')
+                if top_cpd is not None:
+                    mr['cells_per_diameter'] = top_cpd
+
+            cell_size, source, priority = analyzer._resolve_cell_size(mr)
+            # 20mm diam / 20 cells = 1mm = 0.001m
+            assert abs(cell_size - 0.001) < 1e-10
+            assert priority == 2
+
+
 class TestExtractVerticesFromSTL:
     """Test _extract_vertices_from_stl method."""
 
@@ -1567,6 +1730,162 @@ class TestSpanRefinementWithUserLevel:
 
             assert "SPAN_REFINEMENT" in source
             assert "span_level=3" in source
+
+
+class TestMeshStrategy:
+    """Test mesh strategy routing (adaptive_span vs legacy_surface)."""
+
+    @patch('aortacfd_lib.mesh_setup.PatchProcessing')
+    @patch('aortacfd_lib.mesh_setup.Logger')
+    @patch('aortacfd_lib.mesh_setup.Environment')
+    @patch('aortacfd_lib.mesh_setup.FileSystemLoader')
+    def test_adaptive_span_enables_span_in_fallback(self, mock_loader, mock_env, mock_logger, mock_patch):
+        """adaptive_span strategy auto-enables span refinement in the fallback path."""
+        from aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        mock_patch_instance = MagicMock()
+        mock_patch_instance.calculate_inlet_center_radius.return_value = (
+            np.array([0.0, 0.0, 0.0]), 0.012, np.array([0.0, 0.0, 1.0])
+        )
+        mock_patch.return_value = mock_patch_instance
+
+        config = {
+            'geometry': {'wall_keywords_ordered': 'wall', 'inlet_keywords_ordered': 'inlet', 'outlet_keywords_ordered': []},
+            'mesh': {'SNAPPY_SETTINGS': {'mesh_strategy': 'adaptive_span'}}
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tri_path = Path(tmpdir) / "constant" / "triSurface"
+            tri_path.mkdir(parents=True)
+            analyzer = GeometryAnalyzer(config, tmpdir)
+
+            # Fallback path should auto-enable span
+            mesh_resolution = {}  # No user resolution → fallback triggers
+            cell_size, source, priority = analyzer._resolve_cell_size(mesh_resolution)
+
+            assert analyzer.snappy_settings['span_refinement_enabled'] is True
+            assert analyzer.snappy_settings['cells_across_span'] == 12  # default
+            assert "SPAN_REFINEMENT" in source
+
+    @patch('aortacfd_lib.mesh_setup.PatchProcessing')
+    @patch('aortacfd_lib.mesh_setup.Logger')
+    @patch('aortacfd_lib.mesh_setup.Environment')
+    @patch('aortacfd_lib.mesh_setup.FileSystemLoader')
+    def test_legacy_surface_preserves_old_behaviour(self, mock_loader, mock_env, mock_logger, mock_patch):
+        """legacy_surface strategy uses old cpd=10 fallback."""
+        from aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        mock_patch_instance = MagicMock()
+        mock_patch_instance.calculate_inlet_center_radius.return_value = (
+            np.array([0.0, 0.0, 0.0]), 0.012, np.array([0.0, 0.0, 1.0])
+        )
+        mock_patch.return_value = mock_patch_instance
+
+        config = {
+            'geometry': {'wall_keywords_ordered': 'wall', 'inlet_keywords_ordered': 'inlet', 'outlet_keywords_ordered': []},
+            'mesh': {'SNAPPY_SETTINGS': {'mesh_strategy': 'legacy_surface'}}
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tri_path = Path(tmpdir) / "constant" / "triSurface"
+            tri_path.mkdir(parents=True)
+            analyzer = GeometryAnalyzer(config, tmpdir)
+
+            mesh_resolution = {}
+            cell_size, source, priority = analyzer._resolve_cell_size(mesh_resolution)
+
+            assert priority == 3
+            assert "FALLBACK" in source
+            assert analyzer.snappy_settings.get('span_refinement_enabled', False) is False
+
+    @patch('aortacfd_lib.mesh_setup.PatchProcessing')
+    @patch('aortacfd_lib.mesh_setup.Logger')
+    @patch('aortacfd_lib.mesh_setup.Environment')
+    @patch('aortacfd_lib.mesh_setup.FileSystemLoader')
+    def test_explicit_cpd_ignores_strategy(self, mock_loader, mock_env, mock_logger, mock_patch):
+        """When user sets cells_per_diameter, strategy doesn't matter — priority 2 fires."""
+        from aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        mock_patch_instance = MagicMock()
+        mock_patch_instance.calculate_inlet_center_radius.return_value = (
+            np.array([0.0, 0.0, 0.0]), 0.012, np.array([0.0, 0.0, 1.0])
+        )
+        mock_patch.return_value = mock_patch_instance
+
+        config = {
+            'geometry': {'wall_keywords_ordered': 'wall', 'inlet_keywords_ordered': 'inlet', 'outlet_keywords_ordered': []},
+            'mesh': {'SNAPPY_SETTINGS': {'mesh_strategy': 'adaptive_span'}}
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tri_path = Path(tmpdir) / "constant" / "triSurface"
+            tri_path.mkdir(parents=True)
+            analyzer = GeometryAnalyzer(config, tmpdir)
+
+            mesh_resolution = {'cells_per_diameter': 20}
+            cell_size, source, priority = analyzer._resolve_cell_size(mesh_resolution)
+
+            assert priority == 2
+            assert "cells_per_diameter" in source
+
+    @patch('aortacfd_lib.mesh_setup.PatchProcessing')
+    @patch('aortacfd_lib.mesh_setup.Logger')
+    @patch('aortacfd_lib.mesh_setup.Environment')
+    @patch('aortacfd_lib.mesh_setup.FileSystemLoader')
+    def test_surface_levels_reduced_in_adaptive_span(self, mock_loader, mock_env, mock_logger, mock_patch):
+        """adaptive_span reduces surface refinement to [0,1] when not user-set."""
+        from aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        mock_patch_instance = MagicMock()
+        mock_patch_instance.calculate_inlet_center_radius.return_value = (
+            np.array([0.0, 0.0, 0.0]), 0.012, np.array([0.0, 0.0, 1.0])
+        )
+        mock_patch.return_value = mock_patch_instance
+
+        config = {
+            'geometry': {'wall_keywords_ordered': 'wall', 'inlet_keywords_ordered': 'inlet', 'outlet_keywords_ordered': []},
+            'mesh': {'SNAPPY_SETTINGS': {
+                'mesh_strategy': 'adaptive_span',
+                'surfaceRefinementLevels': [1, 2],  # base default, not user-set
+            }}
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tri_path = Path(tmpdir) / "constant" / "triSurface"
+            tri_path.mkdir(parents=True)
+            analyzer = GeometryAnalyzer(config, tmpdir)
+
+            assert analyzer.snappy_settings['surfaceRefinementLevels'] == [0, 1]
+
+    @patch('aortacfd_lib.mesh_setup.PatchProcessing')
+    @patch('aortacfd_lib.mesh_setup.Logger')
+    @patch('aortacfd_lib.mesh_setup.Environment')
+    @patch('aortacfd_lib.mesh_setup.FileSystemLoader')
+    def test_surface_levels_preserved_when_user_set(self, mock_loader, mock_env, mock_logger, mock_patch):
+        """User-specified surfaceRefinementLevels are preserved in adaptive_span."""
+        from aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        mock_patch_instance = MagicMock()
+        mock_patch_instance.calculate_inlet_center_radius.return_value = (
+            np.array([0.0, 0.0, 0.0]), 0.012, np.array([0.0, 0.0, 1.0])
+        )
+        mock_patch.return_value = mock_patch_instance
+
+        config = {
+            'geometry': {'wall_keywords_ordered': 'wall', 'inlet_keywords_ordered': 'inlet', 'outlet_keywords_ordered': []},
+            'mesh': {'SNAPPY_SETTINGS': {
+                'mesh_strategy': 'adaptive_span',
+                'surfaceRefinementLevels': [2, 3],
+                '_user_provided_keys': ['surfaceRefinementLevels'],  # tagged by ConfigBuilder
+            }}
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tri_path = Path(tmpdir) / "constant" / "triSurface"
+            tri_path.mkdir(parents=True)
+            analyzer = GeometryAnalyzer(config, tmpdir)
+
+            assert analyzer.snappy_settings['surfaceRefinementLevels'] == [2, 3]
 
 
 if __name__ == '__main__':
