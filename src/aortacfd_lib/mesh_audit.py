@@ -64,11 +64,14 @@ def audit_mesh(
     Returns:
         Structured audit report dict.
     """
-    snappy = config.get("mesh", {}).get("SNAPPY_SETTINGS", {})
+    mesh_config = config.get("mesh", {})
+    snappy = mesh_config.get("SNAPPY_SETTINGS", {})
 
     report = {
+        "mesh_goal": mesh_config.get("goal"),
         "strategy": snappy.get("mesh_strategy", "unknown"),
         "requested_cells_across_span": snappy.get("cells_across_span"),
+        "layers_mode": "standard" if snappy.get("addLayers") else "off",
         "planner": _extract_planner_info(snappy),
         "quality": _run_quality_check(case_dir),
         "resolution_proxy": {},

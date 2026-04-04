@@ -84,6 +84,16 @@ class GeometryAnalyzer:
         # Track if deprecation warning has been shown (prevent spam)
         self._deprecated_warning_shown = False
 
+        # Resolve mesh_goal preset (fills missing settings from preset defaults)
+        from .utils.mesh_constants import resolve_mesh_goal
+        goal_overrides = resolve_mesh_goal(self.mesh_settings)
+        if goal_overrides:
+            goal_name = self.mesh_settings.get('goal', '?')
+            # Apply preset values only where user hasn't explicitly set them
+            for k, v in goal_overrides.items():
+                if k not in self.snappy_settings or k not in self.snappy_settings.get('_user_provided_keys', []):
+                    self.snappy_settings[k] = v
+
         # Mesh strategy: 'adaptive_span' or 'legacy_surface'
         self.mesh_strategy = self.snappy_settings.get('mesh_strategy', 'legacy_surface')
 

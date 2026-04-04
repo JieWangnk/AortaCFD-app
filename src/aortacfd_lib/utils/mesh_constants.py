@@ -121,6 +121,120 @@ import math
 
 
 # =============================================================================
+# MESH GOAL PRESETS
+# =============================================================================
+# User-facing intent presets that map to existing meshing parameters.
+# These simplify config for non-expert users while preserving full override.
+#
+# Usage in config.json:
+#   "mesh": { "goal": "routine_hemodynamics" }
+#
+# Precedence: explicit user settings override goal defaults.
+
+MESH_GOAL_PRESETS = {
+    "pressure_fast": {
+        "description": "Quick screening — pressure gradient, flow split, robust turnaround",
+        "mesh_strategy": "adaptive_span",
+        "cells_across_span": 10,
+        "layers_mode": "off",
+        "surfaceRefinementLevels": [0, 1],
+    },
+    "routine_hemodynamics": {
+        "description": "Standard patient-specific run — pressure, flow, general hemodynamics",
+        "mesh_strategy": "adaptive_span",
+        "cells_across_span": 16,
+        "layers_mode": "standard",
+        "surfaceRefinementLevels": [0, 1],
+    },
+    "wall_sensitive": {
+        "description": "WSS, OSI, near-wall indices — higher resolution + wall layers",
+        "mesh_strategy": "adaptive_span",
+        "cells_across_span": 22,
+        "layers_mode": "standard",
+        "surfaceRefinementLevels": [0, 1],
+        "throat_uplift": 4,  # reserved — only applies if throat region is supplied
+    },
+}
+
+# Standard 3-layer profile (OF-documented typical values)
+LAYER_PROFILES = {
+    "off": {
+        "addLayers": False,
+        "addLayer": 0,
+    },
+    "standard": {
+        "addLayers": True,
+        "addLayer": 3,
+        "relativeSizes": True,
+        "expansionRatio": 1.2,
+        "finalLayerThickness": 0.3,
+        "minThickness": 0.1,
+        "nGrow": 1,
+        "nSmoothSurfaceNormals": 1,
+        "nSmoothNormals": 3,
+        "nSmoothThickness": 10,
+        "nSmoothDisplacement": 5,
+        "maxFaceThicknessRatio": 0.5,
+        "maxThicknessToMedialRatio": 0.3,
+        "nBufferCellsNoExtrude": 0,
+        "nLayerIter": 50,
+        "nRelaxedIter": 20,
+    },
+}
+
+
+def resolve_mesh_goal(mesh_config: dict) -> dict:
+    """
+    Resolve mesh_goal preset into concrete settings.
+
+    Fills missing values from the goal preset. Explicit user settings
+    always take precedence over preset defaults.
+
+    Args:
+        mesh_config: The mesh section of the config dict.
+                     May contain 'goal' and/or explicit SNAPPY_SETTINGS.
+
+    Returns:
+        Dict of resolved SNAPPY_SETTINGS overrides to apply.
+        Empty dict if no goal is set or goal is unknown.
+    """
+    goal_name = mesh_config.get("goal")
+    if not goal_name or goal_name not in MESH_GOAL_PRESETS:
+        return {}
+
+    preset = MESH_GOAL_PRESETS[goal_name]
+    snappy = mesh_config.get("SNAPPY_SETTINGS", {})
+    user_keys = snappy.get("_user_provided_keys", [])
+
+    resolved = {}
+
+    # mesh_strategy: fill if not explicitly set by user
+    if "mesh_strategy" not in user_keys:
+        resolved["mesh_strategy"] = preset["mesh_strategy"]
+
+    # cells_across_span: fill if user hasn't set span params
+    if "cells_across_span" not in user_keys and "span_refinement_enabled" not in user_keys:
+        resolved["span_refinement_enabled"] = True
+        resolved["cells_across_span"] = preset["cells_across_span"]
+
+    # surfaceRefinementLevels: fill if not user-set
+    if "surfaceRefinementLevels" not in user_keys:
+        resolved["surfaceRefinementLevels"] = preset["surfaceRefinementLevels"]
+
+    # layers_mode: apply layer profile if user hasn't set layer params
+    layers_mode = preset.get("layers_mode", "off")
+    layer_user_keys = {"addLayers", "addLayer", "nSurfaceLayers"} & set(user_keys)
+    if not layer_user_keys and layers_mode in LAYER_PROFILES:
+        resolved.update(LAYER_PROFILES[layers_mode])
+
+    # throat_uplift: store but don't auto-apply (future: needs throat detection)
+    if "throat_uplift" in preset:
+        resolved["_throat_uplift_reserved"] = preset["throat_uplift"]
+
+    return resolved
+
+
+# =============================================================================
 # SPAN REFINEMENT PLANNER
 # =============================================================================
 # Determines coarse blockMesh background and span refinement level to achieve

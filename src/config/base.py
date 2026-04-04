@@ -50,6 +50,11 @@ config = {
     # Optimized for: coarctations, stenoses, aneurysms, bifurcations, high curvature vessels
     # Updated: 2025-12-17 - Aligned with OpenFOAM defaults + cardiovascular best practices
     "mesh": {
+        # Mesh goal preset: maps clinical intent to meshing parameters
+        # pressure_fast | routine_hemodynamics | wall_sensitive
+        # Set to None/omit to use explicit settings instead
+        # "goal": "routine_hemodynamics",
+
         "SNAPPY_SETTINGS": {
             # ==========================================================================
             # CASTELLATED MESH CONTROLS

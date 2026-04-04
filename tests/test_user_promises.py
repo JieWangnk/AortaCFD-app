@@ -527,6 +527,145 @@ class TestPromise5_UsefulOutputs:
 
 
 # ============================================================================
+# Mesh goal presets — user intent → meshing parameters
+# ============================================================================
+
+
+class TestMeshGoalPresets:
+    """mesh_goal maps clinical intent to concrete meshing settings."""
+
+    def test_all_presets_defined(self):
+        """All three goal presets exist."""
+        from aortacfd_lib.utils.mesh_constants import MESH_GOAL_PRESETS
+
+        assert "pressure_fast" in MESH_GOAL_PRESETS
+        assert "routine_hemodynamics" in MESH_GOAL_PRESETS
+        assert "wall_sensitive" in MESH_GOAL_PRESETS
+
+    def test_pressure_fast_no_layers(self):
+        """pressure_fast disables layers."""
+        from aortacfd_lib.utils.mesh_constants import resolve_mesh_goal
+
+        resolved = resolve_mesh_goal({"goal": "pressure_fast", "SNAPPY_SETTINGS": {}})
+        assert resolved["addLayers"] is False
+        assert resolved["cells_across_span"] == 10
+
+    def test_routine_hemodynamics_standard_layers(self):
+        """routine_hemodynamics enables 3-layer standard profile."""
+        from aortacfd_lib.utils.mesh_constants import resolve_mesh_goal
+
+        resolved = resolve_mesh_goal({"goal": "routine_hemodynamics", "SNAPPY_SETTINGS": {}})
+        assert resolved["addLayers"] is True
+        assert resolved["addLayer"] == 3
+        assert resolved["cells_across_span"] == 16
+
+    def test_wall_sensitive_higher_resolution(self):
+        """wall_sensitive has higher span target than routine."""
+        from aortacfd_lib.utils.mesh_constants import resolve_mesh_goal
+
+        resolved = resolve_mesh_goal({"goal": "wall_sensitive", "SNAPPY_SETTINGS": {}})
+        assert resolved["cells_across_span"] == 22
+        assert resolved["addLayers"] is True
+        assert resolved.get("_throat_uplift_reserved") == 4
+
+    def test_explicit_override_wins(self):
+        """User-set cells_across_span overrides goal preset."""
+        from aortacfd_lib.utils.mesh_constants import resolve_mesh_goal
+
+        resolved = resolve_mesh_goal({
+            "goal": "pressure_fast",
+            "SNAPPY_SETTINGS": {
+                "cells_across_span": 30,
+                "_user_provided_keys": ["cells_across_span"],
+            },
+        })
+        # Should NOT override the user's explicit value
+        assert "cells_across_span" not in resolved
+
+    def test_explicit_layer_override_wins(self):
+        """User-set addLayers overrides goal preset."""
+        from aortacfd_lib.utils.mesh_constants import resolve_mesh_goal
+
+        resolved = resolve_mesh_goal({
+            "goal": "routine_hemodynamics",
+            "SNAPPY_SETTINGS": {
+                "addLayers": False,
+                "_user_provided_keys": ["addLayers"],
+            },
+        })
+        # Layers should NOT be overridden by goal
+        assert "addLayers" not in resolved
+
+    def test_no_goal_returns_empty(self):
+        """No goal set → empty overrides (existing logic untouched)."""
+        from aortacfd_lib.utils.mesh_constants import resolve_mesh_goal
+
+        resolved = resolve_mesh_goal({"SNAPPY_SETTINGS": {}})
+        assert resolved == {}
+
+    def test_unknown_goal_returns_empty(self):
+        """Unknown goal name → empty overrides, no crash."""
+        from aortacfd_lib.utils.mesh_constants import resolve_mesh_goal
+
+        resolved = resolve_mesh_goal({"goal": "nonexistent", "SNAPPY_SETTINGS": {}})
+        assert resolved == {}
+
+    def test_goal_integrates_with_geometry_analyzer(self, mock_geometry):
+        """mesh_goal flows through GeometryAnalyzer correctly."""
+        from aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        config = {
+            "geometry": {"wall_keywords_ordered": "wall", "inlet_keywords_ordered": "inlet", "outlet_keywords_ordered": []},
+            "mesh": {
+                "goal": "pressure_fast",
+                "SNAPPY_SETTINGS": {},
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "constant" / "triSurface").mkdir(parents=True)
+            analyzer = GeometryAnalyzer(config, tmpdir)
+
+            assert analyzer.snappy_settings.get("cells_across_span") == 10
+            assert analyzer.snappy_settings.get("addLayers") is False
+            assert analyzer.mesh_strategy == "adaptive_span"
+
+    def test_routine_goal_integrates_with_span_fallback(self, mock_geometry):
+        """routine_hemodynamics goal activates span in fallback path."""
+        from aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        config = {
+            "geometry": {"wall_keywords_ordered": "wall", "inlet_keywords_ordered": "inlet", "outlet_keywords_ordered": []},
+            "mesh": {
+                "goal": "routine_hemodynamics",
+                "SNAPPY_SETTINGS": {},
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "constant" / "triSurface").mkdir(parents=True)
+            analyzer = GeometryAnalyzer(config, tmpdir)
+
+            mesh_resolution = {}
+            cell_size, source, priority = analyzer._resolve_cell_size(mesh_resolution)
+
+            assert "SPAN_REFINEMENT" in source
+            assert analyzer.snappy_settings["cells_across_span"] == 16
+
+    def test_standard_layer_profile_values(self):
+        """Standard layer profile has OF-documented typical values."""
+        from aortacfd_lib.utils.mesh_constants import LAYER_PROFILES
+
+        std = LAYER_PROFILES["standard"]
+        assert std["addLayer"] == 3
+        assert std["nSmoothSurfaceNormals"] == 1  # OF typical
+        assert std["nSmoothNormals"] == 3          # OF typical
+        assert std["nSmoothThickness"] == 10       # OF typical
+        assert std["nLayerIter"] == 50             # OF typical
+        assert std["nRelaxedIter"] == 20           # OF typical
+
+
+# ============================================================================
 # Failure cases — bad inputs should fail clearly
 # ============================================================================
 
