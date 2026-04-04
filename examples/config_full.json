@@ -104,45 +104,45 @@
   "mesh": {
     "_comment": "Mesh generation parameters",
 
-    "cells_per_diameter": 15,
-    "_cells_per_diameter_comment": "Cells across inlet diameter. Can also use mesh.mesh_resolution.cells_per_diameter",
-    "_cells_per_diameter_guidelines": {
-      "coarse": "10-12 cells - initial exploration, geometry checks",
-      "standard": "15-20 cells - production simulations (RECOMMENDED)",
-      "fine": "25-30 cells - mesh independence studies, publications"
+    "goal": "routine_hemodynamics",
+    "_goal_comment": "Mesh goal preset: maps intent to meshing parameters",
+    "_goal_options": {
+      "pressure_fast": "span=10, layers off — quick screening",
+      "routine_hemodynamics": "span=16, 3 layers — production runs (RECOMMENDED)",
+      "wall_sensitive": "span=22, 3 layers — WSS/OSI endpoints"
     },
 
-    "_alternative_location": {
-      "_comment": "cells_per_diameter can also be specified as:",
-      "mesh_resolution": {
-        "cells_per_diameter": 15
+    "_direct_control": {
+      "_comment": "For explicit control instead of goal, set cells_across_span directly:",
+      "SNAPPY_SETTINGS": {
+        "cells_across_span": 16,
+        "surfaceRefinementLevels": [1, 2]
       }
     },
 
+    "_legacy_mode": {
+      "_comment": "Legacy cells_per_diameter is still supported:",
+      "cells_per_diameter": 15,
+      "SNAPPY_SETTINGS": { "mesh_strategy": "legacy_surface" }
+    },
+
     "boundary_layers": {
-      "_comment": "Boundary layer (prism/inflation) settings - traditional OpenFOAM addLayersControls style",
+      "_comment": "Boundary layer settings — inherited from goal preset, override here if needed",
 
       "enabled": true,
       "_enabled_comment": "Enable/disable boundary layer generation",
 
-      "num_layers": 10,
-      "_num_layers_comment": "Number of prism layers (nSurfaceLayers). Standard: 10 (SimVascular default), Minimum: 5, Fine: 12-15",
+      "num_layers": 3,
+      "_num_layers_comment": "Number of prism layers. Standard: 3 (OF-typical), coverage ~20-50% on patient geometry",
 
       "expansion_ratio": 1.2,
-      "_expansion_ratio_comment": "Growth ratio between successive layers (typical: 1.15-1.25, SimVascular default: 1.2)",
+      "_expansion_ratio_comment": "Growth ratio between successive layers (OF typical: 1.2)",
 
       "final_layer_thickness": 0.3,
-      "_final_layer_thickness_comment": "Final (outermost) layer thickness as fraction of local cell size (when relativeSizes=true)",
+      "_final_layer_thickness_comment": "Final layer thickness as fraction of cell size (relativeSizes=true)",
 
       "min_thickness": 0.1,
-      "_min_thickness_comment": "Minimum layer thickness as fraction of cell size. Allows graceful collapse in tight regions.",
-
-      "relativeSizes": true,
-      "_relativeSizes_comment": "If true, layer thicknesses are relative to local cell size. If false, thicknesses are absolute in meters.",
-      "_relativeSizes_options": {
-        "true": "Thicknesses as fraction of local cell size (DEFAULT, recommended)",
-        "false": "Thicknesses as absolute values in meters"
-      }
+      "_min_thickness_comment": "Minimum layer thickness. Allows graceful collapse in tight regions."
     },
 
     "volume_refinement": {

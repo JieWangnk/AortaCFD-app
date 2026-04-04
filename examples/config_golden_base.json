@@ -19,13 +19,7 @@
   },
 
   "mesh": {
-    "cells_per_diameter": 12,
-    "boundary_layers": {
-      "enabled": true,
-      "num_layers": 3,
-      "expansion_ratio": 1.3,
-      "final_layer_thickness": 0.4
-    }
+    "goal": "pressure_fast"
   },
 
   "geometry": {

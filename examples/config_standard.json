@@ -21,13 +21,7 @@
   },
 
   "mesh": {
-    "cells_per_diameter": 15,
-    "boundary_layers": {
-      "enabled": true,
-      "num_layers": 10,
-      "expansion_ratio": 1.2,
-      "final_layer_thickness": 0.3
-    },
+    "goal": "routine_hemodynamics",
     "SNAPPY_SETTINGS": {
       "parallel": true,
       "nProcessors": 8
