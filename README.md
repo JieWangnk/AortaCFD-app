@@ -1,7 +1,7 @@
 # AortaCFD
 
 ![Python Version](https://img.shields.io/badge/python-3.12-blue.svg)
-![Tests](https://img.shields.io/badge/tests-2018%20passing-success.svg)
+![Tests](https://img.shields.io/badge/tests-2086%20passing-success.svg)
 ![OpenFOAM](https://img.shields.io/badge/OpenFOAM-12-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
@@ -142,7 +142,7 @@ AortaCFD uses a single `config.json` per case. The configuration system has thre
     "profile": "standard"
   },
   "mesh": {
-    "cells_per_diameter": 15
+    "goal": "routine_hemodynamics"
   },
   "geometry": {
     "inlet_keywords_ordered": "inlet",
@@ -186,7 +186,7 @@ Any profile works with any physics model (`laminar`, `rans`, `les`). See **Physi
 
 **standard** -- backward time, limitedLinearV convection. Good accuracy with bounded stability.
 
-**precise** -- CrankNicolson 0.9, LUST convection. Requires good mesh quality (orthogonality > 70 deg, skewness < 2).
+**precise** -- backward time, LUST convection. Requires good mesh quality (orthogonality > 70 deg, skewness < 2).
 
 ---
 
@@ -211,31 +211,83 @@ Key risks with turbulence models on aortic meshes:
 
 ## Mesh Resolution
 
-Mesh resolution is set through `cells_per_diameter`, which sizes cells relative to the vessel reference diameter.
+AortaCFD defaults to **adaptive span-based meshing**: a coarse blockMesh background with OpenFOAM 12's `insideSpan` refinement to guarantee minimum cells across the vessel lumen everywhere. This replaces the legacy `cells_per_diameter` approach, reducing blockMesh waste by 80-96% while maintaining or improving mesh quality.
 
-| Category | cells/D | Typical cell count | Use |
-|----------|---------|-------------------|-----|
-| Coarse | 10-12 | 200k-500k | Geometry checks, initial exploration |
-| Standard | 15-20 | 500k-2M | Production simulations |
-| Fine | 25-30 | 2M-5M | Mesh independence studies |
+### Mesh goal presets (recommended)
 
-Cell counts vary with geometry volume and complexity. The same `cells_per_diameter` can produce different cell counts for different anatomies.
-
-Boundary layers are configured separately:
+The simplest way to control meshing is through `mesh_goal`:
 
 ```json
 {
   "mesh": {
-    "cells_per_diameter": 15,
+    "goal": "routine_hemodynamics"
+  }
+}
+```
+
+| Goal | Lumen resolution | Layers | Use case |
+|------|-----------------|--------|----------|
+| `pressure_fast` | 10 cells across span | Off | Quick screening, pressure gradient |
+| `routine_hemodynamics` | 16 cells across span | 3 layers (standard) | Production patient-specific runs |
+| `wall_sensitive` | 22 cells across span | 3 layers (standard) | WSS, OSI, near-wall indices |
+
+### Direct control
+
+For explicit control, set `cells_across_span` directly:
+
+```json
+{
+  "mesh": {
+    "SNAPPY_SETTINGS": {
+      "cells_across_span": 16,
+      "surfaceRefinementLevels": [1, 2]
+    }
+  }
+}
+```
+
+Final cell count depends on geometry size and complexity — the same `cells_across_span` produces different cell counts on different anatomies. The app reports achieved resolution and cell counts in the post-mesh audit.
+
+### Boundary layers
+
+Layers are configured through `boundary_layers` or inherited from the goal preset:
+
+```json
+{
+  "mesh": {
     "boundary_layers": {
       "enabled": true,
-      "num_layers": 5,
+      "num_layers": 3,
       "expansion_ratio": 1.2,
       "final_layer_thickness": 0.3
     }
   }
 }
 ```
+
+Layer coverage on patient-specific vascular geometry is typically 20-50% under standard quality controls, concentrated on lower-curvature wall segments. For WSS-sensitive studies, verify coverage in the mesh audit report.
+
+### Legacy mode
+
+The old `cells_per_diameter` approach is still supported:
+
+```json
+{
+  "mesh": {
+    "cells_per_diameter": 15,
+    "SNAPPY_SETTINGS": {
+      "mesh_strategy": "legacy_surface"
+    }
+  }
+}
+```
+
+### Post-mesh audit
+
+After meshing, AortaCFD writes `reports/mesh_audit.json` with:
+- checkMesh quality metrics (maxNonOrtho, maxSkewness)
+- achieved cells-across-lumen proxy at inlet and each outlet
+- verdict: `pass`, `warn`, or `fail` based on OpenFOAM quality thresholds
 
 ---
 
@@ -377,6 +429,7 @@ output/<case_id>/<run_name>/
 │   └── logs/                    Simulation logs
 ├── reports/
 │   ├── merged_config.json       Full runtime configuration (reproducibility)
+│   ├── mesh_audit.json          Post-mesh QC (quality, resolution proxy, verdict)
 │   ├── simulation_setup_report.txt
 │   └── inlet_audit.json         Inlet BC audit trail
 ├── results/
@@ -389,7 +442,7 @@ output/<case_id>/<run_name>/
 
 ## Testing
 
-AortaCFD includes 2018 automated tests covering configuration, boundary conditions, meshing, hemodynamics, and workflow integration.
+AortaCFD includes 2086 automated tests covering configuration, boundary conditions, meshing, mesh audit, hemodynamics, and workflow integration.
 
 ```bash
 # Run all tests

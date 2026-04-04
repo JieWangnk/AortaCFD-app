@@ -121,43 +121,43 @@ config = {
 
             # ==========================================================================
             # ADD LAYERS CONTROLS
-            # Ref: guide-meshing-snappyhexmesh-layers.html
-            # Critical for WSS accuracy in cardiovascular CFD
+            # Ref: doc.cfd.direct/openfoam/user-guide-v13/snappyhexmesh
+            # Standard 3-layer profile with OF-documented typical values
             # ==========================================================================
 
             # Layer sizing mode
-            "relativeSizes": True,          # true = relative to cell size (recommended)
+            "relativeSizes": True,          # true = relative to cell size (recommended for adaptive span)
 
-            # Layer count and growth - more conservative for quality
-            "addLayer": 10,                 # nSurfaceLayers: 10 for y+ ≈ 1 in cardiovascular
-            "expansionRatio": 1.1,          # Conservative growth ratio for better quality
-            "finalLayerThickness": 0.4,     # Last layer as fraction of cell size
-            "minThickness": 0.15,           # Minimum before termination
+            # Layer count and growth — standard profile
+            "addLayer": 3,                  # nSurfaceLayers: 3 for routine hemodynamics
+            "expansionRatio": 1.2,          # OF typical
+            "finalLayerThickness": 0.3,     # Last layer as fraction of cell size
+            "minThickness": 0.1,            # Minimum before termination
 
-            # Feature angle controls (critical for curved surfaces)
+            # Feature angle controls
             "featureAngle": 150,            # Conservative for better layer quality
             "slipFeatureAngle": 30,         # Permit sliding on patches without layers
             "layerTerminationAngle": -180,  # -180 = attempt extrusion everywhere
 
-            # Growth controls
-            "nGrow": 0,                     # Delay extrusion near features (0 = immediate)
+            # Growth controls — OF-documented typical values
+            "nGrow": 1,                     # Buffer near features
             "nBufferCellsNoExtrude": 0,     # Gradual layer termination regions
-            "addLayers_nRelaxIter": 10,     # Layer addition relaxation iterations - increased
+            "addLayers_nRelaxIter": 5,      # OF typical
 
-            # Smoothing iterations - increased for better quality
-            "nSmoothNormals": 5,            # Interior mesh movement direction smoothing
-            "nSmoothSurfaceNormals": 30,    # Increased for curved cardiovascular surfaces
-            "nSmoothThickness": 15,         # Increased for better layer quality
-            "nSmoothDisplacement": 15,      # Post-medial axis smoothing - increased
+            # Smoothing — OF-documented typical values
+            "nSmoothNormals": 3,            # OF typical (was 5)
+            "nSmoothSurfaceNormals": 1,     # OF typical (was 30)
+            "nSmoothThickness": 10,         # OF typical (was 15)
+            "nSmoothDisplacement": 5,       # OF typical (was 15)
 
-            # Thickness ratio controls - tightened for quality
-            "maxFaceThicknessRatio": 0.4,   # Tighter for better quality
-            "maxThicknessToMedialRatio": 0.25,  # Tighter to prevent self-intersection
-            "minMedianAxisAngle": 90,       # OpenFOAM typical: 90°
+            # Thickness ratio controls — OF-documented typical values
+            "maxFaceThicknessRatio": 0.5,   # OF typical (was 0.4)
+            "maxThicknessToMedialRatio": 0.3,  # OF typical (was 0.25)
+            "minMedianAxisAngle": 90,       # OF typical
 
-            # Iteration limits - increased for better quality
-            "nLayerIter": 100,              # Increased from 50 for complex geometry
-            "nRelaxedIter": 50,             # Increased for more iterations before relaxing
+            # Iteration limits — OF-documented typical values
+            "nLayerIter": 50,               # OF typical (was 100)
+            "nRelaxedIter": 20,             # OF typical (was 50)
 
             # ==========================================================================
             # MESH QUALITY CONTROLS
@@ -169,12 +169,11 @@ config = {
             # < 65°: no correctors needed
             # 65-75°: 1 corrector
             # > 85°: likely divergence
-            "maxNonOrtho": 60,              # Tightened from 65° for better quality
+            "maxNonOrtho": 65,              # OF default — 60 blocks layer insertion on patient geometry
 
-            # Skewness (critical for numerical accuracy and LES)
-            # Tightened for LES and to prevent negative volume cells
-            "maxBoundarySkewness": 4,       # Tightened from 20 for WSS accuracy
-            "maxInternalSkewness": 4,       # Tightened from 8 for LES compatibility
+            # Skewness
+            "maxBoundarySkewness": 20,      # OF default (was 4 — too strict for layers)
+            "maxInternalSkewness": 4,       # Keep strict for solver stability
 
             # Cell shape quality - tightened to prevent negative volume cells
             "maxConcave": 80,               # OpenFOAM default: 80°
