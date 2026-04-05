@@ -300,7 +300,7 @@ def estimate_from_config(config: dict, target_yplus: float) -> Dict[str, float]:
 
     # Get layer settings
     mesh_config = config.get('mesh', {}).get('SNAPPY_SETTINGS', {})
-    n_layers = mesh_config.get('addLayer', 5)
+    n_layers = mesh_config.get('addLayer', 2)
     expansion_ratio = mesh_config.get('expansionRatio', 1.2)
 
     results = estimator.estimate_first_layer_thickness(

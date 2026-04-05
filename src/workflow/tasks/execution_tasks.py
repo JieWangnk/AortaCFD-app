@@ -283,7 +283,7 @@ class ExecuteMeshingTask(Task):
             return
 
         original_content = open(snappy_dict_path).read()
-        original_layers = snappy_settings.get("addLayer", 5)
+        original_layers = snappy_settings.get("addLayer", 2)
 
         retry_configs = [
             {

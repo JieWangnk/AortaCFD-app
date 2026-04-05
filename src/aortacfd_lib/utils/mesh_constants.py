@@ -210,17 +210,28 @@ def resolve_mesh_config(mesh_config: dict) -> dict:
     Returns:
         Dict of resolved SNAPPY_SETTINGS overrides to apply.
     """
+    import logging
+    logger = logging.getLogger("mesh_config")
+
     resolved = {}
     snappy = mesh_config.get("SNAPPY_SETTINGS", {})
     user_keys = snappy.get("_user_provided_keys", [])
+    goal_name = mesh_config.get("goal")
+    span_target = mesh_config.get("span_target")
+    is_legacy = mesh_config.get("mode") == "legacy"
+
+    # Conflict warnings
+    if is_legacy and goal_name:
+        logger.warning(f"Both mode='legacy' and goal='{goal_name}' set. Using legacy mode (goal ignored).")
+    if goal_name and span_target is not None:
+        logger.info(f"Both goal='{goal_name}' and span_target={span_target} set. span_target overrides goal's resolution.")
 
     # --- Legacy mode ---
-    if mesh_config.get("mode") == "legacy":
+    if is_legacy:
         resolved["mesh_strategy"] = "legacy_surface"
         return resolved
 
     # --- Goal preset ---
-    goal_name = mesh_config.get("goal")
     if goal_name and goal_name in MESH_GOAL_PRESETS:
         preset = MESH_GOAL_PRESETS[goal_name]
 
@@ -245,7 +256,6 @@ def resolve_mesh_config(mesh_config: dict) -> dict:
             resolved.update(LAYER_PROFILES[layers_mode])
 
     # --- Public API: span_target ---
-    span_target = mesh_config.get("span_target")
     if span_target is not None:
         resolved["span_refinement_enabled"] = True
         resolved["cells_across_span"] = int(span_target)

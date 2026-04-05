@@ -87,19 +87,23 @@ class GeometryAnalyzer:
         # Resolve public mesh API (goal, span_target, layers, mode) into SNAPPY_SETTINGS
         from .utils.mesh_constants import resolve_mesh_config
         mesh_overrides = resolve_mesh_config(self.mesh_settings)
+        self._goal_resolved_keys = set()
         if mesh_overrides:
-            # Apply resolved values only where user hasn't explicitly set them
             for k, v in mesh_overrides.items():
-                if k not in self.snappy_settings or k not in self.snappy_settings.get('_user_provided_keys', []):
+                if k not in self.snappy_settings.get('_user_provided_keys', []):
                     self.snappy_settings[k] = v
+                    self._goal_resolved_keys.add(k)
 
         # Mesh strategy: 'adaptive_span' or 'legacy_surface'
         self.mesh_strategy = self.snappy_settings.get('mesh_strategy', 'legacy_surface')
 
-        # Track whether user explicitly set surfaceRefinementLevels
-        # (_user_provided_keys is tagged by ConfigBuilder before deep merge)
+        # Track whether surfaceRefinementLevels was set by user OR by goal/resolve
+        # (goal presets set [2,2] intentionally — must not be overridden to [0,1])
         user_keys = self.snappy_settings.get('_user_provided_keys', [])
-        self._surface_levels_user_set = 'surfaceRefinementLevels' in user_keys
+        self._surface_levels_user_set = (
+            'surfaceRefinementLevels' in user_keys
+            or 'surfaceRefinementLevels' in self._goal_resolved_keys
+        )
 
         # Process user-friendly config options into SNAPPY_SETTINGS
         self._process_mesh_config_options()
@@ -809,7 +813,7 @@ class GeometryAnalyzer:
         # Expected final mesh (geometry-aware estimation)
         max_ref_level = max(snappy_levels) if snappy_levels else 1
         fluid_fraction = self._estimate_fluid_fraction()
-        n_bl_layers = self.snappy_settings.get('addLayer', 5)
+        n_bl_layers = self.snappy_settings.get('addLayer', 2)
         bl_enabled = self.snappy_settings.get('addLayers', True)
 
         # Interior cells: background cells inside geometry

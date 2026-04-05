@@ -239,7 +239,7 @@ class MeshConvergenceRunner:
                     'parallel': config.get('computational', {}).get('parallel', True),
                     'nProcessors': config.get('computational', {}).get('max_processors', 4),
                     'addLayers': True,
-                    'addLayer': 5,
+                    'addLayer': 2,
                     'expansionRatio': 1.2,
                     'finalLayerThickness': 0.3,
                     'minThickness': 0.1,
