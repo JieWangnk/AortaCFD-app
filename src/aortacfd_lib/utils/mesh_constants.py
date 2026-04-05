@@ -156,10 +156,9 @@ MESH_GOAL_PRESETS = {
     },
 }
 
-# Layer profiles — evidence-based from 114-case HPC study (April 2026)
-# Key finding: 2 layers >> 3 layers for coverage on patient geometry
-#   PAT002: 99.7% (2 layers) vs 47.2% (3 layers)
-#   VOL04:  28.8% (2 layers) vs 22.9% (3 layers)
+# Layer profiles — optimised for vascular coverage (April 2026)
+# Strategy C: featureAngle 190 + unlocked ratios + moderate smoothing
+# BPM120: 51% coverage with 5 layers (vs 8% with OF defaults, 34% with 2-layer baseline)
 LAYER_PROFILES = {
     "off": {
         "addLayers": False,
@@ -167,21 +166,23 @@ LAYER_PROFILES = {
     },
     "standard": {
         "addLayers": True,
-        "addLayer": 2,                      # 2 layers (not 3) — best coverage/quality
+        "addLayer": 5,
         "relativeSizes": True,
         "expansionRatio": 1.2,
-        "finalLayerThickness": 0.3,         # sweet spot from thickness sweep
-        "minThickness": 0.01,               # allow thin at tight curvature
-        "nGrow": 1,
-        "nSmoothSurfaceNormals": 1,         # OF typical
-        "nSmoothNormals": 3,                # OF typical
-        "nSmoothThickness": 10,             # OF typical
-        "nSmoothDisplacement": 5,           # OF typical
-        "maxFaceThicknessRatio": 0.5,       # OF typical
-        "maxThicknessToMedialRatio": 0.3,   # OF typical
+        "finalLayerThickness": 0.3,
+        "minThickness": 0.01,
+        "featureAngle": 190,                # >180 forces layers at sharp junctions
+        "nGrow": 0,                         # each face gets independent chance
+        "nSmoothSurfaceNormals": 10,        # sweet spot for curved vessels
+        "nSmoothNormals": 5,
+        "nSmoothThickness": 0,             # disabled — lets each face adapt
+        "nSmoothDisplacement": 5,
+        "maxFaceThicknessRatio": 1.0,       # unlocked (0.5 was the main bottleneck)
+        "maxThicknessToMedialRatio": 1.0,   # unlocked (0.3 blocked narrow regions)
+        "minMedianAxisAngle": 30,           # allows tighter angles (was 90)
         "nBufferCellsNoExtrude": 0,
-        "nLayerIter": 50,                   # OF typical
-        "nRelaxedIter": 0,                  # relaxed from start (timing not bottleneck)
+        "nLayerIter": 50,
+        "nRelaxedIter": 0,
     },
 }
 

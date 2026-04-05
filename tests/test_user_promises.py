@@ -556,7 +556,7 @@ class TestMeshGoalPresets:
 
         resolved = resolve_mesh_goal({"goal": "routine_hemodynamics", "SNAPPY_SETTINGS": {}})
         assert resolved["addLayers"] is True
-        assert resolved["addLayer"] == 2
+        assert resolved["addLayer"] == 5
         assert resolved["cells_across_span"] == 16
 
     def test_wall_sensitive_higher_resolution(self):
@@ -653,16 +653,20 @@ class TestMeshGoalPresets:
             assert analyzer.snappy_settings["cells_across_span"] == 16
 
     def test_standard_layer_profile_values(self):
-        """Standard layer profile has OF-documented typical values."""
+        """Standard layer profile uses optimised vascular coverage settings."""
         from aortacfd_lib.utils.mesh_constants import LAYER_PROFILES
 
         std = LAYER_PROFILES["standard"]
-        assert std["addLayer"] == 2
-        assert std["nSmoothSurfaceNormals"] == 1  # OF typical
-        assert std["nSmoothNormals"] == 3          # OF typical
-        assert std["nSmoothThickness"] == 10       # OF typical
-        assert std["nLayerIter"] == 50             # OF typical
-        assert std["nRelaxedIter"] == 0            # relaxed from start
+        assert std["addLayer"] == 5
+        assert std["featureAngle"] == 190          # forces layers at junctions
+        assert std["nSmoothSurfaceNormals"] == 10  # sweet spot for curved vessels
+        assert std["nSmoothNormals"] == 5
+        assert std["nSmoothThickness"] == 0        # disabled — each face adapts
+        assert std["maxFaceThicknessRatio"] == 1.0  # unlocked
+        assert std["maxThicknessToMedialRatio"] == 1.0
+        assert std["minMedianAxisAngle"] == 30
+        assert std["nGrow"] == 0
+        assert std["nRelaxedIter"] == 0
 
 
 # ============================================================================
@@ -702,7 +706,7 @@ class TestPublicMeshAPI:
             "SNAPPY_SETTINGS": {},
         })
         assert resolved["addLayers"] is True
-        assert resolved["addLayer"] == 2
+        assert resolved["addLayer"] == 5
 
     def test_layers_mode_off(self):
         """mesh.layers.mode = 'off' disables layers."""

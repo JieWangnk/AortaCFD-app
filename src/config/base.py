@@ -97,27 +97,29 @@ config = {
             #   3 layers: 47% / 23% — lower coverage, higher ortho
             #   1 layer:  99.9% / 45.7% — higher coverage but ortho marginal
             "relativeSizes": True,
-            "addLayer": 2,                      # nSurfaceLayers (evidence: 2 > 3 for coverage)
+            "addLayer": 5,                      # nSurfaceLayers
             "expansionRatio": 1.2,
-            "finalLayerThickness": 0.3,         # sweet spot from thickness sweep
-            "minThickness": 0.01,               # allow thin layers at tight curvature
-            "featureAngle": 150,
+            "finalLayerThickness": 0.3,
+            "minThickness": 0.01,
+            "featureAngle": 190,                # >180 forces layers at sharp junctions
             "slipFeatureAngle": 30,
             "layerTerminationAngle": -180,
 
-            # --- Layer quality (OF-documented typical values) ---
-            "nGrow": 1,
+            # --- Layer quality (optimised for vascular coverage) ---
+            # Strategy C: featureAngle 190 + unlocked ratios + moderate smoothing
+            # Evidence: 51% coverage on BPM120 coarctation (vs 8% with OF defaults)
+            "nGrow": 0,                         # don't delay near features (each face independent)
             "nBufferCellsNoExtrude": 0,
             "addLayers_nRelaxIter": 5,
-            "nSmoothNormals": 3,
-            "nSmoothSurfaceNormals": 1,
-            "nSmoothThickness": 10,
+            "nSmoothNormals": 5,                # moderate internal smoothing
+            "nSmoothSurfaceNormals": 10,        # 10 = sweet spot (1 too rough, 50 washes out)
+            "nSmoothThickness": 0,              # disabled — lets each face adapt thickness
             "nSmoothDisplacement": 5,
-            "maxFaceThicknessRatio": 0.5,
-            "maxThicknessToMedialRatio": 0.3,
-            "minMedianAxisAngle": 90,
+            "maxFaceThicknessRatio": 1.0,       # unlocked (0.5 rejects half the faces)
+            "maxThicknessToMedialRatio": 1.0,   # unlocked (0.3 stops layers in narrow regions)
+            "minMedianAxisAngle": 30,           # allows layers in tighter angles (was 90)
             "nLayerIter": 50,
-            "nRelaxedIter": 0,                  # relaxed from start (evidence: timing not bottleneck)
+            "nRelaxedIter": 0,                  # relaxed from start
 
             # --- Mesh quality controls (strict base) ---
             "maxNonOrtho": 65,
