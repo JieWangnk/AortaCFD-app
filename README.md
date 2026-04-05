@@ -211,53 +211,45 @@ Key risks with turbulence models on aortic meshes:
 
 ## Mesh Resolution
 
-AortaCFD defaults to **adaptive span-based meshing**: a coarse blockMesh background with OpenFOAM 12's `insideSpan` refinement to guarantee minimum cells across the vessel lumen everywhere. This replaces the legacy `cells_per_diameter` approach, reducing blockMesh waste by 80-96% while maintaining or improving mesh quality.
+AortaCFD defaults to **adaptive span-based meshing**: a coarse blockMesh background with OpenFOAM 12's `insideSpan` refinement to guarantee minimum cells across the vessel lumen. This reduces blockMesh waste by 80-96% versus legacy `cells_per_diameter` while maintaining mesh quality. All defaults are evidence-backed from a 114-case HPC study on patient-specific geometries.
 
-### Mesh goal presets (recommended)
+### Configuration levels (simple → advanced)
 
-The simplest way to control meshing is through `mesh_goal`:
+#### Level 1 — Goal preset (recommended)
 
 ```json
-{
-  "mesh": {
-    "goal": "routine_hemodynamics"
-  }
-}
+{ "mesh": { "goal": "routine_hemodynamics" } }
 ```
 
-| Goal | Lumen resolution | Layers | Use case |
-|------|-----------------|--------|----------|
-| `pressure_fast` | 10 cells across span | Off | Quick screening, pressure gradient |
-| `routine_hemodynamics` | 16 cells across span | 3 layers (standard) | Production patient-specific runs |
-| `wall_sensitive` | 22 cells across span | 3 layers (standard) | WSS, OSI, near-wall indices |
+| Goal | Span target | Layers | Surface | Use case |
+|------|------------|--------|---------|----------|
+| `pressure_fast` | 10 | Off | [0, 1] | Quick screening, pressure gradient |
+| `routine_hemodynamics` | 16 | 2 layers | [2, 2] | Production patient-specific runs |
+| `wall_sensitive` | 22 | 2 layers | [2, 2] | WSS, OSI, near-wall indices |
 
-### Direct control
-
-For explicit control, set `cells_across_span` directly:
+#### Level 2 — Explicit resolution
 
 ```json
-{
-  "mesh": {
-    "SNAPPY_SETTINGS": {
-      "cells_across_span": 16,
-      "surfaceRefinementLevels": [1, 2]
-    }
-  }
-}
+{ "mesh": { "span_target": 20 } }
 ```
 
-Final cell count depends on geometry size and complexity — the same `cells_across_span` produces different cell counts on different anatomies. The app reports achieved resolution and cell counts in the post-mesh audit.
+#### Level 3 — Resolution + wall treatment
 
-### Boundary layers
+```json
+{ "mesh": { "span_target": 20, "layers": { "mode": "standard" } } }
+```
 
-Layers are configured through `boundary_layers` or inherited from the goal preset:
+Layer modes: `off` (no layers), `standard` (2 layers, OF-typical quality settings).
+
+#### Level 4 — Fine-tuned layers
 
 ```json
 {
   "mesh": {
-    "boundary_layers": {
+    "span_target": 20,
+    "layers": {
       "enabled": true,
-      "num_layers": 3,
+      "num_layers": 2,
       "expansion_ratio": 1.2,
       "final_layer_thickness": 0.3
     }
@@ -265,29 +257,55 @@ Layers are configured through `boundary_layers` or inherited from the goal prese
 }
 ```
 
-Layer coverage on patient-specific vascular geometry is typically 20-50% under standard quality controls, concentrated on lower-curvature wall segments. For WSS-sensitive studies, verify coverage in the mesh audit report.
+#### Level 5 — Legacy mode
 
-### Legacy mode
+```json
+{ "mesh": { "mode": "legacy", "cells_per_diameter": 15 } }
+```
 
-The old `cells_per_diameter` approach is still supported:
+#### Level 6 — Expert (raw OpenFOAM)
 
 ```json
 {
   "mesh": {
-    "cells_per_diameter": 15,
     "SNAPPY_SETTINGS": {
-      "mesh_strategy": "legacy_surface"
+      "cells_across_span": 20,
+      "surfaceRefinementLevels": [2, 2],
+      "resolveFeatureAngle": 25,
+      "maxNonOrtho": 65,
+      "parallel": true,
+      "nProcessors": 16
     }
   }
 }
 ```
 
+Explicit settings always override presets. `SNAPPY_SETTINGS` maps directly to snappyHexMesh parameters.
+
+### Mesh design rules (from HPC study)
+
+These defaults are based on a 114-case study across BPM120 (coarctation), PAT002 (adult aorta), and VOL04 (large aorta):
+
+- **2 layers instead of 3**: gives higher wall coverage (99.7% vs 47% on PAT002, 29% vs 23% on VOL04)
+- **Surface refinement [2, 2]** when layers enabled: [0, 1] gives 0% layer coverage
+- **`nRelaxedIter = 0`**: relaxing quality controls from the first layer iteration (timing is not the bottleneck)
+- **`finalLayerThickness = 0.3`**: sweet spot — thinner (0.1) gives 0%, thicker (0.6) gives 7%
+- **Relaxed thresholds 75/200/12**: moderate relaxation (70/100/8) gives identical results to strict — stronger relaxation needed for any improvement
+
+Layer coverage on patient-specific geometry is geometry-dependent:
+
+| Geometry type | Expected coverage (2 layers) | Notes |
+|--------------|------------------------------|-------|
+| Moderate complexity | ~100% | PAT002: 99.7% with checkMesh OK |
+| Large adult aorta | ~29% | VOL04: coverage limited by arch curvature |
+| Coarctation | ~30% | BPM120: additional skewness from stenosis |
+
 ### Post-mesh audit
 
-After meshing, AortaCFD writes `reports/mesh_audit.json` with:
+After meshing, AortaCFD writes `reports/mesh_audit.json`:
 - checkMesh quality metrics (maxNonOrtho, maxSkewness)
 - achieved cells-across-lumen proxy at inlet and each outlet
-- verdict: `pass`, `warn`, or `fail` based on OpenFOAM quality thresholds
+- verdict: `pass` (ortho<65, skew<4), `warn` (65-70), or `fail` (>70)
 
 ---
 

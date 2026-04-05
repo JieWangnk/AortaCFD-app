@@ -137,26 +137,29 @@ MESH_GOAL_PRESETS = {
         "mesh_strategy": "adaptive_span",
         "cells_across_span": 10,
         "layers_mode": "off",
-        "surfaceRefinementLevels": [0, 1],
+        "surfaceRefinementLevels": [0, 1],  # no layers → light surface is fine
     },
     "routine_hemodynamics": {
         "description": "Standard patient-specific run — pressure, flow, general hemodynamics",
         "mesh_strategy": "adaptive_span",
         "cells_across_span": 16,
         "layers_mode": "standard",
-        "surfaceRefinementLevels": [0, 1],
+        "surfaceRefinementLevels": [2, 2],  # required for layer insertion
     },
     "wall_sensitive": {
         "description": "WSS, OSI, near-wall indices — higher resolution + wall layers",
         "mesh_strategy": "adaptive_span",
         "cells_across_span": 22,
         "layers_mode": "standard",
-        "surfaceRefinementLevels": [0, 1],
+        "surfaceRefinementLevels": [2, 2],  # required for layer insertion
         "throat_uplift": 4,  # reserved — only applies if throat region is supplied
     },
 }
 
-# Standard 3-layer profile (OF-documented typical values)
+# Layer profiles — evidence-based from 114-case HPC study (April 2026)
+# Key finding: 2 layers >> 3 layers for coverage on patient geometry
+#   PAT002: 99.7% (2 layers) vs 47.2% (3 layers)
+#   VOL04:  28.8% (2 layers) vs 22.9% (3 layers)
 LAYER_PROFILES = {
     "off": {
         "addLayers": False,
@@ -164,21 +167,21 @@ LAYER_PROFILES = {
     },
     "standard": {
         "addLayers": True,
-        "addLayer": 3,
+        "addLayer": 2,                      # 2 layers (not 3) — best coverage/quality
         "relativeSizes": True,
         "expansionRatio": 1.2,
-        "finalLayerThickness": 0.3,
-        "minThickness": 0.1,
+        "finalLayerThickness": 0.3,         # sweet spot from thickness sweep
+        "minThickness": 0.01,               # allow thin at tight curvature
         "nGrow": 1,
-        "nSmoothSurfaceNormals": 1,
-        "nSmoothNormals": 3,
-        "nSmoothThickness": 10,
-        "nSmoothDisplacement": 5,
-        "maxFaceThicknessRatio": 0.5,
-        "maxThicknessToMedialRatio": 0.3,
+        "nSmoothSurfaceNormals": 1,         # OF typical
+        "nSmoothNormals": 3,                # OF typical
+        "nSmoothThickness": 10,             # OF typical
+        "nSmoothDisplacement": 5,           # OF typical
+        "maxFaceThicknessRatio": 0.5,       # OF typical
+        "maxThicknessToMedialRatio": 0.3,   # OF typical
         "nBufferCellsNoExtrude": 0,
-        "nLayerIter": 50,
-        "nRelaxedIter": 20,
+        "nLayerIter": 50,                   # OF typical
+        "nRelaxedIter": 0,                  # relaxed from start (timing not bottleneck)
     },
 }
 

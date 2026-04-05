@@ -45,156 +45,102 @@ config = {
         "default_prandtl": 0.7
     },
     
-    # Mesh defaults - OpenFOAM defaults optimized for high-curvature cardiovascular geometries
-    # Based on: OpenFOAM documentation (openfoam.com/documentation/guides/latest)
-    # Optimized for: coarctations, stenoses, aneurysms, bifurcations, high curvature vessels
-    # Updated: 2025-12-17 - Aligned with OpenFOAM defaults + cardiovascular best practices
+    # ==========================================================================
+    # MESH DEFAULTS
+    # Evidence: 114-case HPC study on BPM120/PAT002/VOL04 (April 2026)
+    # Ref: doc.cfd.direct/openfoam/user-guide-v13/snappyhexmesh
+    # ==========================================================================
     "mesh": {
-        # Mesh goal preset: maps clinical intent to meshing parameters
-        # pressure_fast | routine_hemodynamics | wall_sensitive
-        # Set to None/omit to use explicit settings instead
-        # "goal": "routine_hemodynamics",
 
         "SNAPPY_SETTINGS": {
-            # ==========================================================================
-            # CASTELLATED MESH CONTROLS
-            # Ref: guide-meshing-snappyhexmesh-castellation.html
-            # ==========================================================================
 
-            # Cell count limits
-            "maxLocalCells": 10000000,      # Per-processor hint, triggers balancing when exceeded
-            "maxGlobalCells": 20000000,     # Overall limit before removing unwanted regions
-            "minRefinementCells": 10,       # Halts refinement when cells below this count
-            "maxLoadUnbalance": 0.10,       # Relative cell difference tolerance between processors
+            # --- Strategy ---
+            "mesh_strategy": "adaptive_span",   # adaptive_span | legacy_surface
+            "default_cells_across_span": 12,    # fallback when no explicit resolution
 
-            # Refinement transition
-            "nCellsBetweenLevels": 3,       # OpenFOAM recommended: 3 (balances transitions)
+            # --- Castellated mesh controls ---
+            "maxLocalCells": 10000000,
+            "maxGlobalCells": 20000000,
+            "minRefinementCells": 10,
+            "maxLoadUnbalance": 0.10,
+            "nCellsBetweenLevels": 3,
 
-            # Mesh strategy: 'adaptive_span' uses span-based refinement with coarse
-            # blockMesh; 'legacy_surface' uses cpd-driven blockMesh + fixed surface levels
-            "mesh_strategy": "adaptive_span",   # 'adaptive_span' | 'legacy_surface'
-            "default_cells_across_span": 12,    # fallback target when adaptive_span + no explicit resolution
+            # --- Surface refinement ---
+            # [2,2] when layers enabled (evidence: [0,1] gives 0% layer coverage)
+            # [0,1] when layers off (sufficient for geometry capture)
+            "surfaceRefinementLevels": [2, 2],
 
-            # Surface refinement
-            "surfaceRefinementLevels": [1, 2],  # [min, max] - conservative for cardiovascular
+            # --- Feature detection ---
+            "includedAngle": 170,               # edge detection threshold
+            "resolveFeatureAngle": 30,          # sharp feature refinement
 
-            # Feature edge detection (for surfaceFeatures command)
-            # Features = edges where face angle < includedAngle
-            # Higher value = more edges detected (captures gentle curves at patch junctions)
-            # 170° = detect edges with angle > 10° (good for inlet-wall transitions)
-            "includedAngle": 170,
-
-            # Feature resolution in snappyHexMesh
-            # Threshold angle between surface normals triggering higher refinement
-            "resolveFeatureAngle": 30,      # Typical for cardiovascular (captures branches)
-
-            # Main controls
+            # --- Main controls ---
             "castellatedMesh": True,
             "snap": True,
             "addLayers": True,
 
-            # ==========================================================================
-            # SNAP CONTROLS
-            # Ref: guide-meshing-snappyhexmesh-snapping.html
-            # ==========================================================================
-
-            # Surface smoothing - increased for better quality and to prevent negative volume cells
-            "nSmoothPatch": 5,              # Increased from 3 for better surface quality
-            "nSmoothInternal": 5,           # Internal smoothing to reduce non-orthogonality
-
-            # Snap attraction
-            "snapTolerance": 2.0,           # Increased for better snapping on complex geometry
-
-            # Mesh displacement iterations - increased to prevent negative volume cells
-            "nSolveIter": 100,              # Increased from 10 for complex cardiovascular geometry
-
-            # Relaxation iterations - increased for better quality
-            "nRelaxIter": 10,               # Increased from 5 for better adaptation
-
-            # Feature edge snapping - increased for complex geometry
-            "nFeatureSnapIter": 10,         # Increased from 5 for better feature edge snapping
-
-            # Feature snap modes
-            "implicitFeatureSnap": False,   # Not recommended for complex geometry
-            "explicitFeatureSnap": True,    # Use pre-extracted .eMesh files (recommended)
+            # --- Snap controls ---
+            "nSmoothPatch": 5,
+            "nSmoothInternal": 5,
+            "snapTolerance": 2.0,
+            "nSolveIter": 100,
+            "nRelaxIter": 10,
+            "nFeatureSnapIter": 10,
+            "implicitFeatureSnap": False,
+            "explicitFeatureSnap": True,
             "multiRegionFeatureSnap": False,
 
-            # ==========================================================================
-            # ADD LAYERS CONTROLS
-            # Ref: doc.cfd.direct/openfoam/user-guide-v13/snappyhexmesh
-            # Standard 3-layer profile with OF-documented typical values
-            # ==========================================================================
+            # --- Layer controls ---
+            # Evidence: 2 layers gives best coverage/quality tradeoff
+            #   PAT002: 99.7% coverage with 2 layers (checkMesh OK)
+            #   VOL04:  28.8% coverage with 2 layers (checkMesh OK)
+            #   3 layers: 47% / 23% — lower coverage, higher ortho
+            #   1 layer:  99.9% / 45.7% — higher coverage but ortho marginal
+            "relativeSizes": True,
+            "addLayer": 2,                      # nSurfaceLayers (evidence: 2 > 3 for coverage)
+            "expansionRatio": 1.2,
+            "finalLayerThickness": 0.3,         # sweet spot from thickness sweep
+            "minThickness": 0.01,               # allow thin layers at tight curvature
+            "featureAngle": 150,
+            "slipFeatureAngle": 30,
+            "layerTerminationAngle": -180,
 
-            # Layer sizing mode
-            "relativeSizes": True,          # true = relative to cell size (recommended for adaptive span)
+            # --- Layer quality (OF-documented typical values) ---
+            "nGrow": 1,
+            "nBufferCellsNoExtrude": 0,
+            "addLayers_nRelaxIter": 5,
+            "nSmoothNormals": 3,
+            "nSmoothSurfaceNormals": 1,
+            "nSmoothThickness": 10,
+            "nSmoothDisplacement": 5,
+            "maxFaceThicknessRatio": 0.5,
+            "maxThicknessToMedialRatio": 0.3,
+            "minMedianAxisAngle": 90,
+            "nLayerIter": 50,
+            "nRelaxedIter": 0,                  # relaxed from start (evidence: timing not bottleneck)
 
-            # Layer count and growth — standard profile
-            "addLayer": 3,                  # nSurfaceLayers: 3 for routine hemodynamics
-            "expansionRatio": 1.2,          # OF typical
-            "finalLayerThickness": 0.3,     # Last layer as fraction of cell size
-            "minThickness": 0.1,            # Minimum before termination
+            # --- Mesh quality controls (strict base) ---
+            "maxNonOrtho": 65,
+            "maxBoundarySkewness": 20,
+            "maxInternalSkewness": 4,
+            "maxConcave": 80,
+            "minVol": 1e-18,
+            "minTetQuality": 1e-30,
+            "minArea": 1e-20,
+            "minTwist": 0.01,
+            "minDeterminant": 0.01,
+            "minFaceWeight": 0.02,
+            "minVolRatio": 0.01,
+            "minTriangleTwist": -1,
+            "nSmoothScale": 6,
+            "errorReduction": 0.75,
 
-            # Feature angle controls
-            "featureAngle": 150,            # Conservative for better layer quality
-            "slipFeatureAngle": 30,         # Permit sliding on patches without layers
-            "layerTerminationAngle": -180,  # -180 = attempt extrusion everywhere
-
-            # Growth controls — OF-documented typical values
-            "nGrow": 1,                     # Buffer near features
-            "nBufferCellsNoExtrude": 0,     # Gradual layer termination regions
-            "addLayers_nRelaxIter": 5,      # OF typical
-
-            # Smoothing — OF-documented typical values
-            "nSmoothNormals": 3,            # OF typical (was 5)
-            "nSmoothSurfaceNormals": 1,     # OF typical (was 30)
-            "nSmoothThickness": 10,         # OF typical (was 15)
-            "nSmoothDisplacement": 5,       # OF typical (was 15)
-
-            # Thickness ratio controls — OF-documented typical values
-            "maxFaceThicknessRatio": 0.5,   # OF typical (was 0.4)
-            "maxThicknessToMedialRatio": 0.3,  # OF typical (was 0.25)
-            "minMedianAxisAngle": 90,       # OF typical
-
-            # Iteration limits — OF-documented typical values
-            "nLayerIter": 50,               # OF typical (was 100)
-            "nRelaxedIter": 20,             # OF typical (was 50)
-
-            # ==========================================================================
-            # MESH QUALITY CONTROLS
-            # Ref: guide-meshing-snappyhexmesh-meshquality.html
-            # Tightened to prevent negative volume cells in complex cardiovascular geometry
-            # ==========================================================================
-
-            # Non-orthogonality (angle between cell center vector and face normal)
-            # < 65°: no correctors needed
-            # 65-75°: 1 corrector
-            # > 85°: likely divergence
-            "maxNonOrtho": 65,              # OF default — 60 blocks layer insertion on patient geometry
-
-            # Skewness
-            "maxBoundarySkewness": 20,      # OF default (was 4 — too strict for layers)
-            "maxInternalSkewness": 4,       # Keep strict for solver stability
-
-            # Cell shape quality - tightened to prevent negative volume cells
-            "maxConcave": 80,               # OpenFOAM default: 80°
-            "minVol": 1e-18,                # Tightened from 1e-13 to prevent negative volume
-            "minTetQuality": 1e-30,         # Tighter tet quality
-            "minArea": 1e-20,               # Positive minimum area (was -1 disabled)
-            "minTwist": 0.01,               # Tightened from 0.02 for better quality
-            "minDeterminant": 0.01,         # Tightened from 0.001 for cell quality
-            "minFaceWeight": 0.02,          # Tightened from 0.05 for better face weighting
-            "minVolRatio": 0.01,            # OpenFOAM default: 0.01
-            "minTriangleTwist": -1,         # -1 = disabled
-
-            # Smoothing and error reduction - increased iterations
-            "nSmoothScale": 6,              # Increased from 4 for more smoothing
-            "errorReduction": 0.75,         # OpenFOAM default: 0.75
-
-            # Relaxed quality controls (used during layer addition after nRelaxedIter)
-            # Still tighter than before to prevent quality issues
-            "relaxed_maxNonOrtho": 70,
-            "relaxed_maxBoundarySkewness": 10,
-            "relaxed_maxInternalSkewness": 6,
+            # --- Relaxed quality (used from nRelaxedIter=0, layer insertion only) ---
+            # Evidence: moderate relaxation (70/100/8) same as strict
+            # Stronger relaxation needed for any coverage improvement
+            "relaxed_maxNonOrtho": 75,
+            "relaxed_maxBoundarySkewness": 200,
+            "relaxed_maxInternalSkewness": 12,
             "relaxed_minDeterminant": 0.001,
             "relaxed_minVol": 1e-20
         }

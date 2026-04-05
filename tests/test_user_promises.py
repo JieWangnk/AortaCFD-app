@@ -556,7 +556,7 @@ class TestMeshGoalPresets:
 
         resolved = resolve_mesh_goal({"goal": "routine_hemodynamics", "SNAPPY_SETTINGS": {}})
         assert resolved["addLayers"] is True
-        assert resolved["addLayer"] == 3
+        assert resolved["addLayer"] == 2
         assert resolved["cells_across_span"] == 16
 
     def test_wall_sensitive_higher_resolution(self):
@@ -657,12 +657,12 @@ class TestMeshGoalPresets:
         from aortacfd_lib.utils.mesh_constants import LAYER_PROFILES
 
         std = LAYER_PROFILES["standard"]
-        assert std["addLayer"] == 3
+        assert std["addLayer"] == 2
         assert std["nSmoothSurfaceNormals"] == 1  # OF typical
         assert std["nSmoothNormals"] == 3          # OF typical
         assert std["nSmoothThickness"] == 10       # OF typical
         assert std["nLayerIter"] == 50             # OF typical
-        assert std["nRelaxedIter"] == 20           # OF typical
+        assert std["nRelaxedIter"] == 0            # relaxed from start
 
 
 # ============================================================================
@@ -702,7 +702,7 @@ class TestPublicMeshAPI:
             "SNAPPY_SETTINGS": {},
         })
         assert resolved["addLayers"] is True
-        assert resolved["addLayer"] == 3
+        assert resolved["addLayer"] == 2
 
     def test_layers_mode_off(self):
         """mesh.layers.mode = 'off' disables layers."""
