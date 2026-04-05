@@ -534,25 +534,35 @@ class GeometryAnalyzer:
                             f"      Consider increasing span_refinement_level to {span_level + 1}"
                         )
                 else:
-                    # Auto-calculate optimal span_level using shared planner
+                    # Auto-calculate optimal span_level using geometry-adaptive planner
                     from .utils.mesh_constants import plan_span_background
 
-                    plan = plan_span_background(cells_across_span)
+                    # Compute diameter ratio for multi-scale geometry awareness
+                    all_radii = [r for r in [self.reference_radius_m] + self.outlet_radii
+                                 if r and r > 0]
+                    if len(all_radii) >= 2:
+                        diameter_ratio = max(all_radii) / min(all_radii)
+                    else:
+                        diameter_ratio = 1.0
+
+                    plan = plan_span_background(cells_across_span, diameter_ratio=diameter_ratio)
                     blockmesh_cells_per_d = plan['background_cpd']
                     span_level = plan['span_level']
                     span_multiplier = 2 ** span_level
                     achievable_cells = plan['theoretical_cells_across']
+                    achievable_min = plan.get('achievable_at_min_branch', 0)
 
                     if plan['warning']:
                         self.log.warning(plan['warning'])
 
                     self.log.info(
-                        f"SPAN REFINEMENT: Planner output\n"
+                        f"SPAN REFINEMENT: Geometry-adaptive planner\n"
                         f"  Target: {cells_across_span} cells across span\n"
+                        f"  Diameter ratio: {diameter_ratio:.1f} (max/min vessel)\n"
                         f"  Background: {blockmesh_cells_per_d} cells/D\n"
                         f"  Span level: {span_level} (2^{span_level} = {span_multiplier}x)\n"
-                        f"  Surface refinement level: {surface_level} (separate, near-surface only)\n"
-                        f"  Theoretical: {achievable_cells} cells across span"
+                        f"  At reference vessel: {achievable_cells} cells across\n"
+                        f"  At smallest branch: {achievable_min:.1f} cells across"
                     )
 
                 cell_size_m = D_ref_m / blockmesh_cells_per_d

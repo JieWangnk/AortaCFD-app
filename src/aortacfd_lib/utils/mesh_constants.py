@@ -303,63 +303,108 @@ def resolve_mesh_goal(mesh_config: dict) -> dict:
 
 # Background blockMesh limits (cells per reference diameter)
 MIN_BLOCKMESH_CPD = 4   # Below this, snappy struggles with castellated mesh quality
-MAX_BLOCKMESH_CPD = 8   # Above this, cubic scaling waste becomes significant
+MAX_BLOCKMESH_CPD = 12  # Upper search bound (12 still much less than legacy full-cpd)
+
+# Candidate scoring weights
+_W_LEVEL = 3.0      # heavily penalise deep refinement (transition cost)
+_W_BG = 1.0         # prefer moderate background (not too coarse or fine)
+_W_OVERSHOOT = 0.5  # prefer not overshooting the target
+_BG_IDEAL = 6       # ideal background cpd for scoring
 
 
 def plan_span_background(
     cells_across_span: int,
+    diameter_ratio: float = 1.0,
     min_blockmesh: int = MIN_BLOCKMESH_CPD,
     max_blockmesh: int = MAX_BLOCKMESH_CPD,
     max_span_level: int = 4,
 ) -> dict:
     """
-    Determine coarse background cpd and span refinement level to achieve
-    a target cells-across-span.
+    Geometry-adaptive planner: search feasible (bg_cpd, level) candidates
+    and select the least aggressive pair that can satisfy the span target
+    at both the reference vessel and the smallest relevant branch.
 
-    Strategy: find the lowest span_level where the required background cpd
-    falls within [min_blockmesh, max_blockmesh]. This minimises refinement
-    depth while keeping blockMesh coarse.
+    The planner accounts for the vessel diameter range: geometries with
+    large diameter ratios (e.g., aorta with small branches) need deeper
+    refinement or denser backgrounds to resolve the smallest lumen.
 
     Args:
         cells_across_span: Target cells across vessel lumen
+        diameter_ratio: D_ref / D_min (1.0 = uniform diameter, >1 = multi-scale)
         min_blockmesh: Minimum background cells/D (quality floor)
-        max_blockmesh: Maximum background cells/D (waste ceiling)
-        max_span_level: Maximum span refinement level to try
+        max_blockmesh: Maximum background cells/D (search ceiling)
+        max_span_level: Maximum span refinement level to search
 
     Returns:
         dict with keys:
-            background_cpd: int — coarse blockMesh cells per diameter
-            span_level: int — insideSpan refinement level
-            theoretical_cells_across: int — bg_cpd * 2^span_level
-            warning: str or None — set if target exceeds preferred range
+            background_cpd: int
+            span_level: int
+            theoretical_cells_across: int — bg_cpd * 2^span_level (at reference diameter)
+            achievable_at_min_branch: float — estimated cells across smallest branch
+            warning: str or None
     """
-    best = None
-    for try_level in range(1, max_span_level + 1):
-        mult = 2 ** try_level
-        required_bg = int(math.ceil(cells_across_span / mult))
-        if min_blockmesh <= required_bg <= max_blockmesh:
-            best = (required_bg, try_level)
-            break
+    T = cells_across_span
+    R = max(1.0, diameter_ratio)
 
-    if best is None:
-        # Edge case: target too high or too low for preferred range
-        required_at_max = int(math.ceil(cells_across_span / (2 ** max_span_level)))
-        chosen_bg = max(min_blockmesh, min(required_at_max, max_blockmesh))
-        best = (chosen_bg, max_span_level)
+    # Generate and score all feasible candidates
+    candidates = []
+    for level in range(1, max_span_level + 1):
+        mult = 2 ** level
+        for bg in range(min_blockmesh, max_blockmesh + 1):
+            theoretical = bg * mult
+            if theoretical < T:
+                continue  # can't achieve target at reference diameter
+
+            # Estimate cells across the smallest branch
+            # bg is cells/D at reference diameter; at smallest branch it's bg/R
+            bg_at_min = bg / R
+            achievable_min = bg_at_min * mult
+
+            # Score: prefer lowest level, moderate bg, minimal overshoot
+            score = (
+                _W_LEVEL * level
+                + _W_BG * abs(bg - _BG_IDEAL)
+                + _W_OVERSHOOT * (theoretical / T - 1.0)
+            )
+
+            passes_branch = achievable_min >= T * 0.7
+
+            candidates.append({
+                "bg": bg,
+                "level": level,
+                "theoretical": theoretical,
+                "achievable_min": round(achievable_min, 1),
+                "passes_branch": passes_branch,
+                "score": round(score, 2),
+            })
+
+    # Pick best: first try candidates that pass the branch threshold
+    passing = [c for c in candidates if c["passes_branch"]]
+
+    if passing:
+        best = min(passing, key=lambda c: c["score"])
+        warning = None
+    elif candidates:
+        # No candidate fully satisfies branches — pick best coverage
+        best = max(candidates, key=lambda c: c["achievable_min"])
         warning = (
-            f"cells_across_span={cells_across_span} exceeds preferred background/span range; "
-            f"using capped background={chosen_bg} with span_level={max_span_level}"
+            f"No (bg_cpd, level) combination fully resolves smallest branch "
+            f"(diameter_ratio={R:.1f}). Best achievable: {best['achievable_min']:.1f} "
+            f"cells across (target {T}). Consider reducing span target or "
+            f"accepting lower resolution at small branches."
         )
     else:
-        warning = None
-
-    bg_cpd, span_level = best
-    theoretical = bg_cpd * (2 ** span_level)
+        # Absolute fallback
+        best = {"bg": min_blockmesh, "level": max_span_level,
+                "theoretical": min_blockmesh * (2 ** max_span_level),
+                "achievable_min": 0, "score": 999}
+        warning = f"cells_across_span={T} with diameter_ratio={R:.1f} exceeds planner range."
 
     return {
-        "background_cpd": bg_cpd,
-        "span_level": span_level,
-        "theoretical_cells_across": theoretical,
+        "background_cpd": best["bg"],
+        "span_level": best["level"],
+        "theoretical_cells_across": best["theoretical"],
+        "achievable_at_min_branch": best.get("achievable_min", 0),
         "warning": warning,
     }
 

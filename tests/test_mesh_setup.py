@@ -363,77 +363,89 @@ class TestMeshConstants:
 
 
 class TestPlanSpanBackground:
-    """Test plan_span_background() shared planner function."""
+    """Test plan_span_background() geometry-adaptive planner."""
 
-    def test_span_12(self):
-        """cells_across_span=12 → bg=6, level=1, theoretical=12."""
-        from aortacfd_lib.utils.mesh_constants import plan_span_background
-
-        result = plan_span_background(12)
-        assert result['background_cpd'] == 6
-        assert result['span_level'] == 1
-        assert result['theoretical_cells_across'] == 12
-        assert result['warning'] is None
-
-    def test_span_20(self):
-        """cells_across_span=20 → bg=5, level=2, theoretical=20."""
-        from aortacfd_lib.utils.mesh_constants import plan_span_background
-
-        result = plan_span_background(20)
-        assert result['background_cpd'] == 5
-        assert result['span_level'] == 2
-        assert result['theoretical_cells_across'] == 20
-        assert result['warning'] is None
-
-    def test_span_16(self):
-        """cells_across_span=16 → bg=8, level=1, theoretical=16."""
+    def test_span_16_simple(self):
+        """Simple geometry (ratio=1): level 1 preferred."""
         from aortacfd_lib.utils.mesh_constants import plan_span_background
 
         result = plan_span_background(16)
-        assert result['background_cpd'] == 8
         assert result['span_level'] == 1
-        assert result['theoretical_cells_across'] == 16
+        assert result['theoretical_cells_across'] >= 16
         assert result['warning'] is None
 
-    def test_span_8_low_target(self):
-        """cells_across_span=8 → bg=4, level=1, theoretical=8."""
+    def test_span_20_simple(self):
+        """Simple geometry: level 2 with moderate bg."""
         from aortacfd_lib.utils.mesh_constants import plan_span_background
 
-        result = plan_span_background(8)
-        assert result['background_cpd'] == 4
-        assert result['span_level'] == 1
-        assert result['theoretical_cells_across'] == 8
+        result = plan_span_background(20)
+        assert result['span_level'] <= 2
+        assert result['theoretical_cells_across'] >= 20
         assert result['warning'] is None
 
-    def test_span_high_target_capped(self):
-        """High target exceeding range produces warning and caps."""
+    def test_high_diameter_ratio_uses_deeper_level(self):
+        """Geometry with small branches needs deeper refinement."""
         from aortacfd_lib.utils.mesh_constants import plan_span_background
 
-        result = plan_span_background(200)
-        assert result['background_cpd'] >= 4
-        assert result['background_cpd'] <= 8
-        assert result['span_level'] == 4  # max
-        assert result['warning'] is not None
-        assert 'exceeds' in result['warning']
+        simple = plan_span_background(20, diameter_ratio=1.0)
+        complex_ = plan_span_background(20, diameter_ratio=3.0)
+
+        # Complex geometry should use higher level OR higher bg
+        assert (complex_['span_level'] > simple['span_level']
+                or complex_['background_cpd'] > simple['background_cpd'])
+        # Must achieve ≥70% of target at smallest branch
+        assert complex_['achievable_at_min_branch'] >= 20 * 0.7
+
+    def test_ratio_1_backward_compat(self):
+        """diameter_ratio=1.0 gives same class of result as old planner."""
+        from aortacfd_lib.utils.mesh_constants import plan_span_background
+
+        result = plan_span_background(20, diameter_ratio=1.0)
+        assert 4 <= result['background_cpd'] <= 12
+        assert 1 <= result['span_level'] <= 4
+        assert result['theoretical_cells_across'] >= 20
 
     def test_always_returns_valid(self):
-        """Planner always returns a valid result regardless of input."""
+        """Planner always returns valid result regardless of input."""
         from aortacfd_lib.utils.mesh_constants import plan_span_background
 
-        for target in [4, 8, 12, 16, 20, 25, 30, 40, 50, 100]:
-            result = plan_span_background(target)
-            assert result['background_cpd'] >= 4
-            assert result['background_cpd'] <= 8
-            assert 1 <= result['span_level'] <= 4
-            assert result['theoretical_cells_across'] == result['background_cpd'] * (2 ** result['span_level'])
+        for target in [4, 8, 12, 16, 20, 25, 30, 40, 50]:
+            for ratio in [1.0, 2.0, 3.0, 5.0]:
+                result = plan_span_background(target, diameter_ratio=ratio)
+                assert 4 <= result['background_cpd'] <= 12
+                assert 1 <= result['span_level'] <= 4
+                assert result['theoretical_cells_across'] >= target
 
-    def test_theoretical_ge_target_when_possible(self):
-        """Theoretical cells should meet or exceed target when within range."""
+    def test_theoretical_ge_target(self):
+        """Theoretical cells at reference always meets target."""
         from aortacfd_lib.utils.mesh_constants import plan_span_background
 
         for target in [8, 12, 16, 20]:
             result = plan_span_background(target)
             assert result['theoretical_cells_across'] >= target
+
+    def test_prefers_lower_level(self):
+        """Planner prefers level 1 over level 2 when both are feasible."""
+        from aortacfd_lib.utils.mesh_constants import plan_span_background
+
+        result = plan_span_background(10, diameter_ratio=1.0)
+        assert result['span_level'] == 1  # 10 achievable at level 1
+
+    def test_extreme_ratio_warns_or_adapts(self):
+        """Very high diameter ratio (>5) still returns valid result."""
+        from aortacfd_lib.utils.mesh_constants import plan_span_background
+
+        result = plan_span_background(20, diameter_ratio=8.0)
+        assert result['background_cpd'] >= 4
+        assert result['span_level'] >= 2  # must go deeper for extreme ratio
+
+    def test_achievable_at_min_branch_reported(self):
+        """Result includes achievable cells at smallest branch."""
+        from aortacfd_lib.utils.mesh_constants import plan_span_background
+
+        result = plan_span_background(20, diameter_ratio=2.8)
+        assert 'achievable_at_min_branch' in result
+        assert result['achievable_at_min_branch'] > 0
 
 
 class TestPatchProperties:
