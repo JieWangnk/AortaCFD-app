@@ -614,7 +614,7 @@ Mesh OK.
 
             cell_count = runner._get_cell_count(case_dir)
 
-            assert cell_count == 1000000  # Fallback value
+            assert cell_count == 0  # Returns 0 when no mesh data available
 
 
 class TestGenerateConvergenceReport:

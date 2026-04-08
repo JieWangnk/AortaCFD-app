@@ -508,143 +508,297 @@ class MeshConvergenceRunner:
 
         return quantities
 
+    def _read_postprocessing_pressure(self, case_dir: Path, patch_name: str) -> list:
+        """Read area-averaged pressure time series from postProcessing."""
+        # Try common naming patterns: patchPressure, {patch}Pressure
+        candidates = [
+            case_dir / 'postProcessing' / f'{patch_name}Pressure' / '0' / 'surfaceFieldValue.dat',
+            case_dir / 'postProcessing' / f'{patch_name}' / '0' / 'surfaceFieldValue.dat',
+        ]
+        for dat_path in candidates:
+            if dat_path.exists():
+                times, vals = [], []
+                with open(dat_path) as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith('#') or not line:
+                            continue
+                        parts = line.split()
+                        times.append(float(parts[0]))
+                        vals.append(float(parts[1]))
+                return list(zip(times, vals))
+        return []
+
+    def _find_outlet_patches(self, case_dir: Path) -> list:
+        """Find all outlet patch names from postProcessing directories."""
+        pp = case_dir / 'postProcessing'
+        if not pp.exists():
+            return []
+        outlets = []
+        for d in sorted(pp.iterdir()):
+            name = d.name
+            if 'outlet' in name.lower() and 'pressure' in name.lower():
+                # Extract patch name: "outlet1Pressure" → "outlet1", "PAT003outlet1Pressure" → "PAT003outlet1"
+                patch = name.replace('Pressure', '')
+                outlets.append(patch)
+        return outlets
+
     def _compute_pressure_drop(self, case_dir: Path) -> float:
         """
-        Compute mean pressure drop using OpenFOAM postProcess.
+        Compute pressure drop from postProcessing area-averaged pressure data.
 
-        Extracts patch-averaged pressure at inlet and outlets, computes difference.
+        Returns ΔP (kinematic, m²/s²) between inlet and the last outlet
+        (descending aorta) at peak systole of the final cardiac cycle.
         """
         try:
-            # Get latest time
-            times = self._get_time_directories(case_dir)
-            if not times:
-                self.logger.warning(f"No time directories found in {case_dir}")
+            # Find inlet patch name
+            pp = case_dir / 'postProcessing'
+            if not pp.exists():
+                self.logger.warning(f"No postProcessing directory in {case_dir}")
                 return 0.0
 
-            latest_time = max(times)
+            # Find inlet
+            inlet_patch = None
+            for d in pp.iterdir():
+                if 'inlet' in d.name.lower() and 'pressure' in d.name.lower():
+                    inlet_patch = d.name.replace('Pressure', '')
+                    break
 
-            # Read pressure field
-            p_file = case_dir / str(latest_time) / 'p'
-            if not p_file.exists():
-                self.logger.warning(f"Pressure file not found: {p_file}")
+            if not inlet_patch:
+                self.logger.warning("No inlet pressure postProcessing found")
                 return 0.0
 
-            # Parse boundary field (simplified - reads inlet/outlet patches)
-            # In production, use foamDictionary or postProcess utilities
-            with open(p_file, 'r') as f:
-                content = f.read()
+            inlet_data = self._read_postprocessing_pressure(case_dir, inlet_patch)
+            if not inlet_data:
+                self.logger.warning(f"No pressure data for {inlet_patch}")
+                return 0.0
 
-            # Extract inlet and outlet1 values (simplified parsing)
-            import re
-            inlet_match = re.search(r'inlet\s*\{[^}]*uniform\s+([-\d.e]+)', content)
-            outlet_match = re.search(r'outlet1\s*\{[^}]*uniform\s+([-\d.e]+)', content)
+            # Find last outlet (descending aorta = highest-numbered outlet)
+            outlets = self._find_outlet_patches(case_dir)
+            if not outlets:
+                self.logger.warning("No outlet pressure postProcessing found")
+                return 0.0
+            desc_aorta = outlets[-1]  # last outlet = descending aorta
 
-            if inlet_match and outlet_match:
-                p_inlet = float(inlet_match.group(1))
-                p_outlet = float(outlet_match.group(1))
-                return abs(p_inlet - p_outlet)
+            outlet_data = self._read_postprocessing_pressure(case_dir, desc_aorta)
+            if not outlet_data:
+                self.logger.warning(f"No pressure data for {desc_aorta}")
+                return 0.0
 
-            # Fallback: use placeholder
-            self.logger.warning("Could not extract pressure values, using placeholder")
-            return 10.0
+            # Find peak inlet pressure in final cycle
+            max_t = max(t for t, _ in inlet_data)
+            cycle_period = self.config.get('cardiac_cycle', self.config.get('simulation_control', {}).get('cardiac_cycle_period', 1.0))
+            cycle_start = max_t - cycle_period
+
+            final_cycle = [(t, p) for t, p in inlet_data if t >= cycle_start]
+            if not final_cycle:
+                final_cycle = inlet_data
+
+            t_peak, p_peak_inlet = max(final_cycle, key=lambda x: x[1])
+
+            # Get outlet pressure at peak time
+            closest_outlet = min(outlet_data, key=lambda x: abs(x[0] - t_peak))
+            p_outlet = closest_outlet[1]
+
+            delta_p = p_peak_inlet - p_outlet
+            self.logger.info(f"  ΔP at t={t_peak:.4f}: inlet={p_peak_inlet:.4f} - {desc_aorta}={p_outlet:.4f} = {delta_p:.4f} m²/s²")
+            return delta_p
 
         except Exception as e:
             self.logger.error(f"Error computing pressure drop: {e}")
-            return 10.0
+            return 0.0
 
     def _compute_avg_velocity(self, case_dir: Path) -> float:
         """
-        Compute volume-averaged velocity magnitude.
+        Compute mean inlet velocity at peak systole from boundaryData.
 
-        Uses volAverage postProcess function if available, otherwise estimates.
+        Falls back to flow rate postProcessing if boundaryData unavailable.
+        """
+        try:
+            # Try patchFlowRate postProcessing
+            pp = case_dir / 'postProcessing'
+            if pp.exists():
+                for d in pp.iterdir():
+                    if 'inlet' in d.name.lower() and 'flow' in d.name.lower():
+                        dat = d / '0' / 'surfaceFieldValue.dat'
+                        if dat.exists():
+                            data = []
+                            with open(dat) as f:
+                                for line in f:
+                                    line = line.strip()
+                                    if line.startswith('#') or not line:
+                                        continue
+                                    parts = line.split()
+                                    data.append((float(parts[0]), abs(float(parts[1]))))
+                            if data:
+                                # Get inlet area from pressure postProcessing header
+                                inlet_area = self._get_patch_area(case_dir, 'inlet')
+                                peak_q = max(v for _, v in data)
+                                if inlet_area > 0:
+                                    return peak_q / inlet_area
+                                return peak_q / 1e-4  # rough fallback
+
+            # Fallback: read boundaryData velocity
+            bd = case_dir / 'constant' / 'boundaryData'
+            if bd.exists():
+                for inlet_dir in bd.iterdir():
+                    if 'inlet' in inlet_dir.name.lower():
+                        pts_file = inlet_dir / 'points'
+                        if not pts_file.exists():
+                            continue
+                        with open(pts_file) as f:
+                            n_pts = int(f.readline().strip())
+                        # Find peak velocity in first cycle
+                        best_u = 0.0
+                        time_dirs = sorted(
+                            [d for d in inlet_dir.iterdir() if d.is_dir() and d.name[0].isdigit()],
+                            key=lambda x: float(x.name)
+                        )
+                        for td in time_dirs[:50]:  # sample first 50 time steps
+                            u_file = td / 'U'
+                            if not u_file.exists():
+                                continue
+                            vels = []
+                            with open(u_file) as f:
+                                for line in f:
+                                    line = line.strip().strip('()')
+                                    if line and line[0] in '(-0123456789':
+                                        parts = line.split()
+                                        if len(parts) == 3:
+                                            try:
+                                                mag = (float(parts[0])**2 + float(parts[1])**2 + float(parts[2])**2)**0.5
+                                                vels.append(mag)
+                                            except ValueError:
+                                                pass
+                            if len(vels) == n_pts:
+                                u_avg = sum(vels) / len(vels)
+                                best_u = max(best_u, u_avg)
+                        if best_u > 0:
+                            return best_u
+            return 0.0
+        except Exception as e:
+            self.logger.error(f"Error computing velocity: {e}")
+            return 0.0
+
+    def _get_patch_area(self, case_dir: Path, patch_keyword: str) -> float:
+        """Extract patch area from postProcessing surfaceFieldValue header."""
+        pp = case_dir / 'postProcessing'
+        if not pp.exists():
+            return 0.0
+        for d in pp.iterdir():
+            if patch_keyword in d.name.lower() and 'pressure' in d.name.lower():
+                dat = d / '0' / 'surfaceFieldValue.dat'
+                if dat.exists():
+                    with open(dat) as f:
+                        for line in f:
+                            if 'Area' in line:
+                                return float(line.split(':')[-1].strip())
+        return 0.0
+
+    def _compute_avg_wss(self, case_dir: Path) -> float:
+        """
+        Compute surface-averaged WSS magnitude from the wallShearStress field
+        at the last saved time step.
         """
         try:
             times = self._get_time_directories(case_dir)
             if not times:
-                return 0.5
+                return 0.0
 
             latest_time = max(times)
-            U_file = case_dir / str(latest_time) / 'U'
+            wss_file = case_dir / str(latest_time) / 'wallShearStress'
 
-            if U_file.exists():
-                # Read inlet velocity as proxy for avg velocity
-                with open(U_file, 'r') as f:
-                    content = f.read()
+            if not wss_file.exists():
+                self.logger.warning(f"wallShearStress field not found at t={latest_time}")
+                return 0.0
 
-                import re
-                inlet_match = re.search(r'inlet\s*\{[^}]*uniform\s*\(\s*([-\d.e]+)\s+([-\d.e]+)\s+([-\d.e]+)\s*\)', content)
+            # Parse wallShearStress vector field on wall patch
+            import re
+            with open(wss_file, 'rb') as f:
+                content = f.read().decode('ascii', errors='ignore')
 
-                if inlet_match:
-                    ux, uy, uz = map(float, inlet_match.groups())
-                    return (ux**2 + uy**2 + uz**2)**0.5
+            # Find wall patch data (look for the wall boundary)
+            wall_patterns = ['wall_aorta', 'wall']
+            for wall_name in wall_patterns:
+                idx = content.find(wall_name)
+                if idx >= 0:
+                    # Extract vectors after this patch
+                    block = content[idx:idx+50000]
+                    vectors = re.findall(r'\(\s*([-\d.e]+)\s+([-\d.e]+)\s+([-\d.e]+)\s*\)', block)
+                    if vectors:
+                        mags = [(float(x)**2 + float(y)**2 + float(z)**2)**0.5 for x, y, z in vectors]
+                        avg = sum(mags) / len(mags)
+                        self.logger.info(f"  WSS from {len(mags)} wall faces: avg={avg:.4f} Pa")
+                        return avg
 
-            return 0.5
-
-        except Exception as e:
-            self.logger.error(f"Error computing velocity: {e}")
-            return 0.5
-
-    def _compute_avg_wss(self, case_dir: Path) -> float:
-        """
-        Compute surface-averaged WSS.
-
-        Requires wallShearStress function object to be executed.
-        """
-        try:
-            # Check for wallShearStress postProcessing directory
-            wss_dir = case_dir / 'postProcessing' / 'wallShearStress'
-
-            if wss_dir.exists():
-                # Find latest time
-                time_dirs = [d for d in wss_dir.iterdir() if d.is_dir()]
-                if time_dirs:
-                    latest = max(time_dirs, key=lambda x: float(x.name))
-                    wss_file = latest / 'wallShearStress.dat'
-
-                    if wss_file.exists():
-                        # Parse WSS data (simplified)
-                        with open(wss_file, 'r') as f:
-                            lines = f.readlines()
-                            # Average WSS values (placeholder parsing)
-                            return 1.5
-
-            return 1.5
+            self.logger.warning("Could not parse wallShearStress field")
+            return 0.0
 
         except Exception as e:
             self.logger.error(f"Error computing WSS: {e}")
-            return 1.5
+            return 0.0
 
     def _compute_peak_wss(self, case_dir: Path) -> float:
-        """Compute peak WSS (placeholder)."""
-        return 3.5
+        """Compute 99th percentile WSS from wallShearStress field."""
+        try:
+            times = self._get_time_directories(case_dir)
+            if not times:
+                return 0.0
+
+            latest_time = max(times)
+            wss_file = case_dir / str(latest_time) / 'wallShearStress'
+
+            if not wss_file.exists():
+                return 0.0
+
+            import re
+            with open(wss_file, 'rb') as f:
+                content = f.read().decode('ascii', errors='ignore')
+
+            wall_patterns = ['wall_aorta', 'wall']
+            for wall_name in wall_patterns:
+                idx = content.find(wall_name)
+                if idx >= 0:
+                    block = content[idx:idx+50000]
+                    vectors = re.findall(r'\(\s*([-\d.e]+)\s+([-\d.e]+)\s+([-\d.e]+)\s*\)', block)
+                    if vectors:
+                        mags = sorted([(float(x)**2 + float(y)**2 + float(z)**2)**0.5 for x, y, z in vectors])
+                        p99_idx = int(0.99 * len(mags))
+                        return mags[p99_idx]
+            return 0.0
+
+        except Exception as e:
+            self.logger.error(f"Error computing peak WSS: {e}")
+            return 0.0
 
     def _get_cell_count(self, case_dir: Path) -> int:
-        """
-        Get total cell count from checkMesh log.
-        """
+        """Get total cell count from polyMesh/owner or checkMesh log."""
         try:
-            # Look for checkMesh log
-            log_file = case_dir / 'logs' / 'log.checkMesh'
-            if not log_file.exists():
-                # Fallback to old location for compatibility
-                log_file = case_dir / 'log.checkMesh'
-
-            if log_file.exists():
-                with open(log_file, 'r') as f:
-                    content = f.read()
-
-                # Extract cell count
+            # Primary: read from polyMesh/owner header
+            owner = case_dir / 'constant' / 'polyMesh' / 'owner'
+            if owner.exists():
                 import re
-                match = re.search(r'cells:\s+(\d+)', content)
+                with open(owner, 'rb') as f:
+                    header = f.read(2000).decode('ascii', errors='ignore')
+                match = re.search(r'nCells:(\d+)', header)
                 if match:
                     return int(match.group(1))
 
-            # Fallback: estimate from cpd
-            return 1000000
+            # Fallback: checkMesh log
+            for log_path in [case_dir / 'logs' / 'log.checkMesh', case_dir / 'log.checkMesh']:
+                if log_path.exists():
+                    import re
+                    with open(log_path) as f:
+                        content = f.read()
+                    match = re.search(r'cells:\s+(\d+)', content)
+                    if match:
+                        return int(match.group(1))
+
+            return 0
 
         except Exception as e:
             self.logger.error(f"Error getting cell count: {e}")
-            return 1000000
+            return 0
 
     def _compute_representative_h(self, case_dir: Path) -> float:
         """
