@@ -68,6 +68,20 @@ system/meshQualityDict
 PyFoam*
 *.gz
 
+# Development/testing case configs (keep only production configs tracked)
+cases_input/PAT003/
+cases_input/G[0-9]*/
+cases_input/*/config_newmesh*.json
+cases_input/*/config_mesh[0-9]*.json
+cases_input/*/config_gci*.json
+cases_input/*/config_split*.json
+cases_input/*/config_betaT*.json
+cases_input/*/config_cpd*.json
+cases_input/BPM120/L[0-9]_*.json
+cases_input/BPM120/L_sp*.json
+cases_input/BPM120/layer_test/
+cases_input/BPM120/mesh_configs/
+
 # Output files
 output/
 results/
