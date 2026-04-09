@@ -2,20 +2,27 @@
 
 Quick validation cases to verify your installation produces correct results.
 
-## Quick validation (~5 min on 8 cores)
+## Quick validation (~1 hour on 4 cores, ~20 min on 8 cores)
 
 ```bash
 python run_patient.py BPM120 --config cases_input/BPM120/config_tutorial_coarse.json --steps all
 ```
 
+This runs 1 cardiac cycle on a coarse mesh (~110K cells, cpd=12, 4 cores).
+
 ### Expected outputs (BPM120 coarse, standard profile)
 
 | Metric | Expected | Tolerance |
 |--------|----------|-----------|
-| Mesh cells | 30K-50K | Depends on geometry adaptive planner |
-| Simulation completes | 3 cycles (1.5s) | Must not diverge |
-| Pressure drop (cycle-avg) | ~11 mmHg | +/-20% (coarse mesh) |
-| TAWSS computed | Yes | Check `output/BPM120/*/openfoam/postProcessing/wallShearStress/` |
+| Mesh cells | ~110K | cpd=12 with 3 boundary layers |
+| Simulation completes | 1 cycle (0.5s) | Must not diverge |
+| P_sys / P_dia | ~140 / 65 mmHg | Reasonable systolic/diastolic range |
+| Peak systolic ΔP (inlet→outlet4) | ~44 mmHg | +/-20% (coarse mesh, 1 cycle) |
+| postProcessing | `inletPressure/`, `outlet*Pressure/`, `wallShearStress/` | Files must exist |
+| Wall time | ~1.7 hrs (4 cores) | Hardware dependent |
+
+Note: 1-cycle results differ from 3-cycle production values because the Windkessel
+capacitor has not fully equilibrated. This is expected and not a failure.
 
 ## Production benchmark (~4 hours on 32 cores)
 
