@@ -298,8 +298,8 @@ class TestPromise2_EfficientMesh:
 
         for target in [4, 8, 12, 16, 20, 30, 50, 100, 200]:
             plan = plan_span_background(target)
-            assert 4 <= plan["background_cpd"] <= 8
-            assert 1 <= plan["span_level"] <= 4
+            assert 4 <= plan["background_cpd"] <= 20
+            assert 1 <= plan["span_level"] <= 5
             assert plan["theoretical_cells_across"] > 0
 
 
@@ -813,10 +813,11 @@ class TestFailureCases:
     """App fails clearly on bad input, not silently."""
 
     def test_extreme_span_target_warns(self):
-        """Unreasonably high span target produces warning."""
+        """Unreasonably high span target on multi-scale geometry produces warning."""
         from aortacfd_lib.utils.mesh_constants import plan_span_background
 
-        result = plan_span_background(500)
+        # High span on large diameter ratio — planner cannot fully resolve smallest branch
+        result = plan_span_background(500, diameter_ratio=10.0)
         assert result["warning"] is not None
 
     def test_missing_geometry_in_config(self, mock_geometry):

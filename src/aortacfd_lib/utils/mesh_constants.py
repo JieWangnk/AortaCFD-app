@@ -304,7 +304,7 @@ def resolve_mesh_goal(mesh_config: dict) -> dict:
 
 # Background blockMesh limits (cells per reference diameter)
 MIN_BLOCKMESH_CPD = 4   # Below this, snappy struggles with castellated mesh quality
-MAX_BLOCKMESH_CPD = 12  # Upper search bound (12 still much less than legacy full-cpd)
+MAX_BLOCKMESH_CPD = 20  # Upper search bound — raised from 12 to support fine meshes on large geometries
 
 # Candidate scoring weights
 _W_LEVEL = 3.0      # heavily penalise deep refinement (transition cost)
@@ -318,7 +318,7 @@ def plan_span_background(
     diameter_ratio: float = 1.0,
     min_blockmesh: int = MIN_BLOCKMESH_CPD,
     max_blockmesh: int = MAX_BLOCKMESH_CPD,
-    max_span_level: int = 4,
+    max_span_level: int = 5,
 ) -> dict:
     """
     Geometry-adaptive planner: search feasible (bg_cpd, level) candidates

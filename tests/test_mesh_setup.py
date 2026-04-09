@@ -401,8 +401,8 @@ class TestPlanSpanBackground:
         from aortacfd_lib.utils.mesh_constants import plan_span_background
 
         result = plan_span_background(20, diameter_ratio=1.0)
-        assert 4 <= result['background_cpd'] <= 12
-        assert 1 <= result['span_level'] <= 4
+        assert 4 <= result['background_cpd'] <= 20
+        assert 1 <= result['span_level'] <= 5
         assert result['theoretical_cells_across'] >= 20
 
     def test_always_returns_valid(self):
@@ -412,8 +412,8 @@ class TestPlanSpanBackground:
         for target in [4, 8, 12, 16, 20, 25, 30, 40, 50]:
             for ratio in [1.0, 2.0, 3.0, 5.0]:
                 result = plan_span_background(target, diameter_ratio=ratio)
-                assert 4 <= result['background_cpd'] <= 12
-                assert 1 <= result['span_level'] <= 4
+                assert 4 <= result['background_cpd'] <= 20
+                assert 1 <= result['span_level'] <= 5
                 assert result['theoretical_cells_across'] >= target
 
     def test_theoretical_ge_target(self):
