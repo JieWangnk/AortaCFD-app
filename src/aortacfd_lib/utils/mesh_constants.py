@@ -158,7 +158,12 @@ MESH_GOAL_PRESETS = {
 
 # Layer profiles — optimised for vascular coverage (April 2026)
 # Strategy C: featureAngle 190 + unlocked ratios + moderate smoothing
-# BPM120: 51% coverage with 5 layers (vs 8% with OF defaults, 34% with 2-layer baseline)
+# BPM120 coarctation: 48.6% coverage with 5 layers at finalLayerThickness=0.5
+# (vs 8% with OF defaults). See cases_input/BPM120/layer_test/ for reproducers.
+# NOTE: the profile default below is finalLayerThickness=0.3 — a thinner,
+# Sendstad-motivated theoretical value that prioritises outer-layer regularity
+# over raw coverage. Override via mesh.layers.final_layer_thickness to reproduce
+# paper measurements.
 LAYER_PROFILES = {
     "off": {
         "addLayers": False,

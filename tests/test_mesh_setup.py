@@ -1900,5 +1900,146 @@ class TestMeshStrategy:
             assert analyzer.snappy_settings['surfaceRefinementLevels'] == [2, 3]
 
 
+class TestAutoAdaptFinalLayerThickness:
+    """
+    Regression tests for _adapt_mesh_transitions finalLayerThickness auto-adapt.
+
+    Before the fix, the user_flt check only looked at mesh.boundary_layers.*.
+    Configs using the new mesh.layers.* public API, the expert
+    mesh.SNAPPY_SETTINGS.* path, or a goal/profile preset were silently
+    overridden when surfaceRefinementLevels[1] >= 2.
+    """
+
+    @staticmethod
+    def _mock_patch_processing(mock_patch):
+        instance = MagicMock()
+        instance.calculate_inlet_center_radius.return_value = (
+            np.array([0.0, 0.0, 0.0]),
+            0.015,
+            np.array([0.0, 0.0, 1.0]),
+        )
+        mock_patch.return_value = instance
+
+    @staticmethod
+    def _base_geometry():
+        return {
+            'wall_keywords_ordered': 'wall',
+            'inlet_keywords_ordered': 'inlet',
+            'outlet_keywords_ordered': [],
+        }
+
+    @patch('aortacfd_lib.mesh_setup.PatchProcessing')
+    @patch('aortacfd_lib.mesh_setup.Logger')
+    @patch('aortacfd_lib.mesh_setup.Environment')
+    @patch('aortacfd_lib.mesh_setup.FileSystemLoader')
+    def test_legacy_boundary_layers_respected(self, mock_loader, mock_env, mock_logger, mock_patch):
+        """mesh.boundary_layers.final_layer_thickness must not be auto-adapted."""
+        from aortacfd_lib.mesh_setup import GeometryAnalyzer
+        self._mock_patch_processing(mock_patch)
+
+        config = {
+            'geometry': self._base_geometry(),
+            'mesh': {
+                'boundary_layers': {'final_layer_thickness': 0.3},
+                'SNAPPY_SETTINGS': {'surfaceRefinementLevels': [2, 2]},
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "constant" / "triSurface").mkdir(parents=True)
+            analyzer = GeometryAnalyzer(config, tmpdir)
+            assert analyzer.snappy_settings['finalLayerThickness'] == 0.3
+
+    @patch('aortacfd_lib.mesh_setup.PatchProcessing')
+    @patch('aortacfd_lib.mesh_setup.Logger')
+    @patch('aortacfd_lib.mesh_setup.Environment')
+    @patch('aortacfd_lib.mesh_setup.FileSystemLoader')
+    def test_new_layers_api_respected(self, mock_loader, mock_env, mock_logger, mock_patch):
+        """mesh.layers.final_layer_thickness must not be auto-adapted (regression for paper bug)."""
+        from aortacfd_lib.mesh_setup import GeometryAnalyzer
+        self._mock_patch_processing(mock_patch)
+
+        config = {
+            'geometry': self._base_geometry(),
+            'mesh': {
+                'layers': {'final_layer_thickness': 0.3, 'num_layers': 5},
+                'SNAPPY_SETTINGS': {'surfaceRefinementLevels': [2, 2]},
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "constant" / "triSurface").mkdir(parents=True)
+            analyzer = GeometryAnalyzer(config, tmpdir)
+            assert analyzer.snappy_settings['finalLayerThickness'] == 0.3
+            assert analyzer.snappy_settings['addLayer'] == 5
+
+    @patch('aortacfd_lib.mesh_setup.PatchProcessing')
+    @patch('aortacfd_lib.mesh_setup.Logger')
+    @patch('aortacfd_lib.mesh_setup.Environment')
+    @patch('aortacfd_lib.mesh_setup.FileSystemLoader')
+    def test_expert_snappy_settings_respected(self, mock_loader, mock_env, mock_logger, mock_patch):
+        """Expert mesh.SNAPPY_SETTINGS.finalLayerThickness must not be auto-adapted."""
+        from aortacfd_lib.mesh_setup import GeometryAnalyzer
+        self._mock_patch_processing(mock_patch)
+
+        config = {
+            'geometry': self._base_geometry(),
+            'mesh': {
+                'SNAPPY_SETTINGS': {
+                    'surfaceRefinementLevels': [2, 2],
+                    'finalLayerThickness': 0.35,
+                    '_user_provided_keys': ['surfaceRefinementLevels', 'finalLayerThickness'],
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "constant" / "triSurface").mkdir(parents=True)
+            analyzer = GeometryAnalyzer(config, tmpdir)
+            assert analyzer.snappy_settings['finalLayerThickness'] == 0.35
+
+    @patch('aortacfd_lib.mesh_setup.PatchProcessing')
+    @patch('aortacfd_lib.mesh_setup.Logger')
+    @patch('aortacfd_lib.mesh_setup.Environment')
+    @patch('aortacfd_lib.mesh_setup.FileSystemLoader')
+    def test_goal_preset_respected(self, mock_loader, mock_env, mock_logger, mock_patch):
+        """Goal preset finalLayerThickness (from LAYER_PROFILES) must not be auto-adapted."""
+        from aortacfd_lib.mesh_setup import GeometryAnalyzer
+        self._mock_patch_processing(mock_patch)
+
+        config = {
+            'geometry': self._base_geometry(),
+            'mesh': {
+                'goal': 'routine_hemodynamics',  # applies LAYER_PROFILES['standard'] → 0.3
+                'SNAPPY_SETTINGS': {},
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "constant" / "triSurface").mkdir(parents=True)
+            analyzer = GeometryAnalyzer(config, tmpdir)
+            assert analyzer.snappy_settings['finalLayerThickness'] == 0.3
+
+    @patch('aortacfd_lib.mesh_setup.PatchProcessing')
+    @patch('aortacfd_lib.mesh_setup.Logger')
+    @patch('aortacfd_lib.mesh_setup.Environment')
+    @patch('aortacfd_lib.mesh_setup.FileSystemLoader')
+    def test_base_default_still_auto_adapts(self, mock_loader, mock_env, mock_logger, mock_patch):
+        """When nothing user-set, auto-adapt still bumps the base default for high refinement."""
+        from aortacfd_lib.mesh_setup import GeometryAnalyzer
+        self._mock_patch_processing(mock_patch)
+
+        config = {
+            'geometry': self._base_geometry(),
+            'mesh': {
+                'SNAPPY_SETTINGS': {
+                    'surfaceRefinementLevels': [2, 3],
+                    '_user_provided_keys': ['surfaceRefinementLevels'],
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "constant" / "triSurface").mkdir(parents=True)
+            analyzer = GeometryAnalyzer(config, tmpdir)
+            # base 0.4 + (3-1)*0.1 = 0.6 — since no user/preset override, auto-adapt fires
+            assert analyzer.snappy_settings['finalLayerThickness'] == pytest.approx(0.6)
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v', '--tb=short'])
