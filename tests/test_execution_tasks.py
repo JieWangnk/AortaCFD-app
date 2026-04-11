@@ -203,6 +203,276 @@ Mesh OK.
             assert len(proc_dirs) == 0
 
 
+# ---------------------------------------------------------------------------
+# Layer-retry logic (_parse_layer_coverage, _mesh_needs_layer_retry,
+# _parse_current_nlayers, _retry_with_relaxed_layers)
+#
+# These tests pin the three bug fixes from fix/mesh-retry-false-positive:
+#   1. substring match on "Reducing layer thickness" was firing on the
+#      harmless "at 0 nodes" convergence tail and forcing zero-layer
+#      retries after successful runs.
+#   2. retry loop never rolled back to the best attempt — a partial
+#      attempt 1 was being silently clobbered by a zero-layer attempt 4.
+#   3. original_layers defaulted to 2, starving every retry from what
+#      was actually a 5-layer Strategy C baseline.
+# ---------------------------------------------------------------------------
+
+
+# Realistic snappy log fragment — taken from the actual BPM120 run that
+# first surfaced the bug. Attempt 1 produced 1.47 average layers and
+# 31.6 % coverage on wall_aorta after the medial-axis solver iterated to
+# convergence. The old detector saw the "Reducing layer thickness" tail
+# and forced three useless retries.
+_BPM120_ATTEMPT1_LOG = """\
+displacementMedialAxis : Reducing layer thickness at 220 nodes where thickness to medial axis distance is large
+displacementMedialAxis : Reducing layer thickness at 218 nodes where thickness to medial axis distance is large
+displacementMedialAxis : Reducing layer thickness at 212 nodes where thickness to medial axis distance is large
+displacementMedialAxis : Reducing layer thickness at 50 nodes where thickness to medial axis distance is large
+displacementMedialAxis : Reducing layer thickness at 10 nodes where thickness to medial axis distance is large
+displacementMedialAxis : Reducing layer thickness at 0 nodes where thickness to medial axis distance is large
+displacementMedialAxis : Reducing layer thickness at 0 nodes where thickness to medial axis distance is large
+patch      faces    layers   overall thickness
+                             [m]       [%]
+-----      -----    ------   ---       ---
+wall_aorta 18778    1.47     0.000264  31.6
+
+Layer mesh : cells:132196  faces:401480  points:140518
+"""
+
+# Retry #3 log — all "Reducing layer thickness at 0 nodes" because the
+# iteration converged cleanly BUT with zero layers. The old detector
+# still saw the substring and kept retrying.
+_BPM120_RETRY3_LOG = """\
+displacementMedialAxis : Reducing layer thickness at 0 nodes where thickness to medial axis distance is large
+displacementMedialAxis : Reducing layer thickness at 0 nodes where thickness to medial axis distance is large
+displacementMedialAxis : Reducing layer thickness at 0 nodes where thickness to medial axis distance is large
+patch      faces    layers   overall thickness
+                             [m]       [%]
+-----      -----    ------   ---       ---
+wall_aorta 18769    0        0         0
+"""
+
+_HEALTHY_MESH_LOG = """\
+patch      faces    layers   overall thickness
+                             [m]       [%]
+-----      -----    ------   ---       ---
+wall_aorta 20000    4.8      0.00045   62.0
+"""
+
+_HARD_FAILURE_LOG = """\
+Illegal cells after layer addition: 124 cells
+patch      faces    layers   overall thickness
+                             [m]       [%]
+-----      -----    ------   ---       ---
+wall_aorta 18000    0        0         0
+"""
+
+
+def _write_logs(case_dir, snappy_content, checkmesh_content=None):
+    """Helper: drop snappy + checkMesh logs where the task methods look."""
+    logs_dir = os.path.join(case_dir, "logs")
+    os.makedirs(logs_dir, exist_ok=True)
+    with open(os.path.join(logs_dir, "log.snappyHexMesh"), "w") as f:
+        f.write(snappy_content)
+    if checkmesh_content is not None:
+        with open(os.path.join(logs_dir, "log.checkMesh"), "w") as f:
+            f.write(checkmesh_content)
+
+
+class TestParseLayerCoverage:
+    """_parse_layer_coverage reads the final snappy summary table."""
+
+    def test_parses_bpm120_attempt1_summary(self, tmp_path):
+        log = tmp_path / "log.snappyHexMesh"
+        log.write_text(_BPM120_ATTEMPT1_LOG)
+
+        from workflow.tasks.execution_tasks import ExecuteMeshingTask
+        patches = ExecuteMeshingTask._parse_layer_coverage(str(log))
+        assert "wall_aorta" in patches
+        assert patches["wall_aorta"]["faces"] == 18778
+        assert patches["wall_aorta"]["layers"] == pytest.approx(1.47)
+        assert patches["wall_aorta"]["coverage_pct"] == pytest.approx(31.6)
+
+    def test_parses_healthy_mesh_summary(self, tmp_path):
+        log = tmp_path / "log.snappyHexMesh"
+        log.write_text(_HEALTHY_MESH_LOG)
+
+        from workflow.tasks.execution_tasks import ExecuteMeshingTask
+        patches = ExecuteMeshingTask._parse_layer_coverage(str(log))
+        assert patches["wall_aorta"]["coverage_pct"] == pytest.approx(62.0)
+
+    def test_missing_file_returns_empty_dict(self, tmp_path):
+        from workflow.tasks.execution_tasks import ExecuteMeshingTask
+        patches = ExecuteMeshingTask._parse_layer_coverage(
+            str(tmp_path / "nope.log")
+        )
+        assert patches == {}
+
+    def test_log_without_summary_returns_empty_dict(self, tmp_path):
+        log = tmp_path / "log.snappyHexMesh"
+        log.write_text("some snappy output without a final layer report\n")
+
+        from workflow.tasks.execution_tasks import ExecuteMeshingTask
+        assert ExecuteMeshingTask._parse_layer_coverage(str(log)) == {}
+
+    def test_max_layer_coverage_picks_highest(self):
+        from workflow.tasks.execution_tasks import ExecuteMeshingTask
+        patches = {
+            "wall_aorta": {"coverage_pct": 31.6},
+            "wall_secondary": {"coverage_pct": 0.0},
+        }
+        assert ExecuteMeshingTask._max_layer_coverage(patches) == 31.6
+
+    def test_max_layer_coverage_empty_dict(self):
+        from workflow.tasks.execution_tasks import ExecuteMeshingTask
+        assert ExecuteMeshingTask._max_layer_coverage({}) == 0.0
+
+
+class TestMeshNeedsLayerRetry:
+    """_mesh_needs_layer_retry must not false-positive on benign messages."""
+
+    def _make_task(self, config=None):
+        from workflow.tasks.execution_tasks import ExecuteMeshingTask
+        return ExecuteMeshingTask(config or {})
+
+    def test_healthy_mesh_does_not_retry(self, tmp_path):
+        _write_logs(str(tmp_path), _HEALTHY_MESH_LOG, "Mesh OK.\n")
+        task = self._make_task()
+        assert task._mesh_needs_layer_retry(str(tmp_path)) is False
+
+    def test_bpm120_attempt1_does_not_retry_when_above_threshold(self, tmp_path):
+        # Coverage 31.6 % beats the default threshold of 25 %, so the
+        # partially-successful attempt 1 should be accepted as-is. This
+        # is the exact scenario the old substring-match broke.
+        _write_logs(str(tmp_path), _BPM120_ATTEMPT1_LOG, "Mesh OK.\n")
+        task = self._make_task()
+        assert task._mesh_needs_layer_retry(str(tmp_path)) is False
+
+    def test_retry_when_below_threshold(self, tmp_path):
+        # A run that converged cleanly but with zero layers should still
+        # be retried because coverage is below threshold.
+        _write_logs(str(tmp_path), _BPM120_RETRY3_LOG, "Mesh OK.\n")
+        task = self._make_task()
+        assert task._mesh_needs_layer_retry(str(tmp_path)) is True
+
+    def test_retry_on_hard_failure_even_when_coverage_unknown(self, tmp_path):
+        _write_logs(str(tmp_path), _HARD_FAILURE_LOG, "Mesh OK.\n")
+        task = self._make_task()
+        assert task._mesh_needs_layer_retry(str(tmp_path)) is True
+
+    def test_retry_on_checkmesh_failed(self, tmp_path):
+        _write_logs(
+            str(tmp_path),
+            _HEALTHY_MESH_LOG,
+            "  non-orthogonality > 70: 42 ***FAILED***\n",
+        )
+        task = self._make_task()
+        assert task._mesh_needs_layer_retry(str(tmp_path)) is True
+
+    def test_no_retry_when_layers_disabled(self, tmp_path):
+        _write_logs(str(tmp_path), _HARD_FAILURE_LOG, "Mesh OK.\n")
+        task = self._make_task(
+            {"mesh": {"SNAPPY_SETTINGS": {"addLayers": False}}}
+        )
+        assert task._mesh_needs_layer_retry(str(tmp_path)) is False
+
+    def test_respects_custom_threshold(self, tmp_path):
+        # With threshold raised to 40 %, the BPM120 attempt 1 result
+        # (31.6 %) should now trigger a retry.
+        _write_logs(str(tmp_path), _BPM120_ATTEMPT1_LOG, "Mesh OK.\n")
+        task = self._make_task(
+            {"mesh": {"layer_coverage_threshold": 40.0}}
+        )
+        assert task._mesh_needs_layer_retry(str(tmp_path)) is True
+
+    def test_missing_snappy_log_does_not_retry(self, tmp_path):
+        task = self._make_task()
+        # No logs directory at all.
+        assert task._mesh_needs_layer_retry(str(tmp_path)) is False
+
+
+class TestParseCurrentNLayers:
+    """_parse_current_nlayers reads the actual nSurfaceLayers from the dict."""
+
+    def test_reads_five_layers(self, tmp_path):
+        dict_path = tmp_path / "snappyHexMeshDict"
+        dict_path.write_text(
+            "addLayersControls\n"
+            "{\n"
+            "    nSurfaceLayers 5;\n"
+            "    expansionRatio 1.2;\n"
+            "}\n"
+        )
+
+        from workflow.tasks.execution_tasks import ExecuteMeshingTask
+        assert ExecuteMeshingTask._parse_current_nlayers(str(dict_path)) == 5
+
+    def test_missing_dict_returns_zero(self, tmp_path):
+        from workflow.tasks.execution_tasks import ExecuteMeshingTask
+        assert ExecuteMeshingTask._parse_current_nlayers(
+            str(tmp_path / "nope")
+        ) == 0
+
+    def test_dict_without_nsurfacelayers_returns_zero(self, tmp_path):
+        dict_path = tmp_path / "snappyHexMeshDict"
+        dict_path.write_text("addLayers false;\n")
+
+        from workflow.tasks.execution_tasks import ExecuteMeshingTask
+        assert ExecuteMeshingTask._parse_current_nlayers(str(dict_path)) == 0
+
+
+class TestPolyMeshSnapshot:
+    """_snapshot_polymesh + _restore_polymesh round-trip."""
+
+    def _make_task(self):
+        from workflow.tasks.execution_tasks import ExecuteMeshingTask
+        return ExecuteMeshingTask({})
+
+    def _make_fake_polymesh(self, case_dir, marker):
+        poly = os.path.join(case_dir, "constant", "polyMesh")
+        os.makedirs(poly, exist_ok=True)
+        for name in ("points", "faces", "owner", "neighbour", "boundary"):
+            with open(os.path.join(poly, name), "w") as f:
+                f.write(f"{name}:{marker}\n")
+        return poly
+
+    def test_snapshot_creates_sibling_directory(self, tmp_path):
+        case = str(tmp_path)
+        self._make_fake_polymesh(case, "v1")
+        task = self._make_task()
+        snap = task._snapshot_polymesh(case, "attempt1")
+        assert snap is not None
+        assert os.path.isdir(snap)
+        assert snap.endswith("polyMesh.attempt1")
+        assert (Path(snap) / "points").read_text() == "points:v1\n"
+
+    def test_snapshot_returns_none_when_source_missing(self, tmp_path):
+        task = self._make_task()
+        assert task._snapshot_polymesh(str(tmp_path), "attempt1") is None
+
+    def test_restore_replaces_current_mesh(self, tmp_path):
+        case = str(tmp_path)
+        self._make_fake_polymesh(case, "original")
+        task = self._make_task()
+        snap = task._snapshot_polymesh(case, "baseline")
+
+        # Clobber the live polyMesh with fresh content...
+        self._make_fake_polymesh(case, "clobbered")
+        poly = os.path.join(case, "constant", "polyMesh")
+        assert (Path(poly) / "points").read_text() == "points:clobbered\n"
+
+        # ...then restore should bring back the snapshot contents.
+        assert task._restore_polymesh(case, snap) is True
+        assert (Path(poly) / "points").read_text() == "points:original\n"
+
+    def test_restore_noop_when_snapshot_missing(self, tmp_path):
+        task = self._make_task()
+        assert (
+            task._restore_polymesh(str(tmp_path), str(tmp_path / "nope"))
+            is False
+        )
+
+
 class TestExecuteSolverTask:
     """Test ExecuteSolverTask class."""
 
