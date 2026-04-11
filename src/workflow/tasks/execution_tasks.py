@@ -235,55 +235,270 @@ class ExecuteMeshingTask(Task):
         except Exception as e:
             logger.debug(f"Turbulence model compatibility check skipped: {e}")
 
+    # -- retry decision + helpers ----------------------------------------
+
+    # Minimum per-patch layer coverage (%) below which a retry is justified.
+    # 25 % comes from the BPM120 baseline measurement: attempt 1 under
+    # Strategy C delivered ~31.6 % coverage, which is below the 51 % target
+    # but well above zero. The threshold sits just under that baseline so
+    # the retry loop doesn't reflexively discard partially-successful runs.
+    # Override via ``config.mesh.layer_coverage_threshold`` if needed.
+    _DEFAULT_LAYER_COVERAGE_THRESHOLD_PCT = 25.0
+
+    def _layer_coverage_threshold(self) -> float:
+        return float(
+            self.config.get("mesh", {}).get(
+                "layer_coverage_threshold",
+                self._DEFAULT_LAYER_COVERAGE_THRESHOLD_PCT,
+            )
+        )
+
+    @staticmethod
+    def _parse_layer_coverage(snappy_log_path: str) -> dict:
+        """Parse the final per-patch layer report from a snappy log.
+
+        snappyHexMesh prints a summary table near the end of a successful
+        layer-addition phase, like this::
+
+            patch      faces    layers   overall thickness
+                                         [m]       [%]
+            -----      -----    ------   ---       ---
+            wall_aorta 18778    1.47     0.000264  31.6
+
+        We return one dict per patch keyed by name::
+
+            {"wall_aorta": {
+                "faces": 18778,
+                "layers": 1.47,
+                "thickness_m": 0.000264,
+                "coverage_pct": 31.6,
+            }}
+
+        Empty dict if the file is missing or the report is not present
+        (e.g. when layer addition failed hard or is disabled).
+        """
+        if not os.path.exists(snappy_log_path):
+            return {}
+        try:
+            content = open(snappy_log_path, errors="replace").read()
+        except Exception:
+            return {}
+
+        # Locate the header line, then walk forward past the separator row
+        # and consume data rows until we hit a blank line or a non-matching
+        # row. The header may appear more than once (e.g. if snappy reprints
+        # it after a dry run); keep only the last occurrence.
+        header_re = re.compile(
+            r"patch\s+faces\s+layers\s+overall\s+thickness", re.IGNORECASE
+        )
+        header_matches = list(header_re.finditer(content))
+        if not header_matches:
+            return {}
+
+        tail = content[header_matches[-1].end():]
+        patches: dict = {}
+        for line in tail.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                if patches:
+                    # First blank line after data rows ends the table.
+                    break
+                continue
+            if set(stripped) <= {"-", " "}:
+                # Separator row under the column headers.
+                continue
+            if stripped.startswith("[") or stripped.startswith("//"):
+                # Units row "[m]  [%]" or comments.
+                continue
+            # Expect 5 tokens: name, faces, layers, thickness_m, pct.
+            tokens = stripped.split()
+            if len(tokens) < 5:
+                # First non-matching row ends the table.
+                break
+            name = tokens[0]
+            try:
+                faces = int(tokens[1])
+                layers = float(tokens[2])
+                thickness_m = float(tokens[3])
+                coverage_pct = float(tokens[4])
+            except ValueError:
+                break
+            patches[name] = {
+                "faces": faces,
+                "layers": layers,
+                "thickness_m": thickness_m,
+                "coverage_pct": coverage_pct,
+            }
+        return patches
+
+    @staticmethod
+    def _max_layer_coverage(patches: dict) -> float:
+        """Return the maximum coverage_pct across parsed wall patches.
+
+        Zero if no patches were parsed. Uses max rather than a weighted
+        mean so a single well-covered wall patch counts as success — the
+        opposite direction would hide a clean wall_aorta behind zero-layer
+        internal surfaces.
+        """
+        if not patches:
+            return 0.0
+        return max(p.get("coverage_pct", 0.0) for p in patches.values())
+
     def _mesh_needs_layer_retry(self, case_dir: str) -> bool:
-        """Check if mesh quality issues are likely caused by boundary layer extrusion."""
+        """Decide whether the current snappy mesh should be retried.
+
+        Triggers retry on:
+          1. Hard snappy failures (illegal cells, negative volumes, missing
+             surfaces) that indicate layer addition is actively breaking
+             the mesh topology.
+          2. checkMesh ``***FAILED***`` report indicating unresolved errors.
+          3. Final per-patch layer coverage below the configured threshold
+             (default 25 %).
+
+        Deliberately does NOT trigger on the "Reducing layer thickness at
+        N nodes" line that the medial-axis solver prints while iterating:
+        after convergence snappy keeps printing it with ``N=0``, and the
+        old substring-match treated that harmless tail as a real problem.
+        This masked the opposite bug — the retry loop discarded the best
+        result and clobbered it with zero-layer meshes.
+        """
         snappy_log = os.path.join(case_dir, "logs", "log.snappyHexMesh")
         if not os.path.exists(snappy_log):
             return False
 
+        # Only retry if layers are enabled in the first place.
+        snappy = self.config.get("mesh", {}).get("SNAPPY_SETTINGS", {}) or {}
+        if not snappy.get("addLayers", True):
+            return False
+
         try:
             content = open(snappy_log, errors="replace").read()
-            # snappyHexMesh reports these when layers cause problems
-            layer_issues = [
-                "Illegal cells after layer addition",
-                "Could not find a surface",
-                "negative volume",
-                "Reducing layer thickness",
-            ]
-            has_layer_problem = any(msg in content for msg in layer_issues)
-
-            # Also check if checkMesh found failed cells
-            checkmesh_log = os.path.join(case_dir, "logs", "log.checkMesh")
-            has_failed_mesh = False
-            if os.path.exists(checkmesh_log):
-                cm = open(checkmesh_log, errors="replace").read()
-                has_failed_mesh = "***FAILED***" in cm or "Mesh has" not in cm
-
-            # Only retry if layers are enabled
-            layers_enabled = self.config.get("mesh", {}).get("SNAPPY_SETTINGS", {}).get("addLayers", True)
-
-            return layers_enabled and (has_layer_problem or has_failed_mesh)
         except Exception:
             return False
+
+        hard_failures = (
+            "Illegal cells after layer addition",
+            "Could not find a surface",
+            "negative volume",
+        )
+        if any(msg in content for msg in hard_failures):
+            return True
+
+        checkmesh_log = os.path.join(case_dir, "logs", "log.checkMesh")
+        if os.path.exists(checkmesh_log):
+            try:
+                cm = open(checkmesh_log, errors="replace").read()
+                if "***FAILED***" in cm:
+                    return True
+            except Exception:
+                pass
+
+        # Coverage-based gate: accept the mesh if at least one wall patch
+        # has coverage above the threshold. If the report is absent we
+        # assume the layer stage never ran cleanly and retry.
+        coverage = self._parse_layer_coverage(snappy_log)
+        if not coverage:
+            return True
+        return self._max_layer_coverage(coverage) < self._layer_coverage_threshold()
+
+    @staticmethod
+    def _parse_current_nlayers(snappy_dict_path: str) -> int:
+        """Read the actual ``nSurfaceLayers`` value from the rendered dict.
+
+        The old retry path used ``snappy_settings.get("addLayer", 2)`` as
+        its baseline, but ``snappy_settings`` is the high-level config
+        namespace and rarely carries ``addLayer``. The default of 2 then
+        made the retry loop shrink 2 → 1 even when the rendered dict
+        actually requested 5 layers, starving every retry from the
+        start. Parsing the rendered dict directly gives the ground truth.
+        """
+        if not os.path.exists(snappy_dict_path):
+            return 0
+        try:
+            content = open(snappy_dict_path, errors="replace").read()
+        except Exception:
+            return 0
+        m = re.search(r"nSurfaceLayers\s+(\d+)", content)
+        return int(m.group(1)) if m else 0
+
+    def _snapshot_polymesh(self, case_dir: str, label: str) -> "str | None":
+        """Copy constant/polyMesh to constant/polyMesh.<label>.
+
+        Returns the snapshot path, or None if the source doesn't exist.
+        Used by the retry loop to preserve a candidate mesh so it can be
+        restored if a later attempt produces a worse result.
+        """
+        src = os.path.join(case_dir, "constant", "polyMesh")
+        if not os.path.isdir(src):
+            return None
+        dst = os.path.join(case_dir, "constant", f"polyMesh.{label}")
+        if os.path.isdir(dst):
+            shutil.rmtree(dst)
+        shutil.copytree(src, dst)
+        return dst
+
+    def _restore_polymesh(self, case_dir: str, snapshot_path: str) -> bool:
+        """Replace constant/polyMesh with the contents of a snapshot."""
+        if not snapshot_path or not os.path.isdir(snapshot_path):
+            return False
+        live = os.path.join(case_dir, "constant", "polyMesh")
+        if os.path.isdir(live):
+            shutil.rmtree(live)
+        shutil.copytree(snapshot_path, live)
+        return True
 
     def _retry_with_relaxed_layers(self, case_dir: str, snappy_settings: dict):
         """
         Re-run snappyHexMesh with progressively relaxed boundary layer settings.
 
         Strategy:
-          Attempt 1 (already done): original settings
-          Attempt 2: reduce layers by 30%, increase finalLayerThickness by 30%
-          Attempt 3: reduce layers by 60%, relax quality constraints
-          Attempt 4: disable layers entirely
+          Attempt 1 (already done): original settings — snapshotted before
+          entry so we can roll back to it if retries produce worse results.
+          Attempt 2: reduce layers by 30 %, increase finalLayerThickness ×1.3.
+          Attempt 3: reduce layers by 60 %, relax quality constraints.
+          Attempt 4: disable layers entirely (last resort — produces a
+          layer-free mesh, worse for WSS but guaranteed to finish).
 
-        Each attempt re-runs snappyHexMesh and checkMesh. Stops at first success.
+        Each attempt re-runs snappyHexMesh + checkMesh, then measures the
+        final layer coverage. The retry loop keeps the mesh (and snappy
+        dict) from whichever attempt produced the highest coverage, not
+        the last one that ran. This fixes the silent regression where a
+        partially-covered attempt 1 was being clobbered by a zero-layer
+        attempt 4 because the loop never compared results.
         """
         snappy_dict_path = os.path.join(case_dir, "system", "snappyHexMeshDict")
         if not os.path.exists(snappy_dict_path):
             return
 
         original_content = open(snappy_dict_path).read()
-        original_layers = snappy_settings.get("addLayer", 2)
+        snappy_log = os.path.join(case_dir, "logs", "log.snappyHexMesh")
+
+        # Fix #3: read the actual nSurfaceLayers from the rendered dict
+        # rather than trusting the config-level default, which often
+        # doesn't carry the key and silently falls through to 2.
+        original_layers = self._parse_current_nlayers(snappy_dict_path)
+        if original_layers <= 0:
+            original_layers = snappy_settings.get("addLayer", 5)
+
+        # Snapshot attempt 1's polyMesh and measure its layer coverage
+        # so we have a baseline to beat.
+        attempt1_coverage = self._max_layer_coverage(
+            self._parse_layer_coverage(snappy_log)
+        )
+        attempt1_snapshot = self._snapshot_polymesh(case_dir, "attempt1")
+        attempt1_dict = original_content
+
+        best = {
+            "attempt": 1,
+            "coverage_pct": attempt1_coverage,
+            "snapshot": attempt1_snapshot,
+            "dict_content": attempt1_dict,
+        }
+        logger.info(
+            "Layer retry baseline: attempt 1 coverage %.1f %% (snapshot %s)",
+            attempt1_coverage,
+            attempt1_snapshot,
+        )
 
         retry_configs = [
             {
@@ -305,6 +520,8 @@ class ExecuteMeshingTask(Task):
                 "disable": True,
             },
         ]
+
+        threshold = self._layer_coverage_threshold()
 
         for attempt, cfg in enumerate(retry_configs, start=2):
             logger.info("=" * 60)
@@ -343,6 +560,8 @@ class ExecuteMeshingTask(Task):
                 f.write(modified)
 
             # Re-run snappyHexMesh
+            retry_log = f"log.snappyHexMesh.retry{attempt}"
+            retry_log_path = os.path.join(case_dir, "logs", retry_log)
             try:
                 if snappy_settings.get("parallel"):
                     n_proc = snappy_settings.get("nProcessors", 1)
@@ -351,32 +570,132 @@ class ExecuteMeshingTask(Task):
                     run_command(
                         self.config,
                         ["mpirun", "-np", str(n_proc), "snappyHexMesh", "-parallel", "-overwrite"],
-                        case_dir, f"log.snappyHexMesh.retry{attempt}",
+                        case_dir, retry_log,
                     )
                     run_command(self.config, ["reconstructPar", "-constant"], case_dir, "log.reconstructPar")
                     self._cleanup_processor_directories(case_dir)
                 else:
-                    run_command(self.config, ["snappyHexMesh", "-overwrite"], case_dir, f"log.snappyHexMesh.retry{attempt}")
+                    run_command(self.config, ["snappyHexMesh", "-overwrite"], case_dir, retry_log)
 
                 run_command(self.config, ["checkMesh"], case_dir, "log.checkMesh")
 
-                # Check if quality is now acceptable
+                # Measure this attempt's layer coverage for the best-of
+                # comparison below.
+                attempt_coverage = self._max_layer_coverage(
+                    self._parse_layer_coverage(retry_log_path)
+                )
+                logger.info(
+                    "Layer retry attempt %d: coverage %.1f %% (best so far: %.1f %%)",
+                    attempt,
+                    attempt_coverage,
+                    best["coverage_pct"],
+                )
+
+                if attempt_coverage > best["coverage_pct"]:
+                    # New best — snapshot the current polyMesh so we can
+                    # restore it if later attempts are worse.
+                    if best["snapshot"] and os.path.isdir(best["snapshot"]):
+                        shutil.rmtree(best["snapshot"], ignore_errors=True)
+                    new_snapshot = self._snapshot_polymesh(
+                        case_dir, f"attempt{attempt}"
+                    )
+                    best = {
+                        "attempt": attempt,
+                        "coverage_pct": attempt_coverage,
+                        "snapshot": new_snapshot,
+                        "dict_content": modified,
+                    }
+
+                # Early exit if coverage is already acceptable and there
+                # are no hard failures. This uses the proper retry gate,
+                # which no longer false-positives on "Reducing layer
+                # thickness at 0 nodes".
                 if not self._mesh_needs_layer_retry(case_dir):
                     mesh_result = self._check_mesh_quality(case_dir)
-                    Logger.console(f"     Mesh retry #{attempt} succeeded: {mesh_result}")
-                    logger.info(f"Layer retry attempt {attempt} succeeded")
+                    Logger.console(
+                        f"     Mesh retry #{attempt} succeeded: {mesh_result} "
+                        f"(coverage {attempt_coverage:.1f}%)"
+                    )
+                    logger.info(
+                        "Layer retry attempt %d succeeded with coverage %.1f %%",
+                        attempt,
+                        attempt_coverage,
+                    )
+                    # Clean up the snapshot we just took (current mesh is
+                    # already in place) and any older one.
+                    if best["snapshot"] and os.path.isdir(best["snapshot"]):
+                        shutil.rmtree(best["snapshot"], ignore_errors=True)
                     return
                 else:
-                    logger.info(f"Layer retry attempt {attempt}: still has issues, trying next")
+                    logger.info(
+                        "Layer retry attempt %d: still below threshold %.0f %%, trying next",
+                        attempt,
+                        threshold,
+                    )
 
             except CommandExecutionError:
                 logger.warning(f"Layer retry attempt {attempt} failed, trying next")
 
-        # All retries exhausted; restore original and proceed with whatever we have
-        with open(snappy_dict_path, "w") as f:
-            f.write(original_content)
-        logger.warning("All layer retry attempts exhausted. Proceeding with current mesh.")
-        Logger.console("     WARNING: mesh layer issues not fully resolved")
+        # All retries exhausted — restore whichever attempt had the best
+        # coverage. If that was attempt 1, this is a silent rollback that
+        # preserves the partially-successful mesh; otherwise it keeps the
+        # best retry rather than the last one.
+        if best["attempt"] == 1:
+            restored = self._restore_polymesh(case_dir, best["snapshot"])
+            with open(snappy_dict_path, "w") as f:
+                f.write(original_content)
+            if restored:
+                Logger.console(
+                    f"     Kept attempt 1 ({best['coverage_pct']:.1f}% coverage) — "
+                    f"retries did not improve"
+                )
+                logger.info(
+                    "Retries exhausted. Rolled back to attempt 1 (coverage %.1f %%).",
+                    best["coverage_pct"],
+                )
+                # Re-run checkMesh on the restored mesh so downstream
+                # quality checks see consistent data.
+                try:
+                    run_command(self.config, ["checkMesh"], case_dir, "log.checkMesh")
+                except CommandExecutionError:
+                    pass
+            else:
+                logger.warning(
+                    "Retries exhausted but attempt 1 snapshot was missing; "
+                    "proceeding with current mesh."
+                )
+        else:
+            # Best was one of the retries. Make sure polyMesh matches
+            # (it will if the best attempt was the most recent one; if
+            # not, restore from its snapshot).
+            if best["snapshot"] and os.path.isdir(best["snapshot"]):
+                self._restore_polymesh(case_dir, best["snapshot"])
+                with open(snappy_dict_path, "w") as f:
+                    f.write(best["dict_content"])
+                try:
+                    run_command(self.config, ["checkMesh"], case_dir, "log.checkMesh")
+                except CommandExecutionError:
+                    pass
+            Logger.console(
+                f"     Kept attempt {best['attempt']} ({best['coverage_pct']:.1f}% coverage) — "
+                f"best of {len(retry_configs) + 1} tries"
+            )
+            logger.info(
+                "Retries exhausted. Kept attempt %d with coverage %.1f %%.",
+                best["attempt"],
+                best["coverage_pct"],
+            )
+
+        # Clean up any snapshot we still hold.
+        if best["snapshot"] and os.path.isdir(best["snapshot"]):
+            shutil.rmtree(best["snapshot"], ignore_errors=True)
+
+        if best["coverage_pct"] < threshold:
+            Logger.console(
+                f"     WARNING: best layer coverage ({best['coverage_pct']:.1f}%) "
+                f"below threshold ({threshold:.0f}%) — WSS-sensitive studies "
+                f"should re-check the geometry"
+            )
 
     def _rename_closeness_files_for_snappy(self, case_dir: str):
         """
