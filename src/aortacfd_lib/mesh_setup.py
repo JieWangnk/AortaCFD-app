@@ -200,12 +200,23 @@ class GeometryAnalyzer:
 
         # --- finalLayerThickness: increase with max refinement ---
         # Higher refinement = smaller surface cells = layers need to be thicker
-        # relative to cell size so the last layer connects smoothly to volume mesh
-        user_flt = (
+        # relative to cell size so the last layer connects smoothly to volume mesh.
+        #
+        # Only fires when the value is at base.py defaults. Skip if the user set it
+        # via any public API (boundary_layers.*, layers.*), expert API
+        # (SNAPPY_SETTINGS.*), or a goal/profile preset (LAYER_PROFILES).
+        user_flt_public = (
             self.mesh_settings.get('boundary_layers', {}).get('final_layer_thickness')
             or self.mesh_settings.get('boundary_layers', {}).get('finalLayerThickness')
+            or self.mesh_settings.get('layers', {}).get('final_layer_thickness')
         )
-        if user_flt is None:
+        user_snappy_keys = self.mesh_settings.get('SNAPPY_SETTINGS', {}).get('_user_provided_keys', [])
+        flt_user_or_preset_set = (
+            user_flt_public is not None
+            or 'finalLayerThickness' in user_snappy_keys
+            or 'finalLayerThickness' in self._goal_resolved_keys
+        )
+        if not flt_user_or_preset_set:
             # Auto-adapt: base 0.4, add 0.1 per refinement level above 1
             base_flt = 0.4
             recommended_flt = min(0.8, base_flt + max(0, max_level - 1) * 0.1)

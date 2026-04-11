@@ -107,7 +107,9 @@ config = {
 
             # --- Layer quality (optimised for vascular coverage) ---
             # Strategy C: featureAngle 190 + unlocked ratios + moderate smoothing
-            # Evidence: 51% coverage on BPM120 coarctation (vs 8% with OF defaults)
+            # Evidence: 48.6% coverage on BPM120 coarctation with 5 layers at
+            # finalLayerThickness=0.5 (vs 8% with OF defaults). See
+            # cases_input/BPM120/layer_test/ for reproducer configs.
             "nGrow": 0,                         # don't delay near features (each face independent)
             "nBufferCellsNoExtrude": 0,
             "addLayers_nRelaxIter": 5,
