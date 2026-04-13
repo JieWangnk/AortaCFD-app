@@ -70,9 +70,9 @@ class TestMethodologyProfileTable:
         """Verify standard profile matches methodology description."""
         profile = NUMERICS_PROFILES['standard']
 
-        # Should be second-order bounded (linearUpwind)
-        assert 'linearUpwind' in profile['divSchemes']['div(phi,U)'], \
-            "Standard profile should use linearUpwind (2nd order bounded)"
+        # Should be second-order TVD bounded (limitedLinearV)
+        assert 'limitedLinearV' in profile['divSchemes']['div(phi,U)'], \
+            "Standard profile should use limitedLinearV (2nd order TVD bounded)"
 
         # Time integration should be backward (second-order)
         assert profile['ddtSchemes']['default'] == 'backward', \

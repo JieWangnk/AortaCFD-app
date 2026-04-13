@@ -1844,8 +1844,8 @@ class TestMeshStrategy:
     @patch('aortacfd_lib.mesh_setup.Logger')
     @patch('aortacfd_lib.mesh_setup.Environment')
     @patch('aortacfd_lib.mesh_setup.FileSystemLoader')
-    def test_surface_levels_reduced_in_adaptive_span(self, mock_loader, mock_env, mock_logger, mock_patch):
-        """adaptive_span reduces surface refinement to [0,1] when not user-set."""
+    def test_surface_levels_kept_high_when_layers_enabled(self, mock_loader, mock_env, mock_logger, mock_patch):
+        """adaptive_span keeps [2,2] when addLayers=True (required for layer coverage)."""
         from aortacfd_lib.mesh_setup import GeometryAnalyzer
 
         mock_patch_instance = MagicMock()
@@ -1859,6 +1859,37 @@ class TestMeshStrategy:
             'mesh': {'SNAPPY_SETTINGS': {
                 'mesh_strategy': 'adaptive_span',
                 'surfaceRefinementLevels': [1, 2],  # base default, not user-set
+                'addLayers': True,
+            }}
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tri_path = Path(tmpdir) / "constant" / "triSurface"
+            tri_path.mkdir(parents=True)
+            analyzer = GeometryAnalyzer(config, tmpdir)
+
+            assert analyzer.snappy_settings['surfaceRefinementLevels'] == [2, 2]
+
+    @patch('aortacfd_lib.mesh_setup.PatchProcessing')
+    @patch('aortacfd_lib.mesh_setup.Logger')
+    @patch('aortacfd_lib.mesh_setup.Environment')
+    @patch('aortacfd_lib.mesh_setup.FileSystemLoader')
+    def test_surface_levels_reduced_when_layers_disabled(self, mock_loader, mock_env, mock_logger, mock_patch):
+        """adaptive_span reduces to [0,1] only when addLayers=False."""
+        from aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        mock_patch_instance = MagicMock()
+        mock_patch_instance.calculate_inlet_center_radius.return_value = (
+            np.array([0.0, 0.0, 0.0]), 0.012, np.array([0.0, 0.0, 1.0])
+        )
+        mock_patch.return_value = mock_patch_instance
+
+        config = {
+            'geometry': {'wall_keywords_ordered': 'wall', 'inlet_keywords_ordered': 'inlet', 'outlet_keywords_ordered': []},
+            'mesh': {'SNAPPY_SETTINGS': {
+                'mesh_strategy': 'adaptive_span',
+                'surfaceRefinementLevels': [1, 2],  # base default, not user-set
+                'addLayers': False,
             }}
         }
 

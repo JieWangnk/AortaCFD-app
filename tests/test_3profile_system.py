@@ -118,9 +118,9 @@ class TestStandardProfile:
             "Standard must use backward time integration"
 
     def test_second_order_bounded_convection(self):
-        """Standard should use linearUpwind (2nd order bounded)."""
-        assert 'linearUpwind' in self.profile['divSchemes']['div(phi,U)'], \
-            "Standard must use linearUpwind convection (2nd order bounded)"
+        """Standard should use limitedLinearV (2nd order TVD bounded)."""
+        assert 'limitedLinearV' in self.profile['divSchemes']['div(phi,U)'], \
+            "Standard must use limitedLinearV convection (2nd order TVD bounded)"
         assert 'limitedLinear' in self.profile['divSchemes']['div(phi,k)'], \
             "Standard must use limitedLinear for turbulence"
 
@@ -354,8 +354,8 @@ class TestMethodologyTableSpecs:
         # Time integration
         assert p['ddtSchemes']['default'] == 'backward'
 
-        # Convection (linearUpwind 2nd order bounded)
-        assert 'linearUpwind' in p['divSchemes']['div(phi,U)']
+        # Convection (limitedLinearV 2nd order TVD bounded)
+        assert 'limitedLinearV' in p['divSchemes']['div(phi,U)']
 
         # PIMPLE (convergence-based exit)
         assert p['solvers']['PIMPLE']['nOuterCorrectors'] == 10

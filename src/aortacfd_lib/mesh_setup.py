@@ -128,10 +128,17 @@ class GeometryAnalyzer:
             self.log.info(f"surfaceRefinementLevels: {levels}")
 
         # Adaptive span: reduce surface refinement to support role (snapping only)
-        # unless user explicitly set their own levels
+        # unless user explicitly set their own levels.
+        # EXCEPTION: when addLayers=True, [2,2] is required for layer coverage
+        # (evidence: [0,1] gives 0% layer coverage — see base.py:69)
         if self.mesh_strategy == 'adaptive_span' and not self._surface_levels_user_set:
-            self.snappy_settings['surfaceRefinementLevels'] = [0, 1]
-            self.log.info("adaptive_span: surface refinement reduced to [0, 1] (support role)")
+            add_layers = self.snappy_settings.get('addLayers', True)
+            if add_layers:
+                self.snappy_settings['surfaceRefinementLevels'] = [2, 2]
+                self.log.info("adaptive_span + addLayers: surface refinement set to [2, 2] (required for layer coverage)")
+            else:
+                self.snappy_settings['surfaceRefinementLevels'] = [0, 1]
+                self.log.info("adaptive_span (no layers): surface refinement reduced to [0, 1] (support role)")
 
         # Process boundary_layers config (accept both snake_case and camelCase)
         boundary_layers = self.mesh_settings.get('boundary_layers', {})

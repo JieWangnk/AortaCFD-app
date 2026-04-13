@@ -137,35 +137,38 @@ def prepare_fv_schemes_context(config: Dict[str, Any]) -> Dict[str, Any]:
     is_steady = physics.get('steady_state', False)
     profile = numerics.get('profile', 'standard')
 
-    # Determine time discretization — read from profile config
+    # Read all schemes from the authoritative profile definitions
+    # (single source of truth — no hardcoded duplicates)
+    from config.profiles.numerics import NUMERICS_PROFILES
+    profile_config = NUMERICS_PROFILES.get(profile, NUMERICS_PROFILES.get('standard', {}))
+
+    # Time discretization
     if is_steady:
         ddt_scheme = 'steadyState'
     else:
-        from config.profiles.numerics import NUMERICS_PROFILES
-        profile_config = NUMERICS_PROFILES.get(profile, {})
         ddt_scheme = profile_config.get('ddtSchemes', {}).get('default', 'Euler')
 
-    # Determine convection scheme based on profile
-    if profile == 'robust':
-        div_scheme = 'Gauss upwind'
-        div_scheme_k = 'Gauss upwind'
-    elif profile == 'precise' or simulation_type == 'les':
-        div_scheme = 'Gauss LUST grad(U)'
-        div_scheme_k = 'Gauss limitedLinear 1'
-    elif profile == 'accurate':
-        div_scheme = 'Gauss linearUpwind grad(U)'
-        div_scheme_k = 'Gauss limitedLinear 1'
-    else:  # standard
-        div_scheme = 'Gauss limitedLinearV 1'
-        div_scheme_k = 'Gauss limitedLinear 1'
+    # Convection schemes — read from profile
+    div_schemes = profile_config.get('divSchemes', {})
+    div_scheme = div_schemes.get('div(phi,U)', 'Gauss limitedLinearV 1')
+    div_scheme_k = div_schemes.get('div(phi,k)', 'Gauss limitedLinear 1')
 
-    # Determine gradient limiter
-    if profile == 'robust':
-        grad_limiter = 1.0
-    elif profile in ['accurate', 'precise']:
+    # LES override: always use LUST for resolved turbulence regardless of profile
+    if simulation_type == 'les' and 'LUST' not in div_scheme:
+        div_scheme = 'Gauss LUST grad(U)'
+
+    # Gradient limiter coefficient — extract from profile's grad scheme string
+    grad_default = profile_config.get('gradSchemes', {}).get('default', 'cellLimited Gauss linear 0.5')
+    # Parse the trailing number from e.g. "cellLimited Gauss linear 0.5"
+    grad_parts = grad_default.split()
+    try:
+        grad_limiter = float(grad_parts[-1])
+    except (ValueError, IndexError):
         grad_limiter = 0.5
-    else:
-        grad_limiter = 0.5
+
+    # Laplacian and snGrad schemes — read from profile
+    laplacian_scheme = profile_config.get('laplacianSchemes', {}).get('default', 'Gauss linear corrected')
+    sngrad_scheme = profile_config.get('snGradSchemes', {}).get('default', 'corrected')
 
     return {
         'is_steady': is_steady,
@@ -176,6 +179,8 @@ def prepare_fv_schemes_context(config: Dict[str, Any]) -> Dict[str, Any]:
         'div_scheme_U': div_scheme,
         'div_scheme_k': div_scheme_k,
         'grad_limiter': grad_limiter,
+        'laplacian_scheme': laplacian_scheme,
+        'sngrad_scheme': sngrad_scheme,
 
         # Allow override from schemes dict
         'schemes': schemes,
