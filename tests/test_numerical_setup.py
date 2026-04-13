@@ -102,9 +102,11 @@ class TestWriteFvSchemesFile:
                     'simulation_type': 'transient',
                     'profile': 'standard',
                     'ddt_scheme': 'backward',
-                    'div_scheme_U': 'Gauss linear',
-                    'div_scheme_k': 'Gauss linear',
-                    'grad_limiter': 1.0
+                    'div_scheme_U': 'Gauss limitedLinearV 1',
+                    'div_scheme_k': 'Gauss limitedLinear 1',
+                    'grad_limiter': 0.5,
+                    'laplacian_scheme': 'Gauss linear limited 0.5',
+                    'sngrad_scheme': 'limited 0.5',
                 }
 
                 writer.write_fvSchemes_file()
@@ -139,7 +141,9 @@ class TestWriteFvSchemesFile:
                     mock_context.return_value = {
                         'is_steady': False, 'simulation_type': 'transient',
                         'profile': 'standard', 'ddt_scheme': 'Euler',
-                        'div_scheme_U': '', 'div_scheme_k': '', 'grad_limiter': 1.0
+                        'div_scheme_U': '', 'div_scheme_k': '', 'grad_limiter': 0.5,
+                        'laplacian_scheme': 'Gauss linear limited 0.5',
+                        'sngrad_scheme': 'limited 0.5',
                     }
 
                     writer.write_fvSchemes_file()
@@ -291,9 +295,11 @@ ddtSchemes
                     'simulation_type': 'transient',
                     'profile': 'standard',
                     'ddt_scheme': 'backward',
-                    'div_scheme_U': 'Gauss linear',
-                    'div_scheme_k': 'Gauss linear',
-                    'grad_limiter': 1.0
+                    'div_scheme_U': 'Gauss limitedLinearV 1',
+                    'div_scheme_k': 'Gauss limitedLinear 1',
+                    'grad_limiter': 0.5,
+                    'laplacian_scheme': 'Gauss linear limited 0.5',
+                    'sngrad_scheme': 'limited 0.5',
                 }
 
                 writer.write_fvSchemes_file()
@@ -345,7 +351,9 @@ class TestWriteFvSchemesWithMeshAdaptive:
                     mock_context.return_value = {
                         'is_steady': False, 'simulation_type': 'transient',
                         'profile': 'standard', 'ddt_scheme': 'backward',
-                        'div_scheme_U': '', 'div_scheme_k': '', 'grad_limiter': 1.0
+                        'div_scheme_U': '', 'div_scheme_k': '', 'grad_limiter': 0.5,
+                        'laplacian_scheme': 'Gauss linear limited 0.5',
+                        'sngrad_scheme': 'limited 0.5',
                     }
 
                     writer.write_fvSchemes_file()

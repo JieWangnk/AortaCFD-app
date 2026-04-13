@@ -94,8 +94,8 @@ config: Dict[str, Any] = {
 
     # Gradient discretization
     "gradSchemes": {
-        "default": "cellLimited Gauss linear 1",
-        "grad(U)": "cellLimited Gauss linear 1",
+        "default": "cellLimited Gauss linear 0.5",
+        "grad(U)": "cellLimited Gauss linear 0.5",
         "grad(p)": "Gauss linear",
         "_comment": "Bounded gradient with limiter=0.5 - tighter than 1.0 for enhanced stability"
     },
@@ -103,7 +103,7 @@ config: Dict[str, Any] = {
     # Convection discretization
     "divSchemes": {
         "default": "none",
-        "div(phi,U)": "Gauss linearUpwind default",
+        "div(phi,U)": "Gauss limitedLinearV 1",
         "div(phi,k)": "Gauss limitedLinear 1",
         "div(phi,omega)": "Gauss limitedLinear 1",
         "div(phi,epsilon)": "Gauss limitedLinear 1",
@@ -118,7 +118,7 @@ config: Dict[str, Any] = {
     # Laplacian discretization
     "laplacianSchemes": {
         "default": "Gauss linear limited 0.5",
-        "_comment": "Second-order with non-orthogonal correction. Coefficient 0.777 optimal for typical cardiovascular mesh orthogonality (65-75°)"
+        "_comment": "Second-order with limited non-orthogonal correction. Coefficient 0.5 for stability on typical cardiovascular meshes (65-75° orthogonality)"
     },
 
     # Interpolation

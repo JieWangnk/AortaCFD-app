@@ -48,7 +48,7 @@ runTimeModifiable {{ controlDict.get('runTimeModifiable', 'true') }};
 
 adjustTimeStep  {{ controlDict.get('adjustTimeStep', 'yes') }};
 
-maxCo           {{ controlDict.get('maxCo', 1.2) }};
+maxCo           {{ controlDict.get('maxCo', 0.8) }};
 
 maxDeltaT       {{ controlDict.get('maxDeltaT', 1e-3) }};
 {# Use pre-computed values from template_context.py when available, fallback to inline computation for backward compatibility #}

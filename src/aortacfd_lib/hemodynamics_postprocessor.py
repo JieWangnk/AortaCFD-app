@@ -63,6 +63,8 @@ class HemodynamicsResults:
     osi_mean_masked: float = 0.0  # Mean OSI where TAWSS > 0.5 Pa (Les et al. 2010)
     rrt_max: float = 0.0
     rrt_mean: float = 0.0
+    rrt_p99: float = 0.0
+    rrt_p95: float = 0.0
 
     # Peak systole information
     peak_systole_time: float = 0.0  # Time of peak inlet flow
@@ -405,13 +407,17 @@ class HemodynamicsPostProcessor:
                     if wss_vec is not None:
                         # Multiply by density for Pa
                         wss_mags.append(np.linalg.norm(wss_vec, axis=1) * BLOOD_DENSITY_DEFAULT)
+                    else:
+                        self.log.warning(f"Failed to read wallShearStress from {d.name}, skipping timestep")
 
             if wss_mags:
                 # Proper TAWSS = time average of magnitudes (already in Pa)
                 tawss_proper = np.mean(wss_mags, axis=0)
 
-                # OSI = 0.5 * (1 - |mean(WSS)| / TAWSS)
-                # Avoid division by zero
+                # OSI = 0.5 * (1 - |mean(WSS_vec)| / mean(|WSS_vec|))
+                #   tawss[i]        = |mean(WSS_vec)|  (magnitude of time-averaged vector, line ~383)
+                #   tawss_proper[i] = mean(|WSS_vec|)   (time-average of magnitudes, line ~411)
+                # These are intentionally different quantities; do not refactor one away.
                 osi = np.zeros_like(tawss_proper)
                 nonzero = tawss_proper > 1e-10
                 osi[nonzero] = 0.5 * (1.0 - tawss[nonzero] / tawss_proper[nonzero])
@@ -441,6 +447,10 @@ class HemodynamicsPostProcessor:
 
                 results.rrt_max = float(np.max(rrt[valid])) if np.any(valid) else 0.0
                 results.rrt_mean = float(np.mean(rrt[valid])) if np.any(valid) else 0.0
+                # Percentile-based descriptors for RRT (robust to outlier cells)
+                if np.any(valid):
+                    results.rrt_p99 = float(np.percentile(rrt[valid], 99))
+                    results.rrt_p95 = float(np.percentile(rrt[valid], 95))
 
                 # Update TAWSS with proper calculation (overrides approximate)
                 results.tawss_max = float(np.max(tawss_proper))

@@ -16,9 +16,9 @@ FoamFile
 
 {# Use pre-computed values from template_context.py when available, fallback to inline defaults for backward compatibility #}
 {%- set _profile = profile if profile is defined else 'standard' -%}
-{%- set _pimple = pimple_defaults if pimple_defaults is defined else {'nOuterCorrectors': 30, 'nCorrectors': 2, 'nNonOrthogonalCorrectors': 1} -%}
-{%- set _relaxation = relaxation_defaults if relaxation_defaults is defined else {'p': 0.3, 'pFinal': 1.0, 'U': 0.7, 'UFinal': 1.0, 'k': 0.7, 'kFinal': 1.0} -%}
-{%- set _tolerances = tolerance_defaults if tolerance_defaults is defined else {'p': 1e-4, 'U': 1e-5} -%}
+{%- set _pimple = pimple_defaults if pimple_defaults is defined else {'nOuterCorrectors': 10, 'nCorrectors': 2, 'nNonOrthogonalCorrectors': 0} -%}
+{%- set _relaxation = relaxation_defaults if relaxation_defaults is defined else {'p': 0.5, 'pFinal': 1.0, 'U': 0.8, 'UFinal': 1.0, 'k': 0.7, 'kFinal': 1.0} -%}
+{%- set _tolerances = tolerance_defaults if tolerance_defaults is defined else {'p': 1e-3, 'U': 1e-4} -%}
 
 solvers
 {

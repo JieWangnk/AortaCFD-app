@@ -41,7 +41,7 @@ CHARACTERISTICS
 Time Integration:    backward (2nd order, A-stable)
 Convection:          Gauss LUST grad(U) (hybrid: 75% central + 25% upwind, low diffusion)
 Gradients:           cellLimited Gauss linear 0.5 (tighter limiting than standard)
-Laplacian:           Gauss linear limited corrected 0.33 (bounded non-orthogonal correction)
+Laplacian:           Gauss linear limited 0.5 (bounded non-orthogonal correction)
 Solver:              PIMPLE with many correctors (3 outer, 3 inner)
 Relaxation:          Light (U: 0.9, p: 0.5) - rely on correctors for stability
 Residual tolerance:  1e-8 (tight convergence per timestep)
@@ -66,7 +66,7 @@ IMPROVEMENTS OVER STANDARD
    - Better pressure-velocity coupling
    - More accurate mass conservation
 
-5. **Limited Laplacian**: Coefficient 0.33
+5. **Limited Laplacian**: Coefficient 0.5
    - Better handling of non-orthogonal meshes
    - Prevents overshoot on imperfect meshes
 
@@ -277,7 +277,7 @@ config: Dict[str, Any] = {
         "default": "Gauss linear limited 0.5",
         "_comment": (
             "Second-order with limited non-orthogonal correction. "
-            "Coefficient 0.33 limits correction for stability. "
+            "Coefficient 0.5 limits correction for stability. "
             "Better than plain 'corrected' on imperfect meshes. "
             "Prevents overshoot on non-orthogonal cells."
         )

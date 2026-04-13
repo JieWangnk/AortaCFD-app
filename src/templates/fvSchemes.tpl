@@ -18,9 +18,11 @@ FoamFile
 {%- set _is_steady = is_steady if is_steady is defined else physics.get('steady_state', false) -%}
 {%- set _profile = profile if profile is defined else 'standard' -%}
 {%- set _ddt_scheme = ddt_scheme if ddt_scheme is defined else ('steadyState' if _is_steady else ('Euler' if _profile == 'robust' else 'backward')) -%}
-{%- set _div_scheme_U = div_scheme_U if div_scheme_U is defined else ('Gauss upwind' if _profile == 'robust' else 'bounded Gauss limitedLinearV 1') -%}
-{%- set _div_scheme_k = div_scheme_k if div_scheme_k is defined else 'bounded Gauss limitedLinear 1' -%}
+{%- set _div_scheme_U = div_scheme_U if div_scheme_U is defined else ('Gauss upwind' if _profile == 'robust' else 'Gauss limitedLinearV 1') -%}
+{%- set _div_scheme_k = div_scheme_k if div_scheme_k is defined else 'Gauss limitedLinear 1' -%}
 {%- set _grad_limiter = grad_limiter if grad_limiter is defined else 0.5 -%}
+{%- set _laplacian_scheme = laplacian_scheme if laplacian_scheme is defined else 'Gauss linear limited 0.5' -%}
+{%- set _sngrad_scheme = sngrad_scheme if sngrad_scheme is defined else 'limited 0.5' -%}
 
 ddtSchemes
 {
@@ -77,10 +79,8 @@ laplacianSchemes
     {{ key }}       {{ value }};
     {%- endif %}
     {%- endfor %}
-    {% elif physics.simulation_type == 'LES' %}
-    default         Gauss linear corrected;
     {% else %}
-    default         Gauss linear corrected;
+    default         {{ _laplacian_scheme }};
     {% endif %}
 }
 
@@ -106,7 +106,7 @@ snGradSchemes
     {%- endif %}
     {%- endfor %}
     {% else %}
-    default         corrected;
+    default         {{ _sngrad_scheme }};
     {% endif %}
 }
 

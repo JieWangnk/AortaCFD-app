@@ -1017,11 +1017,13 @@ class InletMapping:
                 velocities.append(vel_vector)
 
             # Step 4: Verify flow rate (for logging)
+            # Bug fix: compare absolute values - velocity_magnitudes are always
+            # positive (from abs(target_flowrate) in scaling), but target_Q can
+            # be negative during backflow phases of the cardiac cycle.
             if abs(target_Q) > 1e-15:
                 computed_Q = self._verify_flowrate(velocity_magnitudes, n_points)
-                if abs(target_Q) > 1e-15:
-                    error_percent = abs(computed_Q - target_Q) / abs(target_Q) * 100
-                    max_error_percent = max(max_error_percent, error_percent)
+                error_percent = abs(computed_Q - abs(target_Q)) / abs(target_Q) * 100
+                max_error_percent = max(max_error_percent, error_percent)
 
             # Step 5: Write to file
             time_dir_path = os.path.join(parent_directory, f"{t:.6f}")
@@ -1038,12 +1040,16 @@ class InletMapping:
         """
         Verify the integrated flow rate from velocity magnitudes.
 
+        For analytically-scaled profiles (parabolic, plug), uses the analytical
+        integral to avoid mesh-distribution artifacts from non-uniform face areas.
+        For other profiles, falls back to discrete summation (approximate).
+
         Args:
             velocity_magnitudes: Array of velocity magnitudes (m/s)
             n_points: Total number of points
 
         Returns:
-            float: Computed flow rate (m³/s)
+            float: Computed flow rate (m³/s), always positive
         """
         active_mask = velocity_magnitudes > 0
         n_active = np.sum(active_mask)
@@ -1051,10 +1057,24 @@ class InletMapping:
         if n_active == 0:
             return 0.0
 
-        A_face = self.area / n_active
-        Q_computed = np.sum(velocity_magnitudes[active_mask]) * A_face
+        if self.profile == 'parabolic':
+            # Analytical: Q = U_max * A / 2 (exact for Poiseuille)
+            U_max = np.max(velocity_magnitudes)
+            return U_max * self.area / 2.0
 
-        return Q_computed
+        elif self.profile in ['plug', 'plug_flow']:
+            # Analytical: Q = U * A (exact for uniform flow)
+            # All active faces should have the same velocity
+            U_plug = np.max(velocity_magnitudes)
+            return U_plug * self.area
+
+        else:
+            # Discrete summation for non-standard profiles
+            # Note: assumes uniform face areas - this is approximate for
+            # non-uniform meshes (snappyHexMesh with wall refinement).
+            A_face = self.area / n_active
+            Q_computed = np.sum(velocity_magnitudes[active_mask]) * A_face
+            return Q_computed
 
     def _write_openfoam_data_format(self, file_name, n_points, velocities):
         with open(file_name, 'w') as file:

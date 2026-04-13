@@ -58,6 +58,8 @@ class FvSchemesWriter:
             "div_scheme_U": preprocessed['div_scheme_U'],
             "div_scheme_k": preprocessed['div_scheme_k'],
             "grad_limiter": preprocessed['grad_limiter'],
+            "laplacian_scheme": preprocessed['laplacian_scheme'],
+            "sngrad_scheme": preprocessed['sngrad_scheme'],
             # Raw data (still needed for scheme overrides)
             "physics": self.config['physics'],
             "schemes": schemes,
