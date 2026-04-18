@@ -926,33 +926,48 @@ class GeometryAnalyzer:
 
     def _get_internal_point_for_snappy(self) -> np.ndarray:
         """
-        Calculates a point guaranteed to be inside the fluid domain using a
-        robust, path-aligned normal vector. Returns point in meters.
+        Calculates a point guaranteed to be inside the fluid domain.
+
+        Uses the wall STL centroid as the target direction from the inlet,
+        which is always inside the tube regardless of how outlets are
+        distributed (the old path-vector heuristic failed for aortic arches
+        where the descending aorta outlet drags the average below the inlet).
+        Returns point in meters.
         """
         if self.inlet_centroid is None or not self.outlet_centroids:
             raise ValueError("Inlet or outlet centroids have not been calculated.")
 
-        # 1. Calculate the average position of all outlet centers (in meters)
-        avg_outlet_centroid = np.mean(np.array(self.outlet_centroids), axis=0)
         inlet_centroid = self.inlet_centroid
 
-        # 2. Define a vector for the general direction of flow
-        path_vector = avg_outlet_centroid - inlet_centroid
-
-        # 3. Align the geometric inlet normal with the path vector
-        # The dot product tells us if they point in generally the same direction.
-        if np.dot(self.inlet_normal, path_vector) < 0:
-            # If the dot product is negative, they point opposite ways.
-            # We flip the geometric normal to get a guaranteed inward direction.
-            inward_normal = -self.inlet_normal
-            self.log.info("Inlet normal was flipped to point inward along the aorta's path.")
+        # Use the wall STL centroid as a robust interior target.
+        # The centroid of the wall surface is always inside the tube.
+        wall_stl_path = os.path.join(
+            self.case_dir, "constant", "triSurface",
+            self.wall_patch + ".stl" if self.wall_patch else "wall.stl"
+        )
+        if os.path.exists(wall_stl_path):
+            from stl import mesh as stl_mesh
+            wall_mesh = stl_mesh.Mesh.from_file(wall_stl_path)
+            wall_centroid = np.array([
+                np.mean(wall_mesh.vectors[:, :, 0]),
+                np.mean(wall_mesh.vectors[:, :, 1]),
+                np.mean(wall_mesh.vectors[:, :, 2]),
+            ])
+            # Move 10% of inlet radius from inlet toward wall centroid
+            direction = wall_centroid - inlet_centroid
+            direction = direction / np.linalg.norm(direction)
+            offset_distance = self.inlet_radius * 0.1
+            internal_point = inlet_centroid + (offset_distance * direction)
+            self.log.info(f"locationInMesh: inlet toward wall centroid {wall_centroid}")
         else:
-            inward_normal = self.inlet_normal
-            self.log.info("Inlet normal is already aligned inward along the aorta's path.")
-
-        # 4. Move a small distance along this guaranteed inward normal (in meters)
-        offset_distance = self.inlet_radius * 0.1  # 10% of the radius
-        internal_point = inlet_centroid + (offset_distance * inward_normal)
+            # Fallback: use nearest outlet direction
+            self.log.warning(f"Wall STL not found at {wall_stl_path}, using nearest outlet fallback")
+            distances = [np.linalg.norm(np.array(oc) - inlet_centroid) for oc in self.outlet_centroids]
+            nearest_outlet = np.array(self.outlet_centroids[np.argmin(distances)])
+            direction = nearest_outlet - inlet_centroid
+            direction = direction / np.linalg.norm(direction)
+            offset_distance = self.inlet_radius * 0.1
+            internal_point = inlet_centroid + (offset_distance * direction)
 
         self.log.info(f"Robust locationInMesh calculated: {internal_point} (m)")
         return internal_point
