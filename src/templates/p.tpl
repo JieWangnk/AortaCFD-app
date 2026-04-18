@@ -141,6 +141,13 @@ boundaryField
     {
         type            zeroGradient;
     }
+
+    {% if has_world_patch %}
+    world
+    {
+        type            zeroGradient;
+    }
+    {% endif %}
     {% endif %}
 }
 // ************************************************************************* //

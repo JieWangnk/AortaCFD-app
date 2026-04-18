@@ -27,18 +27,25 @@ def detect_world_patch_mode(case_dir, log):
         with open(boundary_file, 'r') as f:
             content = f.read()
             
-        # Look for world patch
-        if re.search(r'\bworld\b\s*{', content):
-            log.info("World patch mode detected in boundary file")
-            return True
-        
         # Check if only one patch exists (excluding defaultFaces)
         patches = re.findall(r'^\s*(\w+)\s*{', content, re.MULTILINE)
-        non_default_patches = [p for p in patches if p != 'defaultFaces']
-        
+        non_default_patches = [p for p in patches if p not in ('defaultFaces', 'FoamFile')]
+
         if len(non_default_patches) == 1:
             log.info(f"Single patch mode detected: {non_default_patches[0]}")
             return True
+
+        # Only trigger world-patch mode when 'world' is the sole
+        # user-facing patch (i.e. blockMesh without snappyHexMesh).
+        # After snappy, a residual 'world' patch may remain alongside
+        # proper inlet/outlet/wall patches — that is NOT world-patch mode.
+        has_world = re.search(r'\bworld\b\s*\{', content) is not None
+        has_inlet = re.search(r'\binlet\b\s*\{', content) is not None
+        if has_world and not has_inlet:
+            log.info("World patch mode detected in boundary file")
+            return True
+        if has_world and has_inlet:
+            log.info("Residual 'world' patch present alongside named patches — not world-patch mode")
             
     except Exception as e:
         log.warning(f"Error checking boundary file: {e}")

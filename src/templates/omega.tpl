@@ -50,6 +50,13 @@ boundaryField
         type            omegaWallFunction;
         value           uniform {{ omega_initial }};
     }
+
+    {% if has_world_patch %}
+    world
+    {
+        type            zeroGradient;
+    }
+    {% endif %}
     {% endif %}
 }
 // ************************************************************************* //

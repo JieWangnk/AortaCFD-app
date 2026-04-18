@@ -5,6 +5,7 @@ from the configuration and using Jinja2 templates.
 """
 
 import os
+import re
 from typing import Any, Dict, Optional, Tuple
 
 from jinja2 import Environment, FileSystemLoader
@@ -69,6 +70,14 @@ class BoundaryConditionSetup:
         # Calculate initial pressure for better convergence
         initial_pressure, outlet_initial_pressures = self._calculate_initial_pressure()
 
+        # Check if a residual 'world' patch exists in the mesh (alongside proper patches)
+        has_world_patch = False
+        if not self.world_patch_mode:
+            boundary_file = os.path.join(self.case_dir, "constant", "polyMesh", "boundary")
+            if os.path.exists(boundary_file):
+                with open(boundary_file, 'r') as f:
+                    has_world_patch = bool(re.search(r'\bworld\b\s*\{', f.read()))
+
         # This context dictionary is now simpler, as it doesn't need initial_conditions
         context = {
             "inlet_patch": "world" if self.world_patch_mode else self.inlet_patch,
@@ -81,6 +90,7 @@ class BoundaryConditionSetup:
             "openfoam_version": self.config.get('openfoam_version', '8'),
             "openfoam_major_version": self.config.get('openfoam_major_version', 8),
             "world_patch_mode": self.world_patch_mode,
+            "has_world_patch": has_world_patch,
             "inlet_velocity_vector": inlet_velocity_vector,
             "initial_pressure": initial_pressure,
             "outlet_initial_pressures": outlet_initial_pressures

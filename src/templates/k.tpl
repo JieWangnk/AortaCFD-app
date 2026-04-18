@@ -50,6 +50,13 @@ boundaryField
         type            kqRWallFunction;
         value           uniform {{ k_initial }};
     }
+
+    {% if has_world_patch %}
+    world
+    {
+        type            zeroGradient;
+    }
+    {% endif %}
     {% endif %}
 }
 // ************************************************************************* //
