@@ -423,7 +423,7 @@ class WkSetup:
         outlet_radii = {name: math.sqrt(area / math.pi) for name, area in outlet_areas.items()}
         return area_inlet, outlet_areas, outlet_radii
 
-    def _compute_mean_inlet_flow(self, area_inlet: float) -> tuple[float, np.ndarray | None, np.ndarray | None]:
+    def _compute_mean_inlet_flow(self, area_inlet: float):
         """Compute mean inlet flow in m^3/s from the configured inlet boundary condition."""
         inlet_type = self.inlet_settings.get('type', 'TIMEVARYING').upper()
 
