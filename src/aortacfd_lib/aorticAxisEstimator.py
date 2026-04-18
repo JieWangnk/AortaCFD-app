@@ -77,7 +77,7 @@ class AorticAxisEstimator:
             self.logger.error(f"Error loading or scaling wall STL {self.wall_stl_full_path}: {e}")
             raise AorticAxisEstimatorError(f"Failed to load/scale wall STL: {e}")
 
-    def _get_patch_centroid_by_keyword(self, patch_keyword: str) -> np.ndarray | None:
+    def _get_patch_centroid_by_keyword(self, patch_keyword: str):
         """
         Calculates the centroid of a specific patch using the PatchProcessing class.
         """
@@ -160,7 +160,7 @@ class AorticAxisEstimator:
             self.logger.error(f"Unexpected error during AorticAxisEstimator processing: {e}")
             self.final_combined_axis = None # Ensure it's None on failure
 
-    def get_combined_axis(self) -> np.ndarray | None:
+    def get_combined_axis(self):
         """
         Returns the calculated combined aortic axis.
 
