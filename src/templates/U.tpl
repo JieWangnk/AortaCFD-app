@@ -116,6 +116,13 @@ boundaryField
         type            fixedValue;
         value           uniform (0 0 0);
     }
+
+    {% if has_world_patch %}
+    world
+    {
+        type            slip;
+    }
+    {% endif %}
     {% endif %}
 }
 // ************************************************************************* //

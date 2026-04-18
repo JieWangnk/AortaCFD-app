@@ -109,6 +109,7 @@ castellatedMeshControls
     }
 
     locationInMesh ({{ '%.6g' % internal_point[0] }} {{ '%.6g' % internal_point[1] }} {{ '%.6g' % internal_point[2] }});
+    keepPatches false;
     allowFreeStandingZoneFaces true;
 
     // Feature resolution angle - triggers higher refinement at sharp features

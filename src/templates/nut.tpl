@@ -50,6 +50,14 @@ boundaryField
         type            nutkWallFunction;
         value           uniform 0;
     }
+
+    {% if has_world_patch %}
+    world
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    {% endif %}
     {% endif %}
 }
 // ************************************************************************* //

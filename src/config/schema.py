@@ -88,8 +88,9 @@ if PYDANTIC_AVAILABLE:
         @model_validator(mode='after')
         def sync_simulation_type(self) -> 'PhysicsConfig':
             """Ensure simulation_type matches model."""
-            if self.simulation_type.lower() != self.model.value:
-                self.simulation_type = self.model.value
+            model_val = self.model.value if hasattr(self.model, 'value') else str(self.model)
+            if self.simulation_type.lower() != model_val:
+                self.simulation_type = model_val
             return self
 
         class Config:

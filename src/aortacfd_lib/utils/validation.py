@@ -1068,6 +1068,14 @@ class BoundaryConditionValidator:
                 csv_path_boundary = self.case_directory / "constant" / "boundaryData" / inlet_patch / csv_file
                 if csv_path_boundary.exists():
                     csv_path = csv_path_boundary
+
+            # If not found, try the config file's directory (cases_input/<case>/)
+            if not csv_path.exists():
+                config_path = self.config.get('_config_file_path')
+                if config_path:
+                    csv_config_dir = Path(config_path).parent / csv_file
+                    if csv_config_dir.exists():
+                        csv_path = csv_config_dir
         else:
             csv_path = Path(csv_file)
 
