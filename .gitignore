@@ -129,9 +129,13 @@ ghp_*
 github_pat_*
 *.token
 
-# Documentation build
+# Documentation build outputs
+# (the docs/ source tree ships; only built HTML output is ignored)
 site/
-docs/
+docs/_build/
+docs/build/
+docs/_static/
+docs/_templates/
 
 # Development progress documentation
 *_SUMMARY.md

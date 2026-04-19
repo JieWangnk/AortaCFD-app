@@ -5,6 +5,8 @@ CLI interface for patient runner - handles command-line argument parsing
 import sys
 import argparse
 
+from aortacfd_lib import __version__ as _aortacfd_version
+
 # Delay PatientCaseRunner import until after Logger is configured
 
 
@@ -42,6 +44,8 @@ steps:
 
     # Information
     info_group = parser.add_argument_group('information')
+    info_group.add_argument('--version', '-V', action='version',
+                           version=f'AortaCFD {_aortacfd_version}')
     info_group.add_argument('--list', '-l', action='store_true',
                            help='list available cases in cases_input/')
     info_group.add_argument('--list-steps', action='store_true',

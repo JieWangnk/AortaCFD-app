@@ -28,6 +28,8 @@ src_path = str(Path(__file__).parent / 'src')
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
+from aortacfd_lib import __version__ as _aortacfd_version
+
 
 # ---------------------------------------------------------------------------
 # Worker function (must be top-level for pickling by multiprocessing)
@@ -250,6 +252,11 @@ def create_parser() -> argparse.ArgumentParser:
         description='AortaCFD Batch Runner - parallel multi-case execution',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
+    )
+
+    parser.add_argument(
+        '--version', '-V', action='version',
+        version=f'AortaCFD {_aortacfd_version}',
     )
 
     # Case selection

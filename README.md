@@ -31,14 +31,26 @@ cd AortaCFD-app
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
-pip install -r requirements.txt
+pip install -e .                  # runtime
+pip install -e ".[dev]"           # runtime + test/lint/security tools
 ```
 
-OpenFOAM 12 must be sourced before running the workflow:
+`pip install -r requirements.txt` also works — it's a thin shim over `pip install -e .`. Dependencies are declared in `pyproject.toml` (see `CHANGELOG.md` for recent changes).
+
+Verify the install:
+
+```bash
+python run_patient.py --version       # → AortaCFD 1.1.0
+python run_patient.py --list          # → BPM120, PAT002, VOL04
+```
+
+OpenFOAM 12 must be sourced before running the `mesh`, `solver`, or `reconstruct` steps:
 
 ```bash
 source /opt/openfoam12/etc/bashrc
 ```
+
+The `case` step (generates OpenFOAM dictionaries) and `postprocess` step work without OpenFOAM sourced — useful for quick config sanity-checks.
 
 If you plan to use 3-element Windkessel outlets, install the custom boundary condition:
 
@@ -109,13 +121,27 @@ python run_patient.py BPM120 --steps case,mesh,boundary
 python run_patient.py BPM120 --steps solver
 python run_patient.py BPM120 --steps postprocess
 
-# Update existing run (preserves mesh, regenerates BCs)
+# Fast smoke-test run (coarse mesh, shortened simulation time)
+python run_patient.py BPM120 --quick
+
+# Update an existing run (re-uses the mesh; requires a completed `mesh` step
+# in the target directory)
 python run_patient.py BPM120 --update output/BPM120/run_xxx
 python run_patient.py BPM120 --update output/BPM120/run_xxx --steps boundary,solver
 
 # Standalone post-processing on a completed run
 python run_patient.py --postprocess output/BPM120/run_xxx
 ```
+
+**Approximate runtimes** for BPM120 (pediatric coarctation, 4-outlet geometry) on 8 cores:
+
+| Step | Time |
+|------|------|
+| `case` | <5 s |
+| `mesh` (`--quick`, ~110k cells) | 5–15 min |
+| `mesh` (production, 800k–2M cells) | 20–60 min |
+| `solver` (1 cardiac cycle, standard profile) | 0.5–3 h |
+| `postprocess` | 1–5 min |
 
 ---
 
@@ -460,15 +486,26 @@ output/<case_id>/<run_name>/
 
 ## Testing
 
-AortaCFD includes 2086 automated tests covering configuration, boundary conditions, meshing, mesh audit, hemodynamics, and workflow integration.
+AortaCFD includes 2168 automated tests covering configuration, boundary conditions, meshing, mesh audit, hemodynamics, and workflow integration.
 
 ```bash
 # Run all tests
-./venv/bin/pytest tests/ -v
+PYTHONPATH=src pytest tests/ -v
 
 # With coverage
-./venv/bin/pytest tests/ --cov=src --cov-report=html
+PYTHONPATH=src pytest tests/ --cov=src --cov-report=html
+
+# Skip slow/OpenFOAM-dependent tests
+PYTHONPATH=src pytest tests/ -m "not slow and not e2e"
 ```
+
+## Documentation
+
+- `CHANGELOG.md` — release notes and migration guide across versions
+- `docs/` — deeper technical notes (mesh specification, PIMPLE settings, backflow stabilisation, numerics evidence)
+- `docs/tutorial/` — step-by-step tutorial cases
+- `examples/` — ready-to-run config templates (`config_minimal.json`, `config_standard.json`, `config_full.json`)
+- `benchmarks/README.md` — expected outputs for reference cases
 
 ---
 
@@ -496,13 +533,14 @@ AortaCFD-app/
 
 ## Citation
 
-If you use AortaCFD in academic work, see `CITATION.cff`.
+If you use AortaCFD in academic work, please cite via `CITATION.cff`.
 
 ```bibtex
-@software{aortacfd2025,
+@software{aortacfd,
   title={AortaCFD: Patient-Specific Aortic Blood Flow Simulation},
   author={Wang, Jie},
-  year={2025},
+  year={2026},
+  version={1.1.0},
   url={https://github.com/JieWangnk/AortaCFD-app}
 }
 ```
