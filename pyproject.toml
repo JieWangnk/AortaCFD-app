@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aortacfd"
-version = "2.1.0"
+version = "1.1.0"
 description = "Automated framework for patient-specific aortic hemodynamics simulations"
 readme = "README.md"
 license = {text = "MIT"}
@@ -41,19 +41,29 @@ dependencies = [
     "matplotlib>=3.7.0",
     "jinja2>=3.1.0",
     "numpy-stl>=3.0.0",
+    "scikit-learn>=1.0.0",
+    "vtk>=9.0.0",
     "pyyaml>=6.0",
     "pydantic>=2.0.0",
 ]
 
 [project.optional-dependencies]
+# Optional: advanced STL ops (only used in a few mesh-quality paths)
+mesh = [
+    "trimesh>=3.15.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
     "pytest-xdist>=3.0.0",
+    "pytest-html>=3.1.0",
     "black>=23.0.0",
     "isort>=5.12.0",
     "flake8>=6.0.0",
     "mypy>=1.0.0",
+    "bandit>=1.7.0",
+    "safety>=2.3.0",
 ]
 docs = [
     "sphinx>=6.0.0",

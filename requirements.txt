@@ -1,27 +1,15 @@
-# Core dependencies
-numpy>=1.21.0
-pandas>=1.3.0
-matplotlib>=3.5.0
-vtk>=9.0.0
-pyvista>=0.32.0
-jinja2>=3.0.0
-numpy-stl>=2.16.0
-scipy>=1.7.0
-scikit-learn>=1.0.0
-trimesh>=3.15.0
-
-# Web interface
-flask>=2.0.0
-markdown>=3.4.0
-
-# Testing framework
-pytest>=7.0.0
-pytest-cov>=4.0.0
-pytest-mock>=3.10.0
-pytest-xdist>=3.0.0
-pytest-html>=3.1.0
-
-# Development tools
-black>=22.0.0
-flake8>=4.0.0
-mypy>=0.950
+# Dependencies are defined in pyproject.toml.
+#
+# Install the package with its runtime dependencies:
+#     pip install -e .
+#
+# Or with development tools (pytest, black, isort, flake8, mypy, bandit, safety):
+#     pip install -e ".[dev]"
+#
+# Optional extras:
+#     pip install -e ".[mesh]"   # trimesh for advanced STL ops
+#     pip install -e ".[docs]"   # sphinx for building the docs
+#
+# This file is retained as a shim for tools and users expecting
+# requirements.txt; the single source of truth is pyproject.toml.
+-e .
