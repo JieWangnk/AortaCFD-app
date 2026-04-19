@@ -66,15 +66,15 @@ FoamFile
         assert result is True
         mock_log.info.assert_called()
 
-    def test_no_world_patch_returns_false(self, tmp_path, mock_log):
-        """Test that file without 'world' patch returns False."""
+    def test_single_real_patch_is_world_mode(self, tmp_path, mock_log):
+        """A boundary with a single real patch (FoamFile/defaultFaces excluded)
+        is world-patch mode — the short-circuit branch for pre-snappy blockMesh
+        output."""
         from aortacfd_lib.utils.patch_utils import detect_world_patch_mode
 
         poly_mesh = tmp_path / "constant" / "polyMesh"
         poly_mesh.mkdir(parents=True)
 
-        # Boundary file without 'world' patch - regex matches multiple entries
-        # including FoamFile, so single patch mode won't be detected
         boundary_content = """FoamFile
 {
     version     2.0;
@@ -96,8 +96,7 @@ FoamFile
 
         result = detect_world_patch_mode(str(tmp_path), mock_log)
 
-        # FoamFile and walls both match the regex, so not single patch mode
-        assert result is False
+        assert result is True
 
     def test_returns_false_for_multiple_patches(self, tmp_path, mock_log):
         """Test that False is returned for multiple patches."""
@@ -144,13 +143,13 @@ FoamFile
         assert result is False
 
     def test_ignores_default_faces_patch(self, tmp_path, mock_log):
-        """Test that defaultFaces patch is ignored in count."""
+        """defaultFaces and FoamFile are excluded from the patch count, so a
+        single real patch alongside them is still world-patch mode."""
         from aortacfd_lib.utils.patch_utils import detect_world_patch_mode
 
         poly_mesh = tmp_path / "constant" / "polyMesh"
         poly_mesh.mkdir(parents=True)
 
-        # One real patch plus defaultFaces - but FoamFile also matches
         boundary_content = """FoamFile
 {
     version     2.0;
@@ -178,8 +177,7 @@ FoamFile
 
         result = detect_world_patch_mode(str(tmp_path), mock_log)
 
-        # FoamFile matches too, so more than 1 non-defaultFaces entry
-        assert result is False
+        assert result is True
 
     def test_handles_file_read_error(self, tmp_path, mock_log):
         """Test graceful handling of file read errors."""
