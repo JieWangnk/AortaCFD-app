@@ -57,7 +57,7 @@ def run_command(config: dict, command: list, case_directory: str, log_filename: 
         case_directory (str): The directory where the command should be run.
         log_filename (str): The name of the log file to capture output.
     """
-    of_env_path = config.get("openfoam_env_path")
+    of_env_path = os.environ.get("OPENFOAM_ENV_PATH") or config.get("openfoam_env_path")
     if not of_env_path:
         raise ValueError("'openfoam_env_path' is not defined in your configuration.")
 
