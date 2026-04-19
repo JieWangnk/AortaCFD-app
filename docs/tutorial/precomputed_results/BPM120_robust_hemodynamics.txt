@@ -1,0 +1,53 @@
+======================================================================
+HEMODYNAMICS ANALYSIS REPORT
+======================================================================
+
+Inlet Type: TIMEVARYING
+Flow Type: Pulsatile
+Cardiac Cycle: 0.500 s
+
+----------------------------------------------------------------------
+WALL SHEAR STRESS (WSS)
+----------------------------------------------------------------------
+  Maximum: 2.0596 Pa
+  Mean:    0.1572 Pa
+  Minimum: 0.0001 Pa
+
+----------------------------------------------------------------------
+TIME-AVERAGED METRICS (Pulsatile Flow)
+----------------------------------------------------------------------
+  TAWSS Maximum: 195.4432 Pa
+  TAWSS Mean:    4.2818 Pa
+  OSI Maximum:   0.4963
+  OSI Mean:      0.1757
+  RRT Maximum:   232.0458 Pa⁻¹
+  RRT Mean:      0.9885 Pa⁻¹
+
+  Clinical thresholds:
+    Low TAWSS (<0.4 Pa): Atherogenic phenotype risk
+    High TAWSS (>40 Pa): Endothelial injury risk
+    High OSI (>0.3): Oscillatory flow, thrombus risk
+    High RRT (>10 Pa⁻¹): Particle trapping risk
+
+----------------------------------------------------------------------
+PRESSURE DROP (Inlet → Outlets)
+----------------------------------------------------------------------
+  Inlet pressure: 115.85 mmHg
+
+  → outlet1:
+      Outlet pressure: 114.74 mmHg
+      Pressure drop:   1.11 mmHg
+  → outlet2:
+      Outlet pressure: 112.87 mmHg
+      Pressure drop:   2.99 mmHg
+  → outlet3:
+      Outlet pressure: 112.34 mmHg
+      Pressure drop:   3.51 mmHg
+  → outlet4:
+      Outlet pressure: 94.31 mmHg
+      Pressure drop:   21.54 mmHg
+
+  Clinical significance:
+    ΔP > 20 mmHg at rest: Significant coarctation
+
+======================================================================

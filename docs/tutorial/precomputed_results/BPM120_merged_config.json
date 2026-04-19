@@ -1,0 +1,383 @@
+{
+  "_metadata": {
+    "case_name": "BPM120",
+    "generated_at": "2026-01-20 14:23:40",
+    "output_directory": "output/BPM120/profile_study/accurate",
+    "description": "Full merged configuration for simulation reproducibility",
+    "usage": "python run_patient.py BPM120 --config <this_file>"
+  },
+  "openfoam": {
+    "version": "12",
+    "major_version": 12,
+    "env_path": "/opt/openfoam12/etc/bashrc",
+    "foundation": true,
+    "solver_names": {
+      "incompressible": "foamRun",
+      "windkessel": "foamRun"
+    },
+    "windkessel": {
+      "repository": "https://github.com/JieWangnk/OpenFOAM-WK",
+      "boundary_condition": "modularWKPressure",
+      "solver_name": "foamRun",
+      "solver_module": "incompressibleFluid",
+      "supported": true,
+      "compilation_required": true
+    }
+  },
+  "numerical": {
+    "default_solver": "GAMG",
+    "pressure_solver": "GAMG",
+    "velocity_solver": "smoothSolver",
+    "time_scheme": "backward",
+    "divergence_scheme": "bounded Gauss limitedLinearV 1",
+    "gradient_scheme": "cellLimited Gauss linear 0.5",
+    "laplacian_scheme": "Gauss linear corrected"
+  },
+  "physics": {
+    "default_turbulence": "laminar",
+    "default_viscosity": 0.004,
+    "default_density": 1060,
+    "default_temperature": 310,
+    "default_prandtl": 0.7,
+    "nu": 3.7735849056603773e-06,
+    "rho": 1060,
+    "mu": 0.004,
+    "model": "laminar",
+    "transport_properties": {
+      "rho": 1060,
+      "nu": 3.7736e-06
+    },
+    "simulation_type": "laminar"
+  },
+  "mesh": {
+    "SNAPPY_SETTINGS": {
+      "maxLocalCells": 10000000,
+      "maxGlobalCells": 20000000,
+      "minRefinementCells": 10,
+      "maxLoadUnbalance": 0.1,
+      "nCellsBetweenLevels": 3,
+      "surfaceRefinementLevels": [
+        1,
+        2
+      ],
+      "includedAngle": 170,
+      "resolveFeatureAngle": 30,
+      "castellatedMesh": true,
+      "snap": true,
+      "addLayers": true,
+      "nSmoothPatch": 5,
+      "nSmoothInternal": 5,
+      "snapTolerance": 2.0,
+      "nSolveIter": 100,
+      "nRelaxIter": 10,
+      "nFeatureSnapIter": 10,
+      "implicitFeatureSnap": false,
+      "explicitFeatureSnap": true,
+      "multiRegionFeatureSnap": false,
+      "relativeSizes": true,
+      "addLayer": 10,
+      "expansionRatio": 1.1,
+      "finalLayerThickness": 0.4,
+      "minThickness": 0.15,
+      "featureAngle": 150,
+      "slipFeatureAngle": 30,
+      "layerTerminationAngle": -180,
+      "nGrow": 0,
+      "nBufferCellsNoExtrude": 0,
+      "addLayers_nRelaxIter": 10,
+      "nSmoothNormals": 5,
+      "nSmoothSurfaceNormals": 30,
+      "nSmoothThickness": 15,
+      "nSmoothDisplacement": 15,
+      "maxFaceThicknessRatio": 0.4,
+      "maxThicknessToMedialRatio": 0.25,
+      "minMedianAxisAngle": 90,
+      "nLayerIter": 100,
+      "nRelaxedIter": 50,
+      "maxNonOrtho": 60,
+      "maxBoundarySkewness": 4,
+      "maxInternalSkewness": 4,
+      "maxConcave": 80,
+      "minVol": 1e-18,
+      "minTetQuality": 1e-30,
+      "minArea": 1e-20,
+      "minTwist": 0.01,
+      "minDeterminant": 0.01,
+      "minFaceWeight": 0.02,
+      "minVolRatio": 0.01,
+      "minTriangleTwist": -1,
+      "nSmoothScale": 6,
+      "errorReduction": 0.75,
+      "relaxed_maxNonOrtho": 70,
+      "relaxed_maxBoundarySkewness": 10,
+      "relaxed_maxInternalSkewness": 6,
+      "relaxed_minDeterminant": 0.001,
+      "relaxed_minVol": 1e-20
+    }
+  },
+  "simulation": {
+    "default_end_time": 5.0,
+    "default_time_step": 0.001,
+    "default_write_interval": 0.1,
+    "default_max_co": 1.0,
+    "default_max_delta_t": 0.01
+  },
+  "paths": {
+    "templates": "src/templates",
+    "windkessel_lib": "windkessel_of12",
+    "logs": "logs",
+    "results": "results"
+  },
+  "geometry": {
+    "case_name": "BPM120",
+    "wall_keywords_ordered": "wall_aorta",
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": [
+      "outlet1",
+      "outlet2",
+      "outlet3",
+      "outlet4"
+    ],
+    "scale_factor": 0.001
+  },
+  "boundary_conditions": {
+    "inlet": {
+      "type": "TIMEVARYING",
+      "csv_file": "BPM120.csv",
+      "data_type": "flowrate",
+      "profile": "parabolic"
+    },
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80,
+        "venous_pressure": 0,
+        "methodology": "murray_law_automatic",
+        "tau": 1.0,
+        "flow_split": 70
+      }
+    },
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+  "simulation_control": {
+    "cardiac_cycle_period": 0.5,
+    "number_of_cycles": 3,
+    "writeInterval": 0.05,
+    "functions": {
+      "enabled": true,
+      "wallShearStress": {
+        "enabled": true,
+        "patches": [
+          "wall_aorta"
+        ],
+        "writeControl": "writeTime"
+      }
+    },
+    "controlDict": {
+      "deltaT": 1e-06,
+      "adjustTimeStep": "yes",
+      "maxCo": 1.0,
+      "maxDeltaT": 0.001,
+      "startFrom": "startTime",
+      "startTime": 0,
+      "stopAt": "endTime",
+      "writeControl": "adjustableRunTime",
+      "writeFormat": "binary",
+      "writePrecision": 6,
+      "writeCompression": "off",
+      "timeFormat": "general",
+      "timePrecision": 6,
+      "runTimeModifiable": "true",
+      "writeInterval": 0.05
+    }
+  },
+  "run_settings": {
+    "solution_type": "parallel",
+    "subdomains": 4,
+    "decomposition_method": "scotch"
+  },
+  "openfoam_version": "12",
+  "openfoam_env_path": "/opt/openfoam12/etc/bashrc",
+  "openfoam_major_version": 12,
+  "openfoam_foundation": true,
+  "solver_application": "foamRun",
+  "solver_module": "incompressibleFluid",
+  "template_vars": {
+    "openfoam_version": "12",
+    "openfoam_major_version": 12
+  },
+  "schemes": {
+    "ddtSchemes": {
+      "default": "backward",
+      "_comment": "Second-order implicit - stable and accurate for transient flows"
+    },
+    "gradSchemes": {
+      "default": "cellLimited Gauss linear 1",
+      "grad(U)": "cellLimited Gauss linear 1",
+      "grad(p)": "Gauss linear",
+      "_comment": "Standard gradient limiting (1.0) - less restrictive than standard profile"
+    },
+    "divSchemes": {
+      "default": "none",
+      "div(phi,U)": "Gauss linearUpwind grad(U)",
+      "div(phi,k)": "Gauss linearUpwind grad(k)",
+      "div(phi,omega)": "Gauss linearUpwind grad(omega)",
+      "div(phi,epsilon)": "Gauss linearUpwind grad(epsilon)",
+      "div((nuEff*dev2(T(grad(U)))))": "Gauss linear",
+      "_comment": "linearUpwind: 2nd order with gradient-based upwinding. Lower diffusion than limitedLinearV but unbounded. Requires good mesh quality for stability."
+    },
+    "laplacianSchemes": {
+      "default": "Gauss linear corrected",
+      "_comment": "Full non-orthogonal correction - requires good mesh orthogonality"
+    },
+    "interpolationSchemes": {
+      "default": "linear",
+      "_comment": "Second-order linear interpolation"
+    },
+    "snGradSchemes": {
+      "default": "corrected",
+      "_comment": "Full correction - requires good mesh orthogonality"
+    },
+    "solvers": {
+      "PIMPLE": {
+        "nOuterCorrectors": 50,
+        "nCorrectors": 2,
+        "nNonOrthogonalCorrectors": 1,
+        "momentumPredictor": true,
+        "_comment": "HIGH nOuterCorrectors (50) with convergence-based early exit. Standard corrector counts for efficiency.",
+        "outerCorrectorResidualControl": {
+          "p": {
+            "tolerance": 0.0001,
+            "relTol": 0
+          },
+          "U": {
+            "tolerance": 1e-05,
+            "relTol": 0
+          },
+          "(k|epsilon|omega)": {
+            "tolerance": 1e-05,
+            "relTol": 0
+          },
+          "_comment": "Standard tolerances for convergence-based early exit"
+        }
+      },
+      "relaxationFactors": {
+        "fields": {
+          "p": 0.3,
+          "pFinal": 1.0,
+          "_comment": "Moderate pressure relaxation with full correction on final iteration"
+        },
+        "equations": {
+          "U": 0.7,
+          "UFinal": 1.0,
+          "k": 0.7,
+          "kFinal": 1.0,
+          "omega": 0.7,
+          "omegaFinal": 1.0,
+          "epsilon": 0.7,
+          "epsilonFinal": 1.0,
+          "_comment": "Moderate relaxation with full correction on final PIMPLE iteration"
+        }
+      },
+      "residualControl": {
+        "p": 1e-07,
+        "U": 1e-07,
+        "k": 1e-07,
+        "omega": 1e-07,
+        "_comment": "Tighter tolerance than standard for convergence studies"
+      }
+    },
+    "time_stepping": {
+      "max_co": 1.0,
+      "initial_delta_t": 1e-06,
+      "max_delta_t": 0.001,
+      "adjustable_time_step": true,
+      "_comment": "Standard time stepping with Co=1.0"
+    },
+    "_profile_metadata": {
+      "name": "accurate",
+      "order_of_accuracy": 2,
+      "stability": "good",
+      "numerical_diffusion": "low (linearUpwind)",
+      "intended_use": "convergence studies, validation, good meshes",
+      "recommended_for": "mesh independence studies, validation cases",
+      "expected_diffusion": "low (unbounded 2nd order)",
+      "mesh_requirements": "orthogonality > 65 degrees, skewness < 3",
+      "key_features": [
+        "linearUpwind for low-diffusion convection",
+        "Full corrected Laplacian/snGrad",
+        "Tighter tolerances (1e-7)",
+        "pFinal/UFinal = 1 for full correction"
+      ],
+      "literature": [
+        "OpenFOAM User Guide v11, Section 4.4 (Numerical Schemes)",
+        "Jasak, H. (1996). Error Analysis for FVM. PhD Thesis, Imperial College",
+        "Roache, P.J. (1998). Verification and Validation. AIAA Journal 36(5)"
+      ]
+    }
+  },
+  "fvSolution": {
+    "PIMPLE": {
+      "nOuterCorrectors": 50,
+      "nCorrectors": 2,
+      "nNonOrthogonalCorrectors": 1,
+      "momentumPredictor": true,
+      "_comment": "HIGH nOuterCorrectors (50) with convergence-based early exit. Standard corrector counts for efficiency.",
+      "outerCorrectorResidualControl": {
+        "p": {
+          "tolerance": 0.0001,
+          "relTol": 0
+        },
+        "U": {
+          "tolerance": 1e-05,
+          "relTol": 0
+        },
+        "(k|epsilon|omega)": {
+          "tolerance": 1e-05,
+          "relTol": 0
+        },
+        "_comment": "Standard tolerances for convergence-based early exit"
+      }
+    },
+    "relaxationFactors": {
+      "fields": {
+        "p": 0.3,
+        "pFinal": 1.0,
+        "_comment": "Moderate pressure relaxation with full correction on final iteration"
+      },
+      "equations": {
+        "U": 0.7,
+        "UFinal": 1.0,
+        "k": 0.7,
+        "kFinal": 1.0,
+        "omega": 0.7,
+        "omegaFinal": 1.0,
+        "epsilon": 0.7,
+        "epsilonFinal": 1.0,
+        "_comment": "Moderate relaxation with full correction on final PIMPLE iteration"
+      }
+    },
+    "residualControl": {
+      "p": 1e-07,
+      "U": 1e-07,
+      "k": 1e-07,
+      "omega": 1e-07,
+      "_comment": "Tighter tolerance than standard for convergence studies"
+    }
+  },
+  "profile_metadata": {
+    "system": "new",
+    "physics_model": "laminar",
+    "numerics_profile": "accurate",
+    "description": "LAMINAR with accurate numerics"
+  },
+  "config_source": {
+    "case_config_file": "/home/mchi4jw4/GitHub/AortaCFD-app/output/BPM120/profile_study/config_accurate.json",
+    "system": "new (physics/numerics/mesh)",
+    "numerics_profile": "accurate"
+  },
+  "_config_file_path": "/home/mchi4jw4/GitHub/AortaCFD-app/output/BPM120/profile_study/config_accurate.json"
+}

@@ -1,0 +1,195 @@
+
+================================================================================
+CFD SIMULATION TECHNICAL REPORT
+================================================================================
+
+Case: BPM120
+Generated: 2026-01-20 14:23:40
+Output Directory: output/BPM120/profile_study/accurate
+
+================================================================================
+
+================================================================================
+1. Simulation Overview
+================================================================================
+
+Case Information
+================================================================================
+
+- Case Name: BPM120
+- Patient ID: BPM120
+- Analysis Type: N/A
+- Solver Type: N/A
+
+Configuration Source
+================================================================================
+
+- Base Config: Default template (src/config/base.py)
+- Profile: N/A
+- Case Config: /home/mchi4jw4/GitHub/AortaCFD-app/output/BPM120/profilestudy/configaccurate.json
+
+================================================================================
+
+================================================================================
+2. Physical Properties
+================================================================================
+
+Fluid Properties
+================================================================================
+
+- Density (ρ): 1060 kg/m³
+- Kinematic Viscosity (ν): 3.773585e-06 m²/s
+- Dynamic Viscosity (μ): 4.000000e-03 Pa·s
+
+Flow Regime
+================================================================================
+
+- Flow Regime: Laminar
+- Turbulence Model: None (Stokes)
+
+================================================================================
+
+================================================================================
+3. Geometry
+================================================================================
+
+STL Files
+================================================================================
+
+- Case Name: BPM120
+- Scale Factor: 0.001 (geometry units → meters)
+- Inlet Patch: inlet
+- Outlet Patches: outlet1, outlet2, outlet3, outlet4 (4 outlets)
+- Wall Patch: wall_aorta
+
+================================================================================
+
+================================================================================
+4. Boundary Conditions
+================================================================================
+
+Inlet
+================================================================================
+
+- Type: TIMEVARYING
+- CSV File: BPM120.csv
+- Data Type: flowrate
+- Profile: parabolic
+
+Outlets
+================================================================================
+
+- Type: 3EWINDKESSEL
+- Systolic Pressure: 120 mmHg
+- Diastolic Pressure: 80 mmHg
+- Venous Pressure: 0 mmHg
+- Flow Split: 70% to main branch (rest distributed by Murray's law)
+
+Walls
+================================================================================
+
+- Type: no_slip
+
+================================================================================
+
+================================================================================
+5. Mesh Configuration
+================================================================================
+
+Mesh Resolution
+================================================================================
+
+- Resolution Level: N/A
+- Target Cell Size: N/A mm
+- Base Cell Size: N/A mm
+
+Boundary Layers
+================================================================================
+
+- Status: Not configured (using default wall functions)
+
+================================================================================
+
+================================================================================
+6. Numerical Settings
+================================================================================
+
+Time Discretization
+================================================================================
+
+- ddt Scheme: backward
+- Description: Time derivative discretization for transient simulations
+
+Gradient Schemes
+================================================================================
+
+- Default: cellLimited Gauss linear 0.5
+- Description: Spatial gradient calculation using Gauss integration
+
+Divergence Schemes
+================================================================================
+
+- Momentum (div(phi,U)): bounded Gauss limitedLinearV 1
+
+Laplacian Schemes
+================================================================================
+
+- Default: Gauss linear corrected
+
+Linear Solvers
+================================================================================
+
+- Pressure: GAMG
+- Velocity: smoothSolver
+
+================================================================================
+
+================================================================================
+7. Simulation Control
+================================================================================
+
+- End Time: N/A s
+- Number of Cycles: 3
+- Write Interval: 0.05 s (output every 50 ms)
+- Initial Time Step (Δt): 1.00e-06 s (1.0 μs)
+- Max Courant Number: 1.0
+- Adjustable Time Step: yes
+- Max Time Step: 1.00e-03 s
+
+================================================================================
+
+================================================================================
+8. Solver Configuration
+================================================================================
+
+- Solution Type: parallel
+- Number of Processors: 4
+- Decomposition Method: scotch
+- OpenFOAM Version: 12
+- Solver Type: laminar
+- Solver Command: mpirun -np 4 foamRun -solver incompressibleFluid -parallel
+
+================================================================================
+
+================================================================================
+9. Reproducibility
+================================================================================
+
+Command to Reproduce
+================================================================================
+
+`bash
+python run_patient.py BPM120
+`
+
+Configuration Files
+================================================================================
+
+- Full config saved to: output/BPM120/profilestudy/accurate/reports/simulationsetup_report.json
+- OpenFOAM case: output/BPM120/profile_study/accurate/openfoam/
+
+================================================================================
+
+Report Generated: 2026-01-20 14:23:40
+Tool: AortaCFD Pipeline v1.2.0
+OpenFOAM Version: 12

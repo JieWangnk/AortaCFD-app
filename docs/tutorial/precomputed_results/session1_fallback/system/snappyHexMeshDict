@@ -1,0 +1,212 @@
+/*--------------------------------*- C++ -*----------------------------------*\\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  12
+     \\/     M anipulation  |
+\\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      snappyHexMeshDict;
+}
+// ************************************************************************* //
+
+castellatedMesh true;
+snap            true;
+addLayers       true;
+
+geometry
+{
+    "wall_aorta.stl"
+    {
+        type triSurfaceMesh;
+        file "wall_aorta.stl";
+        name wall_aorta;
+    }
+    "inlet.stl"
+    {
+        type triSurfaceMesh;
+        file "inlet.stl";
+        name inlet;
+    }
+    "outlet1.stl"
+    {
+        type triSurfaceMesh;
+        file "outlet1.stl";
+        name outlet1;
+    }
+    "outlet2.stl"
+    {
+        type triSurfaceMesh;
+        file "outlet2.stl";
+        name outlet2;
+    }
+    "outlet3.stl"
+    {
+        type triSurfaceMesh;
+        file "outlet3.stl";
+        name outlet3;
+    }
+    "outlet4.stl"
+    {
+        type triSurfaceMesh;
+        file "outlet4.stl";
+        name outlet4;
+    }
+
+};
+
+castellatedMeshControls
+{
+    maxLocalCells       10000000;
+    maxGlobalCells      20000000;
+    minRefinementCells  10;
+    maxLoadUnbalance    0.1;
+    nCellsBetweenLevels 2;
+
+    features
+    (
+        {
+            file "wall_aorta.eMesh";
+            level 1;
+        }
+        {
+            file "inlet.eMesh";
+            level 1;
+        }
+        {
+            file "outlet1.eMesh";
+            level 1;
+        }
+        {
+            file "outlet2.eMesh";
+            level 1;
+        }
+        {
+            file "outlet3.eMesh";
+            level 1;
+        }
+        {
+            file "outlet4.eMesh";
+            level 1;
+        }
+    );
+
+    refinementSurfaces
+    {
+        wall_aorta
+        {
+            level (1 1);
+        }
+        inlet
+        {
+            level (1 1);
+        }
+        outlet1
+        {
+            level (1 1);
+        }
+        outlet2
+        {
+            level (1 1);
+        }
+        outlet3
+        {
+            level (1 1);
+        }
+        outlet4
+        {
+            level (1 1);
+        }
+    }
+    
+    refinementRegions
+    {
+    }
+
+    locationInMesh (-0.0163177 -0.0216838 -0.0123357);
+    allowFreeStandingZoneFaces true;
+    resolveFeatureAngle 30;
+};
+
+snapControls
+{
+    nSmoothPatch        5;
+    tolerance           2.0;
+    nSolveIter          250;
+    nRelaxIter          10;
+    nFeatureSnapIter    15;
+    implicitFeatureSnap false;
+    explicitFeatureSnap true;
+    multiRegionFeatureSnap false;
+};
+
+addLayersControls
+{
+    relativeSizes       true;
+    layers
+    {
+        "wall_aorta"
+        {
+            nSurfaceLayers 5;
+        }
+    }
+    expansionRatio      1.2;
+    finalLayerThickness 0.2;
+    minThickness        0.05;
+    nGrow               0;
+    featureAngle        155;
+    slipFeatureAngle    30;
+    nRelaxIter          5;
+    nSmoothNormals      5;
+    nSmoothSurfaceNormals 15;
+    nSmoothThickness    10;
+    maxFaceThicknessRatio 0.25;
+    maxThicknessToMedialRatio 0.3;
+    minMedianAxisAngle  90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter          50;
+}
+
+meshQualityControls
+{
+    maxNonOrtho         65;
+    maxBoundarySkewness 20;
+    maxInternalSkewness 4;
+    maxConcave          80;
+    minVol              1e-18;
+    minTetQuality       1e-20;
+    minArea             -1;
+    minTwist            0.01;
+    minDeterminant      0.001;
+    minFaceWeight       0.02;
+    minVolRatio         0.01;
+    minTriangleTwist    -1;
+
+    // Relaxation for snap phase
+    nSmoothScale        4;
+    errorReduction      0.75;
+
+    // More gradual transition between refinement levels
+    relaxed
+    {
+        maxNonOrtho 75;
+    }
+};
+
+debug 0;
+
+writeFlags
+(
+    scalarLevels
+    layerSets
+    layerFields
+);
+
+mergeTolerance 1e-06;
+
+// ************************************************************************* //
