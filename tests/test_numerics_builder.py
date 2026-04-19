@@ -408,115 +408,70 @@ class TestListAvailableProfiles:
 class TestRecommendNumericsProfile:
     """Test recommend_numerics_profile function."""
 
-    def test_recommend_conservative_for_poor_mesh(self):
-        """Test recommendation for poor quality mesh."""
+    def test_recommend_robust_for_poor_mesh(self):
+        """Poor-quality mesh should fall back to 'robust' for production."""
         from config.numerics_builder import recommend_numerics_profile
 
-        mesh_quality = {
-            'orthogonality': 50,  # Poor
-            'skewness': 5.0       # High
-        }
-
         result = recommend_numerics_profile(
-            mesh_quality,
+            {'orthogonality': 50, 'skewness': 5.0},
             objective='production',
-            physics_model='laminar'
+            physics_model='laminar',
         )
-
-        assert result == 'conservative'
+        assert result == 'robust'
 
     def test_recommend_standard_for_good_mesh(self):
-        """Test recommendation for good quality mesh."""
+        """Good-quality mesh on a production run should pick 'standard'."""
         from config.numerics_builder import recommend_numerics_profile
 
-        mesh_quality = {
-            'orthogonality': 75,
-            'skewness': 1.5
-        }
-
         result = recommend_numerics_profile(
-            mesh_quality,
+            {'orthogonality': 75, 'skewness': 1.5},
             objective='production',
-            physics_model='laminar'
+            physics_model='laminar',
         )
-
         assert result == 'standard'
 
-    def test_recommend_publication_for_excellent_mesh(self):
-        """Test recommendation for excellent mesh with publication objective."""
+    def test_recommend_precise_for_validation_on_excellent_mesh(self):
+        """Validation objective with excellent mesh should pick 'precise'."""
         from config.numerics_builder import recommend_numerics_profile
 
-        mesh_quality = {
-            'orthogonality': 85,
-            'skewness': 0.8
-        }
-
         result = recommend_numerics_profile(
-            mesh_quality,
-            objective='publication',
-            physics_model='laminar'
+            {'orthogonality': 85, 'skewness': 0.8},
+            objective='validation',
+            physics_model='laminar',
         )
+        assert result == 'precise'
 
-        assert result == 'publication'
-
-    def test_recommend_aggressive_for_les(self):
-        """Test recommendation for LES with excellent mesh."""
+    def test_recommend_precise_for_les(self):
+        """LES must always use 'precise' (LUST) to preserve resolved turbulence."""
         from config.numerics_builder import recommend_numerics_profile
 
-        mesh_quality = {
-            'orthogonality': 85,
-            'skewness': 0.5
-        }
-
         result = recommend_numerics_profile(
-            mesh_quality,
+            {'orthogonality': 85, 'skewness': 0.5},
             objective='les',
-            physics_model='les'
+            physics_model='les',
         )
+        assert result == 'precise'
 
-        assert result == 'aggressive'
-
-    def test_recommend_conservative_for_debug(self):
-        """Test recommendation for debug mode."""
+    def test_recommend_robust_for_debug(self):
+        """Debug mode should always pick 'robust' regardless of mesh quality."""
         from config.numerics_builder import recommend_numerics_profile
 
-        mesh_quality = {
-            'orthogonality': 90,  # Excellent
-            'skewness': 0.5
-        }
-
         result = recommend_numerics_profile(
-            mesh_quality,
+            {'orthogonality': 90, 'skewness': 0.5},
             objective='debug',
-            physics_model='laminar'
+            physics_model='laminar',
         )
-
-        # Debug always uses conservative
-        assert result == 'conservative'
+        assert result == 'robust'
 
     def test_recommend_case_insensitive(self):
-        """Test that inputs are case-insensitive."""
+        """Objective and physics_model inputs are normalised to lowercase."""
         from config.numerics_builder import recommend_numerics_profile
 
         mesh_quality = {'orthogonality': 75, 'skewness': 1.5}
-
-        result1 = recommend_numerics_profile(mesh_quality, 'PRODUCTION', 'LAMINAR')
-        result2 = recommend_numerics_profile(mesh_quality, 'production', 'laminar')
-
-        assert result1 == result2
-
-
-class TestNumericProfileEnum:
-    """Test NumericProfile enum."""
-
-    def test_enum_values(self):
-        """Test enum has expected values."""
-        from config.numerics_builder import NumericProfile
-
-        assert NumericProfile.CONSERVATIVE.value == 'conservative'
-        assert NumericProfile.STANDARD.value == 'standard'
-        assert NumericProfile.PUBLICATION.value == 'publication'
-        assert NumericProfile.AGGRESSIVE.value == 'aggressive'
+        assert (
+            recommend_numerics_profile(mesh_quality, 'PRODUCTION', 'LAMINAR')
+            == recommend_numerics_profile(mesh_quality, 'production', 'laminar')
+        )
 
 
 if __name__ == '__main__':

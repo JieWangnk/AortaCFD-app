@@ -8,15 +8,6 @@ import warnings
 import logging
 from typing import Any, Dict, Optional
 from copy import deepcopy
-from enum import Enum
-
-
-class NumericProfile(str, Enum):
-    """Available numeric profile names (avoids magic strings)."""
-    CONSERVATIVE = 'conservative'
-    STANDARD = 'standard'
-    PUBLICATION = 'publication'
-    AGGRESSIVE = 'aggressive'
 
 
 class NumericsBuilder:
@@ -24,7 +15,7 @@ class NumericsBuilder:
     Build numerics configuration from profiles and user overrides.
 
     Process:
-    1. Load base numeric profile (conservative, standard, publication, aggressive)
+    1. Load base numeric profile (robust, standard, precise)
     2. Apply high-level overrides (max_co, correctors, relaxation)
     3. Apply patches (advanced scheme overrides)
     4. Validate compatibility with physics model
@@ -112,7 +103,7 @@ class NumericsBuilder:
         Load numeric profile by name.
 
         Args:
-            profile_name: One of 'conservative', 'standard', 'publication', 'aggressive'
+            profile_name: One of 'robust', 'standard', 'precise'
 
         Returns:
             Deep copy of profile configuration
@@ -299,7 +290,7 @@ class NumericsBuilder:
                 f"  - Final results\n"
                 f"  - Clinical decision-making\n"
                 f"  - Publications\n\n"
-                f"Consider switching to 'standard' or 'publication' profile for production runs.\n"
+                f"Consider switching to 'standard' or 'precise' profile for production runs.\n"
             )
 
         # Warning: High CFL with LES
@@ -315,33 +306,17 @@ class NumericsBuilder:
                 stacklevel=2
             )
 
-        # Info: Publication profile requirements
-        if profile_name == 'publication':
+        # Info: Precise profile — reminder to back up with a convergence study
+        if profile_name == 'precise':
             self.logger.info(
-                f"\n✓ PUBLICATION PROFILE SELECTED\n"
-                f"────────────────────────────────\n"
-                f"Remember to perform validation studies:\n"
+                f"\n✓ PRECISE PROFILE SELECTED\n"
+                f"────────────────────────────\n"
+                f"LUST + Crank-Nicolson minimises numerical diffusion. Pair with:\n"
                 f"  1. Mesh independence: 3 levels, calculate GCI\n"
                 f"  2. Temporal convergence: halve Δt, verify < 1% change\n"
                 f"  3. Residuals: < 1e-8 for all variables\n"
                 f"  4. Compare to reference data if available\n"
-                f"  5. Document numerical choices in paper methods section\n\n"
-                f"See: docs/NUMERICS_PROFILES_IMPLEMENTATION.md\n"
-            )
-
-        # Info: Aggressive profile requirements
-        if profile_name == 'aggressive':
-            self.logger.warning(
-                f"\n⚠️  AGGRESSIVE PROFILE - EXPERT ONLY\n"
-                f"────────────────────────────────────\n"
-                f"This profile uses UNBOUNDED central differencing.\n\n"
-                f"STRICT requirements:\n"
-                f"  - Mesh: cells_per_diameter ≥ 25, y+ < 1\n"
-                f"  - Quality: orthogonality > 80°, skewness < 1\n"
-                f"  - Time: max_co ≤ 0.3 (very small steps)\n"
-                f"  - Model: Must be LES or DNS (NOT RANS)\n\n"
-                f"WILL DIVERGE if requirements not met!\n\n"
-                f"See: src/config/profiles/numerics/aggressive.py for details\n"
+                f"  5. Document numerical choices in paper methods section\n"
             )
 
     def get_profile_metadata(self, profile_name: str) -> dict:
@@ -383,15 +358,17 @@ class NumericsBuilder:
 def recommend_numerics_profile(mesh_quality: dict, objective: str = 'production',
                                 physics_model: str = 'laminar') -> str:
     """
-    Recommend numeric profile based on mesh quality, objective, and physics.
+    Recommend a numerics profile based on mesh quality, objective, and physics.
+
+    Returns one of the three supported profiles: 'robust', 'standard', 'precise'.
 
     Args:
         mesh_quality: Dict with keys 'orthogonality' (degrees), 'skewness'
-        objective: One of 'debug', 'production', 'publication', 'les'
+        objective: One of 'debug', 'production', 'validation', 'les'
         physics_model: One of 'laminar', 'rans', 'les'
 
     Returns:
-        Recommended profile name
+        One of 'robust', 'standard', 'precise'.
 
     Example:
         >>> recommend_numerics_profile(
@@ -404,50 +381,43 @@ def recommend_numerics_profile(mesh_quality: dict, objective: str = 'production'
     ortho = mesh_quality.get('orthogonality', 0)
     skew = mesh_quality.get('skewness', 10)
 
-    # Normalize inputs to lowercase for case-insensitive comparison
-    objective = objective.lower() if objective else 'production'
-    physics_model = physics_model.lower() if physics_model else 'laminar'
+    objective = (objective or 'production').lower()
+    physics_model = (physics_model or 'laminar').lower()
 
-    # Debug mode - always conservative
+    # Debug mode: always use the maximum-stability profile
     if objective == 'debug':
-        return 'conservative'
+        return 'robust'
 
-    # LES mode - requires excellent mesh
+    # LES: precise (LUST) is required to preserve resolved turbulence
     if objective == 'les' or physics_model == 'les':
-        if ortho > 80 and skew < 1:
-            return 'aggressive'  # Can use unbounded schemes
-        elif ortho > 70 and skew < 2:
-            return 'publication'  # Use LUST (bounded hybrid)
-        else:
+        if ortho < 70 or skew > 2:
             logging.warning(
                 f"LES requires excellent mesh quality (ortho > 70°, skew < 2). "
                 f"Current: ortho={ortho}°, skew={skew}. "
-                f"Falling back to 'standard', but consider improving mesh."
+                f"Returning 'precise' but mesh improvement is strongly advised."
             )
-            return 'standard'
+        return 'precise'
 
-    # Publication mode
-    if objective == 'publication':
+    # Validation / GCI: use minimal-diffusion precise if mesh can support it
+    if objective == 'validation':
         if ortho > 70 and skew < 2:
-            return 'publication'
-        else:
-            logging.warning(
-                f"Publication profile requires ortho > 70°, skew < 2. "
-                f"Current: ortho={ortho}°, skew={skew}. "
-                f"Using 'standard' instead. Consider improving mesh for publication."
-            )
-            return 'standard'
+            return 'precise'
+        logging.warning(
+            f"'precise' profile requires ortho > 70°, skew < 2. "
+            f"Current: ortho={ortho}°, skew={skew}. "
+            f"Falling back to 'standard' — improve mesh before using 'precise'."
+        )
+        return 'standard'
 
-    # Production mode (default)
+    # Production (default): robust for poor meshes, standard otherwise
     if ortho < 60 or skew > 3:
         logging.info(
             f"Mesh quality below recommended levels (ortho={ortho}°, skew={skew}). "
-            f"Using 'conservative' profile for stability. "
+            f"Using 'robust' profile for stability. "
             f"Consider improving mesh and switching to 'standard'."
         )
-        return 'conservative'
-    else:
-        return 'standard'
+        return 'robust'
+    return 'standard'
 
 
 __all__ = [

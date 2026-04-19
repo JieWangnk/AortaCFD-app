@@ -49,11 +49,16 @@ class NumericsProfile(str, Enum):
 
 
 class InletType(str, Enum):
-    """Inlet boundary condition types."""
+    """Inlet boundary condition types.
+
+    The code treats MRI as a time-varying inlet backed by a folder of
+    OpenFOAM-format snapshots (see setup_tasks.py, wk_setup.py, U.tpl).
+    """
     CONSTANT = "CONSTANT"
     TIMEVARYING = "TIMEVARYING"
     WOMERSLEY = "WOMERSLEY"
     PARABOLIC = "PARABOLIC"
+    MRI = "MRI"
 
 
 class OutletType(str, Enum):

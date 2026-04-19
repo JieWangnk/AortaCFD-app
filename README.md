@@ -1,7 +1,7 @@
 # AortaCFD
 
-![Python Version](https://img.shields.io/badge/python-3.12-blue.svg)
-![Tests](https://img.shields.io/badge/tests-2086%20passing-success.svg)
+![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)
+![Tests](https://img.shields.io/badge/tests-2167%20passing-success.svg)
 ![OpenFOAM](https://img.shields.io/badge/OpenFOAM-12-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
