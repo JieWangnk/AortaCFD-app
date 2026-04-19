@@ -330,7 +330,7 @@ class PatientCaseRunner:
         builder = ConfigBuilder()
 
         # Load and merge base config
-        base_config = builder._load_python_profile('.base', package='src.config')
+        base_config = builder._load_python_profile('.base')
         merged_config = deep_merge({}, base_config)
 
         # Convert and apply case-specific config

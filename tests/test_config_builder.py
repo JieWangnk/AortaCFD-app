@@ -166,22 +166,22 @@ class TestBuildBaseAndProfile:
         """Setup config builder for tests."""
         self.builder = ConfigBuilder()
 
-    @pytest.mark.skipif(
-        not os.path.exists('src/config/base.py'),
-        reason="Requires actual config files"
-    )
     def test_build_with_standard_profile(self):
-        """Test building with standard profile (integration test)."""
-        # This is an integration test that requires actual files
-        try:
-            config = self.builder.build_base_and_profile('standard')
+        """build_base_and_profile('standard') should merge base + the
+        standard numerics profile without needing a case directory."""
+        config = self.builder.build_base_and_profile('standard')
 
-            assert config is not None
-            assert isinstance(config, dict)
-            # Should have basic sections from base config
-            assert 'physics' in config or 'simulation_settings' in config
-        except Exception as e:
-            pytest.skip(f"Could not load actual config files: {e}")
+        assert isinstance(config, dict)
+        # Base config provides physics/simulation structure
+        assert 'physics' in config or 'simulation_settings' in config
+        # Standard profile pulls in numerics (schemes/solvers)
+        assert any(k in config for k in ('numerics', 'schemes', 'solvers', 'time_stepping'))
+
+    def test_build_with_all_three_profiles(self):
+        """All three current profiles (robust/standard/precise) should load."""
+        for profile_name in ('robust', 'standard', 'precise'):
+            config = self.builder.build_base_and_profile(profile_name)
+            assert isinstance(config, dict), f"profile {profile_name!r} did not return a dict"
 
     def test_build_with_invalid_profile_name(self):
         """Test building with non-existent profile raises error."""

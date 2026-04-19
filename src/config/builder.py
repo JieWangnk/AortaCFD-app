@@ -4,6 +4,7 @@ import json
 import collections.abc
 import importlib
 import logging
+from typing import Optional
 
 from .mesh_quality_presets import get_mesh_preset, get_available_presets
 from .schema import validate_config, is_pydantic_available
@@ -32,12 +33,8 @@ class ConfigBuilder:
         This version uses relative imports to be more robust.
         """
         try:
-            # --- THE KEY CHANGE IS HERE ---
-            # The '.' tells Python to look inside the current package.
-            # The package='config' argument tells it what the current package is.
-            base_config = self._load_python_profile('.base', package='src.config')
-            sim_config = self._load_python_profile(f".profiles.{sim_profile_name}", package='src.config')
-            # --------------------------------
+            base_config = self._load_python_profile('.base')
+            sim_config = self._load_python_profile(f".profiles.numerics.{sim_profile_name}")
 
             case_specific_config = self._discover_case_config(case_name)
         except (FileNotFoundError, AttributeError, ImportError) as e:
@@ -87,9 +84,8 @@ class ConfigBuilder:
             Base + profile configuration dictionary (without case overrides)
         """
         try:
-            # Load base and simulation profiles
-            base_config = self._load_python_profile('.base', package='src.config')
-            sim_config = self._load_python_profile(f".profiles.{sim_profile_name}", package='src.config')
+            base_config = self._load_python_profile('.base')
+            sim_config = self._load_python_profile(f".profiles.numerics.{sim_profile_name}")
         except (FileNotFoundError, AttributeError, ImportError) as e:
             raise RuntimeError(f"Failed to load configuration files. Please check paths and file contents. Original error: {e}")
 
@@ -114,9 +110,8 @@ class ConfigBuilder:
             Final merged configuration dictionary
         """
         try:
-            # Load base and simulation profiles
-            base_config = self._load_python_profile('.base', package='src.config')
-            sim_config = self._load_python_profile(f".profiles.{sim_profile_name}", package='src.config')
+            base_config = self._load_python_profile('.base')
+            sim_config = self._load_python_profile(f".profiles.numerics.{sim_profile_name}")
 
             # Convert case config to expected format
             case_specific_config = self._convert_unified_config(case_name, case_config)
@@ -156,19 +151,33 @@ class ConfigBuilder:
 
         return final_config
 
-    def _load_python_profile(self, profile_path: str, package: str) -> dict:
+    def _load_python_profile(self, profile_path: str, package: Optional[str] = None) -> dict:
         """
-        Dynamically loads a python module using a relative path.
+        Dynamically load a config module and return its ``config`` dict.
+
+        Args:
+            profile_path: Relative module path such as ``".base"`` or
+                ``".profiles.numerics.standard"``.
+            package: Anchor package for the relative import. Defaults to this
+                module's own package (``__package__``), which resolves
+                correctly whether the caller imports us as ``config.builder``
+                or ``src.config.builder``.
         """
+        anchor = package or __package__
         try:
-            # Pass the package argument to import_module
-            module = importlib.import_module(profile_path, package=package)
+            module = importlib.import_module(profile_path, package=anchor)
             return getattr(module, "config")
         except ImportError as e:
-            # Add the original error 'e' for more detailed debugging
-            raise ImportError(f"Configuration profile could not be imported: '{profile_path}' from package '{package}'. Check file path and __init__.py files. Original error: {e}")
+            raise ImportError(
+                f"Configuration profile could not be imported: '{profile_path}' "
+                f"from package '{anchor}'. Check file path and __init__.py files. "
+                f"Original error: {e}"
+            )
         except AttributeError:
-            raise AttributeError(f"File at '{profile_path}' was found, but it does not contain a 'config' dictionary variable.")
+            raise AttributeError(
+                f"File at '{profile_path}' was found, but it does not contain "
+                f"a 'config' dictionary variable."
+            )
 
     def _discover_case_config(self, case_name: str, cad_root_dir: str = "cases_input") -> dict:
         """
