@@ -8,6 +8,8 @@ import os
 import re
 from typing import Any, Dict, Optional, Tuple
 
+import numpy as np
+
 from jinja2 import Environment, FileSystemLoader
 
 from .utils.logger import Logger
@@ -243,8 +245,7 @@ class BoundaryConditionSetup:
         Returns:
             str: OpenFOAM vector format "(vx vy vz)" or None
         """
-        import numpy as np
-        from .utils.patch_processing import PatchProcessing
+        from .utils.patch_processing import PatchProcessing, compute_inward_normal
 
         inlet_type = self.inlet_settings.get('type', 'TIMEVARYING').upper()
 
@@ -310,40 +311,12 @@ class BoundaryConditionSetup:
             elif orientation == 'in':
                 direction = -inlet_normal
             elif orientation == 'auto':
-                # Auto-detect using outlet positions (same logic as inlet_mapping.py)
-                outlet_patches = self.geom_settings['outlet_keywords_ordered']
-                outlet_centers = []
-
-                for outlet_name in outlet_patches:
-                    outlet_processor = PatchProcessing(tri_surface_dir, outlet_name)
-                    outlet_center, _, _ = outlet_processor.calculate_inlet_center_radius()
-                    outlet_centers.append(outlet_center)
-
-                if outlet_centers:
-                    inlet_center = patch_processor.calculate_inlet_center_radius()[0]
-                    # Use wall centroid as robust interior reference
-                    wall_name = self.geom_settings.get('wall_keywords_ordered', 'wall')
-                    wall_stl = os.path.join(tri_surface_dir, f"{wall_name}.stl")
-                    if os.path.exists(wall_stl):
-                        from stl import mesh as stl_mesh
-                        wm = stl_mesh.Mesh.from_file(wall_stl)
-                        interior_ref = np.array([np.mean(wm.vectors[:, :, i]) for i in range(3)])
-                    else:
-                        interior_ref = np.mean(outlet_centers, axis=0)
-                    flow_direction = interior_ref - inlet_center
-                    flow_direction = flow_direction / np.linalg.norm(flow_direction)
-
-                    # Check alignment
-                    dot_product = np.dot(inlet_normal, flow_direction)
-                    if dot_product < 0:
-                        direction = -inlet_normal  # Flip
-                        self.log.info(f"Auto-orientation: flipping inlet normal (dot={dot_product:.3f})")
-                    else:
-                        direction = inlet_normal
-                        self.log.info(f"Auto-orientation: keeping inlet normal (dot={dot_product:.3f})")
-                else:
-                    direction = inlet_normal
-                    self.log.warning("Auto-orientation: no outlets found, using normal as-is")
+                # Auto-detect using edge-ring method (robust for all geometries)
+                inlet_patch_name = self.geom_settings['inlet_keywords_ordered']
+                wall_name = self.geom_settings.get('wall_keywords_ordered', 'wall')
+                direction = compute_inward_normal(
+                    tri_surface_dir, inlet_patch_name, wall_name, log=self.log
+                )
             else:
                 direction = inlet_normal
 

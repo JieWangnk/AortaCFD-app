@@ -627,45 +627,17 @@ class DistanceWallInletProfile:
             f.write('\n'.join(lines) + '\n')
 
     def _should_flip_normal(self) -> bool:
-        """Determine if normal needs flipping based on outlet positions.
+        """Determine if normal needs flipping using inlet–wall edge-ring method.
 
         NOTE: STL files are PRE-SCALED to meters, no scale_factor needed.
         """
         try:
+            from .utils.patch_processing import compute_inward_normal
             tri_surface_dir = os.path.join(self.case_directory, "constant", "triSurface")
-            stl_files = [f for f in os.listdir(tri_surface_dir) if f.endswith('.stl')]
-            outlet_files = [f for f in stl_files if 'outlet' in f.lower()]
-
-            if not outlet_files:
-                return False
-
-            outlet_centers = []
-
-            for outlet_file in outlet_files:
-                outlet_name = outlet_file.replace('.stl', '')
-                try:
-                    proc = PatchProcessing(tri_surface_dir, outlet_name)
-                    center, _, _ = proc.calculate_inlet_center_radius()
-                    outlet_centers.append(center)
-                except Exception:
-                    continue
-
-            if not outlet_centers:
-                return False
-
-            # Use wall centroid as robust interior reference
-            wall_files = [f for f in stl_files if 'wall' in f.lower()]
-            if wall_files:
-                from stl import mesh as stl_mesh
-                wm = stl_mesh.Mesh.from_file(os.path.join(tri_surface_dir, wall_files[0]))
-                interior_ref = np.array([np.mean(wm.vectors[:, :, i]) for i in range(3)])
-            else:
-                interior_ref = np.mean(outlet_centers, axis=0)
-
-            flow_dir = interior_ref - self.center
-            flow_dir = flow_dir / np.linalg.norm(flow_dir)
-
-            return np.dot(self.inlet_normal, flow_dir) < 0
+            inlet_name = self.config.get('geometry', {}).get('inlet_keywords_ordered', 'inlet')
+            wall_name = self.config.get('geometry', {}).get('wall_keywords_ordered', 'wall')
+            inward = compute_inward_normal(tri_surface_dir, inlet_name, wall_name)
+            return np.dot(self.inlet_normal, inward) < 0
 
         except Exception:
             return False

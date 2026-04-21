@@ -928,46 +928,22 @@ class GeometryAnalyzer:
         """
         Calculates a point guaranteed to be inside the fluid domain.
 
-        Uses the wall STL centroid as the target direction from the inlet,
-        which is always inside the tube regardless of how outlets are
-        distributed (the old path-vector heuristic failed for aortic arches
-        where the descending aorta outlet drags the average below the inlet).
+        Uses the edge-ring method (compute_inward_normal) which finds the
+        inward direction from the first ring of wall faces adjacent to the
+        inlet boundary. Then offsets 10% of inlet radius along that direction.
         Returns point in meters.
         """
         if self.inlet_centroid is None or not self.outlet_centroids:
             raise ValueError("Inlet or outlet centroids have not been calculated.")
 
-        inlet_centroid = self.inlet_centroid
+        from .utils.patch_processing import compute_inward_normal
 
-        # Use the wall STL centroid as a robust interior target.
-        # The centroid of the wall surface is always inside the tube.
-        wall_stl_path = os.path.join(
-            self.case_dir, "constant", "triSurface",
-            self.wall_patch + ".stl" if self.wall_patch else "wall.stl"
-        )
-        if os.path.exists(wall_stl_path):
-            from stl import mesh as stl_mesh
-            wall_mesh = stl_mesh.Mesh.from_file(wall_stl_path)
-            wall_centroid = np.array([
-                np.mean(wall_mesh.vectors[:, :, 0]),
-                np.mean(wall_mesh.vectors[:, :, 1]),
-                np.mean(wall_mesh.vectors[:, :, 2]),
-            ])
-            # Move 10% of inlet radius from inlet toward wall centroid
-            direction = wall_centroid - inlet_centroid
-            direction = direction / np.linalg.norm(direction)
-            offset_distance = self.inlet_radius * 0.1
-            internal_point = inlet_centroid + (offset_distance * direction)
-            self.log.info(f"locationInMesh: inlet toward wall centroid {wall_centroid}")
-        else:
-            # Fallback: use nearest outlet direction
-            self.log.warning(f"Wall STL not found at {wall_stl_path}, using nearest outlet fallback")
-            distances = [np.linalg.norm(np.array(oc) - inlet_centroid) for oc in self.outlet_centroids]
-            nearest_outlet = np.array(self.outlet_centroids[np.argmin(distances)])
-            direction = nearest_outlet - inlet_centroid
-            direction = direction / np.linalg.norm(direction)
-            offset_distance = self.inlet_radius * 0.1
-            internal_point = inlet_centroid + (offset_distance * direction)
+        tri_surface_dir = os.path.join(self.case_dir, "constant", "triSurface")
+        wall_name = self.wall_patch if self.wall_patch else "wall"
+        inward = compute_inward_normal(tri_surface_dir, self.inlet_patch, wall_name, log=self.log)
+
+        offset_distance = self.inlet_radius * 0.1
+        internal_point = self.inlet_centroid + (offset_distance * inward)
 
         self.log.info(f"Robust locationInMesh calculated: {internal_point} (m)")
         return internal_point

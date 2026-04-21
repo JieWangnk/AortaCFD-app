@@ -5,7 +5,7 @@ import numpy as np
 from scipy.special import jv
 
 from .utils.logger import Logger
-from .utils.patch_processing import PatchProcessing
+from .utils.patch_processing import PatchProcessing, compute_inward_normal
 
 class InletMapping:
     """
@@ -157,74 +157,23 @@ class InletMapping:
     def _determine_inward_direction(self, inlet_normal, case_directory):
         """
         Automatically determine if the normal should be flipped to point into the domain.
-        Uses geometric analysis with outlet centroids to determine flow direction.
+
+        Uses the inlet–wall edge-ring method (compute_inward_normal) which is
+        purely local and works regardless of outlet positions or downstream geometry.
         """
         try:
-            # Get outlet centroids to determine domain interior direction
             tri_surface_dir = os.path.join(case_directory, "constant", "triSurface")
-            stl_files = [f for f in os.listdir(tri_surface_dir) if f.endswith('.stl')]
-            outlet_files = [f for f in stl_files if "outlet" in f.lower()]
-            
-            if not outlet_files:
-                self.log.warning("No outlet files found for automatic orientation. Using normal as-is.")
-                return False
-            
-            # Calculate average outlet centroid position
-            # STL files are pre-scaled to meters, no scale_factor needed
-            outlet_centroids = []
+            wall_name = self.config.get('geometry', {}).get('wall_keywords_ordered', 'wall')
+            inward = compute_inward_normal(tri_surface_dir, self.inlet_name, wall_name, log=self.log)
 
-            for outlet_file in outlet_files:
-                outlet_name = outlet_file.replace('.stl', '')
-                try:
-                    outlet_processor = PatchProcessing(tri_surface_dir, outlet_name)
-                    outlet_center, _, _ = outlet_processor.calculate_inlet_center_radius()
-                    outlet_centroids.append(outlet_center)
-                except Exception as e:
-                    self.log.warning(f"Could not process outlet {outlet_name}: {e}")
-                    continue
-            
-            if not outlet_centroids:
-                self.log.warning("No valid outlet centroids found. Using normal as-is.")
-                return False
-            
-            # Use wall centroid as interior reference (robust for aortic arches
-            # where the descending aorta drags the average outlet centroid below
-            # the inlet, fooling the old outlet-based heuristic).
-            wall_files = [f for f in stl_files if "wall" in f.lower()]
-            if wall_files:
-                from stl import mesh as stl_mesh
-                wall_path = os.path.join(tri_surface_dir, wall_files[0])
-                wall_mesh = stl_mesh.Mesh.from_file(wall_path)
-                interior_target = np.array([
-                    np.mean(wall_mesh.vectors[:, :, i]) for i in range(3)
-                ])
-                self.log.info(f"Using wall centroid as interior reference: {interior_target}")
-            else:
-                interior_target = np.mean(outlet_centroids, axis=0)
-                self.log.info(f"No wall STL, using average outlet center: {interior_target}")
-
-            # Vector from inlet center to interior reference
-            inlet_to_interior = interior_target - self.center
-            inlet_to_interior_norm = inlet_to_interior / np.linalg.norm(inlet_to_interior)
-
-            # Check if inlet normal aligns with interior direction
-            dot_product = np.dot(inlet_normal, inlet_to_interior_norm)
-
-            self.log.info(f"Inlet center: {self.center}")
-            self.log.info(f"Interior direction: {inlet_to_interior_norm}")
-            self.log.info(f"Inlet normal: {inlet_normal}")
-            self.log.info(f"Dot product (alignment): {dot_product:.4f}")
-
-            # If dot product is negative, normal points away from interior
+            dot_product = np.dot(inlet_normal, inward)
             should_flip = dot_product < 0
-            
-            if should_flip:
-                self.log.info("Auto-detected: Normal points outward from domain, flipping for inward flow")
-            else:
-                self.log.info("Auto-detected: Normal points inward to domain, keeping as-is")
-                
+
+            self.log.info(f"Inlet normal: {inlet_normal}")
+            self.log.info(f"Inward normal (edge-ring): {inward}")
+            self.log.info(f"Dot product: {dot_product:.4f} → {'flip' if should_flip else 'keep'}")
             return should_flip
-            
+
         except Exception as e:
             self.log.error(f"Error in automatic orientation detection: {e}")
             self.log.warning("Falling back to manual orientation setting")

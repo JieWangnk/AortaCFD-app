@@ -1,8 +1,123 @@
 import os
+from collections import defaultdict
+
 import numpy as np
 from stl import mesh
 from scipy.spatial import ConvexHull
 from .logger import Logger
+
+
+def compute_inward_normal(tri_surface_dir: str, inlet_name: str, wall_name: str = "wall",
+                          log=None) -> np.ndarray:
+    """Compute the inward-pointing unit normal of an inlet patch.
+
+    Uses a purely local geometric signal: the first ring of wall
+    triangles adjacent to the inlet boundary edges.  Their centroids
+    are always offset from the inlet plane toward the tube interior,
+    so the vector from inlet centroid → ring centroid gives a reliable
+    inward direction independent of outlet positions or downstream
+    geometry.
+
+    Parameters
+    ----------
+    tri_surface_dir : str
+        Path to ``constant/triSurface/`` (STLs already in metres).
+    inlet_name : str
+        Patch name (e.g. ``"inlet"``).
+    wall_name : str
+        Wall patch name (default ``"wall"``).
+    log : logger, optional
+        Logger instance.
+
+    Returns
+    -------
+    np.ndarray
+        Unit vector pointing into the tube from the inlet centre.
+    """
+    inlet_path = os.path.join(tri_surface_dir, f"{inlet_name}.stl")
+    wall_path = os.path.join(tri_surface_dir, f"{wall_name}.stl")
+
+    inlet_mesh = mesh.Mesh.from_file(inlet_path)
+    wall_mesh = mesh.Mesh.from_file(wall_path)
+
+    # --- Inlet centroid and face normal ---
+    inlet_verts = inlet_mesh.vectors  # (N, 3, 3)
+    inlet_centroid = np.mean(inlet_verts.reshape(-1, 3), axis=0)
+
+    # Area-weighted average normal
+    cross = np.cross(inlet_verts[:, 1] - inlet_verts[:, 0],
+                     inlet_verts[:, 2] - inlet_verts[:, 0])
+    avg_normal = cross.sum(axis=0)
+    avg_normal = avg_normal / np.linalg.norm(avg_normal)
+
+    # --- Find shared edges between inlet and wall ---
+    # Round coordinates to merge coincident vertices (STL duplication)
+    decimals = 8
+
+    def _edge_set(vectors):
+        """Return a set of canonical edge keys from triangle vertices."""
+        edges = set()
+        for tri in vectors:
+            pts = [tuple(np.round(tri[i], decimals)) for i in range(3)]
+            for i in range(3):
+                edge = tuple(sorted([pts[i], pts[(i + 1) % 3]]))
+                edges.add(edge)
+        return edges
+
+    inlet_edges = _edge_set(inlet_verts)
+
+    # Build wall edge → triangle-index map
+    wall_verts = wall_mesh.vectors
+    wall_edge_to_tri = defaultdict(list)
+    for ti, tri in enumerate(wall_verts):
+        pts = [tuple(np.round(tri[i], decimals)) for i in range(3)]
+        for i in range(3):
+            edge = tuple(sorted([pts[i], pts[(i + 1) % 3]]))
+            wall_edge_to_tri[edge].append(ti)
+
+    # Wall triangles that share an edge with the inlet patch
+    ring_tri_indices = set()
+    shared_edge_count = 0
+    for edge in inlet_edges:
+        if edge in wall_edge_to_tri:
+            shared_edge_count += 1
+            ring_tri_indices.update(wall_edge_to_tri[edge])
+
+    if log:
+        log.info(f"Inlet inward detection: {shared_edge_count} shared edges, "
+                 f"{len(ring_tri_indices)} adjacent wall triangles")
+
+    if not ring_tri_indices:
+        # Fallback: use wall centroid (less local but still inside tube)
+        if log:
+            log.warning("No shared edges found between inlet and wall — "
+                        "falling back to wall centroid")
+        wall_centroid = np.mean(wall_verts.reshape(-1, 3), axis=0)
+        direction = wall_centroid - inlet_centroid
+        direction = direction / np.linalg.norm(direction)
+        if np.dot(avg_normal, direction) < 0:
+            return -avg_normal
+        return avg_normal
+
+    # Centroid of the adjacent wall ring
+    ring_tris = wall_verts[list(ring_tri_indices)]  # (M, 3, 3)
+    ring_centroid = np.mean(ring_tris.reshape(-1, 3), axis=0)
+
+    # Inward direction = from inlet centre toward the wall ring
+    inward_vec = ring_centroid - inlet_centroid
+    inward_vec = inward_vec / np.linalg.norm(inward_vec)
+
+    # Orient the face normal to align with the inward direction
+    if np.dot(avg_normal, inward_vec) < 0:
+        inward_normal = -avg_normal
+    else:
+        inward_normal = avg_normal
+
+    if log:
+        log.info(f"Inlet inward normal: [{inward_normal[0]:.4f}, "
+                 f"{inward_normal[1]:.4f}, {inward_normal[2]:.4f}]")
+
+    return inward_normal
 
 class PatchProcessing:
     """
