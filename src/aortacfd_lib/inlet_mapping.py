@@ -187,23 +187,35 @@ class InletMapping:
                 self.log.warning("No valid outlet centroids found. Using normal as-is.")
                 return False
             
-            # Calculate average outlet position
-            avg_outlet_pos = np.mean(outlet_centroids, axis=0)
-            
-            # Vector from inlet center to average outlet center (expected flow direction)
-            inlet_to_outlets = avg_outlet_pos - self.center
-            inlet_to_outlets_normalized = inlet_to_outlets / np.linalg.norm(inlet_to_outlets)
-            
-            # Check if inlet normal aligns with expected flow direction
-            dot_product = np.dot(inlet_normal, inlet_to_outlets_normalized)
-            
+            # Use wall centroid as interior reference (robust for aortic arches
+            # where the descending aorta drags the average outlet centroid below
+            # the inlet, fooling the old outlet-based heuristic).
+            wall_files = [f for f in stl_files if "wall" in f.lower()]
+            if wall_files:
+                from stl import mesh as stl_mesh
+                wall_path = os.path.join(tri_surface_dir, wall_files[0])
+                wall_mesh = stl_mesh.Mesh.from_file(wall_path)
+                interior_target = np.array([
+                    np.mean(wall_mesh.vectors[:, :, i]) for i in range(3)
+                ])
+                self.log.info(f"Using wall centroid as interior reference: {interior_target}")
+            else:
+                interior_target = np.mean(outlet_centroids, axis=0)
+                self.log.info(f"No wall STL, using average outlet center: {interior_target}")
+
+            # Vector from inlet center to interior reference
+            inlet_to_interior = interior_target - self.center
+            inlet_to_interior_norm = inlet_to_interior / np.linalg.norm(inlet_to_interior)
+
+            # Check if inlet normal aligns with interior direction
+            dot_product = np.dot(inlet_normal, inlet_to_interior_norm)
+
             self.log.info(f"Inlet center: {self.center}")
-            self.log.info(f"Average outlet center: {avg_outlet_pos}")
-            self.log.info(f"Flow direction vector: {inlet_to_outlets_normalized}")
+            self.log.info(f"Interior direction: {inlet_to_interior_norm}")
             self.log.info(f"Inlet normal: {inlet_normal}")
             self.log.info(f"Dot product (alignment): {dot_product:.4f}")
-            
-            # If dot product is negative, normal points opposite to flow direction
+
+            # If dot product is negative, normal points away from interior
             should_flip = dot_product < 0
             
             if should_flip:

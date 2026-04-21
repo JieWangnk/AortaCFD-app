@@ -321,8 +321,16 @@ class BoundaryConditionSetup:
 
                 if outlet_centers:
                     inlet_center = patch_processor.calculate_inlet_center_radius()[0]
-                    avg_outlet_center = np.mean(outlet_centers, axis=0)
-                    flow_direction = avg_outlet_center - inlet_center
+                    # Use wall centroid as robust interior reference
+                    wall_name = self.geom_settings.get('wall_keywords_ordered', 'wall')
+                    wall_stl = os.path.join(tri_surface_dir, f"{wall_name}.stl")
+                    if os.path.exists(wall_stl):
+                        from stl import mesh as stl_mesh
+                        wm = stl_mesh.Mesh.from_file(wall_stl)
+                        interior_ref = np.array([np.mean(wm.vectors[:, :, i]) for i in range(3)])
+                    else:
+                        interior_ref = np.mean(outlet_centers, axis=0)
+                    flow_direction = interior_ref - inlet_center
                     flow_direction = flow_direction / np.linalg.norm(flow_direction)
 
                     # Check alignment

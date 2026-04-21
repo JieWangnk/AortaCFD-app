@@ -558,7 +558,18 @@ class WkSetup:
             self.log.warning("MRI inlet flow direction: no outlet centers found, using inlet normal as-is")
             return inlet_normal
 
-        flow_direction = np.mean(outlet_centers, axis=0) - inlet_center
+        # Use wall centroid as robust interior reference (average outlet
+        # fails for aortic arches where the descending aorta dominates).
+        wall_name = self.geom_settings.get('wall_keywords_ordered', 'wall')
+        wall_stl_path = os.path.join(tri_surface_dir, f"{wall_name}.stl")
+        if os.path.exists(wall_stl_path):
+            from stl import mesh as stl_mesh
+            wall_mesh = stl_mesh.Mesh.from_file(wall_stl_path)
+            interior_ref = np.array([np.mean(wall_mesh.vectors[:, :, i]) for i in range(3)])
+        else:
+            interior_ref = np.mean(outlet_centers, axis=0)
+
+        flow_direction = interior_ref - inlet_center
         flow_direction = flow_direction / np.linalg.norm(flow_direction)
         if np.dot(inlet_normal, flow_direction) < 0:
             return -inlet_normal

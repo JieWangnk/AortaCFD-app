@@ -653,8 +653,16 @@ class DistanceWallInletProfile:
             if not outlet_centers:
                 return False
 
-            avg_outlet = np.mean(outlet_centers, axis=0)
-            flow_dir = avg_outlet - self.center
+            # Use wall centroid as robust interior reference
+            wall_files = [f for f in stl_files if 'wall' in f.lower()]
+            if wall_files:
+                from stl import mesh as stl_mesh
+                wm = stl_mesh.Mesh.from_file(os.path.join(tri_surface_dir, wall_files[0]))
+                interior_ref = np.array([np.mean(wm.vectors[:, :, i]) for i in range(3)])
+            else:
+                interior_ref = np.mean(outlet_centers, axis=0)
+
+            flow_dir = interior_ref - self.center
             flow_dir = flow_dir / np.linalg.norm(flow_dir)
 
             return np.dot(self.inlet_normal, flow_dir) < 0
