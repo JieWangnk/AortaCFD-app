@@ -24,6 +24,11 @@ No behavioural changes for production cases.
   emitted by the post-processor but not yet documented).
 
 ### Changed
+- `[tool.mypy]` config in `pyproject.toml` now disables a small set of
+  high-noise codes (`no-any-return`, `assignment`, `attr-defined`) that
+  fire predominantly on `numpy`/`scipy` return-types. A focused typing
+  pass is planned for v1.2.0; the remaining 72 reports are now genuine
+  type concerns rather than baseline noise.
 - `compute_inward_normal` now raises a clear `FileNotFoundError` when the
   inlet or wall STL is missing or empty, and the callers
   (`GeometryAnalyzer._get_internal_point_for_snappy` and
