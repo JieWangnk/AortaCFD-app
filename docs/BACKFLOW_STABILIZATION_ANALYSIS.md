@@ -2,7 +2,6 @@
 
 **Document Version:** 1.0
 **Date:** 2025-12-05
-**Author:** Claude Code Analysis
 **Source Code Reference:** `~/OpenFOAM/mchi4jw4-12/src/modularWKPressure/stabilizedWindkesselVelocityFvPatchVectorField.C`
 
 ---
