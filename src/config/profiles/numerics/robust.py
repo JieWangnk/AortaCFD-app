@@ -68,16 +68,14 @@ config: Dict[str, Any] = {
     # Time discretization
     "ddtSchemes": {
         "default": "Euler",
-        "_comment": "First-order implicit - maximum stability, but introduces temporal diffusion"
+        "_comment": "First-order implicit - maximum stability, but introduces temporal diffusion",
     },
-
     # Gradient discretization
     "gradSchemes": {
         "default": "cellLimited Gauss linear 1.0",
         "grad(U)": "cellLimited Gauss linear 1.0",
-        "_comment": "Bounded gradient with limiter=1.0 - stable on highly skewed cells, prevents overshoots"
+        "_comment": "Bounded gradient with limiter=1.0 - stable on highly skewed cells, prevents overshoots",
     },
-
     # Convection discretization
     "divSchemes": {
         "default": "none",
@@ -86,27 +84,20 @@ config: Dict[str, Any] = {
         "div(phi,omega)": "Gauss upwind",
         "div(phi,epsilon)": "Gauss upwind",
         "div((nuEff*dev2(T(grad(U)))))": "Gauss linear",
-        "_comment": "First-order upwind - bounded and stable but diffusive. Use only for stability."
+        "_comment": "First-order upwind - bounded and stable but diffusive. Use only for stability.",
     },
-
     # Laplacian discretization
     "laplacianSchemes": {
         "default": "Gauss linear limited corrected 0.5",
-        "_comment": "Second-order with LIMITED non-orthogonal correction for stability on poor meshes"
+        "_comment": "Second-order with LIMITED non-orthogonal correction for stability on poor meshes",
     },
-
     # Interpolation
-    "interpolationSchemes": {
-        "default": "linear",
-        "_comment": "Second-order linear interpolation"
-    },
-
+    "interpolationSchemes": {"default": "linear", "_comment": "Second-order linear interpolation"},
     # Surface-normal gradients
     "snGradSchemes": {
         "default": "limited corrected 0.5",
-        "_comment": "LIMITED correction for stability on highly non-orthogonal meshes"
+        "_comment": "LIMITED correction for stability on highly non-orthogonal meshes",
     },
-
     # Solver settings
     "solvers": {
         "PIMPLE": {
@@ -122,14 +113,14 @@ config: Dict[str, Any] = {
                 "p": {"tolerance": 1e-3, "relTol": 0},
                 "U": {"tolerance": 1e-3, "relTol": 0},
                 "(k|epsilon|omega)": {"tolerance": 1e-3, "relTol": 0},
-                "_comment": "Relaxed tolerances (1e-3) for early exit - stability over tight convergence"
-            }
+                "_comment": "Relaxed tolerances (1e-3) for early exit - stability over tight convergence",
+            },
         },
         "relaxationFactors": {
             "fields": {
                 "p": 0.3,
                 "pFinal": 1.0,
-                "_comment": "pFinal MUST be 1.0 for Windkessel outlets. Under-relaxation on final corrector causes WK ODE state to drift from applied pressure field."
+                "_comment": "pFinal MUST be 1.0 for Windkessel outlets. Under-relaxation on final corrector causes WK ODE state to drift from applied pressure field.",
             },
             "equations": {
                 "U": 0.7,
@@ -140,27 +131,25 @@ config: Dict[str, Any] = {
                 "omegaFinal": 1.0,
                 "epsilon": 0.7,
                 "epsilonFinal": 1.0,
-                "_comment": "Moderate relaxation with full correction on final PIMPLE iteration for proper Windkessel coupling."
-            }
+                "_comment": "Moderate relaxation with full correction on final PIMPLE iteration for proper Windkessel coupling.",
+            },
         },
         "residualControl": {
             "p": 1e-4,
             "U": 1e-4,
             "k": 1e-4,
             "omega": 1e-4,
-            "_comment": "Relaxed tolerances for stability - tight tolerances can prevent convergence on poor meshes"
-        }
+            "_comment": "Relaxed tolerances for stability - tight tolerances can prevent convergence on poor meshes",
+        },
     },
-
     # Time stepping
     "time_stepping": {
         "max_co": 1.0,
         "initial_delta_t": 1e-6,  # Safe startup timestep to avoid Courant spike
-        "max_delta_t": 1e-3,      # Same as standard - 1st order schemes don't need smaller steps
+        "max_delta_t": 1e-3,  # Same as standard - 1st order schemes don't need smaller steps
         "adjustable_time_step": True,
-        "_comment": "First-order schemes are MORE stable, so same time stepping as standard is fine"
+        "_comment": "First-order schemes are MORE stable, so same time stepping as standard is fine",
     },
-
     # Metadata
     "_profile_metadata": {
         "name": "robust",
@@ -171,9 +160,9 @@ config: Dict[str, Any] = {
         "expected_diffusion": "high",
         "literature": [
             "OpenFOAM User Guide v11, Section 4.4 (Numerical Schemes)",
-            "Ferziger & Peric (2002), Computational Methods for Fluid Dynamics, Ch. 5"
-        ]
-    }
+            "Ferziger & Peric (2002), Computational Methods for Fluid Dynamics, Ch. 5",
+        ],
+    },
 }
 
 __all__ = ["config"]

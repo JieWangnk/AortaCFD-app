@@ -40,24 +40,13 @@ class TestWorkflowManager:
                 "inlet_keywords_ordered": "inlet",
                 "outlet_keywords_ordered": ["outlet"],
                 "wall_keywords_ordered": "wall",
-                "scale_factor": 0.001
+                "scale_factor": 0.001,
             },
-            "mesh": {
-                "SNAPPY_SETTINGS": {}
-            },
-            "physics": {
-                "density": 1060,
-                "viscosity": 0.004,
-                "simulation_type": "laminar"
-            },
-            "numerics": {
-                "profile": "standard"
-            },
+            "mesh": {"SNAPPY_SETTINGS": {}},
+            "physics": {"density": 1060, "viscosity": 0.004, "simulation_type": "laminar"},
+            "numerics": {"profile": "standard"},
             "boundary_conditions": {},
-            "simulation": {
-                "end_time": 0.1,
-                "num_processors": 1
-            }
+            "simulation": {"end_time": 0.1, "num_processors": 1},
         }
 
     def test_workflow_manager_initialization(self, mock_config: Dict[str, Any]):
@@ -85,7 +74,7 @@ class TestWorkflowManager:
             "generate_solver_settings",
             "generate_bc_files",
             "execute_meshing",
-            "execute_solver"
+            "execute_solver",
         ]
 
         for task_name in required_tasks:
@@ -105,14 +94,7 @@ class TestWorkflowManager:
         manager = WorkflowManager(mock_config)
 
         # Access recipes through the run_workflow method indirectly
-        expected_commands = [
-            "setup:dict",
-            "setup:bc",
-            "run:mesh",
-            "run:solver",
-            "runAll",
-            "createCase"
-        ]
+        expected_commands = ["setup:dict", "setup:bc", "run:mesh", "run:solver", "runAll", "createCase"]
 
         # These should not raise AortaCFDError for unknown command
         # (they may fail for other reasons since we don't have real files)
@@ -156,17 +138,20 @@ class TestNumericsProfiles:
             "interpolationSchemes",
             "snGradSchemes",
             "solvers",
-            "time_stepping"
+            "time_stepping",
         ]
 
         for key in required_keys:
             assert key in profile, f"Standard profile missing key: {key}"
 
-    @pytest.mark.parametrize("profile_name,expected_stability", [
-        ("robust", "high"),
-        ("standard", "medium"),
-        ("precise", "medium"),
-    ])
+    @pytest.mark.parametrize(
+        "profile_name,expected_stability",
+        [
+            ("robust", "high"),
+            ("standard", "medium"),
+            ("precise", "medium"),
+        ],
+    )
     def test_profile_stability_levels(self, profile_name: str, expected_stability: str):
         """Test that profiles have expected stability characteristics."""
         from config.numerics_builder import NumericsBuilder
@@ -184,15 +169,13 @@ class TestConstantsModule:
 
     def test_unit_conversions_correct(self):
         """Test that unit conversion constants are correct."""
-        from aortacfd_lib.constants import (
-            MMHG_TO_PA, PA_TO_MMHG, ML_TO_M3, M3_TO_ML
-        )
+        from aortacfd_lib.constants import MMHG_TO_PA, PA_TO_MMHG, ML_TO_M3, M3_TO_ML
 
         # 1 mmHg = 133.322 Pa (by definition)
         assert abs(MMHG_TO_PA - 133.322) < 0.001
 
         # Inverse should be reciprocal
-        assert abs(PA_TO_MMHG - 1.0/MMHG_TO_PA) < 1e-10
+        assert abs(PA_TO_MMHG - 1.0 / MMHG_TO_PA) < 1e-10
 
         # 1 mL = 1e-6 m³
         assert ML_TO_M3 == 1e-6
@@ -201,8 +184,12 @@ class TestConstantsModule:
     def test_blood_properties_in_physiological_range(self):
         """Test that blood property defaults are physiologically reasonable."""
         from aortacfd_lib.constants import (
-            BLOOD_DENSITY_DEFAULT, BLOOD_DENSITY_MIN, BLOOD_DENSITY_MAX,
-            BLOOD_VISCOSITY_DEFAULT, BLOOD_VISCOSITY_MIN, BLOOD_VISCOSITY_MAX
+            BLOOD_DENSITY_DEFAULT,
+            BLOOD_DENSITY_MIN,
+            BLOOD_DENSITY_MAX,
+            BLOOD_VISCOSITY_DEFAULT,
+            BLOOD_VISCOSITY_MIN,
+            BLOOD_VISCOSITY_MAX,
         )
 
         # Density should be around 1060 kg/m³
@@ -261,18 +248,16 @@ class TestFileGeneration:
             "numerics": {
                 "profile": "standard",
             },
-            "physics": {
-                "simulation_type": "laminar"
-            },
+            "physics": {"simulation_type": "laminar"},
             "schemes": {
                 "ddtSchemes": {"default": "backward"},
                 "gradSchemes": {"default": "Gauss linear"},
                 "divSchemes": {"default": "none"},
                 "laplacianSchemes": {"default": "Gauss linear corrected"},
                 "interpolationSchemes": {"default": "linear"},
-                "snGradSchemes": {"default": "corrected"}
+                "snGradSchemes": {"default": "corrected"},
             },
-            "openfoam_version": "12"
+            "openfoam_version": "12",
         }
 
         setup = FvSchemesWriter(config, temp_case_directory)
@@ -293,20 +278,14 @@ class TestFileGeneration:
         from aortacfd_lib.physical_properties_setup import PhysicalPropertiesWriter
 
         config = {
-            "physics": {
-                "density": 1060,
-                "viscosity": 0.004,
-                "simulation_type": "laminar"
-            },
-            "openfoam_version": "12"
+            "physics": {"density": 1060, "viscosity": 0.004, "simulation_type": "laminar"},
+            "openfoam_version": "12",
         }
 
         setup = PhysicalPropertiesWriter(config, temp_case_directory)
         setup.write_transportProperties_file()
 
-        props_path = os.path.join(
-            temp_case_directory, "constant", "transportProperties"
-        )
+        props_path = os.path.join(temp_case_directory, "constant", "transportProperties")
         assert os.path.exists(props_path)
 
 

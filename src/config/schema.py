@@ -15,11 +15,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 try:
     from pydantic import BaseModel, Field, field_validator, model_validator
+
     PYDANTIC_AVAILABLE = True
 except ImportError:
     # Fallback if pydantic not installed - use dataclasses
@@ -34,8 +34,10 @@ except ImportError:
 # ENUMERATIONS
 # =============================================================================
 
+
 class PhysicsModel(str, Enum):
     """Supported physics models."""
+
     LAMINAR = "laminar"
     RANS = "rans"
     LES = "les"
@@ -43,9 +45,10 @@ class PhysicsModel(str, Enum):
 
 class NumericsProfile(str, Enum):
     """Numerical accuracy profiles (3-profile system)."""
-    ROBUST = "robust"      # 1st order, maximum stability
+
+    ROBUST = "robust"  # 1st order, maximum stability
     STANDARD = "standard"  # 2nd order TVD bounded (default)
-    PRECISE = "precise"    # 2nd order LUST/CrankNicolson, minimal diffusion
+    PRECISE = "precise"  # 2nd order LUST/CrankNicolson, minimal diffusion
 
 
 class InletType(str, Enum):
@@ -54,6 +57,7 @@ class InletType(str, Enum):
     The code treats MRI as a time-varying inlet backed by a folder of
     OpenFOAM-format snapshots (see setup_tasks.py, wk_setup.py, U.tpl).
     """
+
     CONSTANT = "CONSTANT"
     TIMEVARYING = "TIMEVARYING"
     WOMERSLEY = "WOMERSLEY"
@@ -63,6 +67,7 @@ class InletType(str, Enum):
 
 class OutletType(str, Enum):
     """Outlet boundary condition types."""
+
     ZEROGRADIENT = "zeroGradient"
     FIXEDVALUE = "fixedValue"
     WINDKESSEL_2E = "2EWINDKESSEL"
@@ -71,6 +76,7 @@ class OutletType(str, Enum):
 
 class ReferenceRadiusStrategy(str, Enum):
     """Strategy for determining reference radius for mesh sizing."""
+
     INLET = "inlet"
     MINIMUM = "minimum"
     AVERAGE = "average"
@@ -90,17 +96,16 @@ if PYDANTIC_AVAILABLE:
         blood_density: float = Field(default=1060.0, gt=0, description="Blood density in kg/m³")
         blood_viscosity: float = Field(default=0.004, gt=0, description="Dynamic viscosity in Pa·s")
 
-        @model_validator(mode='after')
-        def sync_simulation_type(self) -> 'PhysicsConfig':
+        @model_validator(mode="after")
+        def sync_simulation_type(self) -> "PhysicsConfig":
             """Ensure simulation_type matches model."""
-            model_val = self.model.value if hasattr(self.model, 'value') else str(self.model)
+            model_val = self.model.value if hasattr(self.model, "value") else str(self.model)
             if self.simulation_type.lower() != model_val:
                 self.simulation_type = model_val
             return self
 
         class Config:
             use_enum_values = True
-
 
     class BoundaryLayerConfig(BaseModel):
         """Boundary layer mesh configuration."""
@@ -110,7 +115,6 @@ if PYDANTIC_AVAILABLE:
         expansion_ratio: float = Field(default=1.15, gt=1.0, le=2.0)
         final_layer_thickness: float = Field(default=0.4, gt=0, le=1.0)
         min_thickness: float = Field(default=0.1, gt=0, le=1.0)
-
 
     class SnappySettings(BaseModel):
         """snappyHexMesh configuration with defaults."""
@@ -136,21 +140,19 @@ if PYDANTIC_AVAILABLE:
         parallel: bool = True
         nProcessors: int = Field(default=4, ge=1)
 
-
     class MeshConfig(BaseModel):
         """Mesh generation configuration."""
 
         boundary_layers: Optional[BoundaryLayerConfig] = None
         SNAPPY_SETTINGS: Optional[SnappySettings] = None
 
-        @model_validator(mode='after')
-        def set_defaults(self) -> 'MeshConfig':
+        @model_validator(mode="after")
+        def set_defaults(self) -> "MeshConfig":
             if self.boundary_layers is None:
                 self.boundary_layers = BoundaryLayerConfig()
             if self.SNAPPY_SETTINGS is None:
                 self.SNAPPY_SETTINGS = SnappySettings()
             return self
-
 
     class GeometryConfig(BaseModel):
         """Geometry configuration."""
@@ -160,7 +162,6 @@ if PYDANTIC_AVAILABLE:
         wall_keywords_ordered: Union[str, List[str]] = "wall"
         scale_factor: float = Field(default=0.001, gt=0, description="STL scale: 0.001 for mm→m")
         reference_radius_strategy: ReferenceRadiusStrategy = ReferenceRadiusStrategy.INLET
-
 
     class NumericsConfig(BaseModel):
         """Numerical schemes configuration."""
@@ -172,7 +173,6 @@ if PYDANTIC_AVAILABLE:
         class Config:
             use_enum_values = True
 
-
     class InletConfig(BaseModel):
         """Inlet boundary condition configuration."""
 
@@ -182,7 +182,6 @@ if PYDANTIC_AVAILABLE:
         csv_file: Optional[str] = None
         profile_type: str = "plug"
 
-
     class OutletConfig(BaseModel):
         """Outlet boundary condition configuration."""
 
@@ -191,13 +190,11 @@ if PYDANTIC_AVAILABLE:
         class Config:
             use_enum_values = True
 
-
     class BoundaryConditionsConfig(BaseModel):
         """Boundary conditions configuration."""
 
         inlet: Optional[InletConfig] = None
         outlets: Optional[OutletConfig] = None
-
 
     class WindkesselConfig(BaseModel):
         """Windkessel parameter configuration."""
@@ -208,18 +205,22 @@ if PYDANTIC_AVAILABLE:
         murray_exponent: float = Field(default=2.6, ge=2.0, le=3.0)
         time_constant: float = Field(default=1.0, gt=0)
 
-
     class ProvenanceConfig(BaseModel):
         """Provenance metadata for reproducibility tracking."""
 
-        geometry_source: Optional[str] = Field(default=None, description="Origin of the geometry (e.g. CT scan ID, STL source)")
-        segmentation_tool: Optional[str] = Field(default=None, description="Tool used for segmentation (e.g. SimVascular, 3D Slicer)")
-        inlet_data_source: Optional[str] = Field(default=None, description="Source of inlet boundary data (e.g. 4D flow MRI, Doppler)")
+        geometry_source: Optional[str] = Field(
+            default=None, description="Origin of the geometry (e.g. CT scan ID, STL source)"
+        )
+        segmentation_tool: Optional[str] = Field(
+            default=None, description="Tool used for segmentation (e.g. SimVascular, 3D Slicer)"
+        )
+        inlet_data_source: Optional[str] = Field(
+            default=None, description="Source of inlet boundary data (e.g. 4D flow MRI, Doppler)"
+        )
         created_by: Optional[str] = Field(default=None, description="Author or operator")
         created_date: Optional[str] = Field(default=None, description="Date config was created (ISO 8601)")
         aortacfd_version: Optional[str] = Field(default=None, description="AortaCFD version used")
         notes: Optional[str] = Field(default=None, description="Free-text notes")
-
 
     class SimulationConfig(BaseModel):
         """
@@ -244,8 +245,8 @@ if PYDANTIC_AVAILABLE:
         # Run settings
         run_settings: Optional[Dict[str, Any]] = None
 
-        @model_validator(mode='after')
-        def set_defaults(self) -> 'SimulationConfig':
+        @model_validator(mode="after")
+        def set_defaults(self) -> "SimulationConfig":
             """Set default values for missing sections."""
             if self.geometry is None:
                 self.geometry = GeometryConfig()
@@ -299,6 +300,7 @@ else:
 # VALIDATION HELPERS
 # =============================================================================
 
+
 def validate_config(config_dict: Dict[str, Any]) -> SimulationConfig:
     """
     Validate a configuration dictionary against the schema.
@@ -318,14 +320,14 @@ def validate_config(config_dict: Dict[str, Any]) -> SimulationConfig:
     else:
         # Basic validation without pydantic
         return SimulationConfig(
-            patient=config_dict.get('patient'),
-            geometry=GeometryConfig(**config_dict.get('geometry', {})) if config_dict.get('geometry') else None,
-            physics=PhysicsConfig(**config_dict.get('physics', {})) if config_dict.get('physics') else None,
-            mesh=MeshConfig(**config_dict.get('mesh', {})) if config_dict.get('mesh') else None,
-            numerics=config_dict.get('numerics'),
-            boundary_conditions=config_dict.get('boundary_conditions'),
-            windkessel=config_dict.get('windkessel'),
-            run_settings=config_dict.get('run_settings'),
+            patient=config_dict.get("patient"),
+            geometry=GeometryConfig(**config_dict.get("geometry", {})) if config_dict.get("geometry") else None,
+            physics=PhysicsConfig(**config_dict.get("physics", {})) if config_dict.get("physics") else None,
+            mesh=MeshConfig(**config_dict.get("mesh", {})) if config_dict.get("mesh") else None,
+            numerics=config_dict.get("numerics"),
+            boundary_conditions=config_dict.get("boundary_conditions"),
+            windkessel=config_dict.get("windkessel"),
+            run_settings=config_dict.get("run_settings"),
         )
 
 

@@ -46,34 +46,62 @@ def minimal_config():
             "SNAPPY_SETTINGS": {
                 "mesh_strategy": "adaptive_span",
                 "default_cells_across_span": 12,
-                "castellatedMesh": True, "snap": True, "addLayers": True,
-                "maxLocalCells": 10000000, "maxGlobalCells": 20000000,
-                "minRefinementCells": 10, "maxLoadUnbalance": 0.10,
-                "nCellsBetweenLevels": 3, "includedAngle": 170,
+                "castellatedMesh": True,
+                "snap": True,
+                "addLayers": True,
+                "maxLocalCells": 10000000,
+                "maxGlobalCells": 20000000,
+                "minRefinementCells": 10,
+                "maxLoadUnbalance": 0.10,
+                "nCellsBetweenLevels": 3,
+                "includedAngle": 170,
                 "resolveFeatureAngle": 30,
-                "nSmoothPatch": 5, "nSmoothInternal": 5,
-                "snapTolerance": 2.0, "nSolveIter": 100,
-                "nRelaxIter": 10, "nFeatureSnapIter": 10,
-                "implicitFeatureSnap": False, "explicitFeatureSnap": True,
+                "nSmoothPatch": 5,
+                "nSmoothInternal": 5,
+                "snapTolerance": 2.0,
+                "nSolveIter": 100,
+                "nRelaxIter": 10,
+                "nFeatureSnapIter": 10,
+                "implicitFeatureSnap": False,
+                "explicitFeatureSnap": True,
                 "multiRegionFeatureSnap": False,
-                "relativeSizes": True, "addLayer": 10,
-                "expansionRatio": 1.1, "finalLayerThickness": 0.4,
-                "minThickness": 0.15, "featureAngle": 150,
-                "slipFeatureAngle": 30, "layerTerminationAngle": -180,
-                "nGrow": 0, "nBufferCellsNoExtrude": 0,
-                "nSmoothNormals": 5, "nSmoothSurfaceNormals": 30,
-                "nSmoothThickness": 15, "nSmoothDisplacement": 15,
-                "maxFaceThicknessRatio": 0.4, "maxThicknessToMedialRatio": 0.25,
-                "minMedianAxisAngle": 90, "nLayerIter": 100, "nRelaxedIter": 50,
-                "maxNonOrtho": 60, "maxBoundarySkewness": 4,
-                "maxInternalSkewness": 4, "maxConcave": 80,
-                "minVol": 1e-18, "minTetQuality": 1e-30, "minArea": 1e-20,
-                "minTwist": 0.01, "minDeterminant": 0.01,
-                "minFaceWeight": 0.02, "minVolRatio": 0.01,
-                "minTriangleTwist": -1, "nSmoothScale": 6,
+                "relativeSizes": True,
+                "addLayer": 10,
+                "expansionRatio": 1.1,
+                "finalLayerThickness": 0.4,
+                "minThickness": 0.15,
+                "featureAngle": 150,
+                "slipFeatureAngle": 30,
+                "layerTerminationAngle": -180,
+                "nGrow": 0,
+                "nBufferCellsNoExtrude": 0,
+                "nSmoothNormals": 5,
+                "nSmoothSurfaceNormals": 30,
+                "nSmoothThickness": 15,
+                "nSmoothDisplacement": 15,
+                "maxFaceThicknessRatio": 0.4,
+                "maxThicknessToMedialRatio": 0.25,
+                "minMedianAxisAngle": 90,
+                "nLayerIter": 100,
+                "nRelaxedIter": 50,
+                "maxNonOrtho": 60,
+                "maxBoundarySkewness": 4,
+                "maxInternalSkewness": 4,
+                "maxConcave": 80,
+                "minVol": 1e-18,
+                "minTetQuality": 1e-30,
+                "minArea": 1e-20,
+                "minTwist": 0.01,
+                "minDeterminant": 0.01,
+                "minFaceWeight": 0.02,
+                "minVolRatio": 0.01,
+                "minTriangleTwist": -1,
+                "nSmoothScale": 6,
                 "errorReduction": 0.75,
-                "relaxed_maxNonOrtho": 70, "relaxed_maxBoundarySkewness": 10,
-                "relaxed_maxInternalSkewness": 6, "relaxed_minDeterminant": 0.001,
+                "relaxed_maxNonOrtho": 70,
+                "relaxed_maxBoundarySkewness": 10,
+                "relaxed_maxInternalSkewness": 6,
+                "relaxed_minDeterminant": 0.001,
                 "relaxed_minVol": 1e-20,
             },
         },
@@ -116,13 +144,14 @@ def legacy_config():
 def mock_geometry():
     """Mock PatchProcessing to return realistic aortic geometry.
     Does NOT mock Jinja2 — templates must render to real strings."""
-    with patch("aortacfd_lib.mesh_setup.PatchProcessing") as mock_pp, \
-         patch("aortacfd_lib.mesh_setup.Logger"):
+    with patch("aortacfd_lib.mesh_setup.PatchProcessing") as mock_pp, patch("aortacfd_lib.mesh_setup.Logger"):
 
         mock_instance = MagicMock()
         # 12mm radius inlet (24mm diameter aorta)
         mock_instance.calculate_inlet_center_radius.return_value = (
-            np.array([0.0, 0.0, 0.0]), 0.012, np.array([0.0, 0.0, 1.0])
+            np.array([0.0, 0.0, 0.0]),
+            0.012,
+            np.array([0.0, 0.0, 1.0]),
         )
         mock_pp.return_value = mock_instance
 
@@ -150,8 +179,7 @@ class TestPromise1_Automation:
             analyzer = GeometryAnalyzer(minimal_config, tmpdir)
 
             # Mock STL vertex extraction since no real STL files
-            with patch.object(analyzer, '_get_all_vertices',
-                            return_value=np.array([[0, 0, 0], [0.05, 0.04, 0.1]])):
+            with patch.object(analyzer, "_get_all_vertices", return_value=np.array([[0, 0, 0], [0.05, 0.04, 0.1]])):
                 analyzer.write_all_mesh_files()
 
             # Verify all three dictionaries exist
@@ -171,8 +199,7 @@ class TestPromise1_Automation:
 
             analyzer = GeometryAnalyzer(minimal_config, tmpdir)
 
-            with patch.object(analyzer, '_get_all_vertices',
-                            return_value=np.array([[0, 0, 0], [0.05, 0.04, 0.1]])):
+            with patch.object(analyzer, "_get_all_vertices", return_value=np.array([[0, 0, 0], [0.05, 0.04, 0.1]])):
                 analyzer.write_all_mesh_files()
 
             content = (sys_path / "blockMeshDict").read_text()
@@ -193,8 +220,7 @@ class TestPromise1_Automation:
 
             analyzer = GeometryAnalyzer(minimal_config, tmpdir)
 
-            with patch.object(analyzer, '_get_all_vertices',
-                            return_value=np.array([[0, 0, 0], [0.05, 0.04, 0.1]])):
+            with patch.object(analyzer, "_get_all_vertices", return_value=np.array([[0, 0, 0], [0.05, 0.04, 0.1]])):
                 analyzer.write_all_mesh_files()
 
             content = (sys_path / "snappyHexMeshDict").read_text()
@@ -264,8 +290,7 @@ class TestPromise2_EfficientMesh:
 
             analyzer = GeometryAnalyzer(minimal_config, tmpdir)
 
-            with patch.object(analyzer, '_get_all_vertices',
-                            return_value=np.array([[0, 0, 0], [0.05, 0.04, 0.1]])):
+            with patch.object(analyzer, "_get_all_vertices", return_value=np.array([[0, 0, 0], [0.05, 0.04, 0.1]])):
                 analyzer.write_all_mesh_files()
 
             snappy = (sys_path / "snappyHexMeshDict").read_text()
@@ -284,8 +309,7 @@ class TestPromise2_EfficientMesh:
 
             analyzer = GeometryAnalyzer(minimal_config, tmpdir)
 
-            with patch.object(analyzer, '_get_all_vertices',
-                            return_value=np.array([[0, 0, 0], [0.05, 0.04, 0.1]])):
+            with patch.object(analyzer, "_get_all_vertices", return_value=np.array([[0, 0, 0], [0.05, 0.04, 0.1]])):
                 analyzer.write_all_mesh_files()
 
             sf = (sys_path / "surfaceFeaturesDict").read_text()
@@ -446,12 +470,18 @@ class TestPromise4_Reproducibility:
         from aortacfd_lib.mesh_setup import GeometryAnalyzer
 
         config = {
-            "geometry": {"wall_keywords_ordered": "wall", "inlet_keywords_ordered": "inlet", "outlet_keywords_ordered": []},
-            "mesh": {"SNAPPY_SETTINGS": {
-                "mesh_strategy": "adaptive_span",
-                "surfaceRefinementLevels": [2, 3],
-                "_user_provided_keys": ["surfaceRefinementLevels"],
-            }},
+            "geometry": {
+                "wall_keywords_ordered": "wall",
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": [],
+            },
+            "mesh": {
+                "SNAPPY_SETTINGS": {
+                    "mesh_strategy": "adaptive_span",
+                    "surfaceRefinementLevels": [2, 3],
+                    "_user_provided_keys": ["surfaceRefinementLevels"],
+                }
+            },
         }
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -478,7 +508,12 @@ class TestPromise5_UsefulOutputs:
 
             report = audit_mesh(
                 tmpdir,
-                geometry_info={"inlet_radius_m": 0.012, "outlet_radii_m": [], "outlet_names": [], "inlet_name": "inlet"},
+                geometry_info={
+                    "inlet_radius_m": 0.012,
+                    "outlet_radii_m": [],
+                    "outlet_names": [],
+                    "inlet_name": "inlet",
+                },
                 config={"mesh": {"SNAPPY_SETTINGS": {}}},
             )
 
@@ -506,8 +541,7 @@ class TestPromise5_UsefulOutputs:
                     pts.append(f"({i * cell_size} {j * cell_size} 0)")
 
             (poly_dir / "points").write_text(
-                f"FoamFile\n{{\n    class vectorField;\n    object points;\n}}\n9\n(\n" +
-                "\n".join(pts) + "\n)\n"
+                f"FoamFile\n{{\n    class vectorField;\n    object points;\n}}\n9\n(\n" + "\n".join(pts) + "\n)\n"
             )
             (poly_dir / "faces").write_text(
                 "FoamFile\n{\n    class faceList;\n    object faces;\n}\n4\n(\n"
@@ -572,13 +606,15 @@ class TestMeshGoalPresets:
         """User-set cells_across_span overrides goal preset."""
         from aortacfd_lib.utils.mesh_constants import resolve_mesh_goal
 
-        resolved = resolve_mesh_goal({
-            "goal": "pressure_fast",
-            "SNAPPY_SETTINGS": {
-                "cells_across_span": 30,
-                "_user_provided_keys": ["cells_across_span"],
-            },
-        })
+        resolved = resolve_mesh_goal(
+            {
+                "goal": "pressure_fast",
+                "SNAPPY_SETTINGS": {
+                    "cells_across_span": 30,
+                    "_user_provided_keys": ["cells_across_span"],
+                },
+            }
+        )
         # Should NOT override the user's explicit value
         assert "cells_across_span" not in resolved
 
@@ -586,13 +622,15 @@ class TestMeshGoalPresets:
         """User-set addLayers overrides goal preset."""
         from aortacfd_lib.utils.mesh_constants import resolve_mesh_goal
 
-        resolved = resolve_mesh_goal({
-            "goal": "routine_hemodynamics",
-            "SNAPPY_SETTINGS": {
-                "addLayers": False,
-                "_user_provided_keys": ["addLayers"],
-            },
-        })
+        resolved = resolve_mesh_goal(
+            {
+                "goal": "routine_hemodynamics",
+                "SNAPPY_SETTINGS": {
+                    "addLayers": False,
+                    "_user_provided_keys": ["addLayers"],
+                },
+            }
+        )
         # Layers should NOT be overridden by goal
         assert "addLayers" not in resolved
 
@@ -615,7 +653,11 @@ class TestMeshGoalPresets:
         from aortacfd_lib.mesh_setup import GeometryAnalyzer
 
         config = {
-            "geometry": {"wall_keywords_ordered": "wall", "inlet_keywords_ordered": "inlet", "outlet_keywords_ordered": []},
+            "geometry": {
+                "wall_keywords_ordered": "wall",
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": [],
+            },
             "mesh": {
                 "goal": "pressure_fast",
                 "SNAPPY_SETTINGS": {},
@@ -635,7 +677,11 @@ class TestMeshGoalPresets:
         from aortacfd_lib.mesh_setup import GeometryAnalyzer
 
         config = {
-            "geometry": {"wall_keywords_ordered": "wall", "inlet_keywords_ordered": "inlet", "outlet_keywords_ordered": []},
+            "geometry": {
+                "wall_keywords_ordered": "wall",
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": [],
+            },
             "mesh": {
                 "goal": "routine_hemodynamics",
                 "SNAPPY_SETTINGS": {},
@@ -658,10 +704,10 @@ class TestMeshGoalPresets:
 
         std = LAYER_PROFILES["standard"]
         assert std["addLayer"] == 5
-        assert std["featureAngle"] == 190          # forces layers at junctions
+        assert std["featureAngle"] == 190  # forces layers at junctions
         assert std["nSmoothSurfaceNormals"] == 10  # sweet spot for curved vessels
         assert std["nSmoothNormals"] == 5
-        assert std["nSmoothThickness"] == 0        # disabled — each face adapts
+        assert std["nSmoothThickness"] == 0  # disabled — each face adapts
         assert std["maxFaceThicknessRatio"] == 1.0  # unlocked
         assert std["maxThicknessToMedialRatio"] == 1.0
         assert std["minMedianAxisAngle"] == 30
@@ -690,21 +736,25 @@ class TestPublicMeshAPI:
         """Explicit span_target wins over goal preset value."""
         from aortacfd_lib.utils.mesh_constants import resolve_mesh_config
 
-        resolved = resolve_mesh_config({
-            "goal": "pressure_fast",  # would set span=10
-            "span_target": 25,        # explicit override
-            "SNAPPY_SETTINGS": {},
-        })
+        resolved = resolve_mesh_config(
+            {
+                "goal": "pressure_fast",  # would set span=10
+                "span_target": 25,  # explicit override
+                "SNAPPY_SETTINGS": {},
+            }
+        )
         assert resolved["cells_across_span"] == 25
 
     def test_layers_mode_standard(self):
         """mesh.layers.mode = 'standard' applies 3-layer profile."""
         from aortacfd_lib.utils.mesh_constants import resolve_mesh_config
 
-        resolved = resolve_mesh_config({
-            "layers": {"mode": "standard"},
-            "SNAPPY_SETTINGS": {},
-        })
+        resolved = resolve_mesh_config(
+            {
+                "layers": {"mode": "standard"},
+                "SNAPPY_SETTINGS": {},
+            }
+        )
         assert resolved["addLayers"] is True
         assert resolved["addLayer"] == 5
 
@@ -712,10 +762,12 @@ class TestPublicMeshAPI:
         """mesh.layers.mode = 'off' disables layers."""
         from aortacfd_lib.utils.mesh_constants import resolve_mesh_config
 
-        resolved = resolve_mesh_config({
-            "layers": {"mode": "off"},
-            "SNAPPY_SETTINGS": {},
-        })
+        resolved = resolve_mesh_config(
+            {
+                "layers": {"mode": "off"},
+                "SNAPPY_SETTINGS": {},
+            }
+        )
         assert resolved["addLayers"] is False
         assert resolved["addLayer"] == 0
 
@@ -723,42 +775,50 @@ class TestPublicMeshAPI:
         """mesh.layers.num_layers overrides goal and mode."""
         from aortacfd_lib.utils.mesh_constants import resolve_mesh_config
 
-        resolved = resolve_mesh_config({
-            "goal": "routine_hemodynamics",  # would set 3 layers
-            "layers": {"num_layers": 5},
-            "SNAPPY_SETTINGS": {},
-        })
+        resolved = resolve_mesh_config(
+            {
+                "goal": "routine_hemodynamics",  # would set 3 layers
+                "layers": {"num_layers": 5},
+                "SNAPPY_SETTINGS": {},
+            }
+        )
         assert resolved["addLayer"] == 5
 
     def test_layers_expansion_ratio(self):
         """mesh.layers.expansion_ratio maps to expansionRatio."""
         from aortacfd_lib.utils.mesh_constants import resolve_mesh_config
 
-        resolved = resolve_mesh_config({
-            "layers": {"mode": "standard", "expansion_ratio": 1.15},
-            "SNAPPY_SETTINGS": {},
-        })
+        resolved = resolve_mesh_config(
+            {
+                "layers": {"mode": "standard", "expansion_ratio": 1.15},
+                "SNAPPY_SETTINGS": {},
+            }
+        )
         assert resolved["expansionRatio"] == 1.15
 
     def test_mode_legacy(self):
         """mesh.mode = 'legacy' activates legacy_surface strategy."""
         from aortacfd_lib.utils.mesh_constants import resolve_mesh_config
 
-        resolved = resolve_mesh_config({
-            "mode": "legacy",
-            "SNAPPY_SETTINGS": {},
-        })
+        resolved = resolve_mesh_config(
+            {
+                "mode": "legacy",
+                "SNAPPY_SETTINGS": {},
+            }
+        )
         assert resolved["mesh_strategy"] == "legacy_surface"
 
     def test_mode_legacy_ignores_goal(self):
         """Legacy mode takes precedence — goal is ignored."""
         from aortacfd_lib.utils.mesh_constants import resolve_mesh_config
 
-        resolved = resolve_mesh_config({
-            "mode": "legacy",
-            "goal": "routine_hemodynamics",
-            "SNAPPY_SETTINGS": {},
-        })
+        resolved = resolve_mesh_config(
+            {
+                "mode": "legacy",
+                "goal": "routine_hemodynamics",
+                "SNAPPY_SETTINGS": {},
+            }
+        )
         assert resolved["mesh_strategy"] == "legacy_surface"
         assert "cells_across_span" not in resolved
 
@@ -766,16 +826,18 @@ class TestPublicMeshAPI:
         """All public API keys together."""
         from aortacfd_lib.utils.mesh_constants import resolve_mesh_config
 
-        resolved = resolve_mesh_config({
-            "span_target": 18,
-            "layers": {
-                "enabled": True,
-                "num_layers": 4,
-                "expansion_ratio": 1.15,
-                "final_layer_thickness": 0.35,
-            },
-            "SNAPPY_SETTINGS": {},
-        })
+        resolved = resolve_mesh_config(
+            {
+                "span_target": 18,
+                "layers": {
+                    "enabled": True,
+                    "num_layers": 4,
+                    "expansion_ratio": 1.15,
+                    "final_layer_thickness": 0.35,
+                },
+                "SNAPPY_SETTINGS": {},
+            }
+        )
         assert resolved["cells_across_span"] == 18
         assert resolved["addLayers"] is True
         assert resolved["addLayer"] == 4
@@ -787,7 +849,11 @@ class TestPublicMeshAPI:
         from aortacfd_lib.mesh_setup import GeometryAnalyzer
 
         config = {
-            "geometry": {"wall_keywords_ordered": "wall", "inlet_keywords_ordered": "inlet", "outlet_keywords_ordered": []},
+            "geometry": {
+                "wall_keywords_ordered": "wall",
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": [],
+            },
             "mesh": {
                 "span_target": 14,
                 "layers": {"mode": "off"},

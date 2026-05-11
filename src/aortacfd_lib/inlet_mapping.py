@@ -7,11 +7,13 @@ from scipy.special import jv
 from .utils.logger import Logger
 from .utils.patch_processing import PatchProcessing, compute_inward_normal
 
+
 class InletMapping:
     """
     Reads time-series data from a CSV, applies a velocity profile, and writes
     the time-varying boundary condition files into the correct directory structure.
     """
+
     def __init__(self, config: dict, case_directory: str):
         self.config = config
         self.case_directory = case_directory
@@ -19,15 +21,15 @@ class InletMapping:
 
         # Get all necessary settings from the config dictionary
         # Support both config structures: boundary_conditions.inlet or inlet
-        self.inlet_settings = self.config.get('boundary_conditions', {}).get('inlet') or self.config.get('inlet', {})
-        self.geom_settings = self.config['geometry']
-        self.phys_settings = self.config['physics']
-        self.inlet_name = self.geom_settings['inlet_keywords_ordered']
-        self.inlet_data_file = self.inlet_settings['csv_file']
-        self.data_type = self.inlet_settings['data_type'].lower().strip()
-        self.profile = self.inlet_settings['profile'].lower().strip()
-        self.orientation = self.inlet_settings.get('orientation', 'auto').lower().strip()
-        self.nu = self.phys_settings.get('nu')
+        self.inlet_settings = self.config.get("boundary_conditions", {}).get("inlet") or self.config.get("inlet", {})
+        self.geom_settings = self.config["geometry"]
+        self.phys_settings = self.config["physics"]
+        self.inlet_name = self.geom_settings["inlet_keywords_ordered"]
+        self.inlet_data_file = self.inlet_settings["csv_file"]
+        self.data_type = self.inlet_settings["data_type"].lower().strip()
+        self.profile = self.inlet_settings["profile"].lower().strip()
+        self.orientation = self.inlet_settings.get("orientation", "auto").lower().strip()
+        self.nu = self.phys_settings.get("nu")
 
         self.center = None
         self.radius = None
@@ -43,7 +45,7 @@ class InletMapping:
         """
         self.log.info("Calculating inlet patch geometry...")
         tri_surface_dir = os.path.join(self.case_directory, "constant", "triSurface")
-        stl_files = [f for f in os.listdir(tri_surface_dir) if f.endswith('.stl')]
+        [f for f in os.listdir(tri_surface_dir) if f.endswith(".stl")]
 
         # STL files in constant/triSurface/ are PRE-SCALED to meters during case setup
         # No scale_factor needed - values returned directly in SI units (meters)
@@ -51,9 +53,9 @@ class InletMapping:
         self.center, self.radius, inlet_normal = inlet_patch_processor.calculate_inlet_center_radius()
         self.area = inlet_patch_processor.calculate_surface_area()
         self.log.info(f"Inlet center: {self.center}, Radius: {self.radius:.6f} m, Area: {self.area:.6e} m²")
-        
+
         # Automatic orientation detection
-        if self.orientation == 'auto':
+        if self.orientation == "auto":
             self.auto_flip_normal = self._determine_inward_direction(inlet_normal, self.case_directory)
         else:
             self.log.info(f"Using manual orientation setting: {self.orientation}")
@@ -72,7 +74,7 @@ class InletMapping:
         self.log.debug(f"Cleaning old time directories and symlinks in {parent_dir}")
         for item in os.listdir(parent_dir):
             item_path = os.path.join(parent_dir, item)
-            if item.replace('.', '', 1).isdigit():
+            if item.replace(".", "", 1).isdigit():
                 if os.path.islink(item_path):
                     os.unlink(item_path)
                 elif os.path.isdir(item_path):
@@ -100,10 +102,10 @@ class InletMapping:
             comment_lines = 0
             header_line = 0
 
-            with open(file_name, 'r') as f:
+            with open(file_name, "r") as f:
                 for line in f:
                     stripped = line.strip()
-                    if not stripped or stripped.startswith('#'):
+                    if not stripped or stripped.startswith("#"):
                         comment_lines += 1
                     else:
                         # First non-comment line - check if it's a header
@@ -114,7 +116,7 @@ class InletMapping:
             # Total lines to skip = comment lines + header (if present)
             skiprows = comment_lines + header_line
 
-            data = np.genfromtxt(file_name, delimiter=',', skip_header=skiprows)
+            data = np.genfromtxt(file_name, delimiter=",", skip_header=skiprows)
             if data.ndim < 2 or data.shape[1] < 2:
                 raise ValueError(f"CSV file {file_name} must have at least 2 columns.")
         except Exception as e:
@@ -126,7 +128,7 @@ class InletMapping:
         # Auto-detect flowrate units and convert to m³/s if needed
         # Clinical data is typically in L/min (values > 1.0)
         # CFD data is typically in m³/s (values << 1.0, order of 1e-4 to 1e-5)
-        if self.data_type == 'flowrate':
+        if self.data_type == "flowrate":
             max_abs_value = np.max(np.abs(yval))
             if max_abs_value > 1.0:
                 # Likely L/min - convert to m³/s
@@ -140,13 +142,13 @@ class InletMapping:
         return times, yval, cardiac_cycle
 
     def _read_points_file(self, file_name):
-        with open(file_name, 'r') as file:
+        with open(file_name, "r") as file:
             lines = [line.strip() for line in file if line.strip()]
             n_points = int(lines[0])
             points = []
-            start_index = 2 if lines[1] == '(' else 1
+            start_index = 2 if lines[1] == "(" else 1
             for i in range(n_points):
-                line_s = re.sub('[()]', '', lines[i + start_index])
+                line_s = re.sub("[()]", "", lines[i + start_index])
                 xyz = [float(p) for p in line_s.split()]
                 points.append(xyz)
         return n_points, np.array(points, dtype=float)
@@ -163,7 +165,7 @@ class InletMapping:
         """
         try:
             tri_surface_dir = os.path.join(case_directory, "constant", "triSurface")
-            wall_name = self.config.get('geometry', {}).get('wall_keywords_ordered', 'wall')
+            wall_name = self.config.get("geometry", {}).get("wall_keywords_ordered", "wall")
             inward = compute_inward_normal(tri_surface_dir, self.inlet_name, wall_name, log=self.log)
 
             dot_product = np.dot(inlet_normal, inward)
@@ -181,10 +183,10 @@ class InletMapping:
 
     def _get_velocity_components(self, speed_scalar, normal_vec):
         # Apply orientation: 'out' means positive normal direction, 'in' means negative, 'auto' means automatic detection
-        if self.orientation == 'auto':
+        if self.orientation == "auto":
             direction_multiplier = -1.0 if self.auto_flip_normal else 1.0
         else:
-            direction_multiplier = -1.0 if self.orientation == 'in' else 1.0
+            direction_multiplier = -1.0 if self.orientation == "in" else 1.0
         return speed_scalar * direction_multiplier * normal_vec
 
     def compute_cross_sectional_area(self):
@@ -198,12 +200,12 @@ class InletMapping:
         return np.pi * self.radius**2
 
     def plug_profile_speed(self, data_val):
-        if self.data_type == 'flowrate':
+        if self.data_type == "flowrate":
             return data_val / self.compute_cross_sectional_area()
         return data_val
 
     def parabolic_centerline_speed(self, data_val):
-        if self.data_type == 'flowrate':
+        if self.data_type == "flowrate":
             avg_vel = data_val / self.compute_cross_sectional_area()
             return 2.0 * avg_vel
         return 2.0 * data_val
@@ -245,8 +247,7 @@ class InletMapping:
     # and the oscillatory nature of aortic flow.
     # =========================================================================
 
-    def _estimate_required_harmonics(self, values: np.ndarray,
-                                       energy_threshold: float = 0.99) -> int:
+    def _estimate_required_harmonics(self, values: np.ndarray, energy_threshold: float = 0.99) -> int:
         """
         Auto-detect required number of Womersley harmonics based on spectral energy.
 
@@ -269,7 +270,7 @@ class InletMapping:
         fft_result = np.fft.fft(values)
 
         # Power spectrum (energy per harmonic)
-        power = np.abs(fft_result[:N//2])**2
+        power = np.abs(fft_result[: N // 2]) ** 2
 
         # Total energy (excluding DC)
         total_energy = np.sum(power[1:])
@@ -287,8 +288,10 @@ class InletMapping:
         # Bounds: minimum 4, maximum from signal length
         n_required = max(4, min(n_required, max_harmonics))
 
-        self.log.info(f"Auto-detected Womersley harmonics: {n_required} "
-                      f"(captures {energy_threshold*100:.0f}% of signal energy)")
+        self.log.info(
+            f"Auto-detected Womersley harmonics: {n_required} "
+            f"(captures {energy_threshold*100:.0f}% of signal energy)"
+        )
 
         return n_required
 
@@ -322,7 +325,7 @@ class InletMapping:
 
         # Complex coefficients for harmonics 1 to n_harmonics
         # FFT gives coefficients scaled by N, and we need factor of 2 for one-sided spectrum
-        Vn_complex = 2 * fft_result[1:n_harmonics + 1] / N
+        Vn_complex = 2 * fft_result[1 : n_harmonics + 1] / N
 
         self.log.info(f"Fourier decomposition: {n_harmonics} harmonics, T={T:.4f}s, ω₀={omega_fundamental:.4f} rad/s")
         self.log.debug(f"  V₀ (mean) = {V0:.6e}")
@@ -370,7 +373,7 @@ class InletMapping:
             # Avoid division by zero for very high alpha
             Phi_n = 0.0
         else:
-            Phi_n = (1 - J0_z / J0_z0)
+            Phi_n = 1 - J0_z / J0_z0
 
         # Complete harmonic contribution: Vₙ · Φₙ(r) · e^(inωt)
         u_n = Vn_complex * Phi_n * np.exp(1j * omega_n * t)
@@ -437,9 +440,7 @@ class InletMapping:
             dist = self._get_distance_from_center(pt)
 
             if dist <= self.radius:
-                velocities[idx] = self._womersley_fft_velocity(
-                    dist, t, V0, Vn_complex, omega_fundamental
-                )
+                velocities[idx] = self._womersley_fft_velocity(dist, t, V0, Vn_complex, omega_fundamental)
             else:
                 velocities[idx] = 0.0
 
@@ -466,9 +467,7 @@ class InletMapping:
             float: Scale factor to apply to velocities
         """
         # Compute raw velocities
-        raw_velocities = self._compute_womersley_fft_shape_factors(
-            points, t, V0, Vn_complex, omega_fundamental
-        )
+        raw_velocities = self._compute_womersley_fft_shape_factors(points, t, V0, Vn_complex, omega_fundamental)
 
         # Estimate integrated flow rate
         active_mask = np.abs(raw_velocities) > 1e-15
@@ -533,7 +532,9 @@ class InletMapping:
             distances = np.zeros(len(points))
             for idx, pt in enumerate(points):
                 pt_2d = pt[:2] if len(pt) >= 2 else pt
-                boundary_2d = inlet_boundary_points[:, :2] if inlet_boundary_points.shape[1] >= 2 else inlet_boundary_points
+                boundary_2d = (
+                    inlet_boundary_points[:, :2] if inlet_boundary_points.shape[1] >= 2 else inlet_boundary_points
+                )
                 distances[idx] = np.min(np.linalg.norm(boundary_2d - pt_2d, axis=1))
 
         return distances
@@ -551,10 +552,11 @@ class InletMapping:
 
             # Use trimesh to load STL and extract boundary edges
             import trimesh
+
             mesh = trimesh.load(inlet_stl_path)
 
             # Get unique vertices on the boundary (edges that appear only once)
-            edges = mesh.edges_unique
+            mesh.edges_unique
             edge_counts = np.bincount(mesh.edges.flatten(), minlength=len(mesh.vertices))
 
             # Boundary vertices are those with lower connectivity
@@ -565,6 +567,7 @@ class InletMapping:
             if len(boundary_vertices) < 3:
                 # Fallback: use all vertices on the convex hull projection
                 from scipy.spatial import ConvexHull
+
                 vertices_2d = mesh.vertices[:, :2]
                 hull = ConvexHull(vertices_2d)
                 boundary_vertices = mesh.vertices[hull.vertices]
@@ -577,7 +580,7 @@ class InletMapping:
             self.log.warning("Falling back to circular approximation")
             # Fallback: generate circular boundary points
             n_boundary = 36
-            theta = np.linspace(0, 2*np.pi, n_boundary, endpoint=False)
+            theta = np.linspace(0, 2 * np.pi, n_boundary, endpoint=False)
             boundary_points = np.zeros((n_boundary, 3))
             boundary_points[:, 0] = self.center[0] + self.radius * np.cos(theta)
             boundary_points[:, 1] = self.center[1] + self.radius * np.sin(theta)
@@ -709,9 +712,9 @@ class InletMapping:
 
         return semi_axis_a, semi_axis_b
 
-    def _compute_shape_factors(self, points, t, omega=None, alpha=None,
-                                V0=None, Vn_complex=None, omega_fundamental=None,
-                                profile_exponent=None):
+    def _compute_shape_factors(
+        self, points, t, omega=None, alpha=None, V0=None, Vn_complex=None, omega_fundamental=None, profile_exponent=None
+    ):
         """
         Compute normalized shape factors for all points based on profile type.
 
@@ -740,18 +743,16 @@ class InletMapping:
             numpy.ndarray: Shape factors for each point (dimensionless)
         """
         # For womersley_fft, use the dedicated method
-        if self.profile == 'womersley_fft':
-            return self._compute_womersley_fft_shape_factors(
-                points, t, V0, Vn_complex, omega_fundamental
-            )
+        if self.profile == "womersley_fft":
+            return self._compute_womersley_fft_shape_factors(points, t, V0, Vn_complex, omega_fundamental)
 
         # For wall_distance profile, use distance-based calculation
-        if self.profile == 'wall_distance':
+        if self.profile == "wall_distance":
             exponent = profile_exponent if profile_exponent is not None else 2.0
             return self._compute_wall_distance_shape_factors(points, exponent)
 
         # For elliptical profile, use elliptical Poiseuille
-        if self.profile == 'elliptical':
+        if self.profile == "elliptical":
             return self._compute_elliptical_poiseuille_factors(points)
 
         # Standard radial-distance based profiles
@@ -761,15 +762,15 @@ class InletMapping:
             dist = self._get_distance_from_center(pt)
 
             if dist <= self.radius:
-                if self.profile in ['plug', 'plug_flow']:
+                if self.profile in ["plug", "plug_flow"]:
                     # Plug flow: uniform shape factor
                     shape_factors[idx] = 1.0
 
-                elif self.profile == 'parabolic':
+                elif self.profile == "parabolic":
                     # Parabolic: 1 - (r/R)^2
                     shape_factors[idx] = self.parabolic_factor(dist)
 
-                elif self.profile == 'womersley':
+                elif self.profile == "womersley":
                     # Womersley: time-dependent shape from Bessel functions
                     shape_factors[idx] = self.womersley_shape_factor(dist, t, omega, alpha)
 
@@ -812,7 +813,7 @@ class InletMapping:
         # Use analytical scaling for standard profiles to avoid mesh distribution artifacts
         # Mesh face centers are often NOT uniformly distributed by area, which causes
         # incorrect velocity scaling when using discrete summation.
-        if self.profile == 'parabolic':
+        if self.profile == "parabolic":
             # Parabolic (Poiseuille): u(r) = U_max * (1 - r²/R²)
             # Analytical integral: Q = U_max * πR² / 2 = U_max * A / 2
             # => U_max = 2 * Q / A = 2 * U_avg
@@ -820,7 +821,7 @@ class InletMapping:
             velocities = shape_factors * U_max
             return velocities
 
-        elif self.profile in ['plug', 'plug_flow']:
+        elif self.profile in ["plug", "plug_flow"]:
             # Plug flow: u = U_max (uniform)
             # Analytical integral: Q = U_max * A
             # => U_max = Q / A = U_avg
@@ -877,10 +878,10 @@ class InletMapping:
         V0 = None
         Vn_complex = None
         omega_fundamental = None
-        n_harmonics_setting = self.inlet_settings.get('n_harmonics', 8)
-        profile_exponent = self.inlet_settings.get('exponent', 2.0)
+        n_harmonics_setting = self.inlet_settings.get("n_harmonics", 8)
+        profile_exponent = self.inlet_settings.get("exponent", 2.0)
 
-        if self.profile == 'womersley':
+        if self.profile == "womersley":
             # Simple single-frequency Womersley
             if not self.nu or self.nu <= 0:
                 raise ValueError("Womersley profile requires a positive kinematic viscosity (nu) in config.")
@@ -888,22 +889,22 @@ class InletMapping:
             alpha = self.radius * np.sqrt(omega / self.nu)
             self.log.info(f"Womersley parameters: omega={omega:.4f} rad/s, alpha={alpha:.4f}")
 
-        elif self.profile == 'womersley_fft':
+        elif self.profile == "womersley_fft":
             # Multi-harmonic Womersley with Fourier decomposition
             if not self.nu or self.nu <= 0:
                 raise ValueError("Womersley FFT profile requires a positive kinematic viscosity (nu) in config.")
 
             # Convert flow rate to velocity for FFT if needed
-            if self.data_type == 'flowrate':
+            if self.data_type == "flowrate":
                 velocity_values = csv_values / self.area
             else:
                 velocity_values = csv_values
 
             # Determine number of harmonics (auto-detect or user-specified)
-            if n_harmonics_setting == 'auto' or n_harmonics_setting == -1:
+            if n_harmonics_setting == "auto" or n_harmonics_setting == -1:
                 # Auto-detect based on spectral energy content
                 # Status: UNDER DEVELOPMENT
-                energy_threshold = self.inlet_settings.get('energy_threshold', 0.99)
+                energy_threshold = self.inlet_settings.get("energy_threshold", 0.99)
                 n_harmonics = self._estimate_required_harmonics(velocity_values, energy_threshold)
             else:
                 n_harmonics = int(n_harmonics_setting)
@@ -919,11 +920,11 @@ class InletMapping:
                 alpha_n = self.radius * np.sqrt(n * omega_fundamental / self.nu)
                 self.log.info(f"  Harmonic {n}: α={alpha_n:.2f}")
 
-        elif self.profile == 'wall_distance':
+        elif self.profile == "wall_distance":
             self.log.info(f"Wall-distance profile with exponent={profile_exponent}")
             self.log.info("  Suitable for irregular (non-circular) inlet geometries")
 
-        elif self.profile == 'elliptical':
+        elif self.profile == "elliptical":
             self.log.info("Elliptical Poiseuille profile")
             self.log.info("  Semi-axes will be estimated from inlet geometry")
 
@@ -942,7 +943,7 @@ class InletMapping:
 
             # Determine target flow rate in m³/s
             # Note: csv_values are already converted to m³/s in _read_csv_file()
-            if self.data_type == 'flowrate':
+            if self.data_type == "flowrate":
                 # CSV flow rate already converted to m³/s during file read
                 target_Q = csv_value
             else:
@@ -951,11 +952,10 @@ class InletMapping:
                 target_Q = csv_value * self.area
 
             # Step 1: Compute shape factors for this timestep
-            if self.profile == 'womersley_fft':
+            if self.profile == "womersley_fft":
                 # For womersley_fft, shape factors are actual velocities
                 shape_factors = self._compute_shape_factors(
-                    points, t, omega, alpha,
-                    V0=V0, Vn_complex=Vn_complex, omega_fundamental=omega_fundamental
+                    points, t, omega, alpha, V0=V0, Vn_complex=Vn_complex, omega_fundamental=omega_fundamental
                 )
                 # Apply flow conservation scaling
                 scale_factor = self._compute_womersley_fft_scale_factor(
@@ -964,10 +964,7 @@ class InletMapping:
                 velocity_magnitudes = shape_factors * scale_factor
             else:
                 # For all other profiles (plug, parabolic, womersley, wall_distance, elliptical)
-                shape_factors = self._compute_shape_factors(
-                    points, t, omega, alpha,
-                    profile_exponent=profile_exponent
-                )
+                shape_factors = self._compute_shape_factors(points, t, omega, alpha, profile_exponent=profile_exponent)
                 # Step 2: Scale to target flow rate
                 velocity_magnitudes = self._scale_to_target_flowrate(shape_factors, target_Q, n_points)
 
@@ -995,7 +992,7 @@ class InletMapping:
         # Log summary
         self.log.info(f"Flow rate conservation complete. Max error: {max_error_percent:.4f}%")
         if max_error_percent > 1.0:
-            self.log.warning(f"Flow rate error exceeds 1%. Consider checking mesh face distribution.")
+            self.log.warning("Flow rate error exceeds 1%. Consider checking mesh face distribution.")
 
     def _verify_flowrate(self, velocity_magnitudes, n_points):
         """
@@ -1018,12 +1015,12 @@ class InletMapping:
         if n_active == 0:
             return 0.0
 
-        if self.profile == 'parabolic':
+        if self.profile == "parabolic":
             # Analytical: Q = U_max * A / 2 (exact for Poiseuille)
             U_max = np.max(velocity_magnitudes)
             return U_max * self.area / 2.0
 
-        elif self.profile in ['plug', 'plug_flow']:
+        elif self.profile in ["plug", "plug_flow"]:
             # Analytical: Q = U * A (exact for uniform flow)
             # All active faces should have the same velocity
             U_plug = np.max(velocity_magnitudes)
@@ -1038,7 +1035,7 @@ class InletMapping:
             return Q_computed
 
     def _write_openfoam_data_format(self, file_name, n_points, velocities):
-        with open(file_name, 'w') as file:
+        with open(file_name, "w") as file:
             file.write(f"{n_points}\n(\n")
             for v in velocities:
                 file.write(f"({v[0]:.6e} {v[1]:.6e} {v[2]:.6e})\n")

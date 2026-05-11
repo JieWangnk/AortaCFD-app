@@ -221,8 +221,7 @@ Even with mesh-adaptive system, you MUST verify grid convergence:
 ### 📚 Further Reading
 
 - [MESH_QUALITY_WARNINGS.md](MESH_QUALITY_WARNINGS.md) - Critical warnings and trade-offs
-- [MESH_ADAPTIVE_SOLVER_SYSTEM.md](MESH_ADAPTIVE_SOLVER_SYSTEM.md) - Technical details
-- [MESH_ADAPTIVE_INTEGRATION.md](MESH_ADAPTIVE_INTEGRATION.md) - Integration guide
+- Numerics profiles (`robust`, `standard`, `precise`) live under `src/config/profiles/numerics/`
 
 ## Troubleshooting
 

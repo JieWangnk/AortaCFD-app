@@ -58,7 +58,7 @@ class Logger:
 
         # Create the log file if it doesn't exist
         if not os.path.exists(log_file):
-            with open(log_file, 'a'):
+            with open(log_file, "a"):
                 pass
 
         # Create the main logger
@@ -73,11 +73,10 @@ class Logger:
         cls._logger.setLevel(logging.DEBUG)
 
         # File handler: always gets full details (INFO and above)
-        file_handler = logging.FileHandler(log_file, mode='a')
+        file_handler = logging.FileHandler(log_file, mode="a")
         file_handler.setLevel(logging.DEBUG)
         file_formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S"
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
         )
         file_handler.setFormatter(file_formatter)
 
@@ -108,10 +107,11 @@ class Logger:
                 if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
                     if verbose:
                         handler.setLevel(logging.INFO)
-                        handler.setFormatter(logging.Formatter(
-                            "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                            datefmt="%Y-%m-%d %H:%M:%S"
-                        ))
+                        handler.setFormatter(
+                            logging.Formatter(
+                                "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+                            )
+                        )
                     else:
                         handler.setLevel(CONSOLE_ONLY)
                         handler.setFormatter(CleanConsoleFormatter())
@@ -125,17 +125,17 @@ class Logger:
         """Log a message that appears on console in clean mode (and always in file)."""
         if cls._logger:
             cls._logger.log(CONSOLE_ONLY, message)
-        
+
     @classmethod
     def clear_log_file(cls, log_file="AortaCFD.log"):
         """Clear the log file for a new session."""
         try:
             if os.path.exists(log_file):
-                with open(log_file, 'w'):
+                with open(log_file, "w"):
                     pass  # Truncate the file
         except Exception:
             pass  # Ignore errors when clearing log file
-    
+
     @classmethod
     def reset_singleton(cls):
         """Reset the singleton instance - useful for testing."""
@@ -144,12 +144,12 @@ class Logger:
             for handler in cls._logger.handlers[:]:
                 handler.close()
                 cls._logger.removeHandler(handler)
-        
+
         # Clear all loggers with our name
         logger = logging.getLogger("AortaCFD")
         for handler in logger.handlers[:]:
             handler.close()
             logger.removeHandler(handler)
-        
+
         cls._instance = None
         cls._logger = None

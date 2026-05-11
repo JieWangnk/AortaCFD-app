@@ -23,82 +23,65 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 class TestInletMappingInit:
     """Test InletMapping initialization."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_init_with_valid_config(self, mock_logger):
         """Test initialization with valid configuration."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'inlet_data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic',
-                    'orientation': 'auto'
+            "boundary_conditions": {
+                "inlet": {
+                    "csv_file": "inlet_data.csv",
+                    "data_type": "flowrate",
+                    "profile": "parabolic",
+                    "orientation": "auto",
                 }
             },
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'scale_factor': 0.001
-            },
-            'physics': {
-                'nu': 3.5e-6
-            }
+            "geometry": {"inlet_keywords_ordered": "inlet", "scale_factor": 0.001},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
 
-        assert mapping.data_type == 'flowrate'
-        assert mapping.profile == 'parabolic'
+        assert mapping.data_type == "flowrate"
+        assert mapping.profile == "parabolic"
         assert mapping.nu == 3.5e-6
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_init_with_direct_inlet_config(self, mock_logger):
         """Test initialization with direct inlet config (alternative structure)."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'inlet': {
-                'csv_file': 'inlet_data.csv',
-                'data_type': 'velocity',
-                'profile': 'plug'
+            "inlet": {"csv_file": "inlet_data.csv", "data_type": "velocity", "profile": "plug"},
+            "boundary_conditions": {},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
             },
-            'boundary_conditions': {},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-            },
-            'physics': {
-                'nu': 3.5e-6
-            }
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
 
-        assert mapping.data_type == 'velocity'
-        assert mapping.profile == 'plug'
+        assert mapping.data_type == "velocity"
+        assert mapping.profile == "plug"
 
 
 class TestPlugProfile:
     """Test plug profile calculations."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_plug_profile_speed_flowrate(self, mock_logger):
         """Test plug profile speed calculation from flow rate."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'plug'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "plug"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
         mapping.radius = 0.01  # 1 cm radius
         mapping.area = np.pi * 0.01**2  # Circular area
 
@@ -110,24 +93,18 @@ class TestPlugProfile:
 
         assert abs(result - expected_speed) < 1e-10
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_plug_profile_speed_velocity(self, mock_logger):
         """Test plug profile speed when data is already velocity."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'velocity',
-                    'profile': 'plug'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "data.csv", "data_type": "velocity", "profile": "plug"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
         mapping.radius = 0.01
 
         velocity = 0.5  # m/s
@@ -139,24 +116,18 @@ class TestPlugProfile:
 class TestParabolicProfile:
     """Test parabolic profile calculations."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_parabolic_centerline_speed(self, mock_logger):
         """Test parabolic centerline speed calculation."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
         mapping.radius = 0.01
         mapping.area = np.pi * 0.01**2
 
@@ -168,24 +139,18 @@ class TestParabolicProfile:
 
         assert abs(result - expected_centerline) < 1e-10
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_parabolic_factor_at_center(self, mock_logger):
         """Test parabolic factor at center (r=0)."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
         mapping.radius = 0.01
 
         # At center (r=0), parabolic factor should be 1.0
@@ -193,24 +158,18 @@ class TestParabolicProfile:
 
         assert result == 1.0
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_parabolic_factor_at_wall(self, mock_logger):
         """Test parabolic factor at wall (r=R)."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
         mapping.radius = 0.01
 
         # At wall (r=R), parabolic factor should be 0.0
@@ -218,24 +177,18 @@ class TestParabolicProfile:
 
         assert result == 0.0
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_parabolic_factor_at_half_radius(self, mock_logger):
         """Test parabolic factor at r=R/2."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
         mapping.radius = 0.01
 
         # At r=R/2, factor = 1 - (0.5)² = 0.75
@@ -243,24 +196,18 @@ class TestParabolicProfile:
 
         assert abs(result - 0.75) < 1e-10
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_parabolic_factor_outside_radius(self, mock_logger):
         """Test parabolic factor outside radius is clamped to 0."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
         mapping.radius = 0.01
 
         # Outside radius should return 0
@@ -272,24 +219,18 @@ class TestParabolicProfile:
 class TestWomersleyProfile:
     """Test Womersley profile calculations."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_womersley_shape_factor_at_center(self, mock_logger):
         """Test Womersley shape factor at center."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'womersley'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "womersley"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
         mapping.radius = 0.01
 
         omega = 2 * np.pi  # 1 Hz
@@ -305,24 +246,20 @@ class TestWomersleyProfile:
 class TestFourierDecomposition:
     """Test Fourier decomposition methods."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_compute_fourier_coefficients(self, mock_logger):
         """Test Fourier coefficient computation."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'womersley_fft'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "womersley_fft"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
         mapping.radius = 0.01
 
         # Create a simple sinusoidal waveform
@@ -333,9 +270,7 @@ class TestFourierDecomposition:
         amplitude = 3e-5
         values = mean_flow + amplitude * np.sin(2 * np.pi * times / T)
 
-        V0, Vn_complex, omega_fundamental = mapping._compute_fourier_coefficients(
-            times, values, n_harmonics=4
-        )
+        V0, Vn_complex, omega_fundamental = mapping._compute_fourier_coefficients(times, values, n_harmonics=4)
 
         # V0 should be close to mean_flow
         assert abs(V0 - mean_flow) < 1e-5
@@ -348,28 +283,24 @@ class TestFourierDecomposition:
         # First harmonic should capture most of the amplitude
         assert np.abs(Vn_complex[0]) > 0.05 * amplitude
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_estimate_required_harmonics(self, mock_logger):
         """Test automatic harmonic estimation."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'womersley_fft'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "womersley_fft"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
 
         # Create a simple sinusoidal waveform (should need few harmonics)
         n_points = 100
-        values = np.sin(np.linspace(0, 2*np.pi, n_points))
+        values = np.sin(np.linspace(0, 2 * np.pi, n_points))
 
         n_harmonics = mapping._estimate_required_harmonics(values, energy_threshold=0.95)
 
@@ -377,24 +308,20 @@ class TestFourierDecomposition:
         assert n_harmonics >= 4  # Minimum
         assert n_harmonics <= 20  # Should be small for simple signal
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_estimate_harmonics_constant_signal(self, mock_logger):
         """Test harmonic estimation for constant signal."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'womersley_fft'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "womersley_fft"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
 
         # Constant signal
         values = np.ones(100) * 5.0
@@ -408,24 +335,18 @@ class TestFourierDecomposition:
 class TestDistanceCalculations:
     """Test distance and geometry calculations."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_get_distance_from_center(self, mock_logger):
         """Test distance from center calculation."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
         mapping.center = np.array([0.0, 0.0, 0.0])
 
         # Test point
@@ -435,24 +356,18 @@ class TestDistanceCalculations:
 
         assert abs(result - 0.005) < 1e-10
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_compute_cross_sectional_area_with_stl_area(self, mock_logger):
         """Test cross-sectional area with STL area."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
         mapping.area = 0.0003  # Pre-computed STL area
         mapping.radius = 0.01
 
@@ -461,24 +376,18 @@ class TestDistanceCalculations:
         # Should return actual STL area
         assert result == 0.0003
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_compute_cross_sectional_area_fallback(self, mock_logger):
         """Test cross-sectional area falls back to circular approx."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
         mapping.area = None  # Not yet computed
         mapping.radius = 0.01
 
@@ -491,25 +400,20 @@ class TestDistanceCalculations:
 class TestVelocityComponents:
     """Test velocity component calculations."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_get_velocity_components_inward(self, mock_logger):
         """Test velocity components with inward orientation."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic',
-                    'orientation': 'in'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "parabolic", "orientation": "in"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
 
         speed = 0.5
         normal = np.array([1.0, 0.0, 0.0])
@@ -520,25 +424,20 @@ class TestVelocityComponents:
         expected = -speed * normal
         np.testing.assert_array_almost_equal(result, expected)
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_get_velocity_components_outward(self, mock_logger):
         """Test velocity components with outward orientation."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic',
-                    'orientation': 'out'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "parabolic", "orientation": "out"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
 
         speed = 0.5
         normal = np.array([1.0, 0.0, 0.0])
@@ -549,25 +448,25 @@ class TestVelocityComponents:
         expected = speed * normal
         np.testing.assert_array_almost_equal(result, expected)
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_get_velocity_components_auto(self, mock_logger):
         """Test velocity components with auto orientation."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic',
-                    'orientation': 'auto'
+            "boundary_conditions": {
+                "inlet": {
+                    "csv_file": "data.csv",
+                    "data_type": "flowrate",
+                    "profile": "parabolic",
+                    "orientation": "auto",
                 }
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
         mapping.auto_flip_normal = True  # Simulate auto-detection result
 
         speed = 0.5
@@ -583,24 +482,18 @@ class TestVelocityComponents:
 class TestDetermineCardiacPeriod:
     """Test cardiac period determination."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_determine_cardiac_period(self, mock_logger):
         """Test cardiac period calculation."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
 
         times = np.array([0.0, 0.2, 0.4, 0.6, 0.8])
 
@@ -608,54 +501,44 @@ class TestDetermineCardiacPeriod:
 
         assert result == 0.8
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_determine_cardiac_period_insufficient_data(self, mock_logger):
         """Test error with insufficient time data."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
 
         times = np.array([0.5])  # Only one point
 
         with pytest.raises(ValueError) as exc_info:
             mapping._determine_cardiac_period(times)
 
-        assert 'Insufficient' in str(exc_info.value)
+        assert "Insufficient" in str(exc_info.value)
 
 
 class TestWomersleyFFTVelocity:
     """Test Womersley FFT velocity calculations."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_womersley_fft_velocity_at_center(self, mock_logger):
         """Test Womersley FFT velocity at center."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'womersley_fft'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "womersley_fft"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
         mapping.radius = 0.01
         mapping.nu = 3.5e-6
 
@@ -669,24 +552,20 @@ class TestWomersleyFFTVelocity:
         # Steady component at center = 2 * V0
         assert result > V0  # Should be greater than mean
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_womersley_fft_velocity_at_wall(self, mock_logger):
         """Test Womersley FFT velocity approaches zero at wall."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'womersley_fft'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "womersley_fft"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
         mapping.radius = 0.01
         mapping.nu = 3.5e-6
 
@@ -699,24 +578,20 @@ class TestWomersleyFFTVelocity:
 
         assert abs(result) < 0.1  # Should be close to zero
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_womersley_fft_velocity_outside_radius(self, mock_logger):
         """Test Womersley FFT velocity is zero outside radius."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'womersley_fft'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "data.csv", "data_type": "flowrate", "profile": "womersley_fft"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
-        mapping = InletMapping(config, '/tmp/case')
+        mapping = InletMapping(config, "/tmp/case")
         mapping.radius = 0.01
         mapping.nu = 3.5e-6
 
@@ -733,21 +608,15 @@ class TestWomersleyFFTVelocity:
 class TestReadCsvFile:
     """Test _read_csv_file method."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_reads_csv_with_header(self, mock_logger, tmp_path):
         """Test reading CSV file with header row."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -767,21 +636,15 @@ class TestReadCsvFile:
         assert abs(times[0]) < 1e-10
         assert abs(cardiac_cycle - 0.2) < 1e-10
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_reads_csv_without_header(self, mock_logger, tmp_path):
         """Test reading CSV file without header (numeric-only first line)."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -799,21 +662,15 @@ class TestReadCsvFile:
         assert len(times) == 3
         assert abs(times[1] - 0.1) < 1e-10
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_reads_csv_with_comments(self, mock_logger, tmp_path):
         """Test reading CSV file with comment lines."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -831,21 +688,15 @@ time,flowrate
 
         assert len(times) == 2
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_auto_converts_liters_per_minute(self, mock_logger, tmp_path):
         """Test automatic conversion from L/min to m³/s."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -864,21 +715,15 @@ time,flowrate
         expected = 300 * 1e-3 / 60.0
         assert abs(values[0] - expected) < 1e-10
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_preserves_si_units(self, mock_logger, tmp_path):
         """Test that SI units (m³/s) are preserved."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -895,21 +740,15 @@ time,flowrate
         # Values < 1.0 should be preserved as-is (m³/s)
         assert abs(values[0] - 5e-5) < 1e-10
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_raises_error_for_single_column(self, mock_logger, tmp_path):
         """Test error handling for invalid CSV format."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -928,21 +767,15 @@ time,flowrate
 class TestReadPointsFile:
     """Test _read_points_file method."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_reads_points_with_parentheses(self, mock_logger, tmp_path):
         """Test reading OpenFOAM points file with parentheses format."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -964,21 +797,15 @@ class TestReadPointsFile:
         assert abs(points[0, 0] - 0.001) < 1e-10
         assert abs(points[1, 1] - 0.005) < 1e-10
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_reads_points_without_outer_parentheses(self, mock_logger, tmp_path):
         """Test reading points file without outer parentheses."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -999,21 +826,15 @@ class TestReadPointsFile:
 class TestFlowRateScaling:
     """Test flow rate scaling and conservation."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_scale_to_target_flowrate_parabolic(self, mock_logger, tmp_path):
         """Test flow rate scaling for parabolic profile."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1030,21 +851,15 @@ class TestFlowRateScaling:
         expected_U_max = 2.0 * target_Q / mapping.area
         assert abs(velocities[0] - expected_U_max) < 1e-10
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_scale_to_target_flowrate_plug(self, mock_logger, tmp_path):
         """Test flow rate scaling for plug profile."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'plug'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "plug"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1061,21 +876,15 @@ class TestFlowRateScaling:
         expected_U = target_Q / mapping.area
         np.testing.assert_array_almost_equal(velocities, [expected_U] * 4)
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_scale_to_target_flowrate_no_active_points(self, mock_logger, tmp_path):
         """Test scaling returns zeros when no active points."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1093,21 +902,15 @@ class TestFlowRateScaling:
 class TestVerifyFlowrate:
     """Test flow rate verification."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_verify_flowrate(self, mock_logger, tmp_path):
         """Test flow rate verification calculation."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1122,21 +925,15 @@ class TestVerifyFlowrate:
         expected = 1.0 * 1e-4
         assert abs(Q - expected) < 1e-10
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_verify_flowrate_no_active(self, mock_logger, tmp_path):
         """Test flow rate verification with no active points."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1153,21 +950,15 @@ class TestVerifyFlowrate:
 class TestOpenFoamOutput:
     """Test OpenFOAM data file writing."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_write_openfoam_data_format(self, mock_logger, tmp_path):
         """Test OpenFOAM velocity data file writing."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1186,21 +977,15 @@ class TestOpenFoamOutput:
         assert content.endswith(")\n")
         assert "(1.000000e-01 0.000000e+00 0.000000e+00)" in content
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_write_openfoam_data_format_empty(self, mock_logger, tmp_path):
         """Test writing empty velocity list."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1217,21 +1002,15 @@ class TestOpenFoamOutput:
 class TestShapeFactors:
     """Test shape factor computation for various profiles."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_plug_profile_shape_factors(self, mock_logger, tmp_path):
         """Test shape factors for plug flow profile."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'plug'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "plug"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1239,32 +1018,28 @@ class TestShapeFactors:
         mapping.radius = 0.01
         mapping.area = np.pi * 0.01**2
 
-        points = np.array([
-            [0.0, 0.0, 0.0],      # Center
-            [0.005, 0.0, 0.0],    # Half radius
-            [0.009, 0.0, 0.0],    # Near edge
-        ])
+        points = np.array(
+            [
+                [0.0, 0.0, 0.0],  # Center
+                [0.005, 0.0, 0.0],  # Half radius
+                [0.009, 0.0, 0.0],  # Near edge
+            ]
+        )
 
         factors = mapping._compute_shape_factors(points, t=0.0)
 
         # Plug flow: all points inside should have factor = 1.0
         np.testing.assert_array_almost_equal(factors, [1.0, 1.0, 1.0])
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_parabolic_profile_shape_factors(self, mock_logger, tmp_path):
         """Test shape factors for parabolic profile."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1272,11 +1047,13 @@ class TestShapeFactors:
         mapping.radius = 0.01
         mapping.area = np.pi * 0.01**2
 
-        points = np.array([
-            [0.0, 0.0, 0.0],      # Center
-            [0.005, 0.0, 0.0],    # Half radius
-            [0.01, 0.0, 0.0],     # Edge
-        ])
+        points = np.array(
+            [
+                [0.0, 0.0, 0.0],  # Center
+                [0.005, 0.0, 0.0],  # Half radius
+                [0.01, 0.0, 0.0],  # Edge
+            ]
+        )
 
         factors = mapping._compute_shape_factors(points, t=0.0)
 
@@ -1285,21 +1062,15 @@ class TestShapeFactors:
         assert abs(factors[1] - 0.75) < 1e-10
         assert abs(factors[2] - 0.0) < 1e-10
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_shape_factors_outside_radius(self, mock_logger, tmp_path):
         """Test shape factors for points outside inlet radius."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1307,31 +1078,29 @@ class TestShapeFactors:
         mapping.radius = 0.01
         mapping.area = np.pi * 0.01**2
 
-        points = np.array([
-            [0.015, 0.0, 0.0],    # Outside radius
-            [0.02, 0.0, 0.0],     # Further outside
-        ])
+        points = np.array(
+            [
+                [0.015, 0.0, 0.0],  # Outside radius
+                [0.02, 0.0, 0.0],  # Further outside
+            ]
+        )
 
         factors = mapping._compute_shape_factors(points, t=0.0)
 
         # Points outside should have factor = 0.0
         np.testing.assert_array_almost_equal(factors, [0.0, 0.0])
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_default_profile_is_plug(self, mock_logger, tmp_path):
         """Test that unknown profile defaults to plug flow."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'unknown_profile'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "unknown_profile"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1339,10 +1108,12 @@ class TestShapeFactors:
         mapping.radius = 0.01
         mapping.area = np.pi * 0.01**2
 
-        points = np.array([
-            [0.0, 0.0, 0.0],
-            [0.005, 0.0, 0.0],
-        ])
+        points = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.005, 0.0, 0.0],
+            ]
+        )
 
         factors = mapping._compute_shape_factors(points, t=0.0)
 
@@ -1353,22 +1124,22 @@ class TestShapeFactors:
 class TestDetermineInwardDirection:
     """Test automatic inlet orientation detection."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_returns_false_when_no_outlet_files(self, mock_logger, tmp_path):
         """Test returns False when no outlet STL files exist."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic',
-                    'orientation': 'auto'
+            "boundary_conditions": {
+                "inlet": {
+                    "csv_file": "test.csv",
+                    "data_type": "flowrate",
+                    "profile": "parabolic",
+                    "orientation": "auto",
                 }
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1386,22 +1157,22 @@ class TestDetermineInwardDirection:
         # No outlets found, should return False (no flip)
         assert result is False
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_handles_exception_gracefully(self, mock_logger, tmp_path):
         """Test handles exceptions and returns False."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic',
-                    'orientation': 'auto'
+            "boundary_conditions": {
+                "inlet": {
+                    "csv_file": "test.csv",
+                    "data_type": "flowrate",
+                    "profile": "parabolic",
+                    "orientation": "auto",
                 }
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1419,21 +1190,17 @@ class TestDetermineInwardDirection:
 class TestEllipticalProfile:
     """Test elliptical Poiseuille profile."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_elliptical_poiseuille_at_center(self, mock_logger, tmp_path):
         """Test elliptical profile gives maximum at center."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'elliptical'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "elliptical"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1442,26 +1209,20 @@ class TestEllipticalProfile:
         mapping.area = np.pi * 0.01 * 0.008
 
         points = np.array([[0.0, 0.0, 0.0]])
-        factors = mapping._compute_elliptical_poiseuille_factors(
-            points, semi_axis_a=0.01, semi_axis_b=0.008
-        )
+        factors = mapping._compute_elliptical_poiseuille_factors(points, semi_axis_a=0.01, semi_axis_b=0.008)
         assert abs(factors[0] - 1.0) < 1e-10
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_elliptical_poiseuille_on_boundary(self, mock_logger, tmp_path):
         """Test elliptical profile is zero on boundary."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'elliptical'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "elliptical"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1471,26 +1232,20 @@ class TestEllipticalProfile:
 
         # Point on ellipse boundary: (a, 0)
         points = np.array([[0.01, 0.0, 0.0]])
-        factors = mapping._compute_elliptical_poiseuille_factors(
-            points, semi_axis_a=0.01, semi_axis_b=0.008
-        )
+        factors = mapping._compute_elliptical_poiseuille_factors(points, semi_axis_a=0.01, semi_axis_b=0.008)
         assert abs(factors[0]) < 1e-10
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_elliptical_poiseuille_outside(self, mock_logger, tmp_path):
         """Test elliptical profile is zero outside ellipse."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'elliptical'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "elliptical"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1500,30 +1255,24 @@ class TestEllipticalProfile:
 
         # Point outside ellipse
         points = np.array([[0.02, 0.02, 0.0]])
-        factors = mapping._compute_elliptical_poiseuille_factors(
-            points, semi_axis_a=0.01, semi_axis_b=0.008
-        )
+        factors = mapping._compute_elliptical_poiseuille_factors(points, semi_axis_a=0.01, semi_axis_b=0.008)
         assert factors[0] == 0.0
 
 
 class TestEstimateEllipseAxes:
     """Test ellipse axis estimation."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_estimate_ellipse_axes(self, mock_logger, tmp_path):
         """Test ellipse axis estimation from points."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'elliptical'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "elliptical"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1547,21 +1296,17 @@ class TestEstimateEllipseAxes:
 class TestWomersleyProfileHarmonic:
     """Test Womersley profile harmonic calculations."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_womersley_profile_harmonic_basic(self, mock_logger, tmp_path):
         """Test single Womersley harmonic calculation."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'womersley_fft'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "womersley_fft"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1572,31 +1317,23 @@ class TestWomersleyProfileHarmonic:
         Vn = 0.3 + 0.0j  # Real coefficient
 
         u_n = mapping._womersley_profile_harmonic(
-            r=0.005,  # Half radius
-            n=1,
-            omega_fundamental=omega_fundamental,
-            Vn_complex=Vn,
-            t=0.0
+            r=0.005, n=1, omega_fundamental=omega_fundamental, Vn_complex=Vn, t=0.0  # Half radius
         )
 
         assert np.isfinite(u_n)
         assert isinstance(u_n, (int, float, np.floating))
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_womersley_profile_harmonic_high_alpha(self, mock_logger, tmp_path):
         """Test Womersley harmonic with moderately high alpha."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'womersley_fft'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "womersley_fft"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 1e-7}  # Moderately low nu for higher alpha
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 1e-7},  # Moderately low nu for higher alpha
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1608,9 +1345,7 @@ class TestWomersleyProfileHarmonic:
 
         # Should return a finite value for reasonable parameters
         u_n = mapping._womersley_profile_harmonic(
-            r=0.005, n=3,
-            omega_fundamental=omega_fundamental,
-            Vn_complex=Vn, t=0.0
+            r=0.005, n=3, omega_fundamental=omega_fundamental, Vn_complex=Vn, t=0.0
         )
 
         # Result should be a real number (finite or potentially small)
@@ -1620,21 +1355,17 @@ class TestWomersleyProfileHarmonic:
 class TestComputeWomersleyFFTShapeFactors:
     """Test Womersley FFT shape factor computation."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_compute_womersley_fft_shape_factors(self, mock_logger, tmp_path):
         """Test Womersley FFT shape factor computation."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'womersley_fft'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "womersley_fft"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1642,11 +1373,13 @@ class TestComputeWomersleyFFTShapeFactors:
         mapping.radius = 0.01
         mapping.nu = 3.5e-6
 
-        points = np.array([
-            [0.0, 0.0, 0.0],      # Center
-            [0.005, 0.0, 0.0],    # Half radius
-            [0.015, 0.0, 0.0],    # Outside
-        ])
+        points = np.array(
+            [
+                [0.0, 0.0, 0.0],  # Center
+                [0.005, 0.0, 0.0],  # Half radius
+                [0.015, 0.0, 0.0],  # Outside
+            ]
+        )
 
         V0 = 0.5
         Vn_complex = np.array([0.1 + 0.0j, 0.05 + 0.0j])
@@ -1666,7 +1399,7 @@ class TestComputeWomersleyFFTShapeFactors:
 class TestRunMethod:
     """Test the main run() orchestration method."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_run_with_parabolic_profile(self, mock_logger, tmp_path):
         """Test run() method with parabolic profile."""
         from aortacfd_lib.inlet_mapping import InletMapping
@@ -1707,25 +1440,27 @@ endsolid inlet"""
         (boundary_data / "inlet_data.csv").write_text(csv_content)
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'inlet_data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'plug',
-                    'orientation': 'inward'
+            "boundary_conditions": {
+                "inlet": {
+                    "csv_file": "inlet_data.csv",
+                    "data_type": "flowrate",
+                    "profile": "plug",
+                    "orientation": "inward",
                 }
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(case_dir))
 
         # Mock PatchProcessing
-        with patch('aortacfd_lib.inlet_mapping.PatchProcessing') as mock_pp:
+        with patch("aortacfd_lib.inlet_mapping.PatchProcessing") as mock_pp:
             mock_instance = MagicMock()
             mock_instance.calculate_inlet_center_radius.return_value = (
-                np.array([0.005, 0.005, 0.0]), 0.005, np.array([0, 0, 1])
+                np.array([0.005, 0.005, 0.0]),
+                0.005,
+                np.array([0, 0, 1]),
             )
             mock_instance.calculate_surface_area.return_value = np.pi * 0.005**2
             mock_pp.return_value = mock_instance
@@ -1736,7 +1471,7 @@ endsolid inlet"""
         time_dirs = [d for d in boundary_data.iterdir() if d.is_dir()]
         assert len(time_dirs) == 3  # Three timesteps
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_run_cleans_old_time_directories(self, mock_logger, tmp_path):
         """Test that run() cleans old time directories."""
         from aortacfd_lib.inlet_mapping import InletMapping
@@ -1778,24 +1513,26 @@ endsolid inlet"""
         (boundary_data / "inlet_data.csv").write_text(csv_content)
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'inlet_data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'plug',
-                    'orientation': 'inward'
+            "boundary_conditions": {
+                "inlet": {
+                    "csv_file": "inlet_data.csv",
+                    "data_type": "flowrate",
+                    "profile": "plug",
+                    "orientation": "inward",
                 }
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(case_dir))
 
-        with patch('aortacfd_lib.inlet_mapping.PatchProcessing') as mock_pp:
+        with patch("aortacfd_lib.inlet_mapping.PatchProcessing") as mock_pp:
             mock_instance = MagicMock()
             mock_instance.calculate_inlet_center_radius.return_value = (
-                np.array([0.005, 0.005, 0.0]), 0.005, np.array([0, 0, 1])
+                np.array([0.005, 0.005, 0.0]),
+                0.005,
+                np.array([0, 0, 1]),
             )
             mock_instance.calculate_surface_area.return_value = np.pi * 0.005**2
             mock_pp.return_value = mock_instance
@@ -1808,7 +1545,7 @@ endsolid inlet"""
         assert (boundary_data / "0.000000").exists()
         assert (boundary_data / "0.500000").exists()
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_run_raises_on_missing_points_file(self, mock_logger, tmp_path):
         """Test run() raises FileNotFoundError when points file missing."""
         from aortacfd_lib.inlet_mapping import InletMapping
@@ -1823,32 +1560,30 @@ endsolid inlet"""
         (tri_surface / "inlet.stl").write_text("solid inlet\nendsolid inlet")
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'inlet_data.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'plug',
-                    'orientation': 'auto'
+            "boundary_conditions": {
+                "inlet": {
+                    "csv_file": "inlet_data.csv",
+                    "data_type": "flowrate",
+                    "profile": "plug",
+                    "orientation": "auto",
                 }
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(case_dir))
 
-        with patch('aortacfd_lib.inlet_mapping.PatchProcessing') as mock_pp:
+        with patch("aortacfd_lib.inlet_mapping.PatchProcessing") as mock_pp:
             mock_instance = MagicMock()
-            mock_instance.calculate_inlet_center_radius.return_value = (
-                np.array([0, 0, 0]), 0.01, np.array([0, 0, 1])
-            )
+            mock_instance.calculate_inlet_center_radius.return_value = (np.array([0, 0, 0]), 0.01, np.array([0, 0, 1]))
             mock_instance.calculate_surface_area.return_value = 1e-4
             mock_pp.return_value = mock_instance
 
             with pytest.raises(FileNotFoundError, match="Points file not found"):
                 mapping.run()
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_run_raises_on_missing_csv_file(self, mock_logger, tmp_path):
         """Test run() raises FileNotFoundError when CSV file missing."""
         from aortacfd_lib.inlet_mapping import InletMapping
@@ -1869,25 +1604,23 @@ endsolid inlet"""
         (boundary_data / "points").write_text(points_content)
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'missing.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'plug',
-                    'orientation': 'inward'
+            "boundary_conditions": {
+                "inlet": {
+                    "csv_file": "missing.csv",
+                    "data_type": "flowrate",
+                    "profile": "plug",
+                    "orientation": "inward",
                 }
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(case_dir))
 
-        with patch('aortacfd_lib.inlet_mapping.PatchProcessing') as mock_pp:
+        with patch("aortacfd_lib.inlet_mapping.PatchProcessing") as mock_pp:
             mock_instance = MagicMock()
-            mock_instance.calculate_inlet_center_radius.return_value = (
-                np.array([0, 0, 0]), 0.01, np.array([0, 0, 1])
-            )
+            mock_instance.calculate_inlet_center_radius.return_value = (np.array([0, 0, 0]), 0.01, np.array([0, 0, 1]))
             mock_instance.calculate_surface_area.return_value = 1e-4
             mock_pp.return_value = mock_instance
 
@@ -1898,21 +1631,17 @@ endsolid inlet"""
 class TestComputeWomersleyFFTScaleFactor:
     """Test _compute_womersley_fft_scale_factor method."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_scale_factor_computation(self, mock_logger, tmp_path):
         """Test Womersley FFT scale factor computation."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'womersley_fft'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "womersley_fft"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1935,28 +1664,23 @@ class TestComputeWomersleyFFTScaleFactor:
         target_Q = 1.0e-5  # m³/s
 
         scale_factor = mapping._compute_womersley_fft_scale_factor(
-            points, t=0.0, V0=V0, Vn_complex=Vn_complex,
-            omega_fundamental=omega_fundamental, target_Q=target_Q
+            points, t=0.0, V0=V0, Vn_complex=Vn_complex, omega_fundamental=omega_fundamental, target_Q=target_Q
         )
 
         assert np.isfinite(scale_factor)
         assert scale_factor != 0.0
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_scale_factor_zero_flow(self, mock_logger, tmp_path):
         """Test scale factor returns 0 when no active points."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'womersley_fft'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "womersley_fft"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -1974,8 +1698,7 @@ class TestComputeWomersleyFFTScaleFactor:
         target_Q = 1.0e-5
 
         scale_factor = mapping._compute_womersley_fft_scale_factor(
-            points, t=0.0, V0=V0, Vn_complex=Vn_complex,
-            omega_fundamental=omega_fundamental, target_Q=target_Q
+            points, t=0.0, V0=V0, Vn_complex=Vn_complex, omega_fundamental=omega_fundamental, target_Q=target_Q
         )
 
         assert scale_factor == 0.0
@@ -1984,21 +1707,17 @@ class TestComputeWomersleyFFTScaleFactor:
 class TestComputeWallDistances:
     """Test _compute_wall_distances method."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_wall_distances_with_boundary_points(self, mock_logger, tmp_path):
         """Test wall distance computation with provided boundary points."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'wall_distance'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "wall_distance"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -2013,11 +1732,13 @@ class TestComputeWallDistances:
         boundary_points[:, 1] = 0.01 * np.sin(theta)
 
         # Test points
-        points = np.array([
-            [0.0, 0.0, 0.0],      # Center - max distance
-            [0.005, 0.0, 0.0],    # Half radius
-            [0.009, 0.0, 0.0],    # Near wall
-        ])
+        points = np.array(
+            [
+                [0.0, 0.0, 0.0],  # Center - max distance
+                [0.005, 0.0, 0.0],  # Half radius
+                [0.009, 0.0, 0.0],  # Near wall
+            ]
+        )
 
         distances = mapping._compute_wall_distances(points, boundary_points)
 
@@ -2027,34 +1748,30 @@ class TestComputeWallDistances:
         # Center distance should be approximately radius
         assert np.isclose(distances[0], 0.01, rtol=0.1)
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_wall_distances_auto_boundary(self, mock_logger, tmp_path):
         """Test wall distance computation with auto boundary detection."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'wall_distance'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "wall_distance"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
         mapping.center = np.array([0.0, 0.0, 0.0])
         mapping.radius = 0.01
         mapping.case_directory = str(tmp_path)
-        mapping.inlet_name = 'inlet'
+        mapping.inlet_name = "inlet"
 
         # Test points
         points = np.array([[0.0, 0.0, 0.0]])
 
         # Mock _get_inlet_boundary_points
-        with patch.object(mapping, '_get_inlet_boundary_points') as mock_boundary:
+        with patch.object(mapping, "_get_inlet_boundary_points") as mock_boundary:
             n_boundary = 36
             theta = np.linspace(0, 2 * np.pi, n_boundary, endpoint=False)
             boundary = np.zeros((n_boundary, 3))
@@ -2071,28 +1788,24 @@ class TestComputeWallDistances:
 class TestGetInletBoundaryPoints:
     """Test _get_inlet_boundary_points method."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_get_boundary_points_fallback(self, mock_logger, tmp_path):
         """Test boundary points fallback when STL loading fails."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'wall_distance'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "wall_distance"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
         mapping.center = np.array([0.0, 0.0, 0.0])
         mapping.radius = 0.01
         mapping.case_directory = str(tmp_path)
-        mapping.inlet_name = 'inlet'
+        mapping.inlet_name = "inlet"
 
         # Create triSurface directory but no STL file
         (tmp_path / "constant" / "triSurface").mkdir(parents=True)
@@ -2105,28 +1818,24 @@ class TestGetInletBoundaryPoints:
         distances_from_center = np.linalg.norm(boundary_points[:, :2] - mapping.center[:2], axis=1)
         assert np.allclose(distances_from_center, mapping.radius, rtol=1e-6)
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_get_boundary_points_with_trimesh(self, mock_logger, tmp_path):
         """Test boundary points extraction with trimesh."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'wall_distance'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "wall_distance"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
         mapping.center = np.array([0.0, 0.0, 0.0])
         mapping.radius = 0.01
         mapping.case_directory = str(tmp_path)
-        mapping.inlet_name = 'inlet'
+        mapping.inlet_name = "inlet"
 
         tri_surface = tmp_path / "constant" / "triSurface"
         tri_surface.mkdir(parents=True)
@@ -2152,6 +1861,7 @@ endsolid inlet"""
 
         try:
             import trimesh
+
             boundary_points = mapping._get_inlet_boundary_points()
             # Should return some boundary points
             assert len(boundary_points) >= 3
@@ -2164,37 +1874,35 @@ endsolid inlet"""
 class TestComputeWallDistanceShapeFactors:
     """Test _compute_wall_distance_shape_factors method."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_wall_distance_shape_factors(self, mock_logger, tmp_path):
         """Test wall distance shape factor computation."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'wall_distance'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "wall_distance"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
         mapping.center = np.array([0.0, 0.0, 0.0])
         mapping.radius = 0.01
         mapping.case_directory = str(tmp_path)
-        mapping.inlet_name = 'inlet'
+        mapping.inlet_name = "inlet"
 
         # Mock _compute_wall_distances
-        points = np.array([
-            [0.0, 0.0, 0.0],      # Center
-            [0.005, 0.0, 0.0],    # Half radius
-            [0.009, 0.0, 0.0],    # Near wall
-        ])
+        points = np.array(
+            [
+                [0.0, 0.0, 0.0],  # Center
+                [0.005, 0.0, 0.0],  # Half radius
+                [0.009, 0.0, 0.0],  # Near wall
+            ]
+        )
 
-        with patch.object(mapping, '_compute_wall_distances') as mock_dist:
+        with patch.object(mapping, "_compute_wall_distances") as mock_dist:
             # Return distances: max at center, decreasing toward wall
             mock_dist.return_value = np.array([0.01, 0.005, 0.001])
 
@@ -2206,21 +1914,17 @@ class TestComputeWallDistanceShapeFactors:
         # All factors should be positive
         assert all(f >= 0 for f in factors)
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_wall_distance_shape_factors_exponent(self, mock_logger, tmp_path):
         """Test wall distance shape factors with different exponents."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'wall_distance'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "wall_distance"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -2228,13 +1932,15 @@ class TestComputeWallDistanceShapeFactors:
         mapping.radius = 0.01
 
         # Use multiple points at different distances to test exponent effect
-        points = np.array([
-            [0.0, 0.0, 0.0],      # Center - max distance from wall
-            [0.005, 0.0, 0.0],    # Mid-radius
-            [0.009, 0.0, 0.0],    # Near wall
-        ])
+        points = np.array(
+            [
+                [0.0, 0.0, 0.0],  # Center - max distance from wall
+                [0.005, 0.0, 0.0],  # Mid-radius
+                [0.009, 0.0, 0.0],  # Near wall
+            ]
+        )
 
-        with patch.object(mapping, '_compute_wall_distances') as mock_dist:
+        with patch.object(mapping, "_compute_wall_distances") as mock_dist:
             # Distances from wall: center=max, mid=mid, near wall=small
             mock_dist.return_value = np.array([0.01, 0.005, 0.001])
 
@@ -2252,21 +1958,21 @@ class TestComputeWallDistanceShapeFactors:
 class TestScaleToTargetFlowrateNonStandard:
     """Test _scale_to_target_flowrate for non-standard profiles."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_scale_womersley_profile(self, mock_logger, tmp_path):
         """Test scaling for womersley profile (mesh-based integration)."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'womersley'  # Non-standard profile
+            "boundary_conditions": {
+                "inlet": {
+                    "csv_file": "test.csv",
+                    "data_type": "flowrate",
+                    "profile": "womersley",  # Non-standard profile
                 }
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -2285,21 +1991,17 @@ class TestScaleToTargetFlowrateNonStandard:
         computed_Q = np.sum(velocities) * A_face
         assert np.isclose(computed_Q, target_flowrate, rtol=0.01)
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_scale_wall_distance_profile(self, mock_logger, tmp_path):
         """Test scaling for wall_distance profile."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'wall_distance'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "wall_distance"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -2318,21 +2020,15 @@ class TestScaleToTargetFlowrateNonStandard:
         computed_Q = np.sum(velocities) * A_face
         assert np.isclose(computed_Q, target_flowrate, rtol=0.01)
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_scale_zero_shape_factors(self, mock_logger, tmp_path):
         """Test scaling returns zeros when shape factors sum is tiny."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'womersley'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "womersley"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -2351,21 +2047,15 @@ class TestScaleToTargetFlowrateNonStandard:
 class TestGenerateTimeData:
     """Test _generate_time_data method."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_generate_time_data_parabolic(self, mock_logger, tmp_path):
         """Test time data generation with parabolic profile."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'parabolic'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "parabolic"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -2380,11 +2070,13 @@ class TestGenerateTimeData:
 
         time_array = np.array([0.0, 0.4, 0.8])
         csv_values = np.array([1.0e-5, 2.0e-5, 1.0e-5])  # Flow rates
-        points = np.array([
-            [0.0, 0.0, 0.0],
-            [0.005, 0.0, 0.0],
-            [0.009, 0.0, 0.0],
-        ])
+        points = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.005, 0.0, 0.0],
+                [0.009, 0.0, 0.0],
+            ]
+        )
         normal_vec = np.array([0, 0, -1])  # Inward
 
         mapping._generate_time_data(str(parent_dir), time_array, csv_values, points, normal_vec)
@@ -2394,21 +2086,15 @@ class TestGenerateTimeData:
         assert (parent_dir / "0.400000" / "U").exists()
         assert (parent_dir / "0.800000" / "U").exists()
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_generate_time_data_womersley(self, mock_logger, tmp_path):
         """Test time data generation with single-frequency Womersley."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'velocity',
-                    'profile': 'womersley'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "velocity", "profile": "womersley"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -2424,10 +2110,12 @@ class TestGenerateTimeData:
 
         time_array = np.array([0.0, 0.2])
         csv_values = np.array([0.5, 1.0])  # Velocities
-        points = np.array([
-            [0.0, 0.0, 0.0],
-            [0.005, 0.0, 0.0],
-        ])
+        points = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.005, 0.0, 0.0],
+            ]
+        )
         normal_vec = np.array([0, 0, -1])
 
         mapping._generate_time_data(str(parent_dir), time_array, csv_values, points, normal_vec)
@@ -2435,22 +2123,17 @@ class TestGenerateTimeData:
         assert (parent_dir / "0.000000" / "U").exists()
         assert (parent_dir / "0.200000" / "U").exists()
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_generate_time_data_womersley_fft(self, mock_logger, tmp_path):
         """Test time data generation with Womersley FFT profile."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'womersley_fft',
-                    'n_harmonics': 4
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "womersley_fft", "n_harmonics": 4}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -2467,10 +2150,12 @@ class TestGenerateTimeData:
         # More timesteps for FFT
         time_array = np.linspace(0, 0.8, 10)
         csv_values = 1.0e-5 * (1 + 0.5 * np.sin(2 * np.pi * time_array / 0.8))  # Pulsatile flow
-        points = np.array([
-            [0.0, 0.0, 0.0],
-            [0.005, 0.0, 0.0],
-        ])
+        points = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.005, 0.0, 0.0],
+            ]
+        )
         normal_vec = np.array([0, 0, -1])
 
         mapping._generate_time_data(str(parent_dir), time_array, csv_values, points, normal_vec)
@@ -2479,22 +2164,17 @@ class TestGenerateTimeData:
         time_dirs = [d for d in parent_dir.iterdir() if d.is_dir()]
         assert len(time_dirs) == 10
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_generate_time_data_wall_distance(self, mock_logger, tmp_path):
         """Test time data generation with wall_distance profile."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'wall_distance',
-                    'exponent': 2.0
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "wall_distance", "exponent": 2.0}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -2513,28 +2193,24 @@ class TestGenerateTimeData:
         normal_vec = np.array([0, 0, -1])
 
         # Mock wall distance methods
-        with patch.object(mapping, '_compute_wall_distances') as mock_dist:
+        with patch.object(mapping, "_compute_wall_distances") as mock_dist:
             mock_dist.return_value = np.array([0.01, 0.005])
 
             mapping._generate_time_data(str(parent_dir), time_array, csv_values, points, normal_vec)
 
         assert (parent_dir / "0.000000" / "U").exists()
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_generate_time_data_elliptical(self, mock_logger, tmp_path):
         """Test time data generation with elliptical profile."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'elliptical'
-                }
+            "boundary_conditions": {
+                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "elliptical"}
             },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -2556,21 +2232,15 @@ class TestGenerateTimeData:
 
         assert (parent_dir / "0.000000" / "U").exists()
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_generate_time_data_womersley_requires_nu(self, mock_logger, tmp_path):
         """Test Womersley profile raises error without positive nu."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'womersley'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 0}  # Invalid nu
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "womersley"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 0},  # Invalid nu
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -2595,21 +2265,15 @@ class TestGenerateTimeData:
 class TestVerifyFlowrate:
     """Test _verify_flowrate method."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_verify_flowrate_basic(self, mock_logger, tmp_path):
         """Test flow rate verification calculation."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'plug'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "plug"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -2623,21 +2287,15 @@ class TestVerifyFlowrate:
         # Q = sum(V) * A_face = 4 * 1.0 * (1e-4 / 4) = 1e-4 m³/s
         assert np.isclose(Q, 1.0e-4)
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_verify_flowrate_zero_velocity(self, mock_logger, tmp_path):
         """Test flow rate verification with zero velocities."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'plug'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "plug"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -2654,21 +2312,15 @@ class TestVerifyFlowrate:
 class TestDetermineCardiacPeriod:
     """Test _determine_cardiac_period method."""
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_determine_cardiac_period(self, mock_logger, tmp_path):
         """Test cardiac period determination from time array."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'plug'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "plug"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -2678,21 +2330,15 @@ class TestDetermineCardiacPeriod:
 
         assert np.isclose(period, 0.8)
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_determine_cardiac_period_insufficient_data(self, mock_logger, tmp_path):
         """Test error when insufficient time data."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'plug'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "plug"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -2702,21 +2348,15 @@ class TestDetermineCardiacPeriod:
         with pytest.raises(ValueError, match="Insufficient time data"):
             mapping._determine_cardiac_period(times)
 
-    @patch('aortacfd_lib.inlet_mapping.Logger')
+    @patch("aortacfd_lib.inlet_mapping.Logger")
     def test_determine_cardiac_period_invalid_range(self, mock_logger, tmp_path):
         """Test error when time range is invalid."""
         from aortacfd_lib.inlet_mapping import InletMapping
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'test.csv',
-                    'data_type': 'flowrate',
-                    'profile': 'plug'
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'physics': {'nu': 3.5e-6}
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "plug"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
         }
 
         mapping = InletMapping(config, str(tmp_path))
@@ -2727,5 +2367,5 @@ class TestDetermineCardiacPeriod:
             mapping._determine_cardiac_period(times)
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

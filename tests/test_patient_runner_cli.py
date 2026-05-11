@@ -29,23 +29,23 @@ class TestCreateParser:
         parser = create_parser()
 
         assert isinstance(parser, argparse.ArgumentParser)
-        assert parser.prog == 'run_patient.py'
+        assert parser.prog == "run_patient.py"
 
     def test_parser_patient_id_argument(self):
         """Test patient_id positional argument."""
         from patient_runner.cli import create_parser
 
         parser = create_parser()
-        args = parser.parse_args(['PAT001'])
+        args = parser.parse_args(["PAT001"])
 
-        assert args.patient_id == 'PAT001'
+        assert args.patient_id == "PAT001"
 
     def test_parser_list_flag(self):
         """Test --list flag."""
         from patient_runner.cli import create_parser
 
         parser = create_parser()
-        args = parser.parse_args(['--list'])
+        args = parser.parse_args(["--list"])
 
         assert args.list is True
 
@@ -54,7 +54,7 @@ class TestCreateParser:
         from patient_runner.cli import create_parser
 
         parser = create_parser()
-        args = parser.parse_args(['--list-steps'])
+        args = parser.parse_args(["--list-steps"])
 
         assert args.list_steps is True
 
@@ -63,43 +63,43 @@ class TestCreateParser:
         from patient_runner.cli import create_parser
 
         parser = create_parser()
-        args = parser.parse_args(['PAT001', '--steps', 'case,mesh,boundary'])
+        args = parser.parse_args(["PAT001", "--steps", "case,mesh,boundary"])
 
-        assert args.steps == 'case,mesh,boundary'
+        assert args.steps == "case,mesh,boundary"
 
     def test_parser_step_list_multiple(self):
         """Test --step option used multiple times."""
         from patient_runner.cli import create_parser
 
         parser = create_parser()
-        args = parser.parse_args(['PAT001', '--step', 'case', '--step', 'mesh'])
+        args = parser.parse_args(["PAT001", "--step", "case", "--step", "mesh"])
 
-        assert args.step_list == ['case', 'mesh']
+        assert args.step_list == ["case", "mesh"]
 
     def test_parser_config_option(self):
         """Test --config option."""
         from patient_runner.cli import create_parser
 
         parser = create_parser()
-        args = parser.parse_args(['PAT001', '--config', 'custom_config.json'])
+        args = parser.parse_args(["PAT001", "--config", "custom_config.json"])
 
-        assert args.config == 'custom_config.json'
+        assert args.config == "custom_config.json"
 
     def test_parser_profile_option(self):
         """Test --profile option."""
         from patient_runner.cli import create_parser
 
         parser = create_parser()
-        args = parser.parse_args(['PAT001', '--profile', 'sim_laminar_coarse'])
+        args = parser.parse_args(["PAT001", "--profile", "sim_laminar_coarse"])
 
-        assert args.profile == 'sim_laminar_coarse'
+        assert args.profile == "sim_laminar_coarse"
 
     def test_parser_quick_flag(self):
         """Test --quick flag."""
         from patient_runner.cli import create_parser
 
         parser = create_parser()
-        args = parser.parse_args(['PAT001', '--quick'])
+        args = parser.parse_args(["PAT001", "--quick"])
 
         assert args.quick is True
 
@@ -108,34 +108,34 @@ class TestCreateParser:
         from patient_runner.cli import create_parser
 
         parser = create_parser()
-        args = parser.parse_args(['PAT001', '--run-name', 'my_test_run'])
+        args = parser.parse_args(["PAT001", "--run-name", "my_test_run"])
 
-        assert args.run_name == 'my_test_run'
+        assert args.run_name == "my_test_run"
 
     def test_parser_update_option(self):
         """Test --update option."""
         from patient_runner.cli import create_parser
 
         parser = create_parser()
-        args = parser.parse_args(['PAT001', '--update', '/path/to/case'])
+        args = parser.parse_args(["PAT001", "--update", "/path/to/case"])
 
-        assert args.update == '/path/to/case'
+        assert args.update == "/path/to/case"
 
     def test_parser_postprocess_option(self):
         """Test --postprocess option."""
         from patient_runner.cli import create_parser
 
         parser = create_parser()
-        args = parser.parse_args(['--postprocess', '/path/to/run'])
+        args = parser.parse_args(["--postprocess", "/path/to/run"])
 
-        assert args.postprocess == '/path/to/run'
+        assert args.postprocess == "/path/to/run"
 
     def test_parser_verbose_flag(self):
         """Test --verbose flag."""
         from patient_runner.cli import create_parser
 
         parser = create_parser()
-        args = parser.parse_args(['PAT001', '--verbose'])
+        args = parser.parse_args(["PAT001", "--verbose"])
 
         assert args.verbose is True
 
@@ -144,7 +144,7 @@ class TestCreateParser:
         from patient_runner.cli import create_parser
 
         parser = create_parser()
-        args = parser.parse_args(['PAT001', '-l'])
+        args = parser.parse_args(["PAT001", "-l"])
 
         assert args.list is True
 
@@ -153,19 +153,15 @@ class TestCreateParser:
         from patient_runner.cli import create_parser
 
         parser = create_parser()
-        args = parser.parse_args([
-            'PAT001',
-            '--config', 'config.json',
-            '--run-name', 'test',
-            '--verbose',
-            '--steps', 'case,mesh'
-        ])
+        args = parser.parse_args(
+            ["PAT001", "--config", "config.json", "--run-name", "test", "--verbose", "--steps", "case,mesh"]
+        )
 
-        assert args.patient_id == 'PAT001'
-        assert args.config == 'config.json'
-        assert args.run_name == 'test'
+        assert args.patient_id == "PAT001"
+        assert args.config == "config.json"
+        assert args.run_name == "test"
         assert args.verbose is True
-        assert args.steps == 'case,mesh'
+        assert args.steps == "case,mesh"
 
     def test_parser_no_args(self):
         """Test parser with no arguments."""
@@ -184,34 +180,44 @@ class TestStepValidation:
 
     def test_valid_steps(self):
         """Test all valid step names."""
-        valid_steps = {'case', 'mesh', 'boundary', 'regenerate-numerics',
-                       'solver', 'reconstruct', 'postprocess', 'paraview', 'all'}
+        valid_steps = {
+            "case",
+            "mesh",
+            "boundary",
+            "regenerate-numerics",
+            "solver",
+            "reconstruct",
+            "postprocess",
+            "paraview",
+            "all",
+        }
 
         from patient_runner.cli import create_parser
+
         parser = create_parser()
 
-        for step in ['case', 'mesh', 'boundary', 'solver', 'reconstruct', 'all']:
-            args = parser.parse_args(['PAT001', '--step', step])
+        for step in ["case", "mesh", "boundary", "solver", "reconstruct", "all"]:
+            args = parser.parse_args(["PAT001", "--step", step])
             assert step in args.step_list
 
     def test_step_mapping_keys(self):
         """Test step mapping contains expected keys."""
         step_mapping = {
-            'case': 'setup:dict',
-            'mesh': 'run:mesh',
-            'boundary': 'setup:bc',
-            'regenerate-numerics': 'setup:regenerate-numerics',
-            'solver': 'run:solver',
-            'reconstruct': 'run:reconstruct',
-            'postprocess': 'run:hemodynamics',
-            'paraview': 'execute_post',
-            'all': 'runAll'
+            "case": "setup:dict",
+            "mesh": "run:mesh",
+            "boundary": "setup:bc",
+            "regenerate-numerics": "setup:regenerate-numerics",
+            "solver": "run:solver",
+            "reconstruct": "run:reconstruct",
+            "postprocess": "run:hemodynamics",
+            "paraview": "execute_post",
+            "all": "runAll",
         }
 
-        assert 'case' in step_mapping
-        assert step_mapping['case'] == 'setup:dict'
-        assert step_mapping['mesh'] == 'run:mesh'
-        assert step_mapping['all'] == 'runAll'
+        assert "case" in step_mapping
+        assert step_mapping["case"] == "setup:dict"
+        assert step_mapping["mesh"] == "run:mesh"
+        assert step_mapping["all"] == "runAll"
 
 
 class TestRunStandalonePostprocess:
@@ -223,7 +229,7 @@ class TestRunStandalonePostprocess:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a directory without openfoam subdirectory
-            with patch('builtins.print') as mock_print:
+            with patch("builtins.print") as mock_print:
                 run_standalone_postprocess(tmpdir)
                 # Should print error message about missing OpenFOAM case
                 assert mock_print.called
@@ -245,25 +251,25 @@ class TestVerbosePreParse:
 
     def test_verbose_in_sys_argv(self):
         """Test detection of verbose flag in sys.argv."""
-        test_argv = ['run_patient.py', 'PAT001', '--verbose']
+        test_argv = ["run_patient.py", "PAT001", "--verbose"]
 
-        verbose = '-v' in test_argv or '--verbose' in test_argv
+        verbose = "-v" in test_argv or "--verbose" in test_argv
 
         assert verbose is True
 
     def test_short_verbose_in_sys_argv(self):
         """Test detection of -v flag in sys.argv."""
-        test_argv = ['run_patient.py', 'PAT001', '-v']
+        test_argv = ["run_patient.py", "PAT001", "-v"]
 
-        verbose = '-v' in test_argv or '--verbose' in test_argv
+        verbose = "-v" in test_argv or "--verbose" in test_argv
 
         assert verbose is True
 
     def test_no_verbose_flag(self):
         """Test no verbose flag detection."""
-        test_argv = ['run_patient.py', 'PAT001']
+        test_argv = ["run_patient.py", "PAT001"]
 
-        verbose = '-v' in test_argv or '--verbose' in test_argv
+        verbose = "-v" in test_argv or "--verbose" in test_argv
 
         assert verbose is False
 
@@ -277,11 +283,11 @@ class TestUpdateMode:
         # This tests the expected behavior without calling main
 
         # Default steps for update mode
-        default_update_steps = ['case', 'boundary']
+        default_update_steps = ["case", "boundary"]
 
-        assert 'mesh' not in default_update_steps  # Mesh is preserved
-        assert 'case' in default_update_steps
-        assert 'boundary' in default_update_steps
+        assert "mesh" not in default_update_steps  # Mesh is preserved
+        assert "case" in default_update_steps
+        assert "boundary" in default_update_steps
 
 
 class TestStepsParsing:
@@ -289,28 +295,28 @@ class TestStepsParsing:
 
     def test_parse_comma_separated_steps(self):
         """Test parsing comma-separated steps string."""
-        steps_str = 'case,mesh,boundary'
+        steps_str = "case,mesh,boundary"
 
-        steps = [s.strip() for s in steps_str.split(',')]
+        steps = [s.strip() for s in steps_str.split(",")]
 
-        assert steps == ['case', 'mesh', 'boundary']
+        assert steps == ["case", "mesh", "boundary"]
 
     def test_parse_single_step(self):
         """Test parsing single step string."""
-        steps_str = 'mesh'
+        steps_str = "mesh"
 
-        steps = [s.strip() for s in steps_str.split(',')]
+        steps = [s.strip() for s in steps_str.split(",")]
 
-        assert steps == ['mesh']
+        assert steps == ["mesh"]
 
     def test_parse_steps_with_spaces(self):
         """Test parsing steps with extra spaces."""
-        steps_str = 'case, mesh, boundary'
+        steps_str = "case, mesh, boundary"
 
-        steps = [s.strip() for s in steps_str.split(',')]
+        steps = [s.strip() for s in steps_str.split(",")]
 
-        assert steps == ['case', 'mesh', 'boundary']
+        assert steps == ["case", "mesh", "boundary"]
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

@@ -35,18 +35,15 @@ from aortacfd_lib.physics_advisor import (
 # Reynolds Number Estimation
 # =============================================================================
 
+
 class TestReynoldsEstimation:
     """Test Reynolds number estimation from config."""
 
     def test_re_from_cardiac_output(self):
         """Test Re estimation from cardiac output."""
         config = {
-            "physics": {
-                "transport_properties": {"nu": 3.7736e-6, "rho": 1060}
-            },
-            "boundary_conditions": {
-                "inlet": {"type": "CONSTANT", "cardiac_output": 5.0}
-            },
+            "physics": {"transport_properties": {"nu": 3.7736e-6, "rho": 1060}},
+            "boundary_conditions": {"inlet": {"type": "CONSTANT", "cardiac_output": 5.0}},
         }
         Re = estimate_reynolds_number(config)
         assert Re is not None
@@ -56,12 +53,8 @@ class TestReynoldsEstimation:
     def test_re_from_velocity(self):
         """Test Re estimation from direct velocity."""
         config = {
-            "physics": {
-                "transport_properties": {"nu": 3.7736e-6}
-            },
-            "boundary_conditions": {
-                "inlet": {"type": "CONSTANT", "velocity": 0.5}
-            },
+            "physics": {"transport_properties": {"nu": 3.7736e-6}},
+            "boundary_conditions": {"inlet": {"type": "CONSTANT", "velocity": 0.5}},
         }
         Re = estimate_reynolds_number(config)
         assert Re is not None
@@ -72,15 +65,11 @@ class TestReynoldsEstimation:
         """Test that pulsatile inlet doubles mean velocity for peak Re estimate."""
         config_steady = {
             "physics": {"transport_properties": {"nu": 3.7736e-6}},
-            "boundary_conditions": {
-                "inlet": {"type": "CONSTANT", "velocity": 0.5}
-            },
+            "boundary_conditions": {"inlet": {"type": "CONSTANT", "velocity": 0.5}},
         }
         config_pulsatile = {
             "physics": {"transport_properties": {"nu": 3.7736e-6}},
-            "boundary_conditions": {
-                "inlet": {"type": "TIMEVARYING", "velocity": 0.5}
-            },
+            "boundary_conditions": {"inlet": {"type": "TIMEVARYING", "velocity": 0.5}},
         }
 
         Re_steady = estimate_reynolds_number(config_steady)
@@ -101,9 +90,7 @@ class TestReynoldsEstimation:
         """Test Re estimation with custom inlet radius."""
         config = {
             "physics": {"transport_properties": {"nu": 3.7736e-6}},
-            "boundary_conditions": {
-                "inlet": {"type": "CONSTANT", "cardiac_output": 5.0}
-            },
+            "boundary_conditions": {"inlet": {"type": "CONSTANT", "cardiac_output": 5.0}},
         }
         # Small inlet radius -> higher velocity -> higher Re
         Re_small = estimate_reynolds_number(config, inlet_radius_m=0.005)
@@ -117,9 +104,7 @@ class TestReynoldsEstimation:
                 "default_viscosity": 0.004,
                 "default_density": 1060,
             },
-            "boundary_conditions": {
-                "inlet": {"type": "CONSTANT", "velocity": 0.5}
-            },
+            "boundary_conditions": {"inlet": {"type": "CONSTANT", "velocity": 0.5}},
         }
         Re = estimate_reynolds_number(config)
         assert Re is not None
@@ -129,9 +114,7 @@ class TestReynoldsEstimation:
         """Test that flowrate is treated as cardiac_output alias."""
         config = {
             "physics": {"transport_properties": {"nu": 3.7736e-6}},
-            "boundary_conditions": {
-                "inlet": {"type": "CONSTANT", "flowrate": 5.0}
-            },
+            "boundary_conditions": {"inlet": {"type": "CONSTANT", "flowrate": 5.0}},
         }
         Re = estimate_reynolds_number(config)
         assert Re is not None
@@ -140,6 +123,7 @@ class TestReynoldsEstimation:
 # =============================================================================
 # Mesh-Turbulence Compatibility
 # =============================================================================
+
 
 class TestMeshTurbulenceCompatibility:
     """Test mesh quality checks for turbulence models."""
@@ -228,6 +212,7 @@ class TestMeshTurbulenceCompatibility:
 # Physics Model Recommendation
 # =============================================================================
 
+
 class TestPhysicsRecommendation:
     """Test physics model recommendation logic."""
 
@@ -238,9 +223,7 @@ class TestPhysicsRecommendation:
                 "simulation_type": "laminar",
                 "transport_properties": {"nu": 3.7736e-6},
             },
-            "boundary_conditions": {
-                "inlet": {"type": "CONSTANT", "velocity": 0.3}
-            },
+            "boundary_conditions": {"inlet": {"type": "CONSTANT", "velocity": 0.3}},
         }
         advice = recommend_physics_model(config)
         assert advice.recommended_model == "laminar"
@@ -254,9 +237,7 @@ class TestPhysicsRecommendation:
                 "simulation_type": "rans",
                 "transport_properties": {"nu": 3.7736e-6},
             },
-            "boundary_conditions": {
-                "inlet": {"type": "CONSTANT", "velocity": 0.3}
-            },
+            "boundary_conditions": {"inlet": {"type": "CONSTANT", "velocity": 0.3}},
         }
         advice = recommend_physics_model(config)
         assert advice.recommended_model == "laminar"
@@ -270,9 +251,7 @@ class TestPhysicsRecommendation:
                 "simulation_type": "rans",
                 "transport_properties": {"nu": 3.7736e-6},
             },
-            "boundary_conditions": {
-                "inlet": {"type": "CONSTANT", "velocity": 2.0}  # High velocity
-            },
+            "boundary_conditions": {"inlet": {"type": "CONSTANT", "velocity": 2.0}},  # High velocity
         }
         advice = recommend_physics_model(config)
         assert advice.estimated_re is not None
@@ -299,9 +278,7 @@ class TestPhysicsRecommendation:
                 "simulation_type": "rans",
                 "transport_properties": {"nu": 3.7736e-6},
             },
-            "boundary_conditions": {
-                "inlet": {"type": "CONSTANT", "velocity": 2.0}
-            },
+            "boundary_conditions": {"inlet": {"type": "CONSTANT", "velocity": 2.0}},
             "mesh": {
                 "SNAPPY_SETTINGS": {"surfaceRefinementLevels": [1, 3]},
             },
@@ -323,6 +300,7 @@ class TestPhysicsRecommendation:
 # =============================================================================
 # Log Physics Advice
 # =============================================================================
+
 
 class TestLogPhysicsAdvice:
     """Test logging of physics advice."""
@@ -352,11 +330,11 @@ class TestLogPhysicsAdvice:
 # LES Stabilisation Override (boundary_condition_setup integration)
 # =============================================================================
 
+
 class TestLESStabilisationOverride:
     """Test LES stabilisation auto-disable in BoundaryConditionSetup."""
 
-    def _make_bc_setup(self, sim_type, outlet_type="3EWINDKESSEL",
-                       wk_settings=None):
+    def _make_bc_setup(self, sim_type, outlet_type="3EWINDKESSEL", wk_settings=None):
         """Create a minimal BoundaryConditionSetup-like object for testing."""
         from unittest.mock import MagicMock
 
@@ -370,8 +348,9 @@ class TestLESStabilisationOverride:
 
         # Bind the actual method
         from aortacfd_lib.boundary_condition_setup import BoundaryConditionSetup
-        setup._apply_les_stabilisation_override = (
-            BoundaryConditionSetup._apply_les_stabilisation_override.__get__(setup)
+
+        setup._apply_les_stabilisation_override = BoundaryConditionSetup._apply_les_stabilisation_override.__get__(
+            setup
         )
         return setup
 
@@ -401,9 +380,7 @@ class TestLESStabilisationOverride:
 
     def test_les_respects_explicit_enable(self):
         """Test that LES does not override explicit enable_stabilization: true."""
-        setup = self._make_bc_setup(
-            "LES", wk_settings={"enable_stabilization": True}
-        )
+        setup = self._make_bc_setup("LES", wk_settings={"enable_stabilization": True})
         setup._apply_les_stabilisation_override()
 
         wk = setup.outlet_settings["windkessel_settings"]
@@ -425,6 +402,7 @@ class TestLESStabilisationOverride:
 # Integration: ConfigBuilder physics validation
 # =============================================================================
 
+
 class TestConfigBuilderPhysicsValidation:
     """Test that ConfigBuilder calls physics validation."""
 
@@ -440,9 +418,7 @@ class TestConfigBuilderPhysicsValidation:
                 "simulation_type": "rans",
                 "transport_properties": {"nu": 3.7736e-6},
             },
-            "boundary_conditions": {
-                "inlet": {"type": "CONSTANT", "velocity": 0.3}
-            },
+            "boundary_conditions": {"inlet": {"type": "CONSTANT", "velocity": 0.3}},
             "mesh": {
                 "SNAPPY_SETTINGS": {"surfaceRefinementLevels": [1, 3]},
             },

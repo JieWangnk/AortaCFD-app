@@ -31,31 +31,25 @@ class TestSecurityValidatorFilePath:
 
     def test_valid_file_path(self):
         """Test validation of a valid file path."""
-        with tempfile.NamedTemporaryFile(suffix='.stl') as f:
-            result = SecurityValidator.validate_file_path(
-                Path(f.name),
-                allowed_extensions=['.stl']
-            )
+        with tempfile.NamedTemporaryFile(suffix=".stl") as f:
+            result = SecurityValidator.validate_file_path(Path(f.name), allowed_extensions=[".stl"])
             assert result is True
 
     def test_invalid_extension(self):
         """Test validation rejects invalid extension."""
-        with tempfile.NamedTemporaryFile(suffix='.exe') as f:
-            result = SecurityValidator.validate_file_path(
-                Path(f.name),
-                allowed_extensions=['.stl', '.json']
-            )
+        with tempfile.NamedTemporaryFile(suffix=".exe") as f:
+            result = SecurityValidator.validate_file_path(Path(f.name), allowed_extensions=[".stl", ".json"])
             assert result is False
 
     def test_no_extension_filter(self):
         """Test validation without extension filter."""
-        with tempfile.NamedTemporaryFile(suffix='.txt') as f:
+        with tempfile.NamedTemporaryFile(suffix=".txt") as f:
             result = SecurityValidator.validate_file_path(Path(f.name))
             assert result is True
 
     def test_path_traversal_double_dot(self):
         """Test rejection of path traversal with double dots."""
-        path = Path('/some/path/../../../etc/passwd')
+        path = Path("/some/path/../../../etc/passwd")
         # After resolve, the path string won't contain '..'
         # But the path may resolve to dangerous location
         result = SecurityValidator.validate_file_path(path)
@@ -67,14 +61,14 @@ class TestSecurityValidatorFilePath:
         # Creating a mock path that contains ~ in the resolved form
         # is tricky since resolve() expands ~
         # This test verifies the pattern matching logic
-        path = Path('/some/path')
+        path = Path("/some/path")
         result = SecurityValidator.validate_file_path(path)
         assert result is True
 
     def test_path_with_special_chars(self):
         """Test rejection of paths with special characters."""
         # Test with path that would be dangerous after resolve
-        path = Path('/tmp/test;rm -rf /')
+        path = Path("/tmp/test;rm -rf /")
         # The actual file doesn't need to exist for validation
         # This tests the pattern matching in validate_file_path
 
@@ -91,28 +85,22 @@ class TestSecurityValidatorFilePath:
                 mock_result.st_size = 200 * 1024 * 1024  # 200MB
                 return mock_result
 
-            with patch.object(Path, 'stat', mock_stat):
+            with patch.object(Path, "stat", mock_stat):
                 result = SecurityValidator.validate_file_path(Path(f.name))
                 # Should reject large files
                 # Note: This depends on the file actually existing
 
     def test_nonexistent_file(self):
         """Test validation of non-existent file path."""
-        path = Path('/nonexistent/file.stl')
-        result = SecurityValidator.validate_file_path(
-            path,
-            allowed_extensions=['.stl']
-        )
+        path = Path("/nonexistent/file.stl")
+        result = SecurityValidator.validate_file_path(path, allowed_extensions=[".stl"])
         # Non-existent file should pass (file size check skipped)
         assert result is True
 
     def test_case_insensitive_extension(self):
         """Test extension matching is case-insensitive."""
-        with tempfile.NamedTemporaryFile(suffix='.STL') as f:
-            result = SecurityValidator.validate_file_path(
-                Path(f.name),
-                allowed_extensions=['.stl']
-            )
+        with tempfile.NamedTemporaryFile(suffix=".STL") as f:
+            result = SecurityValidator.validate_file_path(Path(f.name), allowed_extensions=[".stl"])
             assert result is True
 
 
@@ -139,14 +127,14 @@ class TestSecurityValidatorDirectoryPath:
 
     def test_invalid_system_directory(self):
         """Test rejection of system directories."""
-        path = Path('/etc')
+        path = Path("/etc")
         result = SecurityValidator.validate_directory_path(path)
         # Depends on allowed_prefixes in the implementation
         # /etc is not in ['/tmp', '/home', '/opt', cwd]
 
     def test_relative_path(self):
         """Test validation of relative path."""
-        path = Path('.')
+        path = Path(".")
         result = SecurityValidator.validate_directory_path(path)
         # Relative paths are resolved to absolute
         # '.' resolves to cwd which should be allowed
@@ -155,11 +143,11 @@ class TestSecurityValidatorDirectoryPath:
         """Test rejection of dangerous patterns in directory path."""
         # Test various dangerous patterns
         dangerous_paths = [
-            '/tmp/test$VAR',
-            '/tmp/test|cmd',
-            '/tmp/test;cmd',
-            '/tmp/test&cmd',
-            '/tmp/test`cmd`',
+            "/tmp/test$VAR",
+            "/tmp/test|cmd",
+            "/tmp/test;cmd",
+            "/tmp/test&cmd",
+            "/tmp/test`cmd`",
         ]
 
         for path_str in dangerous_paths:
@@ -178,8 +166,8 @@ class TestResourceValidator:
         assert validator.min_disk_space_gb == 5.0
         assert validator.max_mesh_cells == 10_000_000
 
-    @patch('aortacfd_lib.utils.security.psutil')
-    @patch('aortacfd_lib.utils.security.shutil')
+    @patch("aortacfd_lib.utils.security.psutil")
+    @patch("aortacfd_lib.utils.security.shutil")
     def test_check_system_resources_sufficient(self, mock_shutil, mock_psutil):
         """Test system resources check when sufficient."""
         # Mock memory
@@ -200,15 +188,15 @@ class TestResourceValidator:
         validator = ResourceValidator()
         result = validator.check_system_resources()
 
-        assert result['memory_sufficient'] is True
-        assert result['disk_sufficient'] is True
-        assert result['system_ready'] is True
-        assert result['memory_total_gb'] == 16.0
-        assert result['memory_available_gb'] == 8.0
-        assert result['cpu_count'] == 8
+        assert result["memory_sufficient"] is True
+        assert result["disk_sufficient"] is True
+        assert result["system_ready"] is True
+        assert result["memory_total_gb"] == 16.0
+        assert result["memory_available_gb"] == 8.0
+        assert result["cpu_count"] == 8
 
-    @patch('aortacfd_lib.utils.security.psutil')
-    @patch('aortacfd_lib.utils.security.shutil')
+    @patch("aortacfd_lib.utils.security.psutil")
+    @patch("aortacfd_lib.utils.security.shutil")
     def test_check_system_resources_insufficient_memory(self, mock_shutil, mock_psutil):
         """Test system resources check when memory insufficient."""
         # Mock low memory
@@ -229,11 +217,11 @@ class TestResourceValidator:
         validator = ResourceValidator()
         result = validator.check_system_resources()
 
-        assert result['memory_sufficient'] is False
-        assert result['system_ready'] is False
+        assert result["memory_sufficient"] is False
+        assert result["system_ready"] is False
 
-    @patch('aortacfd_lib.utils.security.psutil')
-    @patch('aortacfd_lib.utils.security.shutil')
+    @patch("aortacfd_lib.utils.security.psutil")
+    @patch("aortacfd_lib.utils.security.shutil")
     def test_check_system_resources_insufficient_disk(self, mock_shutil, mock_psutil):
         """Test system resources check when disk insufficient."""
         # Mock memory
@@ -254,11 +242,11 @@ class TestResourceValidator:
         validator = ResourceValidator()
         result = validator.check_system_resources()
 
-        assert result['disk_sufficient'] is False
-        assert result['system_ready'] is False
+        assert result["disk_sufficient"] is False
+        assert result["system_ready"] is False
 
-    @patch('aortacfd_lib.utils.security.psutil')
-    @patch('aortacfd_lib.utils.security.shutil')
+    @patch("aortacfd_lib.utils.security.psutil")
+    @patch("aortacfd_lib.utils.security.shutil")
     def test_check_system_resources_high_cpu(self, mock_shutil, mock_psutil):
         """Test system resources check when CPU usage high."""
         # Mock memory
@@ -279,9 +267,9 @@ class TestResourceValidator:
         validator = ResourceValidator()
         result = validator.check_system_resources()
 
-        assert result['system_ready'] is False
+        assert result["system_ready"] is False
 
-    @patch('aortacfd_lib.utils.security.psutil')
+    @patch("aortacfd_lib.utils.security.psutil")
     def test_check_system_resources_error(self, mock_psutil):
         """Test system resources check with error."""
         mock_psutil.virtual_memory.side_effect = Exception("Resource error")
@@ -289,8 +277,8 @@ class TestResourceValidator:
         validator = ResourceValidator()
         result = validator.check_system_resources()
 
-        assert 'error' in result
-        assert result['system_ready'] is False
+        assert "error" in result
+        assert result["system_ready"] is False
 
     def test_validate_mesh_size_valid(self):
         """Test mesh size validation with valid size."""
@@ -336,57 +324,41 @@ class TestConfigurationValidator:
     def test_valid_config(self):
         """Test validation of valid configuration."""
         config = {
-            'geometry': {'case_name': 'test_case'},
-            'physics': {'nu': 0.0035},
-            'mesh': {
-                'mesh_resolution': {
-                    'blockmesh_resolution': 50
-                }
-            },
-            'solver': {}
+            "geometry": {"case_name": "test_case"},
+            "physics": {"nu": 0.0035},
+            "mesh": {"mesh_resolution": {"blockmesh_resolution": 50}},
+            "solver": {},
         }
 
         result = ConfigurationValidator.validate_simulation_config(config)
 
-        assert result['valid'] is True
-        assert len(result['errors']) == 0
+        assert result["valid"] is True
+        assert len(result["errors"]) == 0
 
     def test_missing_required_keys(self):
         """Test validation catches missing required keys."""
-        config = {
-            'geometry': {'case_name': 'test'}
-        }
+        config = {"geometry": {"case_name": "test"}}
 
         result = ConfigurationValidator.validate_simulation_config(config)
 
-        assert result['valid'] is False
-        assert len(result['errors']) > 0
+        assert result["valid"] is False
+        assert len(result["errors"]) > 0
         # Should report missing physics, mesh, solver
-        missing_count = sum(1 for e in result['errors'] if 'Missing' in e)
+        missing_count = sum(1 for e in result["errors"] if "Missing" in e)
         assert missing_count >= 3
 
     def test_missing_case_name(self):
         """Test validation catches missing case_name in geometry."""
-        config = {
-            'geometry': {},
-            'physics': {},
-            'mesh': {},
-            'solver': {}
-        }
+        config = {"geometry": {}, "physics": {}, "mesh": {}, "solver": {}}
 
         result = ConfigurationValidator.validate_simulation_config(config)
 
-        assert result['valid'] is False
-        assert any('case_name' in e for e in result['errors'])
+        assert result["valid"] is False
+        assert any("case_name" in e for e in result["errors"])
 
     def test_invalid_viscosity_negative(self):
         """Test validation catches invalid viscosity value."""
-        config = {
-            'geometry': {'case_name': 'test'},
-            'physics': {'nu': -0.001},
-            'mesh': {},
-            'solver': {}
-        }
+        config = {"geometry": {"case_name": "test"}, "physics": {"nu": -0.001}, "mesh": {}, "solver": {}}
 
         result = ConfigurationValidator.validate_simulation_config(config)
 
@@ -395,100 +367,79 @@ class TestConfigurationValidator:
     def test_unusual_viscosity_warning(self):
         """Test validation warns about unusual viscosity."""
         config = {
-            'geometry': {'case_name': 'test'},
-            'physics': {'nu': 5.0},  # Very high viscosity
-            'mesh': {},
-            'solver': {}
+            "geometry": {"case_name": "test"},
+            "physics": {"nu": 5.0},  # Very high viscosity
+            "mesh": {},
+            "solver": {},
         }
 
         result = ConfigurationValidator.validate_simulation_config(config)
 
-        assert len(result['warnings']) > 0
-        assert any('viscosity' in w for w in result['warnings'])
+        assert len(result["warnings"]) > 0
+        assert any("viscosity" in w for w in result["warnings"])
 
     def test_invalid_viscosity_type(self):
         """Test validation catches non-numeric viscosity."""
-        config = {
-            'geometry': {'case_name': 'test'},
-            'physics': {'nu': 'invalid'},
-            'mesh': {},
-            'solver': {}
-        }
+        config = {"geometry": {"case_name": "test"}, "physics": {"nu": "invalid"}, "mesh": {}, "solver": {}}
 
         result = ConfigurationValidator.validate_simulation_config(config)
 
-        assert result['valid'] is False
-        assert any('viscosity' in e.lower() for e in result['errors'])
+        assert result["valid"] is False
+        assert any("viscosity" in e.lower() for e in result["errors"])
 
     def test_unusual_mesh_resolution_low(self):
         """Test validation warns about low mesh resolution."""
         config = {
-            'geometry': {'case_name': 'test'},
-            'physics': {},
-            'mesh': {
-                'mesh_resolution': {
-                    'blockmesh_resolution': 5
-                }
-            },
-            'solver': {}
+            "geometry": {"case_name": "test"},
+            "physics": {},
+            "mesh": {"mesh_resolution": {"blockmesh_resolution": 5}},
+            "solver": {},
         }
 
         result = ConfigurationValidator.validate_simulation_config(config)
 
-        assert len(result['warnings']) > 0
-        assert any('resolution' in w.lower() for w in result['warnings'])
+        assert len(result["warnings"]) > 0
+        assert any("resolution" in w.lower() for w in result["warnings"])
 
     def test_unusual_mesh_resolution_high(self):
         """Test validation warns about high mesh resolution."""
         config = {
-            'geometry': {'case_name': 'test'},
-            'physics': {},
-            'mesh': {
-                'mesh_resolution': {
-                    'blockmesh_resolution': 500
-                }
-            },
-            'solver': {}
+            "geometry": {"case_name": "test"},
+            "physics": {},
+            "mesh": {"mesh_resolution": {"blockmesh_resolution": 500}},
+            "solver": {},
         }
 
         result = ConfigurationValidator.validate_simulation_config(config)
 
-        assert len(result['warnings']) > 0
+        assert len(result["warnings"]) > 0
 
     def test_blockmesh_settings_resolution(self):
         """Test resolution from BLOCKMESH_SETTINGS."""
         config = {
-            'geometry': {'case_name': 'test'},
-            'physics': {},
-            'mesh': {
-                'BLOCKMESH_SETTINGS': {
-                    'resolution': 50
-                }
-            },
-            'solver': {}
+            "geometry": {"case_name": "test"},
+            "physics": {},
+            "mesh": {"BLOCKMESH_SETTINGS": {"resolution": 50}},
+            "solver": {},
         }
 
         result = ConfigurationValidator.validate_simulation_config(config)
 
-        assert result['valid'] is True
+        assert result["valid"] is True
 
     def test_invalid_mesh_resolution_type(self):
         """Test validation catches non-integer mesh resolution."""
         config = {
-            'geometry': {'case_name': 'test'},
-            'physics': {},
-            'mesh': {
-                'mesh_resolution': {
-                    'blockmesh_resolution': 'invalid'
-                }
-            },
-            'solver': {}
+            "geometry": {"case_name": "test"},
+            "physics": {},
+            "mesh": {"mesh_resolution": {"blockmesh_resolution": "invalid"}},
+            "solver": {},
         }
 
         result = ConfigurationValidator.validate_simulation_config(config)
 
-        assert result['valid'] is False
-        assert any('resolution' in e.lower() for e in result['errors'])
+        assert result["valid"] is False
+        assert any("resolution" in e.lower() for e in result["errors"])
 
     def test_empty_config(self):
         """Test validation of empty configuration."""
@@ -496,8 +447,8 @@ class TestConfigurationValidator:
 
         result = ConfigurationValidator.validate_simulation_config(config)
 
-        assert result['valid'] is False
-        assert len(result['errors']) == 4  # All 4 required keys missing
+        assert result["valid"] is False
+        assert len(result["errors"]) == 4  # All 4 required keys missing
 
 
 class TestSecurityValidatorIntegration:
@@ -505,15 +456,12 @@ class TestSecurityValidatorIntegration:
 
     def test_validate_real_temp_file(self):
         """Test validation with real temporary file."""
-        with tempfile.NamedTemporaryFile(suffix='.json', delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
             f.write(b'{"test": "data"}')
             temp_path = Path(f.name)
 
         try:
-            result = SecurityValidator.validate_file_path(
-                temp_path,
-                allowed_extensions=['.json']
-            )
+            result = SecurityValidator.validate_file_path(temp_path, allowed_extensions=[".json"])
             assert result is True
         finally:
             temp_path.unlink()
@@ -544,5 +492,5 @@ class TestResourceValidatorCustomLimits:
         assert validator.validate_mesh_size(6_000_000) is False
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

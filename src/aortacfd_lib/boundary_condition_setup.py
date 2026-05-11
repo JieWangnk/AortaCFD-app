@@ -6,9 +6,8 @@ from the configuration and using Jinja2 templates.
 
 import os
 import re
-from typing import Any, Dict, Optional, Tuple
+from typing import Dict
 
-import numpy as np
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -23,36 +22,43 @@ from .constants import (
     AORTIC_VELOCITY_REFERENCE,
     C_MU,
     TURBULENCE_INTENSITY_DEFAULT,
-    TURBULENCE_VISCOSITY_RATIO_DEFAULT,
     MIXING_LENGTH_FACTOR,
 )
+
 
 class BoundaryConditionSetup:
     """
     Generates the initial condition files (U, p, etc.) by reading from the
     final config object and using Jinja2 templates.
     """
+
     def __init__(self, config: dict, case_directory: str):
         self.config = config
         self.case_dir = case_directory
         self.log = Logger("boundary_conditions").get_logger()
 
-        template_path = os.path.join(os.path.dirname(__file__), '..', 'templates')
-        self.jinja_env = Environment(loader=FileSystemLoader(template_path), trim_blocks=True, lstrip_blocks=True)
-        self.version_adapter = OFVersionAdapter(self.config['openfoam_version'])
-        
+        template_path = os.path.join(os.path.dirname(__file__), "..", "templates")
+        self.jinja_env = (
+            Environment(  # nosec B701 - renders OpenFOAM dictionaries, not HTML; autoescape would corrupt syntax
+                loader=FileSystemLoader(template_path), trim_blocks=True, lstrip_blocks=True
+            )
+        )
+        self.version_adapter = OFVersionAdapter(self.config["openfoam_version"])
+
         # Get all the necessary settings from the config
-        self.geom_settings = self.config['geometry']
+        self.geom_settings = self.config["geometry"]
         # Support both flattened and nested config structures
-        self.inlet_settings = self.config.get('boundary_conditions', {}).get('inlet') or self.config.get('inlet', {})
-        self.outlet_settings = self.config.get('boundary_conditions', {}).get('outlets') or self.config.get('outlets', {})
-        self.physics_settings = self.config['physics']
-        
+        self.inlet_settings = self.config.get("boundary_conditions", {}).get("inlet") or self.config.get("inlet", {})
+        self.outlet_settings = self.config.get("boundary_conditions", {}).get("outlets") or self.config.get(
+            "outlets", {}
+        )
+        self.physics_settings = self.config["physics"]
+
         # Get the patch names that were auto-discovered by the ConfigBuilder
-        self.inlet_patch = self.geom_settings['inlet_keywords_ordered']
-        self.outlet_patches = self.geom_settings['outlet_keywords_ordered']
-        self.wall_patch = self.geom_settings['wall_keywords_ordered']
-        
+        self.inlet_patch = self.geom_settings["inlet_keywords_ordered"]
+        self.outlet_patches = self.geom_settings["outlet_keywords_ordered"]
+        self.wall_patch = self.geom_settings["wall_keywords_ordered"]
+
         # Check if we have world patch scenario
         self.world_patch_mode = detect_world_patch_mode(self.case_dir, self.log)
 
@@ -77,8 +83,8 @@ class BoundaryConditionSetup:
         if not self.world_patch_mode:
             boundary_file = os.path.join(self.case_dir, "constant", "polyMesh", "boundary")
             if os.path.exists(boundary_file):
-                with open(boundary_file, 'r') as f:
-                    has_world_patch = bool(re.search(r'\bworld\b\s*\{', f.read()))
+                with open(boundary_file, "r") as f:
+                    has_world_patch = bool(re.search(r"\bworld\b\s*\{", f.read()))
 
         # This context dictionary is now simpler, as it doesn't need initial_conditions
         context = {
@@ -88,30 +94,30 @@ class BoundaryConditionSetup:
             "inlet_settings": self.inlet_settings,
             "outlet_settings": outlet_settings,  # Use processed outlet settings
             "physics_settings": self.physics_settings,
-            "template_vars": self.config.get('template_vars', {}),
-            "openfoam_version": self.config.get('openfoam_version', '8'),
-            "openfoam_major_version": self.config.get('openfoam_major_version', 8),
+            "template_vars": self.config.get("template_vars", {}),
+            "openfoam_version": self.config.get("openfoam_version", "8"),
+            "openfoam_major_version": self.config.get("openfoam_major_version", 8),
             "world_patch_mode": self.world_patch_mode,
             "has_world_patch": has_world_patch,
             "inlet_velocity_vector": inlet_velocity_vector,
             "initial_pressure": initial_pressure,
-            "outlet_initial_pressures": outlet_initial_pressures
+            "outlet_initial_pressures": outlet_initial_pressures,
         }
 
         zero_dir = os.path.join(self.case_dir, "0")
-        
+
         # Add headers to the context for each file
-        context['header'] = self.version_adapter.get_foam_file_header("volVectorField", "U")
+        context["header"] = self.version_adapter.get_foam_file_header("volVectorField", "U")
         self._write_file_from_template("U.tpl", os.path.join(zero_dir, "U"), context)
-        
-        context['header'] = self.version_adapter.get_foam_file_header("volScalarField", "p")
+
+        context["header"] = self.version_adapter.get_foam_file_header("volScalarField", "p")
         self._write_file_from_template("p.tpl", os.path.join(zero_dir, "p"), context)
 
         # Case-insensitive simulation type comparison
-        sim_type = self.physics_settings.get('simulation_type', '').upper()
+        sim_type = self.physics_settings.get("simulation_type", "").upper()
 
         if sim_type in ["RAS", "LES"]:
-            context['header'] = self.version_adapter.get_foam_file_header("volScalarField", "nut")
+            context["header"] = self.version_adapter.get_foam_file_header("volScalarField", "nut")
             self._write_file_from_template("nut.tpl", os.path.join(zero_dir, "nut"), context)
 
         # Add RANS-specific fields (k, omega)
@@ -119,15 +125,15 @@ class BoundaryConditionSetup:
             # Calculate turbulence parameters
             turbulence_params = self._calculate_turbulence_parameters()
             context.update(turbulence_params)
-            
+
             # Generate k field
-            context['header'] = self.version_adapter.get_foam_file_header("volScalarField", "k")
+            context["header"] = self.version_adapter.get_foam_file_header("volScalarField", "k")
             self._write_file_from_template("k.tpl", os.path.join(zero_dir, "k"), context)
-            
+
             # Generate omega field
-            context['header'] = self.version_adapter.get_foam_file_header("volScalarField", "omega")
+            context["header"] = self.version_adapter.get_foam_file_header("volScalarField", "omega")
             self._write_file_from_template("omega.tpl", os.path.join(zero_dir, "omega"), context)
-    
+
     def _apply_les_stabilisation_override(self):
         """
         Auto-disable hard backflow stabilisation for LES simulations.
@@ -146,18 +152,18 @@ class BoundaryConditionSetup:
         The user can override this by explicitly setting enable_stabilization: true
         in their config (the override only applies when not explicitly set).
         """
-        sim_type = self.physics_settings.get('simulation_type', '').upper()
+        sim_type = self.physics_settings.get("simulation_type", "").upper()
         if sim_type != "LES":
             return
 
-        outlet_type = self.outlet_settings.get('type', 'zeroGradient').upper()
-        if 'WINDKESSEL' not in outlet_type:
+        outlet_type = self.outlet_settings.get("type", "zeroGradient").upper()
+        if "WINDKESSEL" not in outlet_type:
             return
 
-        wk_settings = self.outlet_settings.get('windkessel_settings', {})
+        wk_settings = self.outlet_settings.get("windkessel_settings", {})
 
         # Only override if user hasn't explicitly set it
-        if 'enable_stabilization' not in wk_settings:
+        if "enable_stabilization" not in wk_settings:
             self.log.warning(
                 "LES detected: auto-disabling hard backflow stabilisation at "
                 "Windkessel outlets. The Heaviside step function in "
@@ -165,9 +171,9 @@ class BoundaryConditionSetup:
                 "discontinuities that cause nut blowup in LES. "
                 "Using pressureInletOutletVelocity instead."
             )
-            wk_settings['enable_stabilization'] = False
-            self.outlet_settings.setdefault('windkessel_settings', {}).update(wk_settings)
-        elif wk_settings.get('enable_stabilization', False):
+            wk_settings["enable_stabilization"] = False
+            self.outlet_settings.setdefault("windkessel_settings", {}).update(wk_settings)
+        elif wk_settings.get("enable_stabilization", False):
             self.log.warning(
                 "LES with hard backflow stabilisation enabled. This can cause "
                 "nut blowup from Heaviside-induced velocity gradient discontinuities. "
@@ -182,59 +188,57 @@ class BoundaryConditionSetup:
         outlet_settings = self.outlet_settings.copy()
 
         # Only process Windkessel cases (case-insensitive)
-        outlet_type = outlet_settings.get('type', 'ZEROGRADIENT').upper()
-        if outlet_type not in ['2EWINDKESSEL', '3EWINDKESSEL']:
+        outlet_type = outlet_settings.get("type", "ZEROGRADIENT").upper()
+        if outlet_type not in ["2EWINDKESSEL", "3EWINDKESSEL"]:
             self.log.info(f"Using outlet type: {outlet_type}")
             return outlet_settings
-            
+
         # Check if this is a Windkessel case without predefined flow_split
-        if 'windkessel_settings' in outlet_settings:
-            wk_settings = outlet_settings['windkessel_settings']
-            
+        if "windkessel_settings" in outlet_settings:
+            wk_settings = outlet_settings["windkessel_settings"]
+
             # Check if Murray's law results are already cached in context
             cache_key = get_murray_law_cache_key()
-            if hasattr(self, 'context') and cache_key in self.context:
+            if hasattr(self, "context") and cache_key in self.context:
                 self.log.info("Using cached Murray's law results from context")
                 cached_results = self.context[cache_key]
                 wk_settings.update(cached_results)
                 return outlet_settings
-            
+
             # If flow_split is not defined, calculate using Murray's law
-            if 'flow_split' not in wk_settings or not wk_settings['flow_split']:
+            if "flow_split" not in wk_settings or not wk_settings["flow_split"]:
                 self.log.info("Flow split not defined - calculating using Murray's law from geometry...")
-                
+
                 try:
                     from .murray_calculator import MurrayCalculator
-                    
+
                     calculator = MurrayCalculator(self.case_dir, self.config)
-                    
+
                     # Calculate flow ratios from actual geometry
                     flow_ratios = calculator.calculate_murray_flow_ratios()
-                    
+
                     # Update Windkessel coefficients based on Murray's law
                     murray_config = calculator.update_windkessel_coefficients(flow_ratios)
-                    
+
                     # Update the outlet settings
                     wk_settings.update(murray_config)
-                    
+
                     # Cache the results in context to avoid recalculation
-                    if hasattr(self, 'context'):
+                    if hasattr(self, "context"):
                         self.context[cache_key] = murray_config
-                    
+
                     self.log.info("Successfully calculated Murray's law based coefficients")
                     self.log.info(f"Flow ratios: {flow_ratios}")
-                    
+
                 except Exception as e:
                     self.log.warning(f"Could not calculate Murray's law coefficients: {e}")
                     self.log.info("Using default equal flow distribution")
-                    
+
                     # Fallback to equal distribution
                     num_outlets = len(self.outlet_patches)
                     equal_ratio = 1.0 / num_outlets
-                    wk_settings['flow_split'] = {
-                        outlet: equal_ratio for outlet in self.outlet_patches
-                    }
-        
+                    wk_settings["flow_split"] = {outlet: equal_ratio for outlet in self.outlet_patches}
+
         return outlet_settings
 
     def _calculate_inlet_velocity_vector(self):
@@ -247,27 +251,27 @@ class BoundaryConditionSetup:
         """
         from .utils.patch_processing import PatchProcessing, compute_inward_normal
 
-        inlet_type = self.inlet_settings.get('type', 'TIMEVARYING').upper()
+        inlet_type = self.inlet_settings.get("type", "TIMEVARYING").upper()
 
         # Only calculate for CONSTANT/PARABOLIC types
-        if inlet_type not in ['CONSTANT', 'PARABOLIC']:
+        if inlet_type not in ["CONSTANT", "PARABOLIC"]:
             return None
 
         # Get inlet geometry first (needed for cardiac_output calculation)
         # STL files in constant/triSurface/ are PRE-SCALED to meters during case setup
         tri_surface_dir = os.path.join(self.case_dir, "constant", "triSurface")
-        inlet_patch_name = self.geom_settings['inlet_keywords_ordered']
+        inlet_patch_name = self.geom_settings["inlet_keywords_ordered"]
 
         patch_processor = PatchProcessing(tri_surface_dir, inlet_patch_name)
 
         # Determine velocity magnitude from either velocity, flowrate, or cardiac_output
         # Note: flowrate is an alias for cardiac_output
-        if 'flowrate' in self.inlet_settings and 'cardiac_output' not in self.inlet_settings:
-            self.inlet_settings['cardiac_output'] = self.inlet_settings['flowrate']
+        if "flowrate" in self.inlet_settings and "cardiac_output" not in self.inlet_settings:
+            self.inlet_settings["cardiac_output"] = self.inlet_settings["flowrate"]
 
-        if 'cardiac_output' in self.inlet_settings:
+        if "cardiac_output" in self.inlet_settings:
             # Calculate velocity from cardiac output (L/min) and inlet area
-            cardiac_output_Lmin = self.inlet_settings['cardiac_output']
+            cardiac_output_Lmin = self.inlet_settings["cardiac_output"]
             cardiac_output_m3s = cardiac_output_Lmin / 60.0 / 1000.0  # Convert L/min to m³/s
 
             # Get inlet area (STLs are pre-scaled to meters, no scale_factor needed)
@@ -276,47 +280,53 @@ class BoundaryConditionSetup:
             # Calculate velocity
             velocity_magnitude = cardiac_output_m3s / inlet_area
 
-            self.log.info(f"Cardiac output: {cardiac_output_Lmin:.2f} L/min → velocity: {velocity_magnitude:.4f} m/s "
-                         f"(inlet area: {inlet_area*1e6:.2f} mm²)")
+            self.log.info(
+                f"Cardiac output: {cardiac_output_Lmin:.2f} L/min → velocity: {velocity_magnitude:.4f} m/s "
+                f"(inlet area: {inlet_area*1e6:.2f} mm²)"
+            )
 
             # Warn if both velocity and cardiac_output are specified
-            if 'velocity' in self.inlet_settings:
-                self.log.warning(f"Both 'velocity' and 'cardiac_output' specified. Using cardiac_output ({cardiac_output_Lmin} L/min).")
+            if "velocity" in self.inlet_settings:
+                self.log.warning(
+                    f"Both 'velocity' and 'cardiac_output' specified. Using cardiac_output ({cardiac_output_Lmin} L/min)."
+                )
 
-        elif 'velocity' in self.inlet_settings:
+        elif "velocity" in self.inlet_settings:
             # Use directly specified velocity
-            velocity_magnitude = self.inlet_settings['velocity']
+            velocity_magnitude = self.inlet_settings["velocity"]
             self.log.info(f"Using specified velocity: {velocity_magnitude:.4f} m/s")
         else:
-            self.log.error("Neither 'velocity', 'flowrate', nor 'cardiac_output' specified for CONSTANT/PARABOLIC inlet!")
+            self.log.error(
+                "Neither 'velocity', 'flowrate', nor 'cardiac_output' specified for CONSTANT/PARABOLIC inlet!"
+            )
             return "(0 0 0)"
 
         # For parabolic profile at the boundary, we use centerline velocity
         # (the actual parabolic distribution would need non-uniform BC)
-        if inlet_type == 'PARABOLIC':
+        if inlet_type == "PARABOLIC":
             # For uniform BC with parabolic intent, use mean velocity
             velocity_magnitude = velocity_magnitude / 2.0
-            self.log.warning("PARABOLIC inlet type with fixedValue BC uses mean velocity. "
-                           "For true parabolic profile, consider using groovyBC or codedFixedValue.")
+            self.log.warning(
+                "PARABOLIC inlet type with fixedValue BC uses mean velocity. "
+                "For true parabolic profile, consider using groovyBC or codedFixedValue."
+            )
 
         # Get inlet normal direction from geometry (STLs are pre-scaled, no scale_factor)
         try:
             _, _, inlet_normal = patch_processor.calculate_inlet_center_radius()
 
             # Check orientation setting
-            orientation = self.inlet_settings.get('orientation', 'auto').lower()
+            orientation = self.inlet_settings.get("orientation", "auto").lower()
 
-            if orientation == 'out':
+            if orientation == "out":
                 direction = inlet_normal
-            elif orientation == 'in':
+            elif orientation == "in":
                 direction = -inlet_normal
-            elif orientation == 'auto':
+            elif orientation == "auto":
                 # Auto-detect using edge-ring method (robust for all geometries)
-                inlet_patch_name = self.geom_settings['inlet_keywords_ordered']
-                wall_name = self.geom_settings.get('wall_keywords_ordered', 'wall')
-                direction = compute_inward_normal(
-                    tri_surface_dir, inlet_patch_name, wall_name, log=self.log
-                )
+                inlet_patch_name = self.geom_settings["inlet_keywords_ordered"]
+                wall_name = self.geom_settings.get("wall_keywords_ordered", "wall")
+                direction = compute_inward_normal(tri_surface_dir, inlet_patch_name, wall_name, log=self.log)
             else:
                 direction = inlet_normal
 
@@ -341,8 +351,7 @@ class BoundaryConditionSetup:
         with open(output_path, "w") as f:
             f.write(content)
         self.log.info(f"Successfully wrote file: {os.path.basename(output_path)}")
-    
-    
+
     def _calculate_turbulence_parameters(self) -> Dict[str, float]:
         """
         Calculate turbulence parameters for RANS simulation.
@@ -357,16 +366,11 @@ class BoundaryConditionSetup:
             - mixing_length: Mixing length for boundary conditions (m)
         """
         # Get turbulence parameters from physics settings or use defaults
-        turbulence_intensity = self.physics_settings.get(
-            'turbulence_intensity', TURBULENCE_INTENSITY_DEFAULT
-        )
-        turbulence_viscosity_ratio = self.physics_settings.get(
-            'turbulence_viscosity_ratio', TURBULENCE_VISCOSITY_RATIO_DEFAULT
-        )
+        turbulence_intensity = self.physics_settings.get("turbulence_intensity", TURBULENCE_INTENSITY_DEFAULT)
 
         # Estimate characteristic velocity from inlet settings
-        if 'mean_velocity' in self.inlet_settings:
-            U_ref = self.inlet_settings['mean_velocity']
+        if "mean_velocity" in self.inlet_settings:
+            U_ref = self.inlet_settings["mean_velocity"]
         else:
             U_ref = AORTIC_VELOCITY_REFERENCE
 
@@ -383,10 +387,10 @@ class BoundaryConditionSetup:
         mixing_length = MIXING_LENGTH_FACTOR * L_ref
 
         return {
-            'k_initial': k_initial,
-            'omega_initial': omega_initial,
-            'turbulence_intensity': turbulence_intensity,
-            'mixing_length': mixing_length
+            "k_initial": k_initial,
+            "omega_initial": omega_initial,
+            "turbulence_intensity": turbulence_intensity,
+            "mixing_length": mixing_length,
         }
 
     def _calculate_initial_pressure(self):
@@ -434,44 +438,44 @@ class BoundaryConditionSetup:
             - Klabunde RE. Cardiovascular Physiology Concepts. 2nd ed. 2011.
             - Westerhof N, et al. The arterial Windkessel. Med Biol Eng Comput. 2009.
         """
-        outlet_type = self.outlet_settings.get('type', 'zeroGradient').upper()  # Case-insensitive
+        outlet_type = self.outlet_settings.get("type", "zeroGradient").upper()  # Case-insensitive
 
-        if outlet_type in ['2EWINDKESSEL', '3EWINDKESSEL']:
+        if outlet_type in ["2EWINDKESSEL", "3EWINDKESSEL"]:
             # Get Windkessel pressure settings
-            wk_settings = self.outlet_settings.get('windkessel_settings', {})
+            wk_settings = self.outlet_settings.get("windkessel_settings", {})
 
             # Get systolic and diastolic pressures (mmHg)
-            systolic = wk_settings.get('systolic_pressure', SYSTOLIC_PRESSURE_DEFAULT)
-            diastolic = wk_settings.get('diastolic_pressure', DIASTOLIC_PRESSURE_DEFAULT)
+            systolic = wk_settings.get("systolic_pressure", SYSTOLIC_PRESSURE_DEFAULT)
+            diastolic = wk_settings.get("diastolic_pressure", DIASTOLIC_PRESSURE_DEFAULT)
 
             # Get initialization method (default: diastolic - simulation starts at end-diastole)
-            init_method = wk_settings.get('initial_pressure_method', 'diastolic').lower()
+            init_method = wk_settings.get("initial_pressure_method", "diastolic").lower()
 
             # Calculate pressure based on method
             # Reference: Klabunde (2011) Cardiovascular Physiology Concepts
             pulse_pressure = systolic - diastolic
 
-            if init_method == 'diastolic':
+            if init_method == "diastolic":
                 # End-diastolic pressure - physically correct if simulation starts at end-diastole
                 p_init_mmHg = diastolic
                 method_desc = "diastolic (simulation starts at end-diastole)"
 
-            elif init_method == 'systolic':
+            elif init_method == "systolic":
                 p_init_mmHg = systolic
                 method_desc = "systolic (peak pressure)"
 
-            elif init_method == 'map':
+            elif init_method == "map":
                 # Correct MAP formula: diastole is ~2/3 of cardiac cycle
                 # MAP = DBP + (1/3) × (SBP - DBP) = (2×DBP + SBP) / 3
                 p_init_mmHg = diastolic + (1.0 / 3.0) * pulse_pressure
                 method_desc = f"MAP = DBP + PP/3 = {diastolic} + {pulse_pressure}/3"
 
-            elif init_method == 'mean' or init_method == 'arithmetic':
+            elif init_method == "mean" or init_method == "arithmetic":
                 # Simple arithmetic mean (less accurate but sometimes used)
                 p_init_mmHg = (systolic + diastolic) / 2.0
                 method_desc = "arithmetic mean (SBP + DBP) / 2"
 
-            elif init_method == 'windkessel':
+            elif init_method == "windkessel":
                 # DEPRECATED: This method creates non-uniform pressure gradients
                 # that cause velocity spikes and numerical instability.
                 # Per Pfaller et al. (2021), uniform diastolic pressure is recommended.
@@ -486,7 +490,7 @@ class BoundaryConditionSetup:
                 p_init_mmHg = diastolic
                 method_desc = "diastolic (windkessel method deprecated)"
 
-            elif init_method == 'zero':
+            elif init_method == "zero":
                 p_init_mmHg = 0.0
                 method_desc = "zero (gauge pressure)"
 
@@ -498,8 +502,8 @@ class BoundaryConditionSetup:
             p_init_Pa = p_init_mmHg * MMHG_TO_PA
 
             # Try to get flow splits for outlet initialization
-            flow_splits = wk_settings.get('flow_split', {})
-            outlet_params = wk_settings.get('outlet_parameters', {})
+            flow_splits = wk_settings.get("flow_split", {})
+            outlet_params = wk_settings.get("outlet_parameters", {})
 
             # Initialize all outlets to uniform pressure
             outlet_pressures = {}

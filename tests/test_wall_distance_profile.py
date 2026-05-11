@@ -16,7 +16,7 @@ import sys
 import os
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 
 class TestWallDistanceProfile(unittest.TestCase):
@@ -31,7 +31,7 @@ class TestWallDistanceProfile(unittest.TestCase):
         radius = 0.01  # 10mm radius
         center = np.array([0.0, 0.0, 0.0])
 
-        theta = np.linspace(0, 2*np.pi, n_boundary, endpoint=False)
+        theta = np.linspace(0, 2 * np.pi, n_boundary, endpoint=False)
         boundary_points = np.zeros((n_boundary, 3))
         boundary_points[:, 0] = radius * np.cos(theta)
         boundary_points[:, 1] = radius * np.sin(theta)
@@ -54,12 +54,12 @@ class TestWallDistanceProfile(unittest.TestCase):
 
         # At center, distance should be approximately radius
         center_dist = distances[0]
-        self.assertAlmostEqual(center_dist, radius, delta=radius*0.1)
+        self.assertAlmostEqual(center_dist, radius, delta=radius * 0.1)
 
         # At edge (r=0.95*radius), distance should be approximately 0.05*radius
         edge_dist = distances[-1]
         expected_edge_dist = radius - 0.95 * radius  # 0.05 * radius
-        self.assertAlmostEqual(edge_dist, expected_edge_dist, delta=radius*0.1)
+        self.assertAlmostEqual(edge_dist, expected_edge_dist, delta=radius * 0.1)
 
     def _compute_wall_distances_manual(self, points, boundary_points):
         """Manual implementation of wall distance calculation for testing."""
@@ -81,16 +81,17 @@ class TestWallDistanceProfile(unittest.TestCase):
 
         # Test points at different normalized distances
         test_cases = [
-            (0.0, 0.0),    # At wall: shape = 0
+            (0.0, 0.0),  # At wall: shape = 0
             (d_max, 1.0),  # At center: shape = 1
-            (d_max/2, 1 - (1 - 0.5)**2),  # Mid-point
+            (d_max / 2, 1 - (1 - 0.5) ** 2),  # Mid-point
         ]
 
         for d, expected in test_cases:
             d_normalized = d / d_max
             shape = 1.0 - (1.0 - d_normalized) ** exponent
-            self.assertAlmostEqual(shape, expected, places=6,
-                msg=f"Shape factor at d={d}: expected {expected}, got {shape}")
+            self.assertAlmostEqual(
+                shape, expected, places=6, msg=f"Shape factor at d={d}: expected {expected}, got {shape}"
+            )
 
     def test_wall_distance_exponent_effect(self):
         """
@@ -110,8 +111,9 @@ class TestWallDistanceProfile(unittest.TestCase):
         # Higher exponents should give higher shape factors at mid-point
         # (flatter profile = more uniform velocity)
         for i in range(len(shapes) - 1):
-            self.assertLess(shapes[i], shapes[i+1],
-                f"Exponent {exponents[i]} should give lower shape than {exponents[i+1]}")
+            self.assertLess(
+                shapes[i], shapes[i + 1], f"Exponent {exponents[i]} should give lower shape than {exponents[i+1]}"
+            )
 
 
 class TestEllipticalPoiseuille(unittest.TestCase):
@@ -125,7 +127,7 @@ class TestEllipticalPoiseuille(unittest.TestCase):
         a, b = 0.015, 0.010  # Semi-axes: 15mm and 10mm
         x, y = 0.0, 0.0
 
-        shape = 1.0 - (x/a)**2 - (y/b)**2
+        shape = 1.0 - (x / a) ** 2 - (y / b) ** 2
         self.assertAlmostEqual(shape, 1.0, places=10)
 
     def test_elliptical_formula_at_boundary(self):
@@ -137,11 +139,11 @@ class TestEllipticalPoiseuille(unittest.TestCase):
         a, b = 0.015, 0.010
 
         # On major axis boundary
-        shape_a = 1.0 - (a/a)**2 - (0/b)**2
+        shape_a = 1.0 - (a / a) ** 2 - (0 / b) ** 2
         self.assertAlmostEqual(shape_a, 0.0, places=10)
 
         # On minor axis boundary
-        shape_b = 1.0 - (0/a)**2 - (b/b)**2
+        shape_b = 1.0 - (0 / a) ** 2 - (b / b) ** 2
         self.assertAlmostEqual(shape_b, 0.0, places=10)
 
     def test_elliptical_formula_outside(self):
@@ -152,7 +154,7 @@ class TestEllipticalPoiseuille(unittest.TestCase):
 
         # Point outside on x-axis
         x, y = 0.020, 0.0
-        ellipse_term = (x/a)**2 + (y/b)**2
+        ellipse_term = (x / a) ** 2 + (y / b) ** 2
         self.assertGreater(ellipse_term, 1.0)
 
         # Shape should be clamped to 0
@@ -174,7 +176,7 @@ class TestEllipticalPoiseuille(unittest.TestCase):
                 for sign_y in [1, -1]:
                     xx = sign_x * x
                     yy = sign_y * y
-                    shape = 1.0 - (xx/a)**2 - (yy/b)**2
+                    shape = 1.0 - (xx / a) ** 2 - (yy / b) ** 2
                     shapes.append(shape)
 
             # All should be equal
@@ -194,10 +196,10 @@ class TestEllipticalPoiseuille(unittest.TestCase):
         r_test = 0.005  # 5mm from center
 
         # Circular parabolic
-        parabolic = 1.0 - (r_test/R)**2
+        parabolic = 1.0 - (r_test / R) ** 2
 
         # Elliptical with a=b=R
-        elliptical = 1.0 - (r_test/R)**2 - (0/R)**2
+        elliptical = 1.0 - (r_test / R) ** 2 - (0 / R) ** 2
 
         self.assertAlmostEqual(parabolic, elliptical, places=10)
 
@@ -212,7 +214,7 @@ class TestEllipseAxisEstimation(unittest.TestCase):
         # Generate circular distribution
         n_points = 100
         radius = 0.01
-        theta = np.linspace(0, 2*np.pi, n_points, endpoint=False)
+        theta = np.linspace(0, 2 * np.pi, n_points, endpoint=False)
         points = np.zeros((n_points, 2))
 
         # Uniform circular distribution
@@ -229,8 +231,7 @@ class TestEllipseAxisEstimation(unittest.TestCase):
         ratio = max(eigenvalues) / min(eigenvalues) if min(eigenvalues) > 0 else 1.0
 
         # Allow some tolerance due to random sampling
-        self.assertLess(ratio, 2.0,
-            f"Circular distribution should have similar eigenvalues, got ratio {ratio}")
+        self.assertLess(ratio, 2.0, f"Circular distribution should have similar eigenvalues, got ratio {ratio}")
 
     def test_elliptical_distribution(self):
         """
@@ -246,7 +247,7 @@ class TestEllipseAxisEstimation(unittest.TestCase):
             while True:
                 x = (np.random.random() * 2 - 1) * a
                 y = (np.random.random() * 2 - 1) * b
-                if (x/a)**2 + (y/b)**2 <= 1:
+                if (x / a) ** 2 + (y / b) ** 2 <= 1:
                     points[i] = [x, y]
                     break
 
@@ -260,8 +261,12 @@ class TestEllipseAxisEstimation(unittest.TestCase):
         expected_ratio = a / b
 
         # Allow 20% tolerance due to sampling
-        self.assertAlmostEqual(estimated_ratio, expected_ratio, delta=expected_ratio*0.2,
-            msg=f"Estimated ratio {estimated_ratio} should be close to {expected_ratio}")
+        self.assertAlmostEqual(
+            estimated_ratio,
+            expected_ratio,
+            delta=expected_ratio * 0.2,
+            msg=f"Estimated ratio {estimated_ratio} should be close to {expected_ratio}",
+        )
 
 
 class TestFlowRateConservation(unittest.TestCase):
@@ -272,7 +277,7 @@ class TestFlowRateConservation(unittest.TestCase):
         Test that plug flow correctly conserves flow rate.
         Q = V_avg * A
         """
-        area = np.pi * (0.01)**2  # 10mm radius inlet
+        area = np.pi * (0.01) ** 2  # 10mm radius inlet
         target_Q = 5e-6  # 5 mL/s = 5e-6 m³/s
 
         # For plug flow: V = Q / A
@@ -303,15 +308,18 @@ class TestFlowRateConservation(unittest.TestCase):
 
         Q_numerical = 0.0
         for r in r_samples[:-1]:
-            v = V_max * (1 - (r/radius)**2)
+            v = V_max * (1 - (r / radius) ** 2)
             # Ring area: 2*pi*r*dr
             dA = 2 * np.pi * r * dr if r > 0 else np.pi * dr**2
             Q_numerical += v * dA
 
         # Should be approximately equal to target
         error_percent = abs(Q_numerical - target_Q) / target_Q * 100
-        self.assertLess(error_percent, 5.0,  # 5% tolerance for numerical integration
-            f"Parabolic flow conservation error: {error_percent:.2f}%")
+        self.assertLess(
+            error_percent,
+            5.0,  # 5% tolerance for numerical integration
+            f"Parabolic flow conservation error: {error_percent:.2f}%",
+        )
 
 
 class TestProfileComparison(unittest.TestCase):
@@ -328,26 +336,26 @@ class TestProfileComparison(unittest.TestCase):
 
         # At center (r=0)
         plug_center = 1.0
-        parabolic_center = 1.0 - (0/radius)**2
+        parabolic_center = 1.0 - (0 / radius) ** 2
 
         self.assertAlmostEqual(plug_center, parabolic_center, places=10)
 
         # At r = 0.5*R
         r = 0.5 * radius
         plug_mid = 1.0
-        parabolic_mid = 1.0 - (r/radius)**2
+        parabolic_mid = 1.0 - (r / radius) ** 2
 
         self.assertGreater(plug_mid, parabolic_mid)
 
         # At boundary (r=R)
         plug_edge = 1.0
-        parabolic_edge = 1.0 - (radius/radius)**2
+        parabolic_edge = 1.0 - (radius / radius) ** 2
 
         self.assertEqual(parabolic_edge, 0.0)
         self.assertGreater(plug_edge, parabolic_edge)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     print("=" * 70)
     print("Wall-Distance and Elliptical Profile Tests")
     print("=" * 70)

@@ -48,6 +48,7 @@ from paraview.simple import (
 )
 
 import paraview.simple
+
 paraview.simple._DisableFirstRenderCameraReset()
 
 
@@ -64,65 +65,65 @@ DEFAULT_PROPERTY_MAP: Dict[str, Dict[str, Any]] = {
         "name": "U",
         "derived": False,
         "prefix": "Velocity",
-        "component": ('POINTS', 'U', 'Magnitude'),
+        "component": ("POINTS", "U", "Magnitude"),
         "preset": "Rainbow Desaturated",
         "representation": "Volume",
-        "unit": "m/s"
+        "unit": "m/s",
     },
     "p": {
         "name": "Pressure",
         "derived": True,
         "prefix": "Pressure",
-        "component": ('POINTS', 'Pressure'),
+        "component": ("POINTS", "Pressure"),
         "preset": "Blue - Green - Orange",
         "representation": "Surface",
-        "unit": "mmHg"
+        "unit": "mmHg",
     },
     "wallShearStress": {
         "name": "WSS",
         "derived": True,
         "prefix": "WSS",
-        "component": ('POINTS', 'WSS'),
+        "component": ("POINTS", "WSS"),
         "preset": "Viridis (matplotlib)",
         "representation": "Surface",
-        "unit": "Pa"
+        "unit": "Pa",
     },
     "TAWSS": {
         "name": "TAWSS",
         "derived": False,
         "prefix": "TAWSS",
-        "component": ('POINTS', 'TAWSS'),
+        "component": ("POINTS", "TAWSS"),
         "preset": "Viridis (matplotlib)",
         "representation": "Surface",
-        "unit": "Pa"
+        "unit": "Pa",
     },
     "OSI": {
         "name": "OSI",
         "derived": False,
         "prefix": "OSI",
-        "component": ('POINTS', 'OSI'),
+        "component": ("POINTS", "OSI"),
         "preset": "Cool to Warm",
         "representation": "Surface",
-        "unit": ""
+        "unit": "",
     },
     "RRT": {
         "name": "RRT",
         "derived": False,
         "prefix": "RRT",
-        "component": ('POINTS', 'RRT'),
+        "component": ("POINTS", "RRT"),
         "preset": "Plasma (matplotlib)",
         "representation": "Surface",
-        "unit": "1/Pa"
+        "unit": "1/Pa",
     },
     "KE": {
         "name": "KE",
         "derived": True,
         "prefix": "KE",
-        "component": ('POINTS', 'KE'),
+        "component": ("POINTS", "KE"),
         "preset": "Inferno (matplotlib)",
         "representation": "Volume",
-        "unit": "Pa"
-    }
+        "unit": "Pa",
+    },
 }
 
 # Default color ranges for each field
@@ -133,13 +134,14 @@ DEFAULT_COLOR_RANGES: Dict[str, List[float]] = {
     "TAWSS": [0, 50],
     "OSI": [0, 0.5],
     "RRT": [0, 10],
-    "Pressure": [0, 20]
+    "Pressure": [0, 20],
 }
 
 
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
+
 
 def get_all_points_from_multiblock(mb_dataset: vtk.vtkMultiBlockDataSet) -> Optional[np.ndarray]:
     """
@@ -194,11 +196,7 @@ def check_ffmpeg_available() -> bool:
         True if ffmpeg is available, False otherwise
     """
     try:
-        subprocess.run(
-            ['ffmpeg', '-version'],
-            capture_output=True,
-            check=True
-        )
+        subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False
@@ -207,6 +205,7 @@ def check_ffmpeg_available() -> bool:
 # =============================================================================
 # MAIN CLASS
 # =============================================================================
+
 
 class OpenFOAMParaView:
     """
@@ -237,11 +236,11 @@ class OpenFOAMParaView:
     def __init__(
         self,
         case_path: Union[str, Path],
-        case_type: str = 'auto',
+        case_type: str = "auto",
         time_steps: Optional[Union[str, List[float]]] = None,
         fields: Optional[List[str]] = None,
         rescale_settings: Optional[Dict[str, Dict[str, Any]]] = None,
-        resolution: Tuple[int, int] = (1600, 900)
+        resolution: Tuple[int, int] = (1600, 900),
     ) -> None:
         """
         Initialize OpenFOAM ParaView post-processor.
@@ -273,10 +272,10 @@ class OpenFOAMParaView:
             raise FileNotFoundError(f"Case directory not found: {self.case_path}")
 
         # Auto-detect case type
-        if case_type == 'auto':
+        if case_type == "auto":
             self.case_type = self._detect_case_type()
             self.logger.info(f"Auto-detected case type: {self.case_type}")
-        elif case_type in ('Reconstructed', 'Decomposed'):
+        elif case_type in ("Reconstructed", "Decomposed"):
             self.case_type = case_type
         else:
             raise ValueError(f"Invalid case_type: {case_type}. Use 'auto', 'Reconstructed', or 'Decomposed'")
@@ -307,15 +306,12 @@ class OpenFOAMParaView:
         self.logger = logging.getLogger("AortaCFD.PostProcessor")
         if not self.logger.handlers:
             handler = logging.StreamHandler()
-            handler.setFormatter(logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-            ))
+            handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
             self.logger.addHandler(handler)
             self.logger.setLevel(logging.INFO)
 
     def _build_rescale_settings(
-        self,
-        custom_settings: Optional[Dict[str, Dict[str, Any]]] = None
+        self, custom_settings: Optional[Dict[str, Dict[str, Any]]] = None
     ) -> Dict[str, Dict[str, Any]]:
         """
         Build rescale settings from defaults and custom overrides.
@@ -334,7 +330,7 @@ class OpenFOAMParaView:
             "TAWSS": {"rescaleToData": False, "rescaleRange": DEFAULT_COLOR_RANGES["TAWSS"]},
             "OSI": {"rescaleToData": False, "rescaleRange": DEFAULT_COLOR_RANGES["OSI"]},
             "RRT": {"rescaleToData": False, "rescaleRange": DEFAULT_COLOR_RANGES["RRT"]},
-            "Pressure": {"rescaleToData": True, "rescaleRange": DEFAULT_COLOR_RANGES["Pressure"]}
+            "Pressure": {"rescaleToData": True, "rescaleRange": DEFAULT_COLOR_RANGES["Pressure"]},
         }
 
         if custom_settings:
@@ -359,7 +355,7 @@ class OpenFOAMParaView:
             if os.path.isdir(item_path):
                 try:
                     float(item)
-                    if item != '0':
+                    if item != "0":
                         time_dirs.append(item)
                 except ValueError:
                     pass
@@ -367,11 +363,11 @@ class OpenFOAMParaView:
         has_time_dirs = len(time_dirs) > 0
 
         if has_time_dirs:
-            return 'Reconstructed'
+            return "Reconstructed"
         elif has_processors:
-            return 'Decomposed'
+            return "Decomposed"
         else:
-            return 'Reconstructed'
+            return "Reconstructed"
 
     def _setup_render_view(self) -> Tuple[Any, Any, Any]:
         """
@@ -384,9 +380,9 @@ class OpenFOAMParaView:
 
         foam_reader = OpenFOAMReader(FileName=self.foam_file)
         foam_reader.CaseType = self.case_type + " Case"
-        foam_reader.MeshRegions = ['internalMesh']
+        foam_reader.MeshRegions = ["internalMesh"]
 
-        render_view = CreateView('RenderView')
+        render_view = CreateView("RenderView")
         render_view.ViewSize = list(self.resolution)
 
         foam_display = Show(foam_reader, render_view)
@@ -395,11 +391,7 @@ class OpenFOAMParaView:
 
         return foam_reader, render_view, foam_display
 
-    def _configure_camera_pca(
-        self,
-        foam_reader: Any,
-        render_view: Any
-    ) -> None:
+    def _configure_camera_pca(self, foam_reader: Any, render_view: Any) -> None:
         """
         Configure camera using PCA-based orientation for optimal viewing angle.
 
@@ -416,7 +408,7 @@ class OpenFOAMParaView:
             data = servermanager.Fetch(foam_reader)
             pts = None
 
-            if hasattr(data, 'GetPoints') and data.GetPoints() is not None:
+            if hasattr(data, "GetPoints") and data.GetPoints() is not None:
                 pts = vtk_to_numpy(data.GetPoints().GetData())
             elif isinstance(data, vtk.vtkMultiBlockDataSet):
                 pts = get_all_points_from_multiblock(data)
@@ -499,23 +491,23 @@ class OpenFOAMParaView:
 
         # KE = 0.5 * rho * |U|^2
         calc_ke = Calculator(Input=source)
-        calc_ke.ResultArrayName = 'KE'
-        calc_ke.Function = f'0.5*{BLOOD_DENSITY}*(U_X^2 + U_Y^2 + U_Z^2)'
+        calc_ke.ResultArrayName = "KE"
+        calc_ke.Function = f"0.5*{BLOOD_DENSITY}*(U_X^2 + U_Y^2 + U_Z^2)"
 
         # WSS = rho * |wallShearStress|
         calc_wss = Calculator(Input=calc_ke)
-        calc_wss.ResultArrayName = 'WSS'
-        calc_wss.Function = f'{BLOOD_DENSITY}*mag(wallShearStress)'
+        calc_wss.ResultArrayName = "WSS"
+        calc_wss.Function = f"{BLOOD_DENSITY}*mag(wallShearStress)"
 
         # TAWSS from wallShearStressMean
         calc_tawss = Calculator(Input=calc_wss)
-        calc_tawss.ResultArrayName = 'TAWSS'
-        calc_tawss.Function = f'{BLOOD_DENSITY}*mag(wallShearStressMean)'
+        calc_tawss.ResultArrayName = "TAWSS"
+        calc_tawss.Function = f"{BLOOD_DENSITY}*mag(wallShearStressMean)"
 
         # Pressure in mmHg
         calc_p = Calculator(Input=calc_tawss)
-        calc_p.ResultArrayName = 'Pressure'
-        calc_p.Function = f'p*{BLOOD_DENSITY}/{1/PA_TO_MMHG:.2f}'
+        calc_p.ResultArrayName = "Pressure"
+        calc_p.Function = f"p*{BLOOD_DENSITY}/{1/PA_TO_MMHG:.2f}"
 
         return calc_p
 
@@ -530,28 +522,22 @@ class OpenFOAMParaView:
         for field in self.fields:
             if field in self.property_map:
                 prop = self.property_map[field]
-                rescale = self.rescale_settings.get(
-                    prop["name"],
-                    {"rescaleToData": True, "rescaleRange": [0, 1]}
+                rescale = self.rescale_settings.get(prop["name"], {"rescaleToData": True, "rescaleRange": [0, 1]})
+                properties.append(
+                    {
+                        "name": prop["name"],
+                        "component": prop["component"],
+                        "preset": prop["preset"],
+                        "representation": prop["representation"],
+                        "filePrefix": prop["prefix"],
+                        "unit": prop["unit"],
+                        "rescaleToData": rescale.get("rescaleToData", True),
+                        "rescaleRange": rescale.get("rescaleRange", [0, 1]),
+                    }
                 )
-                properties.append({
-                    "name": prop["name"],
-                    "component": prop["component"],
-                    "preset": prop["preset"],
-                    "representation": prop["representation"],
-                    "filePrefix": prop["prefix"],
-                    "unit": prop["unit"],
-                    "rescaleToData": rescale.get("rescaleToData", True),
-                    "rescaleRange": rescale.get("rescaleRange", [0, 1])
-                })
         return properties
 
-    def _prepare_time_steps(
-        self,
-        available_times: List[float],
-        foam_reader: Any,
-        render_view: Any
-    ) -> List[float]:
+    def _prepare_time_steps(self, available_times: List[float], foam_reader: Any, render_view: Any) -> List[float]:
         """
         Resolve time step selection to actual time values.
 
@@ -572,14 +558,14 @@ class OpenFOAMParaView:
                 self.logger.info("No time steps found, using 0.0")
                 return [0.0]
 
-        elif self.time_steps == 'last':
+        elif self.time_steps == "last":
             if available_times:
                 last_time = max(available_times)
                 self.logger.info(f"Using last time step: {last_time:.6f}")
                 return [last_time]
             return [0.0]
 
-        elif self.time_steps == 'peak':
+        elif self.time_steps == "peak":
             return self._find_peak_systole(available_times, foam_reader, render_view)
 
         elif isinstance(self.time_steps, (list, tuple)):
@@ -592,12 +578,7 @@ class OpenFOAMParaView:
                 return [max(available_times)]
             return [0.0]
 
-    def _find_peak_systole(
-        self,
-        available_times: List[float],
-        foam_reader: Any,
-        render_view: Any
-    ) -> List[float]:
+    def _find_peak_systole(self, available_times: List[float], foam_reader: Any, render_view: Any) -> List[float]:
         """
         Find the time step with maximum velocity (peak systole).
 
@@ -627,8 +608,8 @@ class OpenFOAMParaView:
 
             try:
                 data = servermanager.Fetch(foam_reader)
-                if hasattr(data, 'GetPointData'):
-                    u_array = data.GetPointData().GetArray('U')
+                if hasattr(data, "GetPointData"):
+                    u_array = data.GetPointData().GetArray("U")
                     if u_array:
                         u_data = vtk_to_numpy(u_array)
                         vel_mag = np.linalg.norm(u_data, axis=1).max()
@@ -642,11 +623,7 @@ class OpenFOAMParaView:
         return [peak_time]
 
     def _render_and_save(
-        self,
-        render_view: Any,
-        display: Any,
-        properties: List[Dict[str, Any]],
-        time_steps: List[float]
+        self, render_view: Any, display: Any, properties: List[Dict[str, Any]], time_steps: List[float]
     ) -> None:
         """
         Render and save screenshots for all time steps and properties.
@@ -697,28 +674,19 @@ class OpenFOAMParaView:
                 render_view.Update()
 
                 # Save screenshot
-                formatted_t = f"{t:.6f}".rstrip('0').rstrip('.')
-                screenshot_file = os.path.join(
-                    self.image_dir,
-                    f"{prop['filePrefix']}_{formatted_t}.png"
-                )
+                formatted_t = f"{t:.6f}".rstrip("0").rstrip(".")
+                screenshot_file = os.path.join(self.image_dir, f"{prop['filePrefix']}_{formatted_t}.png")
                 SaveScreenshot(
                     screenshot_file,
                     render_view,
                     ImageResolution=list(self.resolution),
-                    OverrideColorPalette='WhiteBackground',
-                    TransparentBackground=0
+                    OverrideColorPalette="WhiteBackground",
+                    TransparentBackground=0,
                 )
 
                 self.logger.debug(f"Saved: {screenshot_file}")
 
-    def _configure_scalar_bar(
-        self,
-        render_view: Any,
-        display: Any,
-        lut: Any,
-        prop: Dict[str, Any]
-    ) -> None:
+    def _configure_scalar_bar(self, render_view: Any, display: Any, lut: Any, prop: Dict[str, Any]) -> None:
         """
         Configure the scalar bar (color legend) appearance.
 
@@ -732,20 +700,20 @@ class OpenFOAMParaView:
         scalar_bar = GetScalarBar(lut, render_view)
 
         if scalar_bar:
-            scalar_bar.WindowLocation = 'Any Location'
+            scalar_bar.WindowLocation = "Any Location"
             scalar_bar.Position = [0.02, 0.25]
             scalar_bar.ScalarBarLength = 0.5
             scalar_bar.ScalarBarThickness = 16
-            scalar_bar.Orientation = 'Vertical'
+            scalar_bar.Orientation = "Vertical"
 
-            unit_str = f" ({prop['unit']})" if prop['unit'] else ""
+            unit_str = f" ({prop['unit']})" if prop["unit"] else ""
             scalar_bar.Title = f"{prop['name']}{unit_str}"
             scalar_bar.TitleBold = 1
             scalar_bar.TitleFontSize = 16
             scalar_bar.LabelBold = 1
             scalar_bar.LabelFontSize = 14
             scalar_bar.AddRangeLabels = 1
-            scalar_bar.RangeLabelFormat = '%.2f'
+            scalar_bar.RangeLabelFormat = "%.2f"
             scalar_bar.Visibility = 1
 
     def generate_screenshots(self) -> None:
@@ -835,19 +803,25 @@ class OpenFOAMParaView:
             # Run ffmpeg
             output_video = os.path.join(self.image_dir, f"{prefix}.avi")
             ffmpeg_cmd = [
-                "ffmpeg", "-y", "-f", "concat", "-safe", "0",
-                "-r", str(fps), "-i", list_file,
-                "-c:v", "mpeg4", "-q:v", "5", output_video
+                "ffmpeg",
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-r",
+                str(fps),
+                "-i",
+                list_file,
+                "-c:v",
+                "mpeg4",
+                "-q:v",
+                "5",
+                output_video,
             ]
 
             try:
-                subprocess.run(
-                    ffmpeg_cmd,
-                    check=True,
-                    cwd=self.image_dir,
-                    capture_output=True,
-                    text=True
-                )
+                subprocess.run(ffmpeg_cmd, check=True, cwd=self.image_dir, capture_output=True, text=True)
                 self.logger.info(f"Animation saved: {output_video}")
             except subprocess.CalledProcessError as e:
                 self.logger.error(f"ffmpeg failed for '{prefix}': {e.stderr}")
@@ -888,18 +862,18 @@ class OpenFOAMParaView:
                 }
             }
         """
-        custom_fields = config.get('visualization', {}).get('custom_fields', {})
+        custom_fields = config.get("visualization", {}).get("custom_fields", {})
 
         for name, props in custom_fields.items():
             self.property_map[name] = {
                 "name": props.get("name", name),
                 "derived": props.get("derived", True),
                 "prefix": props.get("name", name),
-                "component": ('POINTS', props.get("name", name)),
+                "component": ("POINTS", props.get("name", name)),
                 "preset": props.get("preset", "Rainbow Desaturated"),
                 "representation": props.get("representation", "Surface"),
                 "unit": props.get("unit", ""),
-                "formula": props.get("formula")
+                "formula": props.get("formula"),
             }
             self.logger.info(f"Loaded custom field: {name}")
 
@@ -908,13 +882,14 @@ class OpenFOAMParaView:
 # PYTHON API
 # =============================================================================
 
+
 def post_process(
     case_path: Union[str, Path],
     fields: Optional[List[str]] = None,
     time_steps: Optional[Union[str, List[float]]] = None,
     color_ranges: Optional[Dict[str, List[float]]] = None,
     create_animation: bool = False,
-    fps: int = 30
+    fps: int = 30,
 ) -> None:
     """
     Python API for post-processing OpenFOAM cases.
@@ -942,16 +917,10 @@ def post_process(
     if color_ranges:
         rescale_settings = {}
         for field, range_vals in color_ranges.items():
-            rescale_settings[field] = {
-                "rescaleToData": False,
-                "rescaleRange": range_vals
-            }
+            rescale_settings[field] = {"rescaleToData": False, "rescaleRange": range_vals}
 
     processor = OpenFOAMParaView(
-        case_path=case_path,
-        fields=fields,
-        time_steps=time_steps,
-        rescale_settings=rescale_settings
+        case_path=case_path, fields=fields, time_steps=time_steps, rescale_settings=rescale_settings
     )
 
     processor.generate_screenshots()
@@ -986,7 +955,7 @@ if __name__ == "__main__":
     else:
         case_path = os.getcwd()
 
-    print(f"[INFO] OpenFOAM Post-Processing with ParaView")
+    print("[INFO] OpenFOAM Post-Processing with ParaView")
     print(f"[INFO] Case path: {case_path}")
 
     # Validate case
@@ -994,7 +963,7 @@ if __name__ == "__main__":
         print(f"[ERROR] Case directory not found: {case_path}")
         sys.exit(1)
 
-    foam_files = [f for f in os.listdir(case_path) if f.endswith('.foam')]
+    foam_files = [f for f in os.listdir(case_path) if f.endswith(".foam")]
     if not foam_files:
         print(f"[ERROR] No .foam file found in {case_path}")
         sys.exit(1)
@@ -1012,7 +981,7 @@ if __name__ == "__main__":
 
     if os.path.exists(config_path):
         try:
-            with open(config_path, 'r') as f:
+            with open(config_path, "r") as f:
                 full_config = json.load(f)
             viz_config = full_config.get("visualization", {})
 
@@ -1023,13 +992,19 @@ if __name__ == "__main__":
             if color_ranges:
                 rescale_settings = {}
                 field_map = {
-                    "U": "U", "velocity": "U",
-                    "WSS": "WSS", "wss": "WSS",
-                    "TAWSS": "TAWSS", "tawss": "TAWSS",
-                    "OSI": "OSI", "osi": "OSI",
-                    "RRT": "RRT", "rrt": "RRT",
-                    "Pressure": "Pressure", "pressure": "Pressure",
-                    "KE": "KE"
+                    "U": "U",
+                    "velocity": "U",
+                    "WSS": "WSS",
+                    "wss": "WSS",
+                    "TAWSS": "TAWSS",
+                    "tawss": "TAWSS",
+                    "OSI": "OSI",
+                    "osi": "OSI",
+                    "RRT": "RRT",
+                    "rrt": "RRT",
+                    "Pressure": "Pressure",
+                    "pressure": "Pressure",
+                    "KE": "KE",
                 }
 
                 for field in ["U", "WSS", "TAWSS", "OSI", "RRT", "Pressure", "KE"]:
@@ -1043,7 +1018,10 @@ if __name__ == "__main__":
                         rescale_settings[field] = {"rescaleToData": False, "rescaleRange": user_range}
                         print(f"[INFO] {field}: fixed range {user_range}")
                     else:
-                        rescale_settings[field] = {"rescaleToData": True, "rescaleRange": DEFAULT_COLOR_RANGES.get(field, [0, 1])}
+                        rescale_settings[field] = {
+                            "rescaleToData": True,
+                            "rescaleRange": DEFAULT_COLOR_RANGES.get(field, [0, 1]),
+                        }
                         print(f"[INFO] {field}: auto-scale")
         except Exception as e:
             print(f"[WARNING] Could not load config: {e}")
@@ -1052,11 +1030,11 @@ if __name__ == "__main__":
     time_option = config_time_steps
     if time_option is None and len(sys.argv) > 2:
         time_arg = sys.argv[2].lower()
-        if time_arg == 'last':
-            time_option = 'last'
-        elif time_arg == 'peak':
-            time_option = 'peak'
-        elif time_arg == 'all':
+        if time_arg == "last":
+            time_option = "last"
+        elif time_arg == "peak":
+            time_option = "peak"
+        elif time_arg == "all":
             time_option = None
 
     fields_to_use = config_fields if config_fields else ["U", "p", "wallShearStress"]
@@ -1064,10 +1042,10 @@ if __name__ == "__main__":
     try:
         processor = OpenFOAMParaView(
             case_path=case_path,
-            case_type='auto',
+            case_type="auto",
             time_steps=time_option,
             fields=fields_to_use,
-            rescale_settings=rescale_settings
+            rescale_settings=rescale_settings,
         )
 
         print("[INFO] Generating visualizations...")
@@ -1089,5 +1067,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"[ERROR] Post-processing failed: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)

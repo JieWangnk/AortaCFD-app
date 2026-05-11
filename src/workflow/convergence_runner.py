@@ -19,11 +19,10 @@ References:
 """
 
 import json
-import shutil
 import subprocess
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Tuple
+from typing import Dict, List
 import sys
 
 # Add src to path
@@ -33,12 +32,10 @@ if src_path not in sys.path:
 
 from workflow.manager import WorkflowManager
 from aortacfd_lib.utils.logger import Logger
-from config.builder import ConfigBuilder, deep_merge
 
 
 class ConvergenceStudyError(Exception):
     """Raised when convergence study encounters an error."""
-    pass
 
 
 class MeshConvergenceRunner:
@@ -72,16 +69,16 @@ class MeshConvergenceRunner:
             raise ConvergenceStudyError(f"Config file not found: {base_config_path}")
 
         # Load base configuration
-        with open(self.base_config_path, 'r') as f:
+        with open(self.base_config_path, "r") as f:
             self.base_config = json.load(f)
 
         # Determine patient case directory (where STL files are located)
         # If config is in cases_input/patientX/config.json, use patientX
         # Otherwise use the patient_id from config
-        if 'cases_input' in str(self.base_config_path):
+        if "cases_input" in str(self.base_config_path):
             self.patient_case_dir = self.base_config_path.parent.name
         else:
-            self.patient_case_dir = self.base_config.get('case_info', {}).get('patient_id', 'unknown')
+            self.patient_case_dir = self.base_config.get("case_info", {}).get("patient_id", "unknown")
 
         self.logger.info(f"Patient case directory: cases_input/{self.patient_case_dir}")
 
@@ -89,30 +86,30 @@ class MeshConvergenceRunner:
         self._validate_config()
 
         # Setup directories
-        self.output_dir = Path('output') / 'mesh_convergence' / self._get_study_id()
+        self.output_dir = Path("output") / "mesh_convergence" / self._get_study_id()
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        self.logger.info(f"✨ Mesh Convergence Study initialized")
+        self.logger.info("✨ Mesh Convergence Study initialized")
         self.logger.info(f"📁 Output directory: {self.output_dir}")
 
     def _validate_config(self):
         """Validate that config is suitable for convergence study."""
         # Check for steady or quasi-steady setup
-        bc_inlet = self.base_config.get('boundary_conditions', {}).get('inlet', {})
-        inlet_type = bc_inlet.get('type', '').upper()
+        bc_inlet = self.base_config.get("boundary_conditions", {}).get("inlet", {})
+        inlet_type = bc_inlet.get("type", "").upper()
 
-        if inlet_type == 'TIMEVARYING':
+        if inlet_type == "TIMEVARYING":
             self.logger.warning(
                 "⚠️  Time-varying inlet detected. Convergence study will run multiple cycles.\n"
                 "   Consider using CONSTANT inlet for pure mesh convergence (steady state)."
             )
 
         # Warn if already specifies mesh resolution
-        if 'mesh' in self.base_config:
-            mesh_cfg = self.base_config['mesh']
-            has_resolution = any(key in mesh_cfg for key in [
-                'cells_per_diameter', 'target_cell_size_mm', 'resolution_level'
-            ])
+        if "mesh" in self.base_config:
+            mesh_cfg = self.base_config["mesh"]
+            has_resolution = any(
+                key in mesh_cfg for key in ["cells_per_diameter", "target_cell_size_mm", "resolution_level"]
+            )
             if has_resolution:
                 self.logger.warning(
                     "⚠️  Mesh resolution specified in base config will be OVERRIDDEN\n"
@@ -121,14 +118,13 @@ class MeshConvergenceRunner:
 
     def _get_study_id(self) -> str:
         """Generate unique study identifier."""
-        patient_id = self.base_config.get('case_info', {}).get('patient_id', 'unknown')
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        patient_id = self.base_config.get("case_info", {}).get("patient_id", "unknown")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         return f"{patient_id}_{timestamp}"
 
-    def run_convergence_study(self,
-                             refinement_ratio: float = 1.414,  # sqrt(2)
-                             base_cells_per_diameter: int = 10,
-                             steady_state: bool = True) -> Dict:
+    def run_convergence_study(
+        self, refinement_ratio: float = 1.414, base_cells_per_diameter: int = 10, steady_state: bool = True  # sqrt(2)
+    ) -> Dict:
         """
         Execute complete mesh convergence study.
 
@@ -149,11 +145,7 @@ class MeshConvergenceRunner:
         self.logger.info("")
 
         # Step 1: Generate three mesh configurations
-        mesh_configs = self._generate_mesh_configs(
-            base_cells_per_diameter,
-            refinement_ratio,
-            steady_state
-        )
+        mesh_configs = self._generate_mesh_configs(base_cells_per_diameter, refinement_ratio, steady_state)
 
         # Step 2: Run simulations sequentially with solution mapping
         simulation_results = self._run_sequential_simulations(mesh_configs)
@@ -162,17 +154,11 @@ class MeshConvergenceRunner:
         quantities = self._extract_quantities_of_interest(simulation_results)
 
         # Step 4: Compute convergence metrics (Richardson, GCI)
-        convergence_metrics = self._compute_convergence_metrics(
-            quantities,
-            refinement_ratio
-        )
+        convergence_metrics = self._compute_convergence_metrics(quantities, refinement_ratio)
 
         # Step 5: Generate convergence report
         report_path = self._generate_convergence_report(
-            mesh_configs,
-            simulation_results,
-            quantities,
-            convergence_metrics
+            mesh_configs, simulation_results, quantities, convergence_metrics
         )
 
         self.logger.info("=" * 70)
@@ -181,17 +167,14 @@ class MeshConvergenceRunner:
         self.logger.info("=" * 70)
 
         return {
-            'study_dir': str(self.output_dir),
-            'report': str(report_path),
-            'mesh_configs': mesh_configs,
-            'quantities': quantities,
-            'convergence_metrics': convergence_metrics
+            "study_dir": str(self.output_dir),
+            "report": str(report_path),
+            "mesh_configs": mesh_configs,
+            "quantities": quantities,
+            "convergence_metrics": convergence_metrics,
         }
 
-    def _generate_mesh_configs(self,
-                              base_cpd: int,
-                              ratio: float,
-                              steady_state: bool) -> List[Dict]:
+    def _generate_mesh_configs(self, base_cpd: int, ratio: float, steady_state: bool) -> List[Dict]:
         """
         Generate three mesh configurations with systematic refinement.
 
@@ -205,9 +188,9 @@ class MeshConvergenceRunner:
         cpd_fine = round(base_cpd * ratio * ratio)
 
         mesh_levels = [
-            {'name': 'coarse', 'cpd': cpd_coarse, 'label': 'Mesh 3 (Coarse)'},
-            {'name': 'medium', 'cpd': cpd_medium, 'label': 'Mesh 2 (Medium)'},
-            {'name': 'fine', 'cpd': cpd_fine, 'label': 'Mesh 1 (Fine)'}
+            {"name": "coarse", "cpd": cpd_coarse, "label": "Mesh 3 (Coarse)"},
+            {"name": "medium", "cpd": cpd_medium, "label": "Mesh 2 (Medium)"},
+            {"name": "fine", "cpd": cpd_fine, "label": "Mesh 1 (Fine)"},
         ]
 
         configs = []
@@ -215,35 +198,35 @@ class MeshConvergenceRunner:
             config = self.base_config.copy()
 
             # Ensure geometry section exists (required by workflow tasks)
-            if 'geometry' not in config:
-                config['geometry'] = {}
+            if "geometry" not in config:
+                config["geometry"] = {}
 
             # Set case_name to point to actual patient directory with STL files
-            config['geometry']['case_name'] = self.patient_case_dir
+            config["geometry"]["case_name"] = self.patient_case_dir
 
             # Set defaults for other geometry fields if not present
-            config['geometry'].setdefault('scale_factor', 0.001)
-            config['geometry'].setdefault('rotation', False)
-            config['geometry'].setdefault('inlet_keywords_ordered', 'inlet')
-            config['geometry'].setdefault('outlet_keywords_ordered', ['outlet1', 'outlet2', 'outlet3', 'outlet4'])
-            config['geometry'].setdefault('wall_keywords_ordered', 'wall_aorta')
+            config["geometry"].setdefault("scale_factor", 0.001)
+            config["geometry"].setdefault("rotation", False)
+            config["geometry"].setdefault("inlet_keywords_ordered", "inlet")
+            config["geometry"].setdefault("outlet_keywords_ordered", ["outlet1", "outlet2", "outlet3", "outlet4"])
+            config["geometry"].setdefault("wall_keywords_ordered", "wall_aorta")
 
             # Override mesh resolution
-            if 'mesh' not in config:
-                config['mesh'] = {}
-            config['mesh']['cells_per_diameter'] = level['cpd']
+            if "mesh" not in config:
+                config["mesh"] = {}
+            config["mesh"]["cells_per_diameter"] = level["cpd"]
 
             # Ensure SNAPPY_SETTINGS exists with defaults
-            if 'SNAPPY_SETTINGS' not in config['mesh']:
-                config['mesh']['SNAPPY_SETTINGS'] = {
-                    'parallel': config.get('computational', {}).get('parallel', True),
-                    'nProcessors': config.get('computational', {}).get('max_processors', 4),
-                    'addLayers': True,
-                    'addLayer': 2,
-                    'expansionRatio': 1.2,
-                    'finalLayerThickness': 0.3,
-                    'minThickness': 0.1,
-                    'relativeSizes': True
+            if "SNAPPY_SETTINGS" not in config["mesh"]:
+                config["mesh"]["SNAPPY_SETTINGS"] = {
+                    "parallel": config.get("computational", {}).get("parallel", True),
+                    "nProcessors": config.get("computational", {}).get("max_processors", 4),
+                    "addLayers": True,
+                    "addLayer": 2,
+                    "expansionRatio": 1.2,
+                    "finalLayerThickness": 0.3,
+                    "minThickness": 0.1,
+                    "relativeSizes": True,
                 }
 
             # Set steady-state BC if requested
@@ -254,23 +237,25 @@ class MeshConvergenceRunner:
             config = self._apply_convergence_numerics(config)
 
             # Create output directory for this mesh
-            mesh_dir = self.output_dir / level['name']
+            mesh_dir = self.output_dir / level["name"]
             mesh_dir.mkdir(exist_ok=True)
 
             # Save config
-            config_file = mesh_dir / 'config.json'
-            with open(config_file, 'w') as f:
+            config_file = mesh_dir / "config.json"
+            with open(config_file, "w") as f:
                 json.dump(config, f, indent=2)
 
-            configs.append({
-                'level': level['name'],
-                'cpd': level['cpd'],
-                'label': level['label'],
-                'config': config,
-                'config_file': str(config_file),
-                'output_dir': str(mesh_dir),
-                'case_dir': str(mesh_dir / 'openfoam')
-            })
+            configs.append(
+                {
+                    "level": level["name"],
+                    "cpd": level["cpd"],
+                    "label": level["label"],
+                    "config": config,
+                    "config_file": str(config_file),
+                    "output_dir": str(mesh_dir),
+                    "case_dir": str(mesh_dir / "openfoam"),
+                }
+            )
 
             self.logger.info(f"✓ {level['label']}: {level['cpd']} cells/diameter → {mesh_dir}")
 
@@ -291,26 +276,26 @@ class MeshConvergenceRunner:
         - Outlets: Fixed pressure (simplest for convergence)
         """
         # Compute mean flow rate if time-varying inlet exists (case-insensitive)
-        inlet_bc = config['boundary_conditions']['inlet']
-        if inlet_bc.get('type', '').upper() == 'TIMEVARYING':
+        inlet_bc = config["boundary_conditions"]["inlet"]
+        if inlet_bc.get("type", "").upper() == "TIMEVARYING":
             self.logger.info("⚙️  Converting time-varying inlet → CONSTANT (steady state)")
 
             # Use cardiac output to estimate mean flow
-            co = config.get('case_info', {}).get('cardiac_output', 5.0)  # L/min
+            co = config.get("case_info", {}).get("cardiac_output", 5.0)  # L/min
             mean_flow = co / 60.0 / 1000.0  # Convert to m³/s
 
-            config['boundary_conditions']['inlet'] = {
-                'type': 'CONSTANT',
-                'flow_rate': mean_flow,
-                'profile': 'plug',
-                '_convergence_study': True
+            config["boundary_conditions"]["inlet"] = {
+                "type": "CONSTANT",
+                "flow_rate": mean_flow,
+                "profile": "plug",
+                "_convergence_study": True,
             }
 
         # Use fixed pressure outlets for simplicity
-        config['boundary_conditions']['outlets'] = {
-            'type': 'FIXEDPRESSURE',
-            'pressure': 80,  # mmHg (typical diastolic)
-            '_convergence_study': True
+        config["boundary_conditions"]["outlets"] = {
+            "type": "FIXEDPRESSURE",
+            "pressure": 80,  # mmHg (typical diastolic)
+            "_convergence_study": True,
         }
 
         self.logger.info("⚙️  Using FIXEDPRESSURE outlets for mesh convergence")
@@ -323,18 +308,18 @@ class MeshConvergenceRunner:
 
         Uses 'accurate' profile with second-order schemes for all meshes.
         """
-        if 'numerics' not in config:
-            config['numerics'] = {}
+        if "numerics" not in config:
+            config["numerics"] = {}
 
-        config['numerics']['profile'] = 'accurate'
-        config['numerics']['_convergence_study'] = True
+        config["numerics"]["profile"] = "accurate"
+        config["numerics"]["_convergence_study"] = True
 
         # Increase simulation time for convergence
-        if 'simulation_control' not in config:
-            config['simulation_control'] = {}
+        if "simulation_control" not in config:
+            config["simulation_control"] = {}
 
         # For steady cases, run longer to ensure convergence
-        config['simulation_control']['number_of_cycles'] = 10
+        config["simulation_control"]["number_of_cycles"] = 10
 
         return config
 
@@ -348,21 +333,21 @@ class MeshConvergenceRunner:
         previous_case_dir = None
 
         for i, mesh_cfg in enumerate(mesh_configs):
-            level = mesh_cfg['level']
+            level = mesh_cfg["level"]
             self.logger.info("")
             self.logger.info("=" * 70)
             self.logger.info(f"RUNNING {mesh_cfg['label'].upper()}")
             self.logger.info("=" * 70)
 
             # Run simulation
-            case_dir = Path(mesh_cfg['case_dir'])
+            case_dir = Path(mesh_cfg["case_dir"])
             case_dir.mkdir(parents=True, exist_ok=True)
 
             # Setup simulation using WorkflowManager
             sim_config = {
-                'config': mesh_cfg['config'],
-                'run_dir': Path(mesh_cfg['output_dir']),
-                'case_dir': str(case_dir)
+                "config": mesh_cfg["config"],
+                "run_dir": Path(mesh_cfg["output_dir"]),
+                "case_dir": str(case_dir),
             }
 
             # Run full workflow (mesh + solve)
@@ -374,15 +359,11 @@ class MeshConvergenceRunner:
                 self._map_fields(previous_case_dir, case_dir)
 
                 # Re-run solver with mapped initial condition
-                self.logger.info(f"♻️  Continuing simulation with mapped initial condition")
+                self.logger.info("♻️  Continuing simulation with mapped initial condition")
                 self._run_solver_only(sim_config)
 
             # Store results
-            results.append({
-                'level': level,
-                'case_dir': str(case_dir),
-                'success': True
-            })
+            results.append({"level": level, "case_dir": str(case_dir), "success": True})
 
             previous_case_dir = case_dir
 
@@ -392,16 +373,17 @@ class MeshConvergenceRunner:
         """Run complete simulation workflow."""
         try:
             self.logger.info(f"🚀 Starting workflow: {sim_config['case_dir']}")
-            manager = WorkflowManager(sim_config['config'])
-            manager.context['case_directory'] = sim_config['case_dir']
-            manager.context['patient_name'] = sim_config['config'].get('case_info', {}).get('patient_id', 'convergence')
+            manager = WorkflowManager(sim_config["config"])
+            manager.context["case_directory"] = sim_config["case_dir"]
+            manager.context["patient_name"] = sim_config["config"].get("case_info", {}).get("patient_id", "convergence")
 
             self.logger.info("   Running workflow: runAll")
-            manager.run_workflow('runAll')
+            manager.run_workflow("runAll")
             self.logger.info("   ✓ Workflow completed successfully")
         except Exception as e:
             self.logger.error(f"❌ Simulation failed: {e}")
             import traceback
+
             traceback.print_exc()
             raise ConvergenceStudyError(f"Simulation failed: {e}")
 
@@ -409,15 +391,16 @@ class MeshConvergenceRunner:
         """Run solver only (for mapped cases)."""
         try:
             self.logger.info(f"🔄 Continuing solver: {sim_config['case_dir']}")
-            manager = WorkflowManager(sim_config['config'])
-            manager.context['case_directory'] = sim_config['case_dir']
-            manager.context['patient_name'] = sim_config['config'].get('case_info', {}).get('patient_id', 'convergence')
+            manager = WorkflowManager(sim_config["config"])
+            manager.context["case_directory"] = sim_config["case_dir"]
+            manager.context["patient_name"] = sim_config["config"].get("case_info", {}).get("patient_id", "convergence")
 
-            manager.run_workflow('run:solver')
+            manager.run_workflow("run:solver")
             self.logger.info("   ✓ Solver completed")
         except Exception as e:
             self.logger.error(f"❌ Solver failed: {e}")
             import traceback
+
             traceback.print_exc()
             raise ConvergenceStudyError(f"Solver failed: {e}")
 
@@ -439,21 +422,10 @@ class MeshConvergenceRunner:
         self.logger.info(f"   Target: {target_case}")
 
         # Run mapFields
-        cmd = [
-            'mapFields',
-            str(source_case),
-            '-sourceTime', str(latest_time),
-            '-consistent',
-            '-case', str(target_case)
-        ]
+        cmd = ["mapFields", str(source_case), "-sourceTime", str(latest_time), "-consistent", "-case", str(target_case)]
 
         try:
-            result = subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True
-            )
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
             self.logger.info("   ✓ mapFields completed successfully")
         except subprocess.CalledProcessError as e:
             self.logger.error(f"mapFields failed: {e.stderr}")
@@ -484,19 +456,19 @@ class MeshConvergenceRunner:
         quantities = {}
 
         for result in simulation_results:
-            level = result['level']
-            case_dir = Path(result['case_dir'])
+            level = result["level"]
+            case_dir = Path(result["case_dir"])
 
             self.logger.info(f"📊 Extracting quantities: {level}")
 
             # Use OpenFOAM postProcess utilities
             qoi = {
-                'pressure_drop': self._compute_pressure_drop(case_dir),
-                'avg_velocity': self._compute_avg_velocity(case_dir),
-                'avg_wss': self._compute_avg_wss(case_dir),
-                'peak_wss': self._compute_peak_wss(case_dir),
-                'cell_count': self._get_cell_count(case_dir),
-                'h_representative': self._compute_representative_h(case_dir)
+                "pressure_drop": self._compute_pressure_drop(case_dir),
+                "avg_velocity": self._compute_avg_velocity(case_dir),
+                "avg_wss": self._compute_avg_wss(case_dir),
+                "peak_wss": self._compute_peak_wss(case_dir),
+                "cell_count": self._get_cell_count(case_dir),
+                "h_representative": self._compute_representative_h(case_dir),
             }
 
             quantities[level] = qoi
@@ -512,8 +484,8 @@ class MeshConvergenceRunner:
         """Read area-averaged pressure time series from postProcessing."""
         # Try common naming patterns: patchPressure, {patch}Pressure
         candidates = [
-            case_dir / 'postProcessing' / f'{patch_name}Pressure' / '0' / 'surfaceFieldValue.dat',
-            case_dir / 'postProcessing' / f'{patch_name}' / '0' / 'surfaceFieldValue.dat',
+            case_dir / "postProcessing" / f"{patch_name}Pressure" / "0" / "surfaceFieldValue.dat",
+            case_dir / "postProcessing" / f"{patch_name}" / "0" / "surfaceFieldValue.dat",
         ]
         for dat_path in candidates:
             if dat_path.exists():
@@ -521,7 +493,7 @@ class MeshConvergenceRunner:
                 with open(dat_path) as f:
                     for line in f:
                         line = line.strip()
-                        if line.startswith('#') or not line:
+                        if line.startswith("#") or not line:
                             continue
                         parts = line.split()
                         times.append(float(parts[0]))
@@ -531,15 +503,15 @@ class MeshConvergenceRunner:
 
     def _find_outlet_patches(self, case_dir: Path) -> list:
         """Find all outlet patch names from postProcessing directories."""
-        pp = case_dir / 'postProcessing'
+        pp = case_dir / "postProcessing"
         if not pp.exists():
             return []
         outlets = []
         for d in sorted(pp.iterdir()):
             name = d.name
-            if 'outlet' in name.lower() and 'pressure' in name.lower():
+            if "outlet" in name.lower() and "pressure" in name.lower():
                 # Extract patch name: "outlet1Pressure" → "outlet1", "PAT003outlet1Pressure" → "PAT003outlet1"
-                patch = name.replace('Pressure', '')
+                patch = name.replace("Pressure", "")
                 outlets.append(patch)
         return outlets
 
@@ -552,7 +524,7 @@ class MeshConvergenceRunner:
         """
         try:
             # Find inlet patch name
-            pp = case_dir / 'postProcessing'
+            pp = case_dir / "postProcessing"
             if not pp.exists():
                 self.logger.warning(f"No postProcessing directory in {case_dir}")
                 return 0.0
@@ -560,8 +532,8 @@ class MeshConvergenceRunner:
             # Find inlet
             inlet_patch = None
             for d in pp.iterdir():
-                if 'inlet' in d.name.lower() and 'pressure' in d.name.lower():
-                    inlet_patch = d.name.replace('Pressure', '')
+                if "inlet" in d.name.lower() and "pressure" in d.name.lower():
+                    inlet_patch = d.name.replace("Pressure", "")
                     break
 
             if not inlet_patch:
@@ -587,7 +559,9 @@ class MeshConvergenceRunner:
 
             # Find peak inlet pressure in final cycle
             max_t = max(t for t, _ in inlet_data)
-            cycle_period = self.config.get('cardiac_cycle', self.config.get('simulation_control', {}).get('cardiac_cycle_period', 1.0))
+            cycle_period = self.config.get(
+                "cardiac_cycle", self.config.get("simulation_control", {}).get("cardiac_cycle_period", 1.0)
+            )
             cycle_start = max_t - cycle_period
 
             final_cycle = [(t, p) for t, p in inlet_data if t >= cycle_start]
@@ -601,7 +575,9 @@ class MeshConvergenceRunner:
             p_outlet = closest_outlet[1]
 
             delta_p = p_peak_inlet - p_outlet
-            self.logger.info(f"  ΔP at t={t_peak:.4f}: inlet={p_peak_inlet:.4f} - {desc_aorta}={p_outlet:.4f} = {delta_p:.4f} m²/s²")
+            self.logger.info(
+                f"  ΔP at t={t_peak:.4f}: inlet={p_peak_inlet:.4f} - {desc_aorta}={p_outlet:.4f} = {delta_p:.4f} m²/s²"
+            )
             return delta_p
 
         except Exception as e:
@@ -616,34 +592,34 @@ class MeshConvergenceRunner:
         """
         try:
             # Try patchFlowRate postProcessing
-            pp = case_dir / 'postProcessing'
+            pp = case_dir / "postProcessing"
             if pp.exists():
                 for d in pp.iterdir():
-                    if 'inlet' in d.name.lower() and 'flow' in d.name.lower():
-                        dat = d / '0' / 'surfaceFieldValue.dat'
+                    if "inlet" in d.name.lower() and "flow" in d.name.lower():
+                        dat = d / "0" / "surfaceFieldValue.dat"
                         if dat.exists():
                             data = []
                             with open(dat) as f:
                                 for line in f:
                                     line = line.strip()
-                                    if line.startswith('#') or not line:
+                                    if line.startswith("#") or not line:
                                         continue
                                     parts = line.split()
                                     data.append((float(parts[0]), abs(float(parts[1]))))
                             if data:
                                 # Get inlet area from pressure postProcessing header
-                                inlet_area = self._get_patch_area(case_dir, 'inlet')
+                                inlet_area = self._get_patch_area(case_dir, "inlet")
                                 peak_q = max(v for _, v in data)
                                 if inlet_area > 0:
                                     return peak_q / inlet_area
                                 return peak_q / 1e-4  # rough fallback
 
             # Fallback: read boundaryData velocity
-            bd = case_dir / 'constant' / 'boundaryData'
+            bd = case_dir / "constant" / "boundaryData"
             if bd.exists():
                 for inlet_dir in bd.iterdir():
-                    if 'inlet' in inlet_dir.name.lower():
-                        pts_file = inlet_dir / 'points'
+                    if "inlet" in inlet_dir.name.lower():
+                        pts_file = inlet_dir / "points"
                         if not pts_file.exists():
                             continue
                         with open(pts_file) as f:
@@ -652,21 +628,23 @@ class MeshConvergenceRunner:
                         best_u = 0.0
                         time_dirs = sorted(
                             [d for d in inlet_dir.iterdir() if d.is_dir() and d.name[0].isdigit()],
-                            key=lambda x: float(x.name)
+                            key=lambda x: float(x.name),
                         )
                         for td in time_dirs[:50]:  # sample first 50 time steps
-                            u_file = td / 'U'
+                            u_file = td / "U"
                             if not u_file.exists():
                                 continue
                             vels = []
                             with open(u_file) as f:
                                 for line in f:
-                                    line = line.strip().strip('()')
-                                    if line and line[0] in '(-0123456789':
+                                    line = line.strip().strip("()")
+                                    if line and line[0] in "(-0123456789":
                                         parts = line.split()
                                         if len(parts) == 3:
                                             try:
-                                                mag = (float(parts[0])**2 + float(parts[1])**2 + float(parts[2])**2)**0.5
+                                                mag = (
+                                                    float(parts[0]) ** 2 + float(parts[1]) ** 2 + float(parts[2]) ** 2
+                                                ) ** 0.5
                                                 vels.append(mag)
                                             except ValueError:
                                                 pass
@@ -682,17 +660,17 @@ class MeshConvergenceRunner:
 
     def _get_patch_area(self, case_dir: Path, patch_keyword: str) -> float:
         """Extract patch area from postProcessing surfaceFieldValue header."""
-        pp = case_dir / 'postProcessing'
+        pp = case_dir / "postProcessing"
         if not pp.exists():
             return 0.0
         for d in pp.iterdir():
-            if patch_keyword in d.name.lower() and 'pressure' in d.name.lower():
-                dat = d / '0' / 'surfaceFieldValue.dat'
+            if patch_keyword in d.name.lower() and "pressure" in d.name.lower():
+                dat = d / "0" / "surfaceFieldValue.dat"
                 if dat.exists():
                     with open(dat) as f:
                         for line in f:
-                            if 'Area' in line:
-                                return float(line.split(':')[-1].strip())
+                            if "Area" in line:
+                                return float(line.split(":")[-1].strip())
         return 0.0
 
     def _compute_avg_wss(self, case_dir: Path) -> float:
@@ -706,7 +684,7 @@ class MeshConvergenceRunner:
                 return 0.0
 
             latest_time = max(times)
-            wss_file = case_dir / str(latest_time) / 'wallShearStress'
+            wss_file = case_dir / str(latest_time) / "wallShearStress"
 
             if not wss_file.exists():
                 self.logger.warning(f"wallShearStress field not found at t={latest_time}")
@@ -714,19 +692,20 @@ class MeshConvergenceRunner:
 
             # Parse wallShearStress vector field on wall patch
             import re
-            with open(wss_file, 'rb') as f:
-                content = f.read().decode('ascii', errors='ignore')
+
+            with open(wss_file, "rb") as f:
+                content = f.read().decode("ascii", errors="ignore")
 
             # Find wall patch data (look for the wall boundary)
-            wall_patterns = ['wall_aorta', 'wall']
+            wall_patterns = ["wall_aorta", "wall"]
             for wall_name in wall_patterns:
                 idx = content.find(wall_name)
                 if idx >= 0:
                     # Extract vectors after this patch
-                    block = content[idx:idx+50000]
-                    vectors = re.findall(r'\(\s*([-\d.e]+)\s+([-\d.e]+)\s+([-\d.e]+)\s*\)', block)
+                    block = content[idx : idx + 50000]
+                    vectors = re.findall(r"\(\s*([-\d.e]+)\s+([-\d.e]+)\s+([-\d.e]+)\s*\)", block)
                     if vectors:
-                        mags = [(float(x)**2 + float(y)**2 + float(z)**2)**0.5 for x, y, z in vectors]
+                        mags = [(float(x) ** 2 + float(y) ** 2 + float(z) ** 2) ** 0.5 for x, y, z in vectors]
                         avg = sum(mags) / len(mags)
                         self.logger.info(f"  WSS from {len(mags)} wall faces: avg={avg:.4f} Pa")
                         return avg
@@ -746,23 +725,24 @@ class MeshConvergenceRunner:
                 return 0.0
 
             latest_time = max(times)
-            wss_file = case_dir / str(latest_time) / 'wallShearStress'
+            wss_file = case_dir / str(latest_time) / "wallShearStress"
 
             if not wss_file.exists():
                 return 0.0
 
             import re
-            with open(wss_file, 'rb') as f:
-                content = f.read().decode('ascii', errors='ignore')
 
-            wall_patterns = ['wall_aorta', 'wall']
+            with open(wss_file, "rb") as f:
+                content = f.read().decode("ascii", errors="ignore")
+
+            wall_patterns = ["wall_aorta", "wall"]
             for wall_name in wall_patterns:
                 idx = content.find(wall_name)
                 if idx >= 0:
-                    block = content[idx:idx+50000]
-                    vectors = re.findall(r'\(\s*([-\d.e]+)\s+([-\d.e]+)\s+([-\d.e]+)\s*\)', block)
+                    block = content[idx : idx + 50000]
+                    vectors = re.findall(r"\(\s*([-\d.e]+)\s+([-\d.e]+)\s+([-\d.e]+)\s*\)", block)
                     if vectors:
-                        mags = sorted([(float(x)**2 + float(y)**2 + float(z)**2)**0.5 for x, y, z in vectors])
+                        mags = sorted([(float(x) ** 2 + float(y) ** 2 + float(z) ** 2) ** 0.5 for x, y, z in vectors])
                         p99_idx = int(0.99 * len(mags))
                         return mags[p99_idx]
             return 0.0
@@ -775,22 +755,24 @@ class MeshConvergenceRunner:
         """Get total cell count from polyMesh/owner or checkMesh log."""
         try:
             # Primary: read from polyMesh/owner header
-            owner = case_dir / 'constant' / 'polyMesh' / 'owner'
+            owner = case_dir / "constant" / "polyMesh" / "owner"
             if owner.exists():
                 import re
-                with open(owner, 'rb') as f:
-                    header = f.read(2000).decode('ascii', errors='ignore')
-                match = re.search(r'nCells:(\d+)', header)
+
+                with open(owner, "rb") as f:
+                    header = f.read(2000).decode("ascii", errors="ignore")
+                match = re.search(r"nCells:(\d+)", header)
                 if match:
                     return int(match.group(1))
 
             # Fallback: checkMesh log
-            for log_path in [case_dir / 'logs' / 'log.checkMesh', case_dir / 'log.checkMesh']:
+            for log_path in [case_dir / "logs" / "log.checkMesh", case_dir / "log.checkMesh"]:
                 if log_path.exists():
                     import re
+
                     with open(log_path) as f:
                         content = f.read()
-                    match = re.search(r'cells:\s+(\d+)', content)
+                    match = re.search(r"cells:\s+(\d+)", content)
                     if match:
                         return int(match.group(1))
 
@@ -805,24 +787,25 @@ class MeshConvergenceRunner:
         Compute representative cell spacing h = (V_total / N_cells)^(1/3)
         """
         try:
-            log_file = case_dir / 'logs' / 'log.checkMesh'
+            log_file = case_dir / "logs" / "log.checkMesh"
             if not log_file.exists():
                 # Fallback to old location for compatibility
-                log_file = case_dir / 'log.checkMesh'
+                log_file = case_dir / "log.checkMesh"
 
             if log_file.exists():
-                with open(log_file, 'r') as f:
+                with open(log_file, "r") as f:
                     content = f.read()
 
                 import re
+
                 # Extract total volume and cell count
-                vol_match = re.search(r'Volume:\s+([\d.e+-]+)', content)
-                cells_match = re.search(r'cells:\s+(\d+)', content)
+                vol_match = re.search(r"Volume:\s+([\d.e+-]+)", content)
+                cells_match = re.search(r"cells:\s+(\d+)", content)
 
                 if vol_match and cells_match:
                     volume = float(vol_match.group(1))
                     cells = int(cells_match.group(1))
-                    h = (volume / cells) ** (1/3)
+                    h = (volume / cells) ** (1 / 3)
                     return h
 
             # Fallback
@@ -832,9 +815,7 @@ class MeshConvergenceRunner:
             self.logger.error(f"Error computing h: {e}")
             return 0.001
 
-    def _compute_convergence_metrics(self,
-                                    quantities: Dict,
-                                    refinement_ratio: float) -> Dict:
+    def _compute_convergence_metrics(self, quantities: Dict, refinement_ratio: float) -> Dict:
         """
         Compute Richardson extrapolation and GCI for all quantities.
 
@@ -848,10 +829,10 @@ class MeshConvergenceRunner:
         metrics = {}
 
         # Extract values for each quantity
-        for qty_name in ['pressure_drop', 'avg_velocity', 'avg_wss', 'peak_wss']:
-            phi_3 = quantities['coarse'][qty_name]  # Coarse
-            phi_2 = quantities['medium'][qty_name]  # Medium
-            phi_1 = quantities['fine'][qty_name]    # Fine
+        for qty_name in ["pressure_drop", "avg_velocity", "avg_wss", "peak_wss"]:
+            phi_3 = quantities["coarse"][qty_name]  # Coarse
+            phi_2 = quantities["medium"][qty_name]  # Medium
+            phi_1 = quantities["fine"][qty_name]  # Fine
 
             # Compute convergence metrics
             conv = self._richardson_extrapolation(phi_3, phi_2, phi_1, refinement_ratio)
@@ -870,11 +851,7 @@ class MeshConvergenceRunner:
 
         return metrics
 
-    def _richardson_extrapolation(self,
-                                 phi_3: float,
-                                 phi_2: float,
-                                 phi_1: float,
-                                 r: float) -> Dict:
+    def _richardson_extrapolation(self, phi_3: float, phi_2: float, phi_1: float, r: float) -> Dict:
         """
         Perform Richardson extrapolation and compute GCI.
 
@@ -895,17 +872,18 @@ class MeshConvergenceRunner:
         if abs(epsilon_21) < 1e-10:
             # Nearly converged
             return {
-                'observed_order': float('inf'),
-                'phi_exact': phi_1,
-                'gci_fine': 0.0,
-                'gci_medium': 0.0,
-                'convergence_status': 'converged'
+                "observed_order": float("inf"),
+                "phi_exact": phi_1,
+                "gci_fine": 0.0,
+                "gci_medium": 0.0,
+                "convergence_status": "converged",
             }
 
         R = epsilon_32 / epsilon_21
 
         # Observed order of accuracy (solve: R = r^p)
         import math
+
         p = math.log(abs(R)) / math.log(r)
 
         # Richardson extrapolated value
@@ -919,28 +897,26 @@ class MeshConvergenceRunner:
 
         # Determine convergence status
         if 0 < R < 1:
-            status = 'monotonic_convergence'
+            status = "monotonic_convergence"
         elif R < 0:
-            status = 'oscillatory_convergence'
+            status = "oscillatory_convergence"
         elif R > 1:
-            status = 'divergence'
+            status = "divergence"
         else:
-            status = 'unknown'
+            status = "unknown"
 
         return {
-            'observed_order': p,
-            'phi_exact': phi_exact,
-            'gci_fine': gci_fine,
-            'gci_medium': gci_medium,
-            'convergence_ratio': R,
-            'convergence_status': status
+            "observed_order": p,
+            "phi_exact": phi_exact,
+            "gci_fine": gci_fine,
+            "gci_medium": gci_medium,
+            "convergence_ratio": R,
+            "convergence_status": status,
         }
 
-    def _generate_convergence_report(self,
-                                    mesh_configs: List[Dict],
-                                    simulation_results: List[Dict],
-                                    quantities: Dict,
-                                    convergence_metrics: Dict) -> Path:
+    def _generate_convergence_report(
+        self, mesh_configs: List[Dict], simulation_results: List[Dict], quantities: Dict, convergence_metrics: Dict
+    ) -> Path:
         """
         Generate publication-ready convergence report.
 
@@ -950,9 +926,9 @@ class MeshConvergenceRunner:
         - GCI values
         - Recommendations
         """
-        report_path = self.output_dir / 'convergence_report.md'
+        report_path = self.output_dir / "convergence_report.md"
 
-        with open(report_path, 'w') as f:
+        with open(report_path, "w") as f:
             f.write("# Mesh Convergence Study Report\n\n")
             f.write(f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
             f.write(f"**Patient ID:** {self.base_config.get('case_info', {}).get('patient_id', 'N/A')}\n\n")
@@ -963,15 +939,15 @@ class MeshConvergenceRunner:
             f.write("|------|----------------|------------|--------|------------------|\n")
 
             for i, cfg in enumerate(mesh_configs):
-                cpd = cfg['cpd']
-                level = cfg['level']
-                cell_count = quantities[level]['cell_count']
-                h = quantities[level]['h_representative'] * 1000  # m → mm
+                cpd = cfg["cpd"]
+                level = cfg["level"]
+                cell_count = quantities[level]["cell_count"]
+                h = quantities[level]["h_representative"] * 1000  # m → mm
 
                 if i == 0:
                     r_text = "—"
                 else:
-                    r = cfg['cpd'] / mesh_configs[i-1]['cpd']
+                    r = cfg["cpd"] / mesh_configs[i - 1]["cpd"]
                     r_text = f"{r:.3f}"
 
                 f.write(f"| {cfg['label']} | {cpd} | {cell_count:,} | {h:.4f} | {r_text} |\n")
@@ -984,9 +960,9 @@ class MeshConvergenceRunner:
             for qty_name, metrics in convergence_metrics.items():
                 f.write(f"### {qty_name.replace('_', ' ').title()}\n\n")
 
-                phi_3 = quantities['coarse'][qty_name]
-                phi_2 = quantities['medium'][qty_name]
-                phi_1 = quantities['fine'][qty_name]
+                phi_3 = quantities["coarse"][qty_name]
+                phi_2 = quantities["medium"][qty_name]
+                phi_1 = quantities["fine"][qty_name]
 
                 f.write("| Mesh | Value | Relative Difference | GCI (%) |\n")
                 f.write("|------|-------|---------------------|----------|\n")
@@ -1008,15 +984,17 @@ class MeshConvergenceRunner:
             f.write("## 3. Recommendations\n\n")
 
             # Check if medium mesh is converged
-            avg_gci_fine = sum(m['gci_fine'] for m in convergence_metrics.values()) / len(convergence_metrics)
-            avg_gci_medium = sum(m['gci_medium'] for m in convergence_metrics.values()) / len(convergence_metrics)
+            avg_gci_fine = sum(m["gci_fine"] for m in convergence_metrics.values()) / len(convergence_metrics)
+            avg_gci_medium = sum(m["gci_medium"] for m in convergence_metrics.values()) / len(convergence_metrics)
 
             if avg_gci_fine < 3.0:
                 f.write("✅ **Fine mesh is CONVERGED** (GCI < 3%)\n\n")
                 f.write("The fine mesh provides mesh-independent results suitable for publication.\n\n")
             elif avg_gci_fine < 5.0:
                 f.write("⚠️ **Fine mesh is ACCEPTABLE** (3% < GCI < 5%)\n\n")
-                f.write("Results are acceptable for most applications but consider further refinement for high-precision studies.\n\n")
+                f.write(
+                    "Results are acceptable for most applications but consider further refinement for high-precision studies.\n\n"
+                )
             else:
                 f.write("❌ **Further refinement required** (GCI > 5%)\n\n")
                 f.write("Consider generating an ultra-fine mesh or adjusting refinement strategy.\n\n")
@@ -1031,13 +1009,13 @@ class MeshConvergenceRunner:
 
         # Save JSON data
         json_data = {
-            'mesh_configs': mesh_configs,
-            'quantities': quantities,
-            'convergence_metrics': convergence_metrics,
-            'timestamp': datetime.now().isoformat()
+            "mesh_configs": mesh_configs,
+            "quantities": quantities,
+            "convergence_metrics": convergence_metrics,
+            "timestamp": datetime.now().isoformat(),
         }
 
-        with open(self.output_dir / 'convergence_data.json', 'w') as f:
+        with open(self.output_dir / "convergence_data.json", "w") as f:
             json.dump(json_data, f, indent=2)
 
         self.logger.info(f"📄 Report saved: {report_path}")
@@ -1049,25 +1027,22 @@ def main():
     """Command-line interface for convergence studies."""
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description='Run automated mesh convergence study for patient-specific CFD'
+    parser = argparse.ArgumentParser(description="Run automated mesh convergence study for patient-specific CFD")
+    parser.add_argument("config", help="Path to base configuration file")
+    parser.add_argument(
+        "--ratio", type=float, default=1.414, help="Refinement ratio between meshes (default: √2 = 1.414)"
     )
-    parser.add_argument('config', help='Path to base configuration file')
-    parser.add_argument('--ratio', type=float, default=1.414,
-                       help='Refinement ratio between meshes (default: √2 = 1.414)')
-    parser.add_argument('--base-cpd', type=int, default=10,
-                       help='Base cells_per_diameter for coarse mesh (default: 10)')
-    parser.add_argument('--transient', action='store_true',
-                       help='Use transient BC (default: converts to steady state)')
+    parser.add_argument(
+        "--base-cpd", type=int, default=10, help="Base cells_per_diameter for coarse mesh (default: 10)"
+    )
+    parser.add_argument("--transient", action="store_true", help="Use transient BC (default: converts to steady state)")
 
     args = parser.parse_args()
 
     # Run convergence study
     runner = MeshConvergenceRunner(args.config)
     results = runner.run_convergence_study(
-        refinement_ratio=args.ratio,
-        base_cells_per_diameter=args.base_cpd,
-        steady_state=not args.transient
+        refinement_ratio=args.ratio, base_cells_per_diameter=args.base_cpd, steady_state=not args.transient
     )
 
     print("\n" + "=" * 70)
@@ -1078,5 +1053,5 @@ def main():
     print("=" * 70)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

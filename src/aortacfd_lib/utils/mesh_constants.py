@@ -96,28 +96,26 @@ DEFAULT_SURFACE_REFINEMENT_LEVELS = [1, 2]  # Moderate refinement
 #   - Number of layers: 10-15 (captures boundary layer development)
 
 DEFAULT_BOUNDARY_LAYER_SETTINGS = {
-    'enabled': True,
-    'num_layers': 10,              # Increased from 5-8 to 10 (SimVascular standard)
-    'expansion_ratio': 1.2,        # Growth ratio between layers
-    'final_layer_thickness': 0.3,  # Relative to undistorted cell
-    'min_thickness': 0.1,          # Minimum layer thickness
-    'relativeSizes': True,         # Sizes relative to base cell
+    "enabled": True,
+    "num_layers": 10,  # Increased from 5-8 to 10 (SimVascular standard)
+    "expansion_ratio": 1.2,  # Growth ratio between layers
+    "final_layer_thickness": 0.3,  # Relative to undistorted cell
+    "min_thickness": 0.1,  # Minimum layer thickness
+    "relativeSizes": True,  # Sizes relative to base cell
 }
 
 # Quality tiers for boundary layer coverage
 # Percentage of wall surface covered by prism layers
 BL_COVERAGE_EXCELLENT = 95.0  # Target for publication quality
-BL_COVERAGE_GOOD = 90.0       # Acceptable for production
-BL_COVERAGE_FAIR = 80.0       # May miss some regions
-BL_COVERAGE_POOR = 70.0       # Significant gaps - investigate
+BL_COVERAGE_GOOD = 90.0  # Acceptable for production
+BL_COVERAGE_FAIR = 80.0  # May miss some regions
+BL_COVERAGE_POOR = 70.0  # Significant gaps - investigate
 
 # BlockMesh size warning thresholds
 # We don't try to "fix" large meshes - just warn the user and let them decide
 MAX_BLOCKMESH_CELLS_WARNING = 10_000_000  # 10M cells - inform user it's large
-MAX_BLOCKMESH_CELLS_LARGE = 25_000_000    # 25M cells - warn may cause OOM
-MAX_BLOCKMESH_CELLS_HUGE = 50_000_000     # 50M cells - strongly warn
-
-import math
+MAX_BLOCKMESH_CELLS_LARGE = 25_000_000  # 25M cells - warn may cause OOM
+MAX_BLOCKMESH_CELLS_HUGE = 50_000_000  # 50M cells - strongly warn
 
 
 # =============================================================================
@@ -176,15 +174,15 @@ LAYER_PROFILES = {
         "expansionRatio": 1.2,
         "finalLayerThickness": 0.3,
         "minThickness": 0.01,
-        "featureAngle": 190,                # >180 forces layers at sharp junctions
-        "nGrow": 0,                         # each face gets independent chance
-        "nSmoothSurfaceNormals": 10,        # sweet spot for curved vessels
+        "featureAngle": 190,  # >180 forces layers at sharp junctions
+        "nGrow": 0,  # each face gets independent chance
+        "nSmoothSurfaceNormals": 10,  # sweet spot for curved vessels
         "nSmoothNormals": 5,
-        "nSmoothThickness": 0,             # disabled — lets each face adapt
+        "nSmoothThickness": 0,  # disabled — lets each face adapt
         "nSmoothDisplacement": 5,
-        "maxFaceThicknessRatio": 1.0,       # unlocked (0.5 was the main bottleneck)
-        "maxThicknessToMedialRatio": 1.0,   # unlocked (0.3 blocked narrow regions)
-        "minMedianAxisAngle": 30,           # allows tighter angles (was 90)
+        "maxFaceThicknessRatio": 1.0,  # unlocked (0.5 was the main bottleneck)
+        "maxThicknessToMedialRatio": 1.0,  # unlocked (0.3 blocked narrow regions)
+        "minMedianAxisAngle": 30,  # allows tighter angles (was 90)
         "nBufferCellsNoExtrude": 0,
         "nLayerIter": 50,
         "nRelaxedIter": 0,
@@ -217,6 +215,7 @@ def resolve_mesh_config(mesh_config: dict) -> dict:
         Dict of resolved SNAPPY_SETTINGS overrides to apply.
     """
     import logging
+
     logger = logging.getLogger("mesh_config")
 
     resolved = {}
@@ -230,7 +229,9 @@ def resolve_mesh_config(mesh_config: dict) -> dict:
     if is_legacy and goal_name:
         logger.warning(f"Both mode='legacy' and goal='{goal_name}' set. Using legacy mode (goal ignored).")
     if goal_name and span_target is not None:
-        logger.info(f"Both goal='{goal_name}' and span_target={span_target} set. span_target overrides goal's resolution.")
+        logger.info(
+            f"Both goal='{goal_name}' and span_target={span_target} set. span_target overrides goal's resolution."
+        )
 
     # --- Legacy mode ---
     if is_legacy:
@@ -285,9 +286,11 @@ def resolve_mesh_config(mesh_config: dict) -> dict:
             resolved["addLayer"] = layers_config["num_layers"]
             resolved["addLayers"] = True
         # layers.expansion_ratio, final_layer_thickness, min_thickness
-        for key_map in [("expansion_ratio", "expansionRatio"),
-                        ("final_layer_thickness", "finalLayerThickness"),
-                        ("min_thickness", "minThickness")]:
+        for key_map in [
+            ("expansion_ratio", "expansionRatio"),
+            ("final_layer_thickness", "finalLayerThickness"),
+            ("min_thickness", "minThickness"),
+        ]:
             if key_map[0] in layers_config:
                 resolved[key_map[1]] = layers_config[key_map[0]]
 
@@ -308,14 +311,14 @@ def resolve_mesh_goal(mesh_config: dict) -> dict:
 # benchmark (generate_case.py) to ensure identical planning logic.
 
 # Background blockMesh limits (cells per reference diameter)
-MIN_BLOCKMESH_CPD = 4   # Below this, snappy struggles with castellated mesh quality
+MIN_BLOCKMESH_CPD = 4  # Below this, snappy struggles with castellated mesh quality
 MAX_BLOCKMESH_CPD = 20  # Upper search bound — raised from 12 to support fine meshes on large geometries
 
 # Candidate scoring weights
-_W_LEVEL = 3.0      # heavily penalise deep refinement (transition cost)
-_W_BG = 1.0         # prefer moderate background (not too coarse or fine)
+_W_LEVEL = 3.0  # heavily penalise deep refinement (transition cost)
+_W_BG = 1.0  # prefer moderate background (not too coarse or fine)
 _W_OVERSHOOT = 0.5  # prefer not overshooting the target
-_BG_IDEAL = 6       # ideal background cpd for scoring
+_BG_IDEAL = 6  # ideal background cpd for scoring
 
 
 def plan_span_background(
@@ -355,7 +358,7 @@ def plan_span_background(
     # Generate and score all feasible candidates
     candidates = []
     for level in range(1, max_span_level + 1):
-        mult = 2 ** level
+        mult = 2**level
         for bg in range(min_blockmesh, max_blockmesh + 1):
             theoretical = bg * mult
             if theoretical < T:
@@ -367,22 +370,20 @@ def plan_span_background(
             achievable_min = bg_at_min * mult
 
             # Score: prefer lowest level, moderate bg, minimal overshoot
-            score = (
-                _W_LEVEL * level
-                + _W_BG * abs(bg - _BG_IDEAL)
-                + _W_OVERSHOOT * (theoretical / T - 1.0)
-            )
+            score = _W_LEVEL * level + _W_BG * abs(bg - _BG_IDEAL) + _W_OVERSHOOT * (theoretical / T - 1.0)
 
             passes_branch = achievable_min >= T * 0.7
 
-            candidates.append({
-                "bg": bg,
-                "level": level,
-                "theoretical": theoretical,
-                "achievable_min": round(achievable_min, 1),
-                "passes_branch": passes_branch,
-                "score": round(score, 2),
-            })
+            candidates.append(
+                {
+                    "bg": bg,
+                    "level": level,
+                    "theoretical": theoretical,
+                    "achievable_min": round(achievable_min, 1),
+                    "passes_branch": passes_branch,
+                    "score": round(score, 2),
+                }
+            )
 
     # Pick best: first try candidates that pass the branch threshold
     passing = [c for c in candidates if c["passes_branch"]]
@@ -401,9 +402,13 @@ def plan_span_background(
         )
     else:
         # Absolute fallback
-        best = {"bg": min_blockmesh, "level": max_span_level,
-                "theoretical": min_blockmesh * (2 ** max_span_level),
-                "achievable_min": 0, "score": 999}
+        best = {
+            "bg": min_blockmesh,
+            "level": max_span_level,
+            "theoretical": min_blockmesh * (2**max_span_level),
+            "achievable_min": 0,
+            "score": 999,
+        }
         warning = f"cells_across_span={T} with diameter_ratio={R:.1f} exceeds planner range."
 
     return {
@@ -452,42 +457,38 @@ def check_blockmesh_size(target_cell_size_mm: float, bbox_volume_mm3: float) -> 
     Returns:
         dict with 'estimated_cells', 'warning_level', 'message'
     """
-    estimated_cells = bbox_volume_mm3 / (target_cell_size_mm ** 3)
+    estimated_cells = bbox_volume_mm3 / (target_cell_size_mm**3)
     estimated_memory_gb = estimated_cells / 1e6 * 0.3
 
     if estimated_cells < MAX_BLOCKMESH_CELLS_WARNING:
-        return {
-            'estimated_cells': estimated_cells,
-            'warning_level': 'ok',
-            'message': None
-        }
+        return {"estimated_cells": estimated_cells, "warning_level": "ok", "message": None}
     elif estimated_cells < MAX_BLOCKMESH_CELLS_LARGE:
         return {
-            'estimated_cells': estimated_cells,
-            'warning_level': 'large',
-            'message': (
+            "estimated_cells": estimated_cells,
+            "warning_level": "large",
+            "message": (
                 f"Large blockMesh: {estimated_cells/1e6:.1f}M cells (~{estimated_memory_gb:.1f}GB RAM). "
                 f"Feasible with 16GB+ RAM and parallel meshing. "
                 f"If OOM occurs, reduce cells_per_diameter."
-            )
+            ),
         }
     elif estimated_cells < MAX_BLOCKMESH_CELLS_HUGE:
         return {
-            'estimated_cells': estimated_cells,
-            'warning_level': 'very_large',
-            'message': (
+            "estimated_cells": estimated_cells,
+            "warning_level": "very_large",
+            "message": (
                 f"Very large blockMesh: {estimated_cells/1e6:.1f}M cells (~{estimated_memory_gb:.1f}GB RAM). "
                 f"May cause OOM. Recommendations: (1) Reduce cells_per_diameter, "
                 f"(2) Use cluster/HPC, (3) Enable parallel meshing."
-            )
+            ),
         }
     else:
         return {
-            'estimated_cells': estimated_cells,
-            'warning_level': 'huge',
-            'message': (
+            "estimated_cells": estimated_cells,
+            "warning_level": "huge",
+            "message": (
                 f"Extremely large blockMesh: {estimated_cells/1e6:.1f}M cells (~{estimated_memory_gb:.1f}GB RAM). "
                 f"Will likely cause OOM. Strongly recommend: (1) Reduce cells_per_diameter significantly, "
                 f"(2) Use HPC cluster with 64GB+ RAM."
-            )
+            ),
         }

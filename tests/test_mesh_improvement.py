@@ -29,15 +29,12 @@ class TestMeshAttemptResult:
 
         metrics = MeshQualityMetrics(mesh_ok=True)
         result = MeshAttemptResult(
-            attempt_number=1,
-            quality_tier=MeshQualityTier.GOOD,
-            metrics=metrics,
-            parameters_used={'nSolveIter': 50}
+            attempt_number=1, quality_tier=MeshQualityTier.GOOD, metrics=metrics, parameters_used={"nSolveIter": 50}
         )
 
         assert result.attempt_number == 1
         assert result.quality_tier == MeshQualityTier.GOOD
-        assert result.parameters_used == {'nSolveIter': 50}
+        assert result.parameters_used == {"nSolveIter": 50}
         assert result.smoothmesh_applied is False
         assert result.success is True
         assert result.notes == []
@@ -54,7 +51,7 @@ class TestMeshAttemptResult:
             metrics=metrics,
             parameters_used={},
             success=False,
-            notes=['High skewness detected', 'Consider refining mesh']
+            notes=["High skewness detected", "Consider refining mesh"],
         )
 
         assert result.success is False
@@ -71,10 +68,7 @@ class TestMeshImprovementResult:
 
         metrics = MeshQualityMetrics(mesh_ok=True)
         attempt = MeshAttemptResult(
-            attempt_number=1,
-            quality_tier=MeshQualityTier.GOOD,
-            metrics=metrics,
-            parameters_used={}
+            attempt_number=1, quality_tier=MeshQualityTier.GOOD, metrics=metrics, parameters_used={}
         )
 
         result = MeshImprovementResult(
@@ -83,7 +77,7 @@ class TestMeshImprovementResult:
             total_attempts=1,
             attempts=[attempt],
             improvement_achieved=True,
-            parameters_used={'nSolveIter': 100}
+            parameters_used={"nSolveIter": 100},
         )
 
         assert result.final_tier == MeshQualityTier.GOOD
@@ -100,16 +94,9 @@ class TestMeshImprovementWorkflow:
         """Create a MeshImprovementWorkflow instance."""
         from aortacfd_lib.mesh_improvement import MeshImprovementWorkflow
 
-        config = {
-            'mesh': {
-                'SNAPPY_SETTINGS': {
-                    'nSolveIter': 50,
-                    'nSmoothPatch': 5
-                }
-            }
-        }
+        config = {"mesh": {"SNAPPY_SETTINGS": {"nSolveIter": 50, "nSmoothPatch": 5}}}
 
-        with patch('aortacfd_lib.mesh_improvement.Logger'):
+        with patch("aortacfd_lib.mesh_improvement.Logger"):
             workflow = MeshImprovementWorkflow(config, str(tmp_path))
 
         return workflow
@@ -118,20 +105,20 @@ class TestMeshImprovementWorkflow:
         """Test workflow initialization."""
         assert workflow.case_dir == str(tmp_path)
         assert workflow.quality_history == []
-        assert 'mesh' in workflow.config
+        assert "mesh" in workflow.config
 
     def test_get_current_parameters(self, workflow):
         """Test extracting current parameters from config."""
         params = workflow._get_current_parameters()
 
-        assert params['nSolveIter'] == 50
-        assert params['nSmoothPatch'] == 5
+        assert params["nSolveIter"] == 50
+        assert params["nSmoothPatch"] == 5
 
     def test_get_current_parameters_empty_config(self, tmp_path):
         """Test _get_current_parameters with empty config."""
         from aortacfd_lib.mesh_improvement import MeshImprovementWorkflow
 
-        with patch('aortacfd_lib.mesh_improvement.Logger'):
+        with patch("aortacfd_lib.mesh_improvement.Logger"):
             workflow = MeshImprovementWorkflow({}, str(tmp_path))
 
         params = workflow._get_current_parameters()
@@ -139,28 +126,28 @@ class TestMeshImprovementWorkflow:
 
     def test_update_config_parameters(self, workflow):
         """Test updating config with new parameters."""
-        new_params = {'nSolveIter': 100, 'nSmoothPatch': 10}
+        new_params = {"nSolveIter": 100, "nSmoothPatch": 10}
 
         updated_config = workflow.update_config_parameters(new_params)
 
-        assert updated_config['mesh']['SNAPPY_SETTINGS']['nSolveIter'] == 100
-        assert updated_config['mesh']['SNAPPY_SETTINGS']['nSmoothPatch'] == 10
+        assert updated_config["mesh"]["SNAPPY_SETTINGS"]["nSolveIter"] == 100
+        assert updated_config["mesh"]["SNAPPY_SETTINGS"]["nSmoothPatch"] == 10
         # Original config should be unchanged
-        assert workflow.config['mesh']['SNAPPY_SETTINGS']['nSolveIter'] == 50
+        assert workflow.config["mesh"]["SNAPPY_SETTINGS"]["nSolveIter"] == 50
 
     def test_update_config_parameters_creates_structure(self, tmp_path):
         """Test update_config_parameters creates mesh structure if missing."""
         from aortacfd_lib.mesh_improvement import MeshImprovementWorkflow
 
-        with patch('aortacfd_lib.mesh_improvement.Logger'):
+        with patch("aortacfd_lib.mesh_improvement.Logger"):
             workflow = MeshImprovementWorkflow({}, str(tmp_path))
 
-        new_params = {'nSolveIter': 100}
+        new_params = {"nSolveIter": 100}
         updated_config = workflow.update_config_parameters(new_params)
 
-        assert 'mesh' in updated_config
-        assert 'SNAPPY_SETTINGS' in updated_config['mesh']
-        assert updated_config['mesh']['SNAPPY_SETTINGS']['nSolveIter'] == 100
+        assert "mesh" in updated_config
+        assert "SNAPPY_SETTINGS" in updated_config["mesh"]
+        assert updated_config["mesh"]["SNAPPY_SETTINGS"]["nSolveIter"] == 100
 
     def test_should_retry_exceeds_max_retries(self, workflow):
         """Test should_retry returns False when max retries exceeded."""
@@ -169,10 +156,7 @@ class TestMeshImprovementWorkflow:
 
         metrics = MeshQualityMetrics(mesh_ok=False)
         result = MeshAttemptResult(
-            attempt_number=3,
-            quality_tier=MeshQualityTier.POOR,
-            metrics=metrics,
-            parameters_used={}
+            attempt_number=3, quality_tier=MeshQualityTier.POOR, metrics=metrics, parameters_used={}
         )
 
         should_retry = workflow.should_retry(result, max_retries=2)
@@ -185,10 +169,7 @@ class TestMeshImprovementWorkflow:
 
         metrics = MeshQualityMetrics(mesh_ok=True)
         result = MeshAttemptResult(
-            attempt_number=1,
-            quality_tier=MeshQualityTier.GOOD,
-            metrics=metrics,
-            parameters_used={}
+            attempt_number=1, quality_tier=MeshQualityTier.GOOD, metrics=metrics, parameters_used={}
         )
 
         should_retry = workflow.should_retry(result, max_retries=3)
@@ -201,10 +182,7 @@ class TestMeshImprovementWorkflow:
 
         metrics = MeshQualityMetrics(mesh_ok=True)
         result = MeshAttemptResult(
-            attempt_number=1,
-            quality_tier=MeshQualityTier.EXCELLENT,
-            metrics=metrics,
-            parameters_used={}
+            attempt_number=1, quality_tier=MeshQualityTier.EXCELLENT, metrics=metrics, parameters_used={}
         )
 
         should_retry = workflow.should_retry(result, max_retries=3)
@@ -217,10 +195,7 @@ class TestMeshImprovementWorkflow:
 
         metrics = MeshQualityMetrics(mesh_ok=False)
         result = MeshAttemptResult(
-            attempt_number=1,
-            quality_tier=MeshQualityTier.POOR,
-            metrics=metrics,
-            parameters_used={}
+            attempt_number=1, quality_tier=MeshQualityTier.POOR, metrics=metrics, parameters_used={}
         )
 
         should_retry = workflow.should_retry(result, max_retries=3)
@@ -236,10 +211,7 @@ class TestMeshImprovementWorkflow:
         metrics1.max_skewness = 5.0
         metrics1.max_non_orthogonality = 70.0
         result1 = MeshAttemptResult(
-            attempt_number=1,
-            quality_tier=MeshQualityTier.POOR,
-            metrics=metrics1,
-            parameters_used={}
+            attempt_number=1, quality_tier=MeshQualityTier.POOR, metrics=metrics1, parameters_used={}
         )
         workflow.quality_history.append(result1)
 
@@ -248,10 +220,7 @@ class TestMeshImprovementWorkflow:
         metrics2.max_skewness = 5.5  # Worse
         metrics2.max_non_orthogonality = 72.0  # Worse
         result2 = MeshAttemptResult(
-            attempt_number=2,
-            quality_tier=MeshQualityTier.POOR,
-            metrics=metrics2,
-            parameters_used={}
+            attempt_number=2, quality_tier=MeshQualityTier.POOR, metrics=metrics2, parameters_used={}
         )
         workflow.quality_history.append(result2)
 
@@ -270,10 +239,7 @@ class TestMeshImprovementWorkflow:
 
         metrics = MeshQualityMetrics(mesh_ok=True)
         result = MeshAttemptResult(
-            attempt_number=1,
-            quality_tier=MeshQualityTier.FAIR,
-            metrics=metrics,
-            parameters_used={}
+            attempt_number=1, quality_tier=MeshQualityTier.FAIR, metrics=metrics, parameters_used={}
         )
         workflow.quality_history.append(result)
 
@@ -289,10 +255,7 @@ class TestMeshImprovementWorkflow:
         metrics1 = MeshQualityMetrics(mesh_ok=True)
         metrics1.max_skewness = 4.0
         result1 = MeshAttemptResult(
-            attempt_number=1,
-            quality_tier=MeshQualityTier.POOR,
-            metrics=metrics1,
-            parameters_used={}
+            attempt_number=1, quality_tier=MeshQualityTier.POOR, metrics=metrics1, parameters_used={}
         )
         workflow.quality_history.append(result1)
 
@@ -300,10 +263,7 @@ class TestMeshImprovementWorkflow:
         metrics2 = MeshQualityMetrics(mesh_ok=True)
         metrics2.max_skewness = 2.0  # 50% improvement
         result2 = MeshAttemptResult(
-            attempt_number=2,
-            quality_tier=MeshQualityTier.FAIR,
-            metrics=metrics2,
-            parameters_used={}
+            attempt_number=2, quality_tier=MeshQualityTier.FAIR, metrics=metrics2, parameters_used={}
         )
         workflow.quality_history.append(result2)
 
@@ -319,10 +279,7 @@ class TestMeshImprovementWorkflow:
         metrics1 = MeshQualityMetrics(mesh_ok=True)
         metrics1.max_skewness = 2.0
         result1 = MeshAttemptResult(
-            attempt_number=1,
-            quality_tier=MeshQualityTier.FAIR,
-            metrics=metrics1,
-            parameters_used={}
+            attempt_number=1, quality_tier=MeshQualityTier.FAIR, metrics=metrics1, parameters_used={}
         )
         workflow.quality_history.append(result1)
 
@@ -330,10 +287,7 @@ class TestMeshImprovementWorkflow:
         metrics2 = MeshQualityMetrics(mesh_ok=True)
         metrics2.max_skewness = 3.0  # 50% degradation
         result2 = MeshAttemptResult(
-            attempt_number=2,
-            quality_tier=MeshQualityTier.POOR,
-            metrics=metrics2,
-            parameters_used={}
+            attempt_number=2, quality_tier=MeshQualityTier.POOR, metrics=metrics2, parameters_used={}
         )
         workflow.quality_history.append(result2)
 
@@ -345,9 +299,10 @@ class TestMeshImprovementWorkflow:
         result = workflow.analyze_current_quality()
 
         from aortacfd_lib.utils.mesh_quality import MeshQualityTier
+
         assert result.quality_tier == MeshQualityTier.CRITICAL
         assert result.success is False
-        assert 'checkMesh log not found' in result.metrics.errors
+        assert "checkMesh log not found" in result.metrics.errors
 
     def test_analyze_current_quality_with_log(self, workflow, tmp_path):
         """Test analyze_current_quality with valid checkMesh log."""
@@ -383,9 +338,10 @@ Mesh OK.
         log_path = logs_dir / "log.checkMesh"
         log_path.write_text(log_content)
 
-        with patch('aortacfd_lib.mesh_improvement.MeshQualityAnalyzer') as mock_analyzer:
+        with patch("aortacfd_lib.mesh_improvement.MeshQualityAnalyzer") as mock_analyzer:
             mock_instance = MagicMock()
             from aortacfd_lib.utils.mesh_quality import MeshQualityMetrics, MeshQualityTier
+
             mock_metrics = MeshQualityMetrics(mesh_ok=True)
             mock_metrics.max_skewness = 2.5
             mock_metrics.max_non_orthogonality = 55.5
@@ -407,24 +363,18 @@ Mesh OK.
         metrics = MeshQualityMetrics(mesh_ok=False)
         metrics.max_skewness = 5.0
         result = MeshAttemptResult(
-            attempt_number=1,
-            quality_tier=MeshQualityTier.POOR,
-            metrics=metrics,
-            parameters_used={'nSolveIter': 50}
+            attempt_number=1, quality_tier=MeshQualityTier.POOR, metrics=metrics, parameters_used={"nSolveIter": 50}
         )
 
-        with patch('aortacfd_lib.mesh_improvement.MeshQualityAnalyzer') as mock_analyzer:
+        with patch("aortacfd_lib.mesh_improvement.MeshQualityAnalyzer") as mock_analyzer:
             mock_instance = MagicMock()
-            mock_instance.get_snappy_parameter_recommendations.return_value = {
-                'nSolveIter': 100,
-                'nSmoothPatch': 8
-            }
+            mock_instance.get_snappy_parameter_recommendations.return_value = {"nSolveIter": 100, "nSmoothPatch": 8}
             mock_analyzer.return_value = mock_instance
 
             improved = workflow.get_improved_parameters(result)
 
-            assert 'nSolveIter' in improved
-            assert improved['nSolveIter'] >= 100  # Should be escalated
+            assert "nSolveIter" in improved
+            assert improved["nSolveIter"] >= 100  # Should be escalated
 
     def test_generate_report_no_history(self, workflow):
         """Test generate_report with no attempts."""
@@ -446,7 +396,7 @@ Mesh OK.
             quality_tier=MeshQualityTier.POOR,
             metrics=metrics1,
             parameters_used={},
-            notes=['Initial attempt']
+            notes=["Initial attempt"],
         )
         workflow.quality_history.append(result1)
 
@@ -460,7 +410,7 @@ Mesh OK.
             quality_tier=MeshQualityTier.FAIR,
             metrics=metrics2,
             parameters_used={},
-            smoothmesh_applied=True
+            smoothmesh_applied=True,
         )
         workflow.quality_history.append(result2)
 
@@ -484,7 +434,7 @@ class TestGetPresetForQuality:
         from aortacfd_lib.utils.mesh_quality import MeshQualityTier
 
         preset = get_preset_for_quality(MeshQualityTier.EXCELLENT)
-        assert preset == 'standard'
+        assert preset == "standard"
 
     def test_good_returns_standard(self):
         """Test that good quality returns standard preset."""
@@ -492,7 +442,7 @@ class TestGetPresetForQuality:
         from aortacfd_lib.utils.mesh_quality import MeshQualityTier
 
         preset = get_preset_for_quality(MeshQualityTier.GOOD)
-        assert preset == 'standard'
+        assert preset == "standard"
 
     def test_fair_returns_standard(self):
         """Test that fair quality returns standard preset."""
@@ -500,7 +450,7 @@ class TestGetPresetForQuality:
         from aortacfd_lib.utils.mesh_quality import MeshQualityTier
 
         preset = get_preset_for_quality(MeshQualityTier.FAIR)
-        assert preset == 'standard'
+        assert preset == "standard"
 
     def test_poor_returns_high_quality(self):
         """Test that poor quality returns high_quality preset."""
@@ -508,7 +458,7 @@ class TestGetPresetForQuality:
         from aortacfd_lib.utils.mesh_quality import MeshQualityTier
 
         preset = get_preset_for_quality(MeshQualityTier.POOR)
-        assert preset == 'high_quality'
+        assert preset == "high_quality"
 
     def test_critical_returns_high_quality(self):
         """Test that critical quality returns high_quality preset."""
@@ -516,7 +466,7 @@ class TestGetPresetForQuality:
         from aortacfd_lib.utils.mesh_quality import MeshQualityTier
 
         preset = get_preset_for_quality(MeshQualityTier.CRITICAL)
-        assert preset == 'high_quality'
+        assert preset == "high_quality"
 
 
 class TestMaxParameters:
@@ -526,17 +476,17 @@ class TestMaxParameters:
         """Test that MAX_PARAMETERS contains expected keys."""
         from aortacfd_lib.mesh_improvement import MeshImprovementWorkflow
 
-        assert 'nSolveIter' in MeshImprovementWorkflow.MAX_PARAMETERS
-        assert 'nSmoothPatch' in MeshImprovementWorkflow.MAX_PARAMETERS
-        assert 'nLayerIter' in MeshImprovementWorkflow.MAX_PARAMETERS
+        assert "nSolveIter" in MeshImprovementWorkflow.MAX_PARAMETERS
+        assert "nSmoothPatch" in MeshImprovementWorkflow.MAX_PARAMETERS
+        assert "nLayerIter" in MeshImprovementWorkflow.MAX_PARAMETERS
 
     def test_max_parameters_are_reasonable(self):
         """Test that MAX_PARAMETERS values are reasonable."""
         from aortacfd_lib.mesh_improvement import MeshImprovementWorkflow
 
-        assert MeshImprovementWorkflow.MAX_PARAMETERS['nSolveIter'] > 0
-        assert MeshImprovementWorkflow.MAX_PARAMETERS['nSolveIter'] <= 500
+        assert MeshImprovementWorkflow.MAX_PARAMETERS["nSolveIter"] > 0
+        assert MeshImprovementWorkflow.MAX_PARAMETERS["nSolveIter"] <= 500
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

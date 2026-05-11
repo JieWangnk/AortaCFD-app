@@ -47,7 +47,7 @@ class TestFormatPointsFunction:
         points = [(0.0, 0.0, 0.0), (1.0, 2.0, 3.0), (4.5, 5.5, 6.5)]
         result = format_points(points)
 
-        lines = result.strip().split('\n')
+        lines = result.strip().split("\n")
         assert len(lines) == 3
 
     def test_format_with_precision(self):
@@ -96,13 +96,13 @@ class TestFormatPointsFunction:
         result = format_points(points)
 
         # Should use scientific notation for very small numbers
-        assert 'e' in result.lower()
+        assert "e" in result.lower()
 
 
 class TestEnhancedPointsFormatterInit:
     """Test EnhancedPointsFormatter initialization."""
 
-    @patch('aortacfd_lib.utils.format_points.Logger')
+    @patch("aortacfd_lib.utils.format_points.Logger")
     def test_init_default_values(self, mock_logger):
         """Test initialization with default values."""
         from aortacfd_lib.utils.format_points import EnhancedPointsFormatter
@@ -111,17 +111,14 @@ class TestEnhancedPointsFormatterInit:
 
         assert formatter.format_version == 2
 
-    @patch('aortacfd_lib.utils.format_points.Logger')
+    @patch("aortacfd_lib.utils.format_points.Logger")
     def test_init_custom_values(self, mock_logger):
         """Test initialization with custom values."""
         from aortacfd_lib.utils.format_points import EnhancedPointsFormatter
 
         with tempfile.TemporaryDirectory() as tmpdir:
             formatter = EnhancedPointsFormatter(
-                input_filename="input.txt",
-                output_filename="output.txt",
-                format_version=1,
-                case_directory=tmpdir
+                input_filename="input.txt", output_filename="output.txt", format_version=1, case_directory=tmpdir
             )
 
             assert formatter.format_version == 1
@@ -131,7 +128,7 @@ class TestEnhancedPointsFormatterInit:
 class TestEnhancedPointsFormatterFormatCoordinates:
     """Test EnhancedPointsFormatter.format_coordinates method."""
 
-    @patch('aortacfd_lib.utils.format_points.Logger')
+    @patch("aortacfd_lib.utils.format_points.Logger")
     def test_format_coordinates_v2(self, mock_logger):
         """Test coordinate formatting with version 2."""
         from aortacfd_lib.utils.format_points import EnhancedPointsFormatter
@@ -139,16 +136,13 @@ class TestEnhancedPointsFormatterFormatCoordinates:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create input file
             input_file = os.path.join(tmpdir, "points-new")
-            with open(input_file, 'w') as f:
+            with open(input_file, "w") as f:
                 f.write("0 1.0 2.0 3.0\n")
                 f.write("1 4.0 5.0 6.0\n")
                 f.write("2 7.0 8.0 9.0\n")
 
             formatter = EnhancedPointsFormatter(
-                input_filename="points-new",
-                output_filename="points",
-                format_version=2,
-                case_directory=tmpdir
+                input_filename="points-new", output_filename="points", format_version=2, case_directory=tmpdir
             )
 
             formatter.format_coordinates()
@@ -157,15 +151,15 @@ class TestEnhancedPointsFormatterFormatCoordinates:
             output_file = os.path.join(tmpdir, "points")
             assert os.path.exists(output_file)
 
-            with open(output_file, 'r') as f:
+            with open(output_file, "r") as f:
                 content = f.read()
 
             # Version 2 should have parentheses
-            assert '(' in content
-            assert ')' in content
-            assert '3\n' in content  # 3 points
+            assert "(" in content
+            assert ")" in content
+            assert "3\n" in content  # 3 points
 
-    @patch('aortacfd_lib.utils.format_points.Logger')
+    @patch("aortacfd_lib.utils.format_points.Logger")
     def test_format_coordinates_v1(self, mock_logger):
         """Test coordinate formatting with version 1."""
         from aortacfd_lib.utils.format_points import EnhancedPointsFormatter
@@ -173,38 +167,33 @@ class TestEnhancedPointsFormatterFormatCoordinates:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create input file
             input_file = os.path.join(tmpdir, "points-new")
-            with open(input_file, 'w') as f:
+            with open(input_file, "w") as f:
                 f.write("0 1.0 2.0 3.0\n")
                 f.write("1 4.0 5.0 6.0\n")
 
             formatter = EnhancedPointsFormatter(
-                input_filename="points-new",
-                output_filename="points",
-                format_version=1,
-                case_directory=tmpdir
+                input_filename="points-new", output_filename="points", format_version=1, case_directory=tmpdir
             )
 
             formatter.format_coordinates()
 
             # Check output file
             output_file = os.path.join(tmpdir, "points")
-            with open(output_file, 'r') as f:
+            with open(output_file, "r") as f:
                 content = f.read()
 
             # Version 1 doesn't have outer parentheses
             # But coordinates still have inner parentheses based on _process_lines
-            assert '2\n' in content  # 2 points
+            assert "2\n" in content  # 2 points
 
-    @patch('aortacfd_lib.utils.format_points.Logger')
+    @patch("aortacfd_lib.utils.format_points.Logger")
     def test_format_coordinates_missing_input(self, mock_logger):
         """Test error handling for missing input file."""
         from aortacfd_lib.utils.format_points import EnhancedPointsFormatter
 
         with tempfile.TemporaryDirectory() as tmpdir:
             formatter = EnhancedPointsFormatter(
-                input_filename="nonexistent.txt",
-                output_filename="output.txt",
-                case_directory=tmpdir
+                input_filename="nonexistent.txt", output_filename="output.txt", case_directory=tmpdir
             )
 
             with pytest.raises(SystemExit):
@@ -214,7 +203,7 @@ class TestEnhancedPointsFormatterFormatCoordinates:
 class TestEnhancedPointsFormatterProcessLines:
     """Test EnhancedPointsFormatter._process_lines method."""
 
-    @patch('aortacfd_lib.utils.format_points.Logger')
+    @patch("aortacfd_lib.utils.format_points.Logger")
     def test_process_valid_lines(self, mock_logger):
         """Test processing valid input lines."""
         from aortacfd_lib.utils.format_points import EnhancedPointsFormatter
@@ -233,7 +222,7 @@ class TestEnhancedPointsFormatterProcessLines:
             assert "(1.0 2.0 3.0)" in result[0]
             assert "(4.0 5.0 6.0)" in result[1]
 
-    @patch('aortacfd_lib.utils.format_points.Logger')
+    @patch("aortacfd_lib.utils.format_points.Logger")
     def test_process_lines_skips_invalid(self, mock_logger):
         """Test that invalid lines are skipped."""
         from aortacfd_lib.utils.format_points import EnhancedPointsFormatter
@@ -252,7 +241,7 @@ class TestEnhancedPointsFormatterProcessLines:
             # Should only have 2 valid entries
             assert len(result) == 2
 
-    @patch('aortacfd_lib.utils.format_points.Logger')
+    @patch("aortacfd_lib.utils.format_points.Logger")
     def test_process_empty_lines(self, mock_logger):
         """Test processing empty line list."""
         from aortacfd_lib.utils.format_points import EnhancedPointsFormatter
@@ -264,7 +253,7 @@ class TestEnhancedPointsFormatterProcessLines:
 
             assert result == []
 
-    @patch('aortacfd_lib.utils.format_points.Logger')
+    @patch("aortacfd_lib.utils.format_points.Logger")
     def test_process_lines_with_whitespace(self, mock_logger):
         """Test processing lines with extra whitespace."""
         from aortacfd_lib.utils.format_points import EnhancedPointsFormatter
@@ -323,14 +312,14 @@ class TestFormatPointsEdgeCases:
         points = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
         result = format_points(points)
 
-        lines = result.strip().split('\n')
+        lines = result.strip().split("\n")
         assert len(lines) == 2
 
 
 class TestFormatterIntegration:
     """Integration tests for the formatter."""
 
-    @patch('aortacfd_lib.utils.format_points.Logger')
+    @patch("aortacfd_lib.utils.format_points.Logger")
     def test_full_workflow(self, mock_logger):
         """Test complete format workflow."""
         from aortacfd_lib.utils.format_points import EnhancedPointsFormatter
@@ -343,14 +332,11 @@ class TestFormatterIntegration:
 3 0.010 0.011 0.012
 """
             input_file = os.path.join(tmpdir, "points-new")
-            with open(input_file, 'w') as f:
+            with open(input_file, "w") as f:
                 f.write(input_content)
 
             formatter = EnhancedPointsFormatter(
-                input_filename="points-new",
-                output_filename="points",
-                format_version=2,
-                case_directory=tmpdir
+                input_filename="points-new", output_filename="points", format_version=2, case_directory=tmpdir
             )
 
             formatter.format_coordinates()
@@ -359,14 +345,14 @@ class TestFormatterIntegration:
             output_file = os.path.join(tmpdir, "points")
             assert os.path.exists(output_file)
 
-            with open(output_file, 'r') as f:
+            with open(output_file, "r") as f:
                 output_content = f.read()
 
             # Check format
-            assert output_content.startswith('4')  # 4 points
-            assert '(' in output_content
-            assert ')' in output_content
+            assert output_content.startswith("4")  # 4 points
+            assert "(" in output_content
+            assert ")" in output_content
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

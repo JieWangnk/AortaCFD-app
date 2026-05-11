@@ -207,7 +207,7 @@ class TestGetMurrayLawCacheKey:
         key2 = get_murray_law_cache_key()
 
         assert key1 == key2
-        assert key1 == 'murray_law_results'
+        assert key1 == "murray_law_results"
 
     def test_returns_string(self):
         """Test that function returns a string."""
@@ -219,5 +219,5 @@ class TestGetMurrayLawCacheKey:
         assert len(key) > 0
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

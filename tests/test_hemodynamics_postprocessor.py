@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from aortacfd_lib.hemodynamics_postprocessor import (
     HemodynamicsResults,
     HemodynamicsPostProcessor,
-    run_hemodynamics_analysis
+    run_hemodynamics_analysis,
 )
 
 
@@ -48,11 +48,7 @@ class TestHemodynamicsResults:
     def test_custom_initialization(self):
         """Test custom value initialization."""
         results = HemodynamicsResults(
-            inlet_type="TIMEVARYING",
-            is_pulsatile=True,
-            cardiac_cycle=1.0,
-            wss_max=15.5,
-            wss_mean=3.2
+            inlet_type="TIMEVARYING", is_pulsatile=True, cardiac_cycle=1.0, wss_max=15.5, wss_mean=3.2
         )
 
         assert results.inlet_type == "TIMEVARYING"
@@ -64,13 +60,7 @@ class TestHemodynamicsResults:
     def test_pulsatile_metrics_storage(self):
         """Test pulsatile-specific metrics."""
         results = HemodynamicsResults(
-            is_pulsatile=True,
-            tawss_max=12.0,
-            tawss_mean=4.5,
-            osi_max=0.4,
-            osi_mean=0.15,
-            rrt_max=5.0,
-            rrt_mean=1.2
+            is_pulsatile=True, tawss_max=12.0, tawss_mean=4.5, osi_max=0.4, osi_mean=0.15, rrt_max=5.0, rrt_mean=1.2
         )
 
         assert results.tawss_max == 12.0
@@ -96,15 +86,15 @@ class TestHemodynamicsResults:
         """Test pressure drop results storage."""
         results = HemodynamicsResults(
             pressure_inlet=12000.0,
-            pressure_outlets={'outlet_1': 10500.0, 'outlet_2': 10800.0},
-            pressure_drops={'outlet_1': 1500.0, 'outlet_2': 1200.0},
-            pressure_drop_mmhg={'outlet_1': 11.25, 'outlet_2': 9.0}
+            pressure_outlets={"outlet_1": 10500.0, "outlet_2": 10800.0},
+            pressure_drops={"outlet_1": 1500.0, "outlet_2": 1200.0},
+            pressure_drop_mmhg={"outlet_1": 11.25, "outlet_2": 9.0},
         )
 
         assert results.pressure_inlet == 12000.0
-        assert 'outlet_1' in results.pressure_outlets
-        assert results.pressure_drops['outlet_1'] == 1500.0
-        assert results.pressure_drop_mmhg['outlet_2'] == 9.0
+        assert "outlet_1" in results.pressure_outlets
+        assert results.pressure_drops["outlet_1"] == 1500.0
+        assert results.pressure_drop_mmhg["outlet_2"] == 9.0
 
 
 class TestHemodynamicsPostProcessorInit:
@@ -114,23 +104,20 @@ class TestHemodynamicsPostProcessorInit:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.base_config = {
-            'inlet': {'type': 'CONSTANT'},
-            'cardiac_cycle': 0.8,
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet_1', 'outlet_2'],
-                'wall_keywords_ordered': 'wall_aorta'
+            "inlet": {"type": "CONSTANT"},
+            "cardiac_cycle": 0.8,
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet_1", "outlet_2"],
+                "wall_keywords_ordered": "wall_aorta",
             },
-            'hemodynamics': {
-                'tawss_settings': {
-                    'skip_cycles': 2
-                }
-            }
+            "hemodynamics": {"tawss_settings": {"skip_cycles": 2}},
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_constant_inlet_detection(self):
@@ -143,7 +130,7 @@ class TestHemodynamicsPostProcessorInit:
     def test_timevarying_inlet_detection(self):
         """Test TIMEVARYING inlet type detection."""
         config = self.base_config.copy()
-        config['inlet'] = {'type': 'TIMEVARYING'}
+        config["inlet"] = {"type": "TIMEVARYING"}
 
         processor = HemodynamicsPostProcessor(self.temp_dir, config)
 
@@ -153,7 +140,7 @@ class TestHemodynamicsPostProcessorInit:
     def test_womersley_inlet_detection(self):
         """Test WOMERSLEY inlet type detection (pulsatile)."""
         config = self.base_config.copy()
-        config['inlet'] = {'type': 'WOMERSLEY'}
+        config["inlet"] = {"type": "WOMERSLEY"}
 
         processor = HemodynamicsPostProcessor(self.temp_dir, config)
 
@@ -163,14 +150,12 @@ class TestHemodynamicsPostProcessorInit:
     def test_boundary_conditions_fallback(self):
         """Test fallback to boundary_conditions config structure."""
         config = {
-            'boundary_conditions': {
-                'inlet': {'type': 'TIMEVARYING'}
+            "boundary_conditions": {"inlet": {"type": "TIMEVARYING"}},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
             },
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
         }
 
         processor = HemodynamicsPostProcessor(self.temp_dir, config)
@@ -181,7 +166,7 @@ class TestHemodynamicsPostProcessorInit:
     def test_cardiac_cycle_extraction(self):
         """Test cardiac cycle value extraction."""
         config = self.base_config.copy()
-        config['cardiac_cycle'] = 1.2
+        config["cardiac_cycle"] = 1.2
 
         processor = HemodynamicsPostProcessor(self.temp_dir, config)
 
@@ -196,12 +181,14 @@ class TestPhysicalConstants:
         # 1 mmHg = 133.322 Pa, so 1/133.322 Pa/mmHg
         # Constants are now centralized in aortacfd_lib.constants
         from src.aortacfd_lib.constants import PA_TO_MMHG
-        assert PA_TO_MMHG == pytest.approx(1/133.322, rel=1e-4)
+
+        assert PA_TO_MMHG == pytest.approx(1 / 133.322, rel=1e-4)
 
     def test_blood_density(self):
         """Test default blood density from centralized constants."""
         # Constants are now centralized in aortacfd_lib.constants
         from src.aortacfd_lib.constants import BLOOD_DENSITY_DEFAULT
+
         assert BLOOD_DENSITY_DEFAULT == 1060.0
 
 
@@ -212,25 +199,26 @@ class TestTimeDirectoryHandling:
         """Create mock case directory structure."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
         # Create time directories
-        for t in ['0', '0.5', '1.0', '1.5']:
+        for t in ["0", "0.5", "1.0", "1.5"]:
             os.makedirs(os.path.join(self.temp_dir, t), exist_ok=True)
 
         # Create non-time directories
-        os.makedirs(os.path.join(self.temp_dir, 'constant'), exist_ok=True)
-        os.makedirs(os.path.join(self.temp_dir, 'system'), exist_ok=True)
+        os.makedirs(os.path.join(self.temp_dir, "constant"), exist_ok=True)
+        os.makedirs(os.path.join(self.temp_dir, "system"), exist_ok=True)
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_time_directory_detection(self):
@@ -265,6 +253,7 @@ class TestTimeDirectoryHandling:
             assert latest is None
         finally:
             import shutil
+
             shutil.rmtree(empty_dir, ignore_errors=True)
 
 
@@ -275,23 +264,24 @@ class TestWSSComputation:
         """Setup test case directory."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall_aorta'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall_aorta",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_wss_check_false_when_missing(self):
         """Test WSS check returns False when no WSS data."""
         # Create time directory without WSS
-        os.makedirs(os.path.join(self.temp_dir, '1.0'), exist_ok=True)
+        os.makedirs(os.path.join(self.temp_dir, "1.0"), exist_ok=True)
 
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
         assert processor._check_wss_exists() == False
@@ -299,12 +289,12 @@ class TestWSSComputation:
     def test_wss_check_true_when_exists(self):
         """Test WSS check returns True when WSS file exists."""
         # Create time directory with WSS file
-        time_dir = os.path.join(self.temp_dir, '1.0')
+        time_dir = os.path.join(self.temp_dir, "1.0")
         os.makedirs(time_dir, exist_ok=True)
 
         # Create mock WSS file
-        wss_file = os.path.join(time_dir, 'wallShearStress')
-        with open(wss_file, 'w') as f:
+        wss_file = os.path.join(time_dir, "wallShearStress")
+        with open(wss_file, "w") as f:
             f.write("// Mock WSS file")
 
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
@@ -320,10 +310,7 @@ class TestOSIBounds:
         # When mean(WSS) = TAWSS (no oscillation): OSI = 0
         # When mean(WSS) = 0 (full oscillation): OSI = 0.5
 
-        results = HemodynamicsResults(
-            osi_max=0.5,
-            osi_mean=0.25
-        )
+        results = HemodynamicsResults(osi_max=0.5, osi_mean=0.25)
 
         assert 0 <= results.osi_max <= 0.5
         assert 0 <= results.osi_mean <= 0.5
@@ -337,17 +324,18 @@ class TestReportGeneration:
         self.temp_dir = tempfile.mkdtemp()
         self.output_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet_1', 'outlet_2'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet_1", "outlet_2"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directories."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
         shutil.rmtree(self.output_dir, ignore_errors=True)
 
@@ -355,37 +343,29 @@ class TestReportGeneration:
         """Test that report file is created."""
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
         results = HemodynamicsResults(
-            inlet_type="CONSTANT",
-            is_pulsatile=False,
-            wss_max=15.0,
-            wss_mean=3.5,
-            wss_min=0.1
+            inlet_type="CONSTANT", is_pulsatile=False, wss_max=15.0, wss_mean=3.5, wss_min=0.1
         )
 
         report_path = processor.generate_report(results, self.output_dir)
 
         assert os.path.exists(report_path)
-        assert 'hemodynamics_report.txt' in report_path
+        assert "hemodynamics_report.txt" in report_path
 
     def test_report_contains_wss_values(self):
         """Test that report contains WSS values."""
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
         results = HemodynamicsResults(
-            inlet_type="CONSTANT",
-            is_pulsatile=False,
-            wss_max=15.0,
-            wss_mean=3.5,
-            wss_min=0.1
+            inlet_type="CONSTANT", is_pulsatile=False, wss_max=15.0, wss_mean=3.5, wss_min=0.1
         )
 
         report_path = processor.generate_report(results, self.output_dir)
 
-        with open(report_path, 'r') as f:
+        with open(report_path, "r") as f:
             content = f.read()
 
-        assert '15.0000' in content  # WSS max
-        assert '3.5000' in content   # WSS mean
-        assert 'CONSTANT' in content # Inlet type
+        assert "15.0000" in content  # WSS max
+        assert "3.5000" in content  # WSS mean
+        assert "CONSTANT" in content  # Inlet type
 
     def test_pulsatile_report_contains_tawss(self):
         """Test that pulsatile report contains TAWSS/OSI/RRT."""
@@ -400,18 +380,18 @@ class TestReportGeneration:
             osi_max=0.35,
             osi_mean=0.12,
             rrt_max=8.0,
-            rrt_mean=2.0
+            rrt_mean=2.0,
         )
 
         report_path = processor.generate_report(results, self.output_dir)
 
-        with open(report_path, 'r') as f:
+        with open(report_path, "r") as f:
             content = f.read()
 
-        assert 'TAWSS' in content
-        assert 'OSI' in content
-        assert 'RRT' in content
-        assert '12.0000' in content  # TAWSS max
+        assert "TAWSS" in content
+        assert "OSI" in content
+        assert "RRT" in content
+        assert "12.0000" in content  # TAWSS max
 
 
 class TestConvenienceFunction:
@@ -423,25 +403,26 @@ class TestConvenienceFunction:
         self.output_dir = tempfile.mkdtemp()
 
         # Create minimal case structure
-        os.makedirs(os.path.join(self.temp_dir, '0'), exist_ok=True)
+        os.makedirs(os.path.join(self.temp_dir, "0"), exist_ok=True)
 
         self.config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directories."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
         shutil.rmtree(self.output_dir, ignore_errors=True)
 
-    @patch.object(HemodynamicsPostProcessor, 'run_wss_postprocess')
-    @patch.object(HemodynamicsPostProcessor, '_check_wss_exists')
+    @patch.object(HemodynamicsPostProcessor, "run_wss_postprocess")
+    @patch.object(HemodynamicsPostProcessor, "_check_wss_exists")
     def test_runs_wss_postprocess_if_needed(self, mock_check, mock_run):
         """Test that WSS postprocess is run if WSS doesn't exist."""
         mock_check.return_value = False
@@ -449,11 +430,7 @@ class TestConvenienceFunction:
 
         # This will fail gracefully since there's no actual WSS data
         try:
-            results = run_hemodynamics_analysis(
-                self.temp_dir,
-                self.config,
-                self.output_dir
-            )
+            results = run_hemodynamics_analysis(self.temp_dir, self.config, self.output_dir)
         except:
             pass  # Expected to fail without actual data
 
@@ -467,10 +444,7 @@ class TestIntegrationWithWorkflow:
     def test_import_in_execution_tasks(self):
         """Test that hemodynamics module can be imported as in execution_tasks."""
         # This mimics the import in execution_tasks.py
-        from aortacfd_lib.hemodynamics_postprocessor import (
-            HemodynamicsPostProcessor,
-            run_hemodynamics_analysis
-        )
+        from aortacfd_lib.hemodynamics_postprocessor import HemodynamicsPostProcessor, run_hemodynamics_analysis
 
         assert HemodynamicsPostProcessor is not None
         assert run_hemodynamics_analysis is not None
@@ -479,17 +453,13 @@ class TestIntegrationWithWorkflow:
         """Test that results can be converted to dict for logging."""
         from dataclasses import asdict
 
-        results = HemodynamicsResults(
-            inlet_type="CONSTANT",
-            wss_max=15.0,
-            wss_mean=3.5
-        )
+        results = HemodynamicsResults(inlet_type="CONSTANT", wss_max=15.0, wss_mean=3.5)
 
         results_dict = asdict(results)
 
         assert isinstance(results_dict, dict)
-        assert results_dict['inlet_type'] == "CONSTANT"
-        assert results_dict['wss_max'] == 15.0
+        assert results_dict["inlet_type"] == "CONSTANT"
+        assert results_dict["wss_max"] == 15.0
 
 
 class TestReadSurfaceFieldValue:
@@ -499,17 +469,18 @@ class TestReadSurfaceFieldValue:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_read_surface_field_value_success(self):
@@ -518,7 +489,7 @@ class TestReadSurfaceFieldValue:
         func_dir = os.path.join(self.temp_dir, "postProcessing", "inletPressure", "0")
         os.makedirs(func_dir, exist_ok=True)
         data_file = os.path.join(func_dir, "surfaceFieldValue.dat")
-        with open(data_file, 'w') as f:
+        with open(data_file, "w") as f:
             f.write("# Time areaAverage(p)\n")
             f.write("0.0 100.5\n")
             f.write("0.1 101.2\n")
@@ -560,17 +531,18 @@ class TestGetBoundaryPatches:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_get_boundary_patches_success(self):
@@ -579,8 +551,9 @@ class TestGetBoundaryPatches:
         polymesh_dir = os.path.join(self.temp_dir, "constant", "polyMesh")
         os.makedirs(polymesh_dir, exist_ok=True)
         boundary_file = os.path.join(polymesh_dir, "boundary")
-        with open(boundary_file, 'w') as f:
-            f.write("""FoamFile
+        with open(boundary_file, "w") as f:
+            f.write(
+                """FoamFile
 {
     class polyBoundaryMesh;
 }
@@ -599,14 +572,15 @@ wall
 {
     type wall;
 }
-""")
+"""
+            )
 
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
         patches = processor._get_boundary_patches()
 
-        assert 'inlet' in patches
-        assert 'outlet' in patches
-        assert 'wall' in patches
+        assert "inlet" in patches
+        assert "outlet" in patches
+        assert "wall" in patches
 
     def test_get_boundary_patches_no_file(self):
         """Test when boundary file doesn't exist."""
@@ -623,17 +597,18 @@ class TestComputePressureDrop:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet1'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet1"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_compute_pressure_drop_with_data(self):
@@ -641,13 +616,13 @@ class TestComputePressureDrop:
         # Create inlet pressure data
         inlet_dir = os.path.join(self.temp_dir, "postProcessing", "inletPressure", "0")
         os.makedirs(inlet_dir, exist_ok=True)
-        with open(os.path.join(inlet_dir, "surfaceFieldValue.dat"), 'w') as f:
+        with open(os.path.join(inlet_dir, "surfaceFieldValue.dat"), "w") as f:
             f.write("0.0 100.0\n0.5 110.0\n1.0 105.0\n")
 
         # Create outlet pressure data
         outlet_dir = os.path.join(self.temp_dir, "postProcessing", "outlet1Pressure", "0")
         os.makedirs(outlet_dir, exist_ok=True)
-        with open(os.path.join(outlet_dir, "surfaceFieldValue.dat"), 'w') as f:
+        with open(os.path.join(outlet_dir, "surfaceFieldValue.dat"), "w") as f:
             f.write("0.0 80.0\n0.5 85.0\n1.0 82.0\n")
 
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
@@ -655,8 +630,8 @@ class TestComputePressureDrop:
         processor._compute_pressure_drop(results)
 
         assert results.pressure_inlet > 0
-        assert 'outlet1' in results.pressure_outlets
-        assert 'outlet1' in results.pressure_drops
+        assert "outlet1" in results.pressure_outlets
+        assert "outlet1" in results.pressure_drops
 
     def test_compute_pressure_drop_no_postprocessing(self):
         """Test pressure drop computation when no postProcessing directory."""
@@ -676,17 +651,18 @@ class TestExportQoi:
         self.temp_dir = tempfile.mkdtemp()
         self.output_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'TIMEVARYING'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet1'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "TIMEVARYING"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet1"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directories."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
         shutil.rmtree(self.output_dir, ignore_errors=True)
 
@@ -706,7 +682,7 @@ class TestExportQoi:
             tawss_mean=8.0,
             osi_mean=0.1,
             osi_mean_masked=0.12,
-            pressure_drop_mmhg={'outlet1': 5.0}
+            pressure_drop_mmhg={"outlet1": 5.0},
         )
 
         json_path, csv_path = processor.export_qoi(results, self.output_dir)
@@ -718,14 +694,14 @@ class TestExportQoi:
         # Check JSON content
         with open(json_path) as f:
             data = json.load(f)
-        assert '_metadata' in data
-        assert 'qoi' in data
-        assert data['qoi']['wss_p99_pa']['value'] == 20.0
+        assert "_metadata" in data
+        assert "qoi" in data
+        assert data["qoi"]["wss_p99_pa"]["value"] == 20.0
 
         # Check CSV content
         with open(csv_path) as f:
             content = f.read()
-        assert 'wss_p99_pa' in content
+        assert "wss_p99_pa" in content
 
 
 class TestDetectPeakSystole:
@@ -738,24 +714,25 @@ class TestDetectPeakSystole:
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_detect_peak_systole_success(self):
         """Test peak systole detection from flowrate.csv."""
         config = {
-            'inlet': {'type': 'TIMEVARYING'},
-            'cardiac_cycle': 0.8,
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "TIMEVARYING"},
+            "cardiac_cycle": 0.8,
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
         # Create boundaryData with flowrate.csv
         inlet_dir = os.path.join(self.temp_dir, "constant", "boundaryData", "inlet")
         os.makedirs(inlet_dir, exist_ok=True)
-        with open(os.path.join(inlet_dir, "flowrate.csv"), 'w') as f:
+        with open(os.path.join(inlet_dir, "flowrate.csv"), "w") as f:
             f.write("0.0,0.001\n")
             f.write("0.1,0.005\n")
             f.write("0.2,0.010\n")  # Peak
@@ -772,12 +749,12 @@ class TestDetectPeakSystole:
     def test_detect_peak_systole_not_pulsatile(self):
         """Test peak systole detection skipped for non-pulsatile flow."""
         config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
         processor = HemodynamicsPostProcessor(self.temp_dir, config)
@@ -789,12 +766,12 @@ class TestDetectPeakSystole:
     def test_detect_peak_systole_no_file(self):
         """Test peak systole detection when flowrate.csv doesn't exist."""
         config = {
-            'inlet': {'type': 'TIMEVARYING'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "TIMEVARYING"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
         processor = HemodynamicsPostProcessor(self.temp_dir, config)
@@ -811,23 +788,24 @@ class TestRunWssPostprocess:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_wss_postprocess_success(self, mock_run):
         """Test successful WSS post-processing."""
-        mock_run.return_value = MagicMock(returncode=0, stderr='')
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
 
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
         result = processor.run_wss_postprocess()
@@ -835,28 +813,29 @@ class TestRunWssPostprocess:
         assert result == True
         mock_run.assert_called_once()
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_wss_postprocess_failure(self, mock_run):
         """Test failed WSS post-processing."""
-        mock_run.return_value = MagicMock(returncode=1, stderr='Error message')
+        mock_run.return_value = MagicMock(returncode=1, stderr="Error message")
 
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
         result = processor.run_wss_postprocess()
 
         assert result == False
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_wss_postprocess_timeout(self, mock_run):
         """Test WSS post-processing timeout."""
         import subprocess
-        mock_run.side_effect = subprocess.TimeoutExpired('cmd', 300)
+
+        mock_run.side_effect = subprocess.TimeoutExpired("cmd", 300)
 
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
         result = processor.run_wss_postprocess()
 
         assert result == False
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_wss_postprocess_exception(self, mock_run):
         """Test WSS post-processing with general exception."""
         mock_run.side_effect = Exception("Unexpected error")
@@ -874,17 +853,18 @@ class TestWriteScalarBoundaryField:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_write_scalar_boundary_field_success(self):
@@ -914,24 +894,25 @@ class TestFieldAverageCheck:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'TIMEVARYING'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "TIMEVARYING"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_fieldaverage_exists(self):
         """Test fieldAverage detection when file exists."""
         time_dir = os.path.join(self.temp_dir, "1.0")
         os.makedirs(time_dir)
-        with open(os.path.join(time_dir, "wallShearStressMean"), 'w') as f:
+        with open(os.path.join(time_dir, "wallShearStressMean"), "w") as f:
             f.write("// Mock file")
 
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
@@ -956,43 +937,44 @@ class TestComputeAllMethod:
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_compute_all_no_wss(self):
         """Test compute_all when no WSS data exists."""
         config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
         processor = HemodynamicsPostProcessor(self.temp_dir, config)
         results = processor.compute_all()
 
-        assert results.inlet_type == 'CONSTANT'
+        assert results.inlet_type == "CONSTANT"
         assert results.is_pulsatile == False
         assert results.wss_max == 0.0
 
     def test_compute_all_returns_results(self):
         """Test compute_all returns HemodynamicsResults object."""
         config = {
-            'inlet': {'type': 'TIMEVARYING'},
-            'cardiac_cycle': 0.9,
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "TIMEVARYING"},
+            "cardiac_cycle": 0.9,
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
         processor = HemodynamicsPostProcessor(self.temp_dir, config)
         results = processor.compute_all()
 
         assert isinstance(results, HemodynamicsResults)
-        assert results.inlet_type == 'TIMEVARYING'
+        assert results.inlet_type == "TIMEVARYING"
         assert results.is_pulsatile == True
         assert results.cardiac_cycle == 0.9
 
@@ -1004,17 +986,18 @@ class TestReadVectorField:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_read_ascii_vector_field_success(self):
@@ -1101,17 +1084,18 @@ class TestComputeSteadyWSS:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_compute_steady_wss_with_data(self):
@@ -1177,18 +1161,19 @@ class TestComputeTAWSSComplex:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'TIMEVARYING'},
-            'cardiac_cycle': 1.0,
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "TIMEVARYING"},
+            "cardiac_cycle": 1.0,
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def _create_wss_file(self, time_dir, vectors):
@@ -1257,7 +1242,7 @@ boundaryField
             time_dir.mkdir()
             # Create WSS files with time-varying values
             wss_val = 1.0 + 0.5 * t  # increases with time
-            self._create_wss_file(time_dir, [[wss_val, 0, 0], [wss_val*2, 0, 0]])
+            self._create_wss_file(time_dir, [[wss_val, 0, 0], [wss_val * 2, 0, 0]])
 
         # Create mean file at latest time
         time_dir = Path(self.temp_dir) / "2.0"
@@ -1293,17 +1278,18 @@ class TestGetTimeDirectories:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_get_time_directories_sorted(self):
@@ -1341,12 +1327,12 @@ class TestSaveHemodynamicFields:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
         # Create polyMesh/boundary file
         mesh_dir = Path(self.temp_dir) / "constant" / "polyMesh"
@@ -1382,6 +1368,7 @@ FoamFile
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_save_hemodynamic_fields_creates_files(self):
@@ -1399,7 +1386,7 @@ FoamFile
         processor._save_hemodynamic_fields(time_dir, tawss, osi, rrt)
 
         # Check files were created
-        for field_name in ['TAWSS', 'OSI', 'RRT']:
+        for field_name in ["TAWSS", "OSI", "RRT"]:
             field_file = time_dir / field_name
             assert field_file.exists(), f"{field_name} file not created"
             content = field_file.read_text()
@@ -1415,17 +1402,18 @@ class TestGenerateReport:
         self.temp_dir = tempfile.mkdtemp()
         self.output_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'TIMEVARYING'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet1', 'outlet2'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "TIMEVARYING"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet1", "outlet2"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directories."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
         shutil.rmtree(self.output_dir, ignore_errors=True)
 
@@ -1433,7 +1421,7 @@ class TestGenerateReport:
         """Test report generation for pulsatile flow."""
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
         results = HemodynamicsResults(
-            inlet_type='TIMEVARYING',
+            inlet_type="TIMEVARYING",
             is_pulsatile=True,
             cardiac_cycle=0.8,
             wss_max=12.5,
@@ -1445,7 +1433,7 @@ class TestGenerateReport:
             osi_max=0.35,
             osi_mean=0.12,
             rrt_max=5.0,
-            rrt_mean=1.5
+            rrt_mean=1.5,
         )
 
         report_path = processor.generate_report(results, self.output_dir)
@@ -1461,20 +1449,15 @@ class TestGenerateReport:
     def test_generate_report_steady(self):
         """Test report generation for steady flow."""
         steady_config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
         processor = HemodynamicsPostProcessor(self.temp_dir, steady_config)
-        results = HemodynamicsResults(
-            inlet_type='CONSTANT',
-            is_pulsatile=False,
-            wss_max=8.0,
-            wss_mean=2.0
-        )
+        results = HemodynamicsResults(inlet_type="CONSTANT", is_pulsatile=False, wss_max=8.0, wss_mean=2.0)
 
         report_path = processor.generate_report(results, self.output_dir)
 
@@ -1488,12 +1471,12 @@ class TestGenerateReport:
         """Test report includes pressure drop data."""
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
         results = HemodynamicsResults(
-            inlet_type='TIMEVARYING',
+            inlet_type="TIMEVARYING",
             is_pulsatile=True,
             pressure_inlet=100.0,
-            pressure_outlets={'outlet1': 80.0, 'outlet2': 85.0},
-            pressure_drops={'outlet1': 20.0, 'outlet2': 15.0},
-            pressure_drop_mmhg={'outlet1': 15.0, 'outlet2': 11.0}
+            pressure_outlets={"outlet1": 80.0, "outlet2": 85.0},
+            pressure_drops={"outlet1": 20.0, "outlet2": 15.0},
+            pressure_drop_mmhg={"outlet1": 15.0, "outlet2": 11.0},
         )
 
         report_path = processor.generate_report(results, self.output_dir)
@@ -1511,17 +1494,18 @@ class TestExportQoiExtended:
         self.temp_dir = tempfile.mkdtemp()
         self.output_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'TIMEVARYING'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "TIMEVARYING"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directories."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
         shutil.rmtree(self.output_dir, ignore_errors=True)
 
@@ -1531,12 +1515,7 @@ class TestExportQoiExtended:
 
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
         results = HemodynamicsResults(
-            inlet_type='TIMEVARYING',
-            is_pulsatile=True,
-            wss_max=10.0,
-            wss_p99=9.5,
-            tawss_p99=8.0,
-            osi_mean_masked=0.15
+            inlet_type="TIMEVARYING", is_pulsatile=True, wss_max=10.0, wss_p99=9.5, tawss_p99=8.0, osi_mean_masked=0.15
         )
 
         json_path, csv_path = processor.export_qoi(results, self.output_dir)
@@ -1545,7 +1524,7 @@ class TestExportQoiExtended:
         with open(json_path) as f:
             qoi_data = json.load(f)
 
-        assert 'tawss_p99_pa' in qoi_data or 'tawss_p99' in str(qoi_data).lower()
+        assert "tawss_p99_pa" in qoi_data or "tawss_p99" in str(qoi_data).lower()
         assert os.path.exists(csv_path)
 
     def test_export_qoi_with_pressure_data(self):
@@ -1553,11 +1532,7 @@ class TestExportQoiExtended:
         import json
 
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
-        results = HemodynamicsResults(
-            inlet_type='TIMEVARYING',
-            is_pulsatile=True,
-            pressure_drop_mmhg={'outlet': 12.5}
-        )
+        results = HemodynamicsResults(inlet_type="TIMEVARYING", is_pulsatile=True, pressure_drop_mmhg={"outlet": 12.5})
 
         json_path, csv_path = processor.export_qoi(results, self.output_dir)
 
@@ -1580,52 +1555,45 @@ class TestConvenienceFunctionExtended:
     def teardown_method(self):
         """Cleanup temp directories."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
         shutil.rmtree(self.output_dir, ignore_errors=True)
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_hemodynamics_analysis_steady(self, mock_run):
         """Test convenience function with steady flow config."""
-        mock_run.return_value = MagicMock(returncode=0, stderr='')
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
 
         config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
-        results = run_hemodynamics_analysis(
-            self.temp_dir,
-            config,
-            output_dir=self.output_dir
-        )
+        results = run_hemodynamics_analysis(self.temp_dir, config, output_dir=self.output_dir)
 
         assert isinstance(results, HemodynamicsResults)
-        assert results.inlet_type == 'CONSTANT'
+        assert results.inlet_type == "CONSTANT"
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_hemodynamics_analysis_pulsatile(self, mock_run):
         """Test convenience function with pulsatile flow config."""
-        mock_run.return_value = MagicMock(returncode=0, stderr='')
+        mock_run.return_value = MagicMock(returncode=0, stderr="")
 
         config = {
-            'inlet': {'type': 'WOMERSLEY'},
-            'cardiac_cycle': 0.75,
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "WOMERSLEY"},
+            "cardiac_cycle": 0.75,
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
-        results = run_hemodynamics_analysis(
-            self.temp_dir,
-            config,
-            output_dir=self.output_dir
-        )
+        results = run_hemodynamics_analysis(self.temp_dir, config, output_dir=self.output_dir)
 
         assert results.is_pulsatile == True
         assert results.cardiac_cycle == 0.75
@@ -1635,6 +1603,7 @@ class TestConvenienceFunctionExtended:
 # ADDITIONAL TESTS FOR UNCOVERED PATHS
 # =============================================================================
 
+
 class TestDetectPeakSystole:
     """Test _detect_peak_systole method."""
 
@@ -1642,28 +1611,29 @@ class TestDetectPeakSystole:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'TIMEVARYING'},
-            'cardiac_cycle': 0.8,
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "TIMEVARYING"},
+            "cardiac_cycle": 0.8,
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_detect_peak_systole_with_flowrate_csv(self):
         """Test peak systole detection from flowrate.csv."""
         # Create boundaryData/inlet directory with flowrate.csv
-        inlet_dir = os.path.join(self.temp_dir, 'constant', 'boundaryData', 'inlet')
+        inlet_dir = os.path.join(self.temp_dir, "constant", "boundaryData", "inlet")
         os.makedirs(inlet_dir, exist_ok=True)
 
-        flowrate_file = os.path.join(inlet_dir, 'flowrate.csv')
-        with open(flowrate_file, 'w') as f:
+        flowrate_file = os.path.join(inlet_dir, "flowrate.csv")
+        with open(flowrate_file, "w") as f:
             # Peak flow at t=0.2
             f.write("0.0,50.0\n")
             f.write("0.1,80.0\n")
@@ -1682,7 +1652,7 @@ class TestDetectPeakSystole:
     def test_detect_peak_systole_steady_flow_skips(self):
         """Test peak systole detection is skipped for steady flow."""
         config = self.config.copy()
-        config['inlet'] = {'type': 'CONSTANT'}
+        config["inlet"] = {"type": "CONSTANT"}
 
         processor = HemodynamicsPostProcessor(self.temp_dir, config)
         results = HemodynamicsResults(is_pulsatile=False)
@@ -1702,11 +1672,11 @@ class TestDetectPeakSystole:
 
     def test_detect_peak_systole_with_header(self):
         """Test peak systole detection with CSV header."""
-        inlet_dir = os.path.join(self.temp_dir, 'constant', 'boundaryData', 'inlet_main')
+        inlet_dir = os.path.join(self.temp_dir, "constant", "boundaryData", "inlet_main")
         os.makedirs(inlet_dir, exist_ok=True)
 
-        flowrate_file = os.path.join(inlet_dir, 'flowrate.csv')
-        with open(flowrate_file, 'w') as f:
+        flowrate_file = os.path.join(inlet_dir, "flowrate.csv")
+        with open(flowrate_file, "w") as f:
             f.write("time,flowrate\n")  # Header (non-numeric)
             f.write("0.0,50.0\n")
             f.write("0.15,120.0\n")  # Peak
@@ -1722,11 +1692,11 @@ class TestDetectPeakSystole:
 
     def test_detect_peak_systole_negative_flows(self):
         """Test peak systole detection handles negative flow (uses absolute value)."""
-        inlet_dir = os.path.join(self.temp_dir, 'constant', 'boundaryData', 'inlet')
+        inlet_dir = os.path.join(self.temp_dir, "constant", "boundaryData", "inlet")
         os.makedirs(inlet_dir, exist_ok=True)
 
-        flowrate_file = os.path.join(inlet_dir, 'flowrate.csv')
-        with open(flowrate_file, 'w') as f:
+        flowrate_file = os.path.join(inlet_dir, "flowrate.csv")
+        with open(flowrate_file, "w") as f:
             f.write("0.0,-50.0\n")
             f.write("0.1,-120.0\n")  # Peak magnitude
             f.write("0.2,-60.0\n")
@@ -1747,17 +1717,18 @@ class TestComputeSteadyWSS:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_compute_steady_wss_no_time_dir(self):
@@ -1773,7 +1744,7 @@ class TestComputeSteadyWSS:
     def test_compute_steady_wss_no_wss_file(self):
         """Test _compute_steady_wss when WSS file doesn't exist."""
         # Create time directory without WSS file
-        time_dir = os.path.join(self.temp_dir, '1.0')
+        time_dir = os.path.join(self.temp_dir, "1.0")
         os.makedirs(time_dir, exist_ok=True)
 
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
@@ -1791,32 +1762,33 @@ class TestComputePressureDrop:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet1', 'outlet2'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet1", "outlet2"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_compute_pressure_drop_with_data(self):
         """Test pressure drop computation with actual data."""
         # Create postProcessing data
-        inlet_dir = os.path.join(self.temp_dir, 'postProcessing', 'inletPressure', '0')
+        inlet_dir = os.path.join(self.temp_dir, "postProcessing", "inletPressure", "0")
         os.makedirs(inlet_dir, exist_ok=True)
-        with open(os.path.join(inlet_dir, 'surfaceFieldValue.dat'), 'w') as f:
+        with open(os.path.join(inlet_dir, "surfaceFieldValue.dat"), "w") as f:
             f.write("# Time p\n")
             f.write("0.0 120.0\n")
             f.write("0.5 122.0\n")
 
-        outlet_dir = os.path.join(self.temp_dir, 'postProcessing', 'outlet1Pressure', '0')
+        outlet_dir = os.path.join(self.temp_dir, "postProcessing", "outlet1Pressure", "0")
         os.makedirs(outlet_dir, exist_ok=True)
-        with open(os.path.join(outlet_dir, 'surfaceFieldValue.dat'), 'w') as f:
+        with open(os.path.join(outlet_dir, "surfaceFieldValue.dat"), "w") as f:
             f.write("# Time p\n")
             f.write("0.0 100.0\n")
             f.write("0.5 102.0\n")
@@ -1848,34 +1820,36 @@ class TestReadVectorField:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'CONSTANT'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "CONSTANT"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_read_vector_field_nonexistent(self):
         """Test reading nonexistent vector field file."""
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
-        result = processor._read_vector_field(Path(self.temp_dir) / 'nonexistent')
+        result = processor._read_vector_field(Path(self.temp_dir) / "nonexistent")
 
         assert result is None
 
     def test_read_ascii_vector_field(self):
         """Test reading ASCII format vector field."""
-        time_dir = os.path.join(self.temp_dir, '1.0')
+        time_dir = os.path.join(self.temp_dir, "1.0")
         os.makedirs(time_dir, exist_ok=True)
 
-        wss_file = os.path.join(time_dir, 'wallShearStress')
-        with open(wss_file, 'w') as f:
-            f.write("""FoamFile
+        wss_file = os.path.join(time_dir, "wallShearStress")
+        with open(wss_file, "w") as f:
+            f.write(
+                """FoamFile
 {
     version     2.0;
     format      ascii;
@@ -1902,7 +1876,8 @@ boundaryField
 ;
     }
 }
-""")
+"""
+            )
 
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
         result = processor._read_vector_field(Path(wss_file))
@@ -1914,11 +1889,11 @@ boundaryField
 
     def test_read_vector_field_invalid_format(self):
         """Test reading vector field with invalid format."""
-        time_dir = os.path.join(self.temp_dir, '1.0')
+        time_dir = os.path.join(self.temp_dir, "1.0")
         os.makedirs(time_dir, exist_ok=True)
 
-        wss_file = os.path.join(time_dir, 'wallShearStress')
-        with open(wss_file, 'w') as f:
+        wss_file = os.path.join(time_dir, "wallShearStress")
+        with open(wss_file, "w") as f:
             f.write("invalid content without proper format")
 
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
@@ -1935,17 +1910,18 @@ class TestGeneratePressurePlot:
         self.temp_dir = tempfile.mkdtemp()
         self.output_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'TIMEVARYING'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet1', 'outlet2'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "TIMEVARYING"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet1", "outlet2"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directories."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
         shutil.rmtree(self.output_dir, ignore_errors=True)
 
@@ -1958,16 +1934,15 @@ class TestGeneratePressurePlot:
         processor._generate_pressure_plot(results, Path(self.output_dir))
 
         # No plot file should be created
-        plot_file = os.path.join(self.output_dir, 'pressure_drop_timeseries.png')
+        plot_file = os.path.join(self.output_dir, "pressure_drop_timeseries.png")
         assert not os.path.exists(plot_file)
 
-    @patch('aortacfd_lib.hemodynamics_postprocessor.HAS_MATPLOTLIB', True)
-    @patch('matplotlib.pyplot.savefig')
-    @patch('matplotlib.pyplot.subplots')
-    @patch('matplotlib.pyplot.tight_layout')
-    @patch('matplotlib.pyplot.close')
-    def test_generate_pressure_plot_with_data(self, mock_close, mock_tight,
-                                               mock_subplots, mock_savefig):
+    @patch("aortacfd_lib.hemodynamics_postprocessor.HAS_MATPLOTLIB", True)
+    @patch("matplotlib.pyplot.savefig")
+    @patch("matplotlib.pyplot.subplots")
+    @patch("matplotlib.pyplot.tight_layout")
+    @patch("matplotlib.pyplot.close")
+    def test_generate_pressure_plot_with_data(self, mock_close, mock_tight, mock_subplots, mock_savefig):
         """Test pressure plot generation with data."""
         mock_fig = MagicMock()
         mock_ax1 = MagicMock()
@@ -1978,10 +1953,7 @@ class TestGeneratePressurePlot:
         results = HemodynamicsResults(
             time_series=[0.0, 0.1, 0.2],
             pressure_inlet_series=[100.0, 110.0, 105.0],
-            pressure_outlet_series={
-                'outlet1': [80.0, 85.0, 82.0],
-                'outlet2': [75.0, 78.0, 76.0]
-            }
+            pressure_outlet_series={"outlet1": [80.0, 85.0, 82.0], "outlet2": [75.0, 78.0, 76.0]},
         )
 
         processor._generate_pressure_plot(results, Path(self.output_dir))
@@ -1997,29 +1969,26 @@ class TestComputeTAWSSWithMissingData:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'TIMEVARYING'},
-            'cardiac_cycle': 0.4,
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
+            "inlet": {"type": "TIMEVARYING"},
+            "cardiac_cycle": 0.4,
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
             },
-            'hemodynamics': {
-                'tawss_settings': {
-                    'skip_cycles': 1
-                }
-            }
+            "hemodynamics": {"tawss_settings": {"skip_cycles": 1}},
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_compute_tawss_no_valid_dirs_after_skip(self):
         """Test TAWSS computation when no dirs after skip_cycles."""
         # Create time directories before skip time (0.4s with skip_cycles=1 means 0.4s)
-        for t in ['0', '0.1', '0.2', '0.3']:
+        for t in ["0", "0.1", "0.2", "0.3"]:
             os.makedirs(os.path.join(self.temp_dir, t), exist_ok=True)
 
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
@@ -2039,17 +2008,18 @@ class TestReportWithPressureDrops:
         self.temp_dir = tempfile.mkdtemp()
         self.output_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'TIMEVARYING'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet1', 'outlet2'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "TIMEVARYING"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet1", "outlet2"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directories."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
         shutil.rmtree(self.output_dir, ignore_errors=True)
 
@@ -2066,20 +2036,20 @@ class TestReportWithPressureDrops:
             tawss_max=10.0,
             tawss_mean=3.0,
             pressure_inlet=120.0,
-            pressure_outlets={'outlet1': 100.0, 'outlet2': 95.0},
-            pressure_drops={'outlet1': 20.0, 'outlet2': 25.0},
-            pressure_drop_mmhg={'outlet1': 15.0, 'outlet2': 18.75}
+            pressure_outlets={"outlet1": 100.0, "outlet2": 95.0},
+            pressure_drops={"outlet1": 20.0, "outlet2": 25.0},
+            pressure_drop_mmhg={"outlet1": 15.0, "outlet2": 18.75},
         )
 
         report_path = processor.generate_report(results, self.output_dir)
 
-        with open(report_path, 'r') as f:
+        with open(report_path, "r") as f:
             content = f.read()
 
         # Should contain pressure drop section
-        assert 'PRESSURE DROP' in content
-        assert 'outlet1' in content
-        assert 'outlet2' in content
+        assert "PRESSURE DROP" in content
+        assert "outlet1" in content
+        assert "outlet2" in content
 
     def test_report_with_peak_systole(self):
         """Test report includes peak systole when detected."""
@@ -2091,34 +2061,29 @@ class TestReportWithPressureDrops:
             peak_systole_detected=True,
             peak_systole_time=0.15,
             wss_max=15.0,
-            wss_mean=3.5
+            wss_mean=3.5,
         )
 
         report_path = processor.generate_report(results, self.output_dir)
 
-        with open(report_path, 'r') as f:
+        with open(report_path, "r") as f:
             content = f.read()
 
-        assert 'Peak Systole' in content
-        assert '0.15' in content
+        assert "Peak Systole" in content
+        assert "0.15" in content
 
     def test_report_steady_flow_no_pulsatile_metrics(self):
         """Test report for steady flow excludes pulsatile metrics."""
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
-        results = HemodynamicsResults(
-            inlet_type="CONSTANT",
-            is_pulsatile=False,
-            wss_max=15.0,
-            wss_mean=3.5
-        )
+        results = HemodynamicsResults(inlet_type="CONSTANT", is_pulsatile=False, wss_max=15.0, wss_mean=3.5)
 
         report_path = processor.generate_report(results, self.output_dir)
 
-        with open(report_path, 'r') as f:
+        with open(report_path, "r") as f:
             content = f.read()
 
-        assert 'Not Applicable' in content
-        assert 'OSI = 0' in content
+        assert "Not Applicable" in content
+        assert "OSI = 0" in content
 
 
 class TestFieldAverageCheck:
@@ -2128,26 +2093,27 @@ class TestFieldAverageCheck:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'TIMEVARYING'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall'
-            }
+            "inlet": {"type": "TIMEVARYING"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_fieldaverage_exists_true(self):
         """Test fieldAverage check returns True when Mean file exists."""
-        time_dir = os.path.join(self.temp_dir, '1.0')
+        time_dir = os.path.join(self.temp_dir, "1.0")
         os.makedirs(time_dir, exist_ok=True)
 
-        mean_file = os.path.join(time_dir, 'wallShearStressMean')
-        with open(mean_file, 'w') as f:
+        mean_file = os.path.join(time_dir, "wallShearStressMean")
+        with open(mean_file, "w") as f:
             f.write("// Mock mean file")
 
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
@@ -2155,7 +2121,7 @@ class TestFieldAverageCheck:
 
     def test_fieldaverage_exists_false(self):
         """Test fieldAverage check returns False when no Mean file."""
-        time_dir = os.path.join(self.temp_dir, '1.0')
+        time_dir = os.path.join(self.temp_dir, "1.0")
         os.makedirs(time_dir, exist_ok=True)
 
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
@@ -2169,22 +2135,23 @@ class TestSaveHemodynamicFields:
         """Setup test fixtures."""
         self.temp_dir = tempfile.mkdtemp()
         self.config = {
-            'inlet': {'type': 'TIMEVARYING'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet'],
-                'wall_keywords_ordered': 'wall_aorta'
-            }
+            "inlet": {"type": "TIMEVARYING"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall_aorta",
+            },
         }
 
     def teardown_method(self):
         """Cleanup temp directory."""
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_save_hemodynamic_fields_no_boundary_file(self):
         """Test save when boundary file doesn't exist."""
-        time_dir = Path(self.temp_dir) / '1.0'
+        time_dir = Path(self.temp_dir) / "1.0"
         time_dir.mkdir(parents=True, exist_ok=True)
 
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
@@ -2198,16 +2165,17 @@ class TestSaveHemodynamicFields:
 
     def test_save_hemodynamic_fields_with_boundary(self):
         """Test save with valid boundary file."""
-        time_dir = Path(self.temp_dir) / '1.0'
+        time_dir = Path(self.temp_dir) / "1.0"
         time_dir.mkdir(parents=True, exist_ok=True)
 
         # Create boundary file
-        polymesh_dir = Path(self.temp_dir) / 'constant' / 'polyMesh'
+        polymesh_dir = Path(self.temp_dir) / "constant" / "polyMesh"
         polymesh_dir.mkdir(parents=True, exist_ok=True)
 
-        boundary_file = polymesh_dir / 'boundary'
-        with open(boundary_file, 'w') as f:
-            f.write("""wall_aorta
+        boundary_file = polymesh_dir / "boundary"
+        with open(boundary_file, "w") as f:
+            f.write(
+                """wall_aorta
 {
     type wall;
 }
@@ -2215,7 +2183,8 @@ inlet
 {
     type patch;
 }
-""")
+"""
+            )
 
         processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
 
@@ -2226,6 +2195,6 @@ inlet
         processor._save_hemodynamic_fields(time_dir, tawss, osi, rrt)
 
         # Check files were created
-        assert (time_dir / 'TAWSS').exists()
-        assert (time_dir / 'OSI').exists()
-        assert (time_dir / 'RRT').exists()
+        assert (time_dir / "TAWSS").exists()
+        assert (time_dir / "OSI").exists()
+        assert (time_dir / "RRT").exists()

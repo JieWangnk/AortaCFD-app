@@ -5,6 +5,7 @@ from .utils.logger import Logger
 from .utils.ofVersionAdapter import OFVersionAdapter
 from .template_context import prepare_fv_schemes_context
 
+
 class FvSchemesWriter:
     """
     Generates the fvSchemes file using a unified config object and a
@@ -13,15 +14,18 @@ class FvSchemesWriter:
     Includes mesh-adaptive system that automatically adjusts schemes
     based on checkMesh quality metrics.
     """
+
     def __init__(self, config: dict, case_directory: str):
         """The constructor now takes the unified config object."""
         self.config = config
         self.case_dir = case_directory
         self.log = Logger("numerical_setup").get_logger()
 
-        template_path = os.path.join(os.path.dirname(__file__), '..', 'templates')
-        self.jinja_env = Environment(loader=FileSystemLoader(template_path))
-        self.version_adapter = OFVersionAdapter(self.config['openfoam_version'])
+        template_path = os.path.join(os.path.dirname(__file__), "..", "templates")
+        self.jinja_env = Environment(  # nosec B701 - renders OpenFOAM dictionaries, not HTML
+            loader=FileSystemLoader(template_path)
+        )
+        self.version_adapter = OFVersionAdapter(self.config["openfoam_version"])
 
     def write_fvSchemes_file(self):
         """
@@ -32,12 +36,12 @@ class FvSchemesWriter:
         schemes will be automatically adjusted for mesh quality.
         """
         # Get schemes from config
-        schemes = self.config.get('schemes', {})
+        schemes = self.config.get("schemes", {})
 
         # Apply mesh-adaptive adjustments if enabled
-        mesh_adaptive_enabled = self.config.get('numerics', {}).get('mesh_adaptive', True)
+        mesh_adaptive_enabled = self.config.get("numerics", {}).get("mesh_adaptive", True)
 
-        if mesh_adaptive_enabled and 'schemes' in self.config:
+        if mesh_adaptive_enabled and "schemes" in self.config:
             schemes = self._apply_mesh_adaptive_schemes(schemes)
 
         # This single method replaces all the previous private _get... methods.
@@ -51,25 +55,25 @@ class FvSchemesWriter:
         context = {
             "header": self.version_adapter.get_foam_file_header("dictionary", "fvSchemes"),
             # Pre-computed business logic values
-            "is_steady": preprocessed['is_steady'],
-            "simulation_type": preprocessed['simulation_type'],
-            "profile": preprocessed['profile'],
-            "ddt_scheme": preprocessed['ddt_scheme'],
-            "div_scheme_U": preprocessed['div_scheme_U'],
-            "div_scheme_k": preprocessed['div_scheme_k'],
-            "grad_limiter": preprocessed['grad_limiter'],
-            "laplacian_scheme": preprocessed['laplacian_scheme'],
-            "sngrad_scheme": preprocessed['sngrad_scheme'],
+            "is_steady": preprocessed["is_steady"],
+            "simulation_type": preprocessed["simulation_type"],
+            "profile": preprocessed["profile"],
+            "ddt_scheme": preprocessed["ddt_scheme"],
+            "div_scheme_U": preprocessed["div_scheme_U"],
+            "div_scheme_k": preprocessed["div_scheme_k"],
+            "grad_limiter": preprocessed["grad_limiter"],
+            "laplacian_scheme": preprocessed["laplacian_scheme"],
+            "sngrad_scheme": preprocessed["sngrad_scheme"],
             # Raw data (still needed for scheme overrides)
-            "physics": self.config['physics'],
+            "physics": self.config["physics"],
             "schemes": schemes,
-            "template_vars": self.config.get('template_vars', {}),
-            "openfoam_version": self.config.get('openfoam_version', '8'),
-            "openfoam_major_version": self.config.get('openfoam_major_version', 8)
+            "template_vars": self.config.get("template_vars", {}),
+            "openfoam_version": self.config.get("openfoam_version", "8"),
+            "openfoam_major_version": self.config.get("openfoam_major_version", 8),
         }
 
         output_path = os.path.join(self.case_dir, "system", "fvSchemes")
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             f.write(template.render(context))
         self.log.info(f"Successfully wrote fvSchemes file to {output_path}")
 
@@ -97,7 +101,7 @@ class FvSchemesWriter:
             adapter.analyze_checkmesh_log(str(checkmesh_log))
 
             # Get profile name (case-insensitive)
-            profile_name = self.config.get('numerics', {}).get('profile', 'standard').lower()
+            profile_name = self.config.get("numerics", {}).get("profile", "standard").lower()
 
             # Adjust schemes
             adjusted_schemes = adapter.adjust_fvschemes_for_mesh(base_schemes, profile_name)
@@ -106,12 +110,12 @@ class FvSchemesWriter:
             if adjusted_schemes != base_schemes:
                 tier = adapter.mesh_quality_tier
                 self.log.info(f"🔧 Mesh-Adaptive System: Detected {tier} quality mesh")
-                self.log.info(f"   Adjusted fvSchemes for mesh quality")
+                self.log.info("   Adjusted fvSchemes for mesh quality")
 
                 # Log specific changes
-                if 'laplacianSchemes' in adjusted_schemes:
-                    base_lap = base_schemes.get('laplacianSchemes', {}).get('default', 'N/A')
-                    adj_lap = adjusted_schemes['laplacianSchemes'].get('default', 'N/A')
+                if "laplacianSchemes" in adjusted_schemes:
+                    base_lap = base_schemes.get("laplacianSchemes", {}).get("default", "N/A")
+                    adj_lap = adjusted_schemes["laplacianSchemes"].get("default", "N/A")
                     if base_lap != adj_lap:
                         self.log.info(f"   Laplacian: {base_lap} → {adj_lap}")
 

@@ -40,10 +40,10 @@ class TestShapeFunctionEnum:
         """Test that all expected members exist."""
         from aortacfd_lib.distance_wall_inlet_profile import ShapeFunction
 
-        assert hasattr(ShapeFunction, 'POWER_LAW')
-        assert hasattr(ShapeFunction, 'POISEUILLE')
-        assert hasattr(ShapeFunction, 'HYBRID_JET')
-        assert hasattr(ShapeFunction, 'BLUNTED_PARABOLIC')
+        assert hasattr(ShapeFunction, "POWER_LAW")
+        assert hasattr(ShapeFunction, "POISEUILLE")
+        assert hasattr(ShapeFunction, "HYBRID_JET")
+        assert hasattr(ShapeFunction, "BLUNTED_PARABOLIC")
 
 
 class TestDistanceWallInletProfileInit:
@@ -54,48 +54,40 @@ class TestDistanceWallInletProfileInit:
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
         config = {
-            'inlet': {
-                'csv_file': 'flow.csv',
-                'data_type': 'flowrate',
-                'profile': 'distance_wall',
-                'exponent': 2.0,
-                'shape_function': 'power_law',
-                'orientation': 'auto'
+            "inlet": {
+                "csv_file": "flow.csv",
+                "data_type": "flowrate",
+                "profile": "distance_wall",
+                "exponent": 2.0,
+                "shape_function": "power_law",
+                "orientation": "auto",
             },
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet'
-            },
-            'physics': {}
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {},
         }
 
         profile = DistanceWallInletProfile(config, str(tmp_path))
 
-        assert profile.inlet_name == 'inlet'
-        assert profile.inlet_data_file == 'flow.csv'
-        assert profile.data_type == 'flowrate'
+        assert profile.inlet_name == "inlet"
+        assert profile.inlet_data_file == "flow.csv"
+        assert profile.data_type == "flowrate"
         assert profile.exponent == 2.0
-        assert profile.orientation == 'auto'
+        assert profile.orientation == "auto"
 
     def test_initialization_with_boundary_conditions_config(self, tmp_path):
         """Test initialization with boundary_conditions.inlet structure."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
         config = {
-            'boundary_conditions': {
-                'inlet': {
-                    'csv_file': 'velocity.csv',
-                    'data_type': 'velocity',
-                    'exponent': 1.5
-                }
-            },
-            'geometry': {'inlet_keywords_ordered': 'aortic_inlet'},
-            'physics': {}
+            "boundary_conditions": {"inlet": {"csv_file": "velocity.csv", "data_type": "velocity", "exponent": 1.5}},
+            "geometry": {"inlet_keywords_ordered": "aortic_inlet"},
+            "physics": {},
         }
 
         profile = DistanceWallInletProfile(config, str(tmp_path))
 
-        assert profile.inlet_data_file == 'velocity.csv'
-        assert profile.data_type == 'velocity'
+        assert profile.inlet_data_file == "velocity.csv"
+        assert profile.data_type == "velocity"
         assert profile.exponent == 1.5
 
     def test_initialization_default_values(self, tmp_path):
@@ -106,9 +98,9 @@ class TestDistanceWallInletProfileInit:
 
         profile = DistanceWallInletProfile(config, str(tmp_path))
 
-        assert profile.inlet_name == 'inlet'
-        assert profile.inlet_data_file == 'flow.csv'
-        assert profile.data_type == 'flowrate'
+        assert profile.inlet_name == "inlet"
+        assert profile.inlet_data_file == "flow.csv"
+        assert profile.data_type == "flowrate"
         assert profile.exponent == 2.0
         assert profile.core_fraction == 0.3
         assert profile.shape_function == ShapeFunction.POWER_LAW
@@ -123,9 +115,9 @@ class TestParseShapeFunction:
 
         profile = DistanceWallInletProfile({}, str(tmp_path))
 
-        assert profile._parse_shape_function('power_law') == ShapeFunction.POWER_LAW
-        assert profile._parse_shape_function('power') == ShapeFunction.POWER_LAW
-        assert profile._parse_shape_function('linear') == ShapeFunction.POWER_LAW
+        assert profile._parse_shape_function("power_law") == ShapeFunction.POWER_LAW
+        assert profile._parse_shape_function("power") == ShapeFunction.POWER_LAW
+        assert profile._parse_shape_function("linear") == ShapeFunction.POWER_LAW
 
     def test_parse_poiseuille(self, tmp_path):
         """Test parsing poiseuille shape function."""
@@ -133,8 +125,8 @@ class TestParseShapeFunction:
 
         profile = DistanceWallInletProfile({}, str(tmp_path))
 
-        assert profile._parse_shape_function('poiseuille') == ShapeFunction.POISEUILLE
-        assert profile._parse_shape_function('parabolic') == ShapeFunction.POISEUILLE
+        assert profile._parse_shape_function("poiseuille") == ShapeFunction.POISEUILLE
+        assert profile._parse_shape_function("parabolic") == ShapeFunction.POISEUILLE
 
     def test_parse_hybrid_jet(self, tmp_path):
         """Test parsing hybrid_jet shape function."""
@@ -142,8 +134,8 @@ class TestParseShapeFunction:
 
         profile = DistanceWallInletProfile({}, str(tmp_path))
 
-        assert profile._parse_shape_function('hybrid') == ShapeFunction.HYBRID_JET
-        assert profile._parse_shape_function('hybrid_jet') == ShapeFunction.HYBRID_JET
+        assert profile._parse_shape_function("hybrid") == ShapeFunction.HYBRID_JET
+        assert profile._parse_shape_function("hybrid_jet") == ShapeFunction.HYBRID_JET
 
     def test_parse_blunted(self, tmp_path):
         """Test parsing blunted shape function."""
@@ -151,8 +143,8 @@ class TestParseShapeFunction:
 
         profile = DistanceWallInletProfile({}, str(tmp_path))
 
-        assert profile._parse_shape_function('blunted') == ShapeFunction.BLUNTED_PARABOLIC
-        assert profile._parse_shape_function('blunted_parabolic') == ShapeFunction.BLUNTED_PARABOLIC
+        assert profile._parse_shape_function("blunted") == ShapeFunction.BLUNTED_PARABOLIC
+        assert profile._parse_shape_function("blunted_parabolic") == ShapeFunction.BLUNTED_PARABOLIC
 
     def test_parse_unknown_defaults_to_poiseuille(self, tmp_path):
         """Test unknown shape function defaults to poiseuille."""
@@ -160,8 +152,8 @@ class TestParseShapeFunction:
 
         profile = DistanceWallInletProfile({}, str(tmp_path))
 
-        assert profile._parse_shape_function('unknown') == ShapeFunction.POISEUILLE
-        assert profile._parse_shape_function('foobar') == ShapeFunction.POISEUILLE
+        assert profile._parse_shape_function("unknown") == ShapeFunction.POISEUILLE
+        assert profile._parse_shape_function("foobar") == ShapeFunction.POISEUILLE
 
 
 class TestComputeShapeFactor:
@@ -171,7 +163,7 @@ class TestComputeShapeFactor:
         """Test power law shape factor at wall (d=0)."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile, ShapeFunction
 
-        config = {'inlet': {'shape_function': 'power_law', 'exponent': 2.0}}
+        config = {"inlet": {"shape_function": "power_law", "exponent": 2.0}}
         profile = DistanceWallInletProfile(config, str(tmp_path))
         profile.d_max = 0.01
 
@@ -181,7 +173,7 @@ class TestComputeShapeFactor:
         """Test power law shape factor at center (d=d_max)."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile, ShapeFunction
 
-        config = {'inlet': {'shape_function': 'power_law', 'exponent': 2.0}}
+        config = {"inlet": {"shape_function": "power_law", "exponent": 2.0}}
         profile = DistanceWallInletProfile(config, str(tmp_path))
         profile.d_max = 0.01
 
@@ -191,7 +183,7 @@ class TestComputeShapeFactor:
         """Test power law with exponent=2 gives quadratic profile."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
-        config = {'inlet': {'shape_function': 'power_law', 'exponent': 2.0}}
+        config = {"inlet": {"shape_function": "power_law", "exponent": 2.0}}
         profile = DistanceWallInletProfile(config, str(tmp_path))
         profile.d_max = 1.0
 
@@ -202,7 +194,7 @@ class TestComputeShapeFactor:
         """Test power law with exponent=1 gives linear profile."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
-        config = {'inlet': {'shape_function': 'power_law', 'exponent': 1.0}}
+        config = {"inlet": {"shape_function": "power_law", "exponent": 1.0}}
         profile = DistanceWallInletProfile(config, str(tmp_path))
         profile.d_max = 1.0
 
@@ -213,7 +205,7 @@ class TestComputeShapeFactor:
         """Test Poiseuille shape factor at wall."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
-        config = {'inlet': {'shape_function': 'poiseuille'}}
+        config = {"inlet": {"shape_function": "poiseuille"}}
         profile = DistanceWallInletProfile(config, str(tmp_path))
         profile.d_max = 0.01
 
@@ -223,7 +215,7 @@ class TestComputeShapeFactor:
         """Test Poiseuille shape factor at center."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
-        config = {'inlet': {'shape_function': 'poiseuille'}}
+        config = {"inlet": {"shape_function": "poiseuille"}}
         profile = DistanceWallInletProfile(config, str(tmp_path))
         profile.d_max = 0.01
 
@@ -233,7 +225,7 @@ class TestComputeShapeFactor:
         """Test Poiseuille gives parabolic profile."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
-        config = {'inlet': {'shape_function': 'poiseuille'}}
+        config = {"inlet": {"shape_function": "poiseuille"}}
         profile = DistanceWallInletProfile(config, str(tmp_path))
         profile.d_max = 1.0
 
@@ -245,7 +237,7 @@ class TestComputeShapeFactor:
         """Test hybrid jet shape factor in core region."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
-        config = {'inlet': {'shape_function': 'hybrid_jet', 'core_fraction': 0.3}}
+        config = {"inlet": {"shape_function": "hybrid_jet", "core_fraction": 0.3}}
         profile = DistanceWallInletProfile(config, str(tmp_path))
         profile.d_max = 1.0
         profile.core_fraction = 0.3
@@ -257,7 +249,7 @@ class TestComputeShapeFactor:
         """Test hybrid jet shape factor near wall."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
-        config = {'inlet': {'shape_function': 'hybrid_jet', 'core_fraction': 0.3, 'exponent': 2.0}}
+        config = {"inlet": {"shape_function": "hybrid_jet", "core_fraction": 0.3, "exponent": 2.0}}
         profile = DistanceWallInletProfile(config, str(tmp_path))
         profile.d_max = 1.0
         profile.core_fraction = 0.3
@@ -270,7 +262,7 @@ class TestComputeShapeFactor:
         """Test blunted parabolic shape factor in core region."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
-        config = {'inlet': {'shape_function': 'blunted', 'core_fraction': 0.3}}
+        config = {"inlet": {"shape_function": "blunted", "core_fraction": 0.3}}
         profile = DistanceWallInletProfile(config, str(tmp_path))
         profile.d_max = 1.0
         profile.core_fraction = 0.3
@@ -295,7 +287,7 @@ class TestComputeShapeFactorsVectorized:
         """Test vectorized power law computation."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
-        config = {'inlet': {'shape_function': 'power_law', 'exponent': 2.0}}
+        config = {"inlet": {"shape_function": "power_law", "exponent": 2.0}}
         profile = DistanceWallInletProfile(config, str(tmp_path))
         profile.d_max = 1.0
 
@@ -309,7 +301,7 @@ class TestComputeShapeFactorsVectorized:
         """Test vectorized Poiseuille computation."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
-        config = {'inlet': {'shape_function': 'poiseuille'}}
+        config = {"inlet": {"shape_function": "poiseuille"}}
         profile = DistanceWallInletProfile(config, str(tmp_path))
         profile.d_max = 1.0
 
@@ -432,11 +424,7 @@ class TestWriteVelocityFileFast:
 
         profile = DistanceWallInletProfile({}, str(tmp_path))
 
-        velocities = np.array([
-            [0.1, 0.0, 0.0],
-            [0.2, 0.0, 0.0],
-            [0.15, 0.0, 0.0]
-        ])
+        velocities = np.array([[0.1, 0.0, 0.0], [0.2, 0.0, 0.0], [0.15, 0.0, 0.0]])
 
         output_file = tmp_path / "U"
         profile._write_velocity_file_fast(str(output_file), velocities)
@@ -459,7 +447,7 @@ class TestWriteVelocityFileFast:
         output_file = tmp_path / "U"
         profile._write_velocity_file_fast(str(output_file), velocities)
 
-        lines = output_file.read_text().strip().split('\n')
+        lines = output_file.read_text().strip().split("\n")
 
         assert lines[0] == "1"
         assert lines[1] == "("
@@ -514,7 +502,7 @@ class TestCalculateScalingFactor:
         """Test scaling factor calculation."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
-        config = {'inlet': {'shape_function': 'power_law', 'exponent': 2.0}}
+        config = {"inlet": {"shape_function": "power_law", "exponent": 2.0}}
         profile = DistanceWallInletProfile(config, str(tmp_path))
         profile.d_max = 1.0
         profile.face_areas = np.array([0.1, 0.1, 0.1])  # Total area 0.3
@@ -537,11 +525,9 @@ class TestCreateDistanceWallProfile:
 
     def test_create_returns_correct_instance(self, tmp_path):
         """Test factory function returns correct instance."""
-        from aortacfd_lib.distance_wall_inlet_profile import (
-            create_distance_wall_profile, DistanceWallInletProfile
-        )
+        from aortacfd_lib.distance_wall_inlet_profile import create_distance_wall_profile, DistanceWallInletProfile
 
-        config = {'inlet': {'exponent': 3.0}}
+        config = {"inlet": {"exponent": 3.0}}
         result = create_distance_wall_profile(config, str(tmp_path))
 
         assert isinstance(result, DistanceWallInletProfile)
@@ -551,7 +537,7 @@ class TestCreateDistanceWallProfile:
 class TestShouldFlipNormal:
     """Test _should_flip_normal method."""
 
-    @patch('aortacfd_lib.distance_wall_inlet_profile.PatchProcessing')
+    @patch("aortacfd_lib.distance_wall_inlet_profile.PatchProcessing")
     def test_no_outlet_files_returns_false(self, mock_patch_proc, tmp_path):
         """Test returns False when no outlet files exist."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
@@ -569,7 +555,7 @@ class TestShouldFlipNormal:
 
         assert result is False
 
-    @patch('aortacfd_lib.distance_wall_inlet_profile.PatchProcessing')
+    @patch("aortacfd_lib.distance_wall_inlet_profile.PatchProcessing")
     def test_exception_returns_false(self, mock_patch_proc, tmp_path):
         """Test returns False on exception."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
@@ -591,10 +577,7 @@ class TestWriteVelocityFile:
 
         profile = DistanceWallInletProfile({}, str(tmp_path))
 
-        velocities = [
-            np.array([0.1, 0.0, 0.0]),
-            np.array([0.2, 0.0, 0.0])
-        ]
+        velocities = [np.array([0.1, 0.0, 0.0]), np.array([0.2, 0.0, 0.0])]
 
         output_file = tmp_path / "U"
         profile._write_velocity_file(str(output_file), velocities)
@@ -610,10 +593,11 @@ class TestWriteVelocityFile:
 # ADDITIONAL TESTS FOR UNCOVERED PATHS
 # =============================================================================
 
+
 class TestLoadInletGeometry:
     """Test _load_inlet_geometry method."""
 
-    @patch('aortacfd_lib.distance_wall_inlet_profile.PatchProcessing')
+    @patch("aortacfd_lib.distance_wall_inlet_profile.PatchProcessing")
     def test_load_inlet_geometry_success(self, mock_patch_proc, tmp_path):
         """Test loading inlet geometry successfully."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
@@ -628,7 +612,7 @@ class TestLoadInletGeometry:
         mock_instance.calculate_inlet_center_radius.return_value = (
             np.array([0.01, 0.02, 0.0]),
             0.005,
-            np.array([0, 0, 1])
+            np.array([0, 0, 1]),
         )
         mock_instance.calculate_surface_area.return_value = 0.0001
         mock_patch_proc.return_value = mock_instance
@@ -655,21 +639,12 @@ class TestCalculateWallDistances:
         profile.center = np.array([0.5, 0.5, 0.0])
 
         # Test points
-        points = np.array([
-            [0.5, 0.5, 0.0],  # Center
-            [0.6, 0.5, 0.0],
-            [0.4, 0.5, 0.0]
-        ])
+        points = np.array([[0.5, 0.5, 0.0], [0.6, 0.5, 0.0], [0.4, 0.5, 0.0]])  # Center
 
         # Mock boundary extraction to return wall points
-        with patch.object(profile, '_extract_inlet_boundary') as mock_boundary:
+        with patch.object(profile, "_extract_inlet_boundary") as mock_boundary:
             # Square boundary
-            mock_boundary.return_value = np.array([
-                [0.0, 0.0, 0.0],
-                [1.0, 0.0, 0.0],
-                [1.0, 1.0, 0.0],
-                [0.0, 1.0, 0.0]
-            ])
+            mock_boundary.return_value = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]])
 
             distances = profile._calculate_wall_distances(points)
 
@@ -684,14 +659,10 @@ class TestCalculateWallDistances:
         profile = DistanceWallInletProfile({}, str(tmp_path))
         profile.center = np.array([0.0, 0.0, 0.0])
 
-        points = np.array([
-            [0.0, 0.0, 0.0],  # Center
-            [0.5, 0.0, 0.0],  # Mid
-            [1.0, 0.0, 0.0]   # Edge
-        ])
+        points = np.array([[0.0, 0.0, 0.0], [0.5, 0.0, 0.0], [1.0, 0.0, 0.0]])  # Center  # Mid  # Edge
 
         # Mock boundary extraction to return None
-        with patch.object(profile, '_extract_inlet_boundary', return_value=None):
+        with patch.object(profile, "_extract_inlet_boundary", return_value=None):
             distances = profile._calculate_wall_distances(points)
 
             assert len(distances) == 3
@@ -700,7 +671,7 @@ class TestCalculateWallDistances:
             # Edge should have min distance (1.0 - 1.0 = 0.0)
             assert distances[2] == pytest.approx(0.0)
 
-    @patch('aortacfd_lib.distance_wall_inlet_profile.HAS_SCIPY', False)
+    @patch("aortacfd_lib.distance_wall_inlet_profile.HAS_SCIPY", False)
     def test_calculate_wall_distances_no_scipy(self, tmp_path):
         """Test wall distance calculation without scipy."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
@@ -708,13 +679,10 @@ class TestCalculateWallDistances:
         profile = DistanceWallInletProfile({}, str(tmp_path))
         profile.center = np.array([0.0, 0.0, 0.0])
 
-        points = np.array([
-            [0.0, 0.0, 0.0],
-            [0.5, 0.0, 0.0]
-        ])
+        points = np.array([[0.0, 0.0, 0.0], [0.5, 0.0, 0.0]])
 
         # Mock to return empty boundary to trigger fallback
-        with patch.object(profile, '_extract_inlet_boundary', return_value=np.array([[1.0, 0.0, 0.0]])):
+        with patch.object(profile, "_extract_inlet_boundary", return_value=np.array([[1.0, 0.0, 0.0]])):
             distances = profile._calculate_wall_distances(points)
             assert len(distances) == 2
 
@@ -734,7 +702,7 @@ class TestExtractInletBoundary:
         profile = DistanceWallInletProfile({}, str(tmp_path))
         profile.center = np.array([0, 0, 0])
 
-        with patch.dict('sys.modules', {'trimesh': None}):
+        with patch.dict("sys.modules", {"trimesh": None}):
             result = profile._extract_inlet_boundary()
             # Should return None when trimesh not available
             # (may or may not depending on import caching)
@@ -759,13 +727,11 @@ class TestComputeShapeFactorsVectorizedAll:
 
     def test_hybrid_jet_shape(self, tmp_path):
         """Test hybrid jet shape function."""
-        from aortacfd_lib.distance_wall_inlet_profile import (
-            DistanceWallInletProfile, ShapeFunction
-        )
+        from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile, ShapeFunction
 
-        profile = DistanceWallInletProfile({
-            'inlet': {'shape_function': 'hybrid_jet', 'core_fraction': 0.3, 'exponent': 2.0}
-        }, str(tmp_path))
+        profile = DistanceWallInletProfile(
+            {"inlet": {"shape_function": "hybrid_jet", "core_fraction": 0.3, "exponent": 2.0}}, str(tmp_path)
+        )
         profile.d_max = 1.0
 
         distances = np.array([0.0, 0.15, 0.3, 0.5, 1.0])
@@ -780,13 +746,11 @@ class TestComputeShapeFactorsVectorizedAll:
 
     def test_blunted_parabolic_shape(self, tmp_path):
         """Test blunted parabolic shape function."""
-        from aortacfd_lib.distance_wall_inlet_profile import (
-            DistanceWallInletProfile, ShapeFunction
-        )
+        from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile, ShapeFunction
 
-        profile = DistanceWallInletProfile({
-            'inlet': {'shape_function': 'blunted', 'core_fraction': 0.3}
-        }, str(tmp_path))
+        profile = DistanceWallInletProfile(
+            {"inlet": {"shape_function": "blunted", "core_fraction": 0.3}}, str(tmp_path)
+        )
         profile.d_max = 1.0
 
         distances = np.array([0.0, 0.15, 0.3, 0.5, 1.0])
@@ -802,9 +766,7 @@ class TestComputeShapeFactorsVectorizedAll:
         """Test Poiseuille shape function."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
-        profile = DistanceWallInletProfile({
-            'inlet': {'shape_function': 'poiseuille'}
-        }, str(tmp_path))
+        profile = DistanceWallInletProfile({"inlet": {"shape_function": "poiseuille"}}, str(tmp_path))
         profile.d_max = 1.0
 
         distances = np.array([0.0, 0.5, 1.0])
@@ -820,9 +782,7 @@ class TestComputeShapeFactorsVectorizedAll:
         """Test power law shape function."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
-        profile = DistanceWallInletProfile({
-            'inlet': {'shape_function': 'power_law', 'exponent': 2.0}
-        }, str(tmp_path))
+        profile = DistanceWallInletProfile({"inlet": {"shape_function": "power_law", "exponent": 2.0}}, str(tmp_path))
         profile.d_max = 1.0
 
         distances = np.array([0.0, 0.5, 1.0])
@@ -840,9 +800,7 @@ class TestComputeShapeFactorsVectorizedAll:
         """Test unknown shape defaults to Poiseuille."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
-        profile = DistanceWallInletProfile({
-            'inlet': {'shape_function': 'unknown_shape'}
-        }, str(tmp_path))
+        profile = DistanceWallInletProfile({"inlet": {"shape_function": "unknown_shape"}}, str(tmp_path))
         profile.d_max = 1.0
 
         distances = np.array([0.0, 1.0])
@@ -869,13 +827,11 @@ class TestComputeShapeFactorSingle:
 
     def test_hybrid_jet_single(self, tmp_path):
         """Test hybrid jet shape factor (single point)."""
-        from aortacfd_lib.distance_wall_inlet_profile import (
-            DistanceWallInletProfile, ShapeFunction
-        )
+        from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile, ShapeFunction
 
-        profile = DistanceWallInletProfile({
-            'inlet': {'shape_function': 'hybrid_jet', 'core_fraction': 0.3, 'exponent': 2.0}
-        }, str(tmp_path))
+        profile = DistanceWallInletProfile(
+            {"inlet": {"shape_function": "hybrid_jet", "core_fraction": 0.3, "exponent": 2.0}}, str(tmp_path)
+        )
         profile.d_max = 1.0
 
         # In core region (d >= 0.3)
@@ -886,13 +842,11 @@ class TestComputeShapeFactorSingle:
 
     def test_blunted_parabolic_single(self, tmp_path):
         """Test blunted parabolic shape factor (single point)."""
-        from aortacfd_lib.distance_wall_inlet_profile import (
-            DistanceWallInletProfile, ShapeFunction
-        )
+        from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile, ShapeFunction
 
-        profile = DistanceWallInletProfile({
-            'inlet': {'shape_function': 'blunted', 'core_fraction': 0.3}
-        }, str(tmp_path))
+        profile = DistanceWallInletProfile(
+            {"inlet": {"shape_function": "blunted", "core_fraction": 0.3}}, str(tmp_path)
+        )
         profile.d_max = 1.0
 
         # In core region (d >= 0.3)
@@ -940,7 +894,7 @@ class TestCalculateScalingFactor:
 class TestShouldFlipNormalWithOutlets:
     """Test _should_flip_normal with outlet files present."""
 
-    @patch('aortacfd_lib.distance_wall_inlet_profile.PatchProcessing')
+    @patch("aortacfd_lib.distance_wall_inlet_profile.PatchProcessing")
     def test_flip_normal_with_outlet_behind(self, mock_patch_proc, tmp_path):
         """Test flipping normal when outlet is behind inlet."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
@@ -956,7 +910,7 @@ class TestShouldFlipNormalWithOutlets:
         mock_instance.calculate_inlet_center_radius.return_value = (
             np.array([0, 0, -1]),  # Outlet center is behind inlet
             0.005,
-            np.array([0, 0, 1])
+            np.array([0, 0, 1]),
         )
         mock_patch_proc.return_value = mock_instance
 
@@ -970,7 +924,7 @@ class TestShouldFlipNormalWithOutlets:
         # dot([0,0,1], [0,0,-1]) = -1 < 0, so should flip
         assert result == True
 
-    @patch('aortacfd_lib.distance_wall_inlet_profile.PatchProcessing')
+    @patch("aortacfd_lib.distance_wall_inlet_profile.PatchProcessing")
     def test_no_flip_when_outlet_ahead(self, mock_patch_proc, tmp_path):
         """Test not flipping when outlet is ahead."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
@@ -984,7 +938,7 @@ class TestShouldFlipNormalWithOutlets:
         mock_instance.calculate_inlet_center_radius.return_value = (
             np.array([0, 0, 1]),  # Outlet center is ahead of inlet
             0.005,
-            np.array([0, 0, 1])
+            np.array([0, 0, 1]),
         )
         mock_patch_proc.return_value = mock_instance
 
@@ -1047,9 +1001,7 @@ class TestGenerateConstantData:
         """Test generating constant velocity data."""
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
-        profile = DistanceWallInletProfile({
-            'inlet': {'orientation': 'auto'}
-        }, str(tmp_path))
+        profile = DistanceWallInletProfile({"inlet": {"orientation": "auto"}}, str(tmp_path))
         profile.inlet_normal = np.array([0, 0, 1.0])
         profile.d_max = 0.01
         profile.area = 0.001
@@ -1060,12 +1012,9 @@ class TestGenerateConstantData:
         parent_dir.mkdir(parents=True)
 
         # Mock _should_flip_normal
-        with patch.object(profile, '_should_flip_normal', return_value=False):
+        with patch.object(profile, "_should_flip_normal", return_value=False):
             profile._generate_constant_data(
-                str(parent_dir),
-                flow_rate_m3s=0.0001,
-                n_points=2,
-                distances=np.array([0.005, 0.01])
+                str(parent_dir), flow_rate_m3s=0.0001, n_points=2, distances=np.array([0.005, 0.01])
             )
 
         # Check file was created
@@ -1082,13 +1031,15 @@ class TestReadCSVFile:
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
         csv_file = tmp_path / "flow.csv"
-        csv_file.write_text("""# This is a comment
+        csv_file.write_text(
+            """# This is a comment
 # Another comment
 time,flowrate
 0.0,50.0
 0.1,60.0
 0.2,55.0
-""")
+"""
+        )
 
         profile = DistanceWallInletProfile({}, str(tmp_path))
         times, values, cardiac = profile._read_csv_file(str(csv_file))
@@ -1103,10 +1054,12 @@ time,flowrate
         from aortacfd_lib.distance_wall_inlet_profile import DistanceWallInletProfile
 
         csv_file = tmp_path / "flow.csv"
-        csv_file.write_text("""0.0,100.0
+        csv_file.write_text(
+            """0.0,100.0
 0.4,200.0
 0.8,100.0
-""")
+"""
+        )
 
         profile = DistanceWallInletProfile({}, str(tmp_path))
         times, values, cardiac = profile._read_csv_file(str(csv_file))
@@ -1122,11 +1075,11 @@ class TestFactoryFunction:
         """Test factory function creates profile instance."""
         from aortacfd_lib.distance_wall_inlet_profile import create_distance_wall_profile
 
-        config = {'inlet': {'exponent': 2.5}}
+        config = {"inlet": {"exponent": 2.5}}
         profile = create_distance_wall_profile(config, str(tmp_path))
 
         assert profile.exponent == 2.5
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

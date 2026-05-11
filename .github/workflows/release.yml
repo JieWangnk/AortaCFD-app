@@ -27,9 +27,18 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
 
-    - name: Run tests
+    - name: Run tests with coverage gate
       run: |
-        PYTHONPATH=src pytest tests/ -v --cov=src --cov-report=xml
+        PYTHONPATH=src pytest tests/ -v --cov=src --cov-report=xml \
+          --cov-fail-under=60 -m "not slow and not e2e"
+
+    - name: Lint gate (block F-code violations)
+      run: |
+        flake8 src/ --select F --max-line-length 120 --extend-ignore E203,W503
+
+    - name: Security gate (block bandit HIGH/HIGH)
+      run: |
+        bandit -r src/ -ll -ii
 
     - name: Upload coverage
       uses: codecov/codecov-action@v4

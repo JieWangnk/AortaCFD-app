@@ -30,19 +30,19 @@ def mock_paraview():
     mock_paraview = MagicMock()
     mock_paraview.simple = MagicMock()
 
-    sys.modules['paraview'] = mock_paraview
-    sys.modules['paraview.simple'] = mock_paraview.simple
-    sys.modules['paraview.servermanager'] = MagicMock()
+    sys.modules["paraview"] = mock_paraview
+    sys.modules["paraview.simple"] = mock_paraview.simple
+    sys.modules["paraview.servermanager"] = MagicMock()
 
     yield mock_paraview
 
     # Cleanup
-    if 'paraview' in sys.modules:
-        del sys.modules['paraview']
-    if 'paraview.simple' in sys.modules:
-        del sys.modules['paraview.simple']
-    if 'paraview.servermanager' in sys.modules:
-        del sys.modules['paraview.servermanager']
+    if "paraview" in sys.modules:
+        del sys.modules["paraview"]
+    if "paraview.simple" in sys.modules:
+        del sys.modules["paraview.simple"]
+    if "paraview.servermanager" in sys.modules:
+        del sys.modules["paraview.servermanager"]
 
 
 class TestConstants:
@@ -70,25 +70,25 @@ class TestConstants:
         property_map = post_processor.DEFAULT_PROPERTY_MAP
 
         # Should have standard fields
-        assert 'U' in property_map
-        assert 'p' in property_map
-        assert 'TAWSS' in property_map
-        assert 'OSI' in property_map
-        assert 'RRT' in property_map
+        assert "U" in property_map
+        assert "p" in property_map
+        assert "TAWSS" in property_map
+        assert "OSI" in property_map
+        assert "RRT" in property_map
 
     def test_property_map_fields(self):
         """Test property map field structure."""
         from aortacfd_lib import post_processor
 
-        u_props = post_processor.DEFAULT_PROPERTY_MAP['U']
+        u_props = post_processor.DEFAULT_PROPERTY_MAP["U"]
 
-        assert 'name' in u_props
-        assert 'derived' in u_props
-        assert 'prefix' in u_props
-        assert 'component' in u_props
-        assert 'preset' in u_props
-        assert 'representation' in u_props
-        assert 'unit' in u_props
+        assert "name" in u_props
+        assert "derived" in u_props
+        assert "prefix" in u_props
+        assert "component" in u_props
+        assert "preset" in u_props
+        assert "representation" in u_props
+        assert "unit" in u_props
 
     def test_default_color_ranges(self):
         """Test default color ranges."""
@@ -96,9 +96,9 @@ class TestConstants:
 
         color_ranges = post_processor.DEFAULT_COLOR_RANGES
 
-        assert 'U' in color_ranges
-        assert color_ranges['U'] == [0, 1]
-        assert color_ranges['OSI'] == [0, 0.5]
+        assert "U" in color_ranges
+        assert color_ranges["U"] == [0, 1]
+        assert color_ranges["OSI"] == [0, 0.5]
 
 
 class TestPropertyMapConfiguration:
@@ -108,45 +108,45 @@ class TestPropertyMapConfiguration:
         """Test velocity field configuration."""
         from aortacfd_lib import post_processor
 
-        u_props = post_processor.DEFAULT_PROPERTY_MAP['U']
+        u_props = post_processor.DEFAULT_PROPERTY_MAP["U"]
 
-        assert u_props['derived'] is False
-        assert u_props['representation'] == 'Volume'
-        assert u_props['unit'] == 'm/s'
+        assert u_props["derived"] is False
+        assert u_props["representation"] == "Volume"
+        assert u_props["unit"] == "m/s"
 
     def test_pressure_field_config(self):
         """Test pressure field configuration."""
         from aortacfd_lib import post_processor
 
-        p_props = post_processor.DEFAULT_PROPERTY_MAP['p']
+        p_props = post_processor.DEFAULT_PROPERTY_MAP["p"]
 
-        assert p_props['derived'] is True
-        assert p_props['unit'] == 'mmHg'
+        assert p_props["derived"] is True
+        assert p_props["unit"] == "mmHg"
 
     def test_wss_field_config(self):
         """Test WSS field configuration."""
         from aortacfd_lib import post_processor
 
-        wss_props = post_processor.DEFAULT_PROPERTY_MAP['wallShearStress']
+        wss_props = post_processor.DEFAULT_PROPERTY_MAP["wallShearStress"]
 
-        assert wss_props['name'] == 'WSS'
-        assert wss_props['unit'] == 'Pa'
+        assert wss_props["name"] == "WSS"
+        assert wss_props["unit"] == "Pa"
 
     def test_hemodynamic_fields(self):
         """Test hemodynamic field configurations."""
         from aortacfd_lib import post_processor
 
         # TAWSS
-        tawss = post_processor.DEFAULT_PROPERTY_MAP['TAWSS']
-        assert tawss['unit'] == 'Pa'
+        tawss = post_processor.DEFAULT_PROPERTY_MAP["TAWSS"]
+        assert tawss["unit"] == "Pa"
 
         # OSI
-        osi = post_processor.DEFAULT_PROPERTY_MAP['OSI']
-        assert osi['unit'] == ''  # Dimensionless
+        osi = post_processor.DEFAULT_PROPERTY_MAP["OSI"]
+        assert osi["unit"] == ""  # Dimensionless
 
         # RRT
-        rrt = post_processor.DEFAULT_PROPERTY_MAP['RRT']
-        assert rrt['unit'] == '1/Pa'
+        rrt = post_processor.DEFAULT_PROPERTY_MAP["RRT"]
+        assert rrt["unit"] == "1/Pa"
 
 
 class TestColorRanges:
@@ -156,27 +156,27 @@ class TestColorRanges:
         """Test velocity default range."""
         from aortacfd_lib import post_processor
 
-        assert post_processor.DEFAULT_COLOR_RANGES['U'][0] == 0
-        assert post_processor.DEFAULT_COLOR_RANGES['U'][1] == 1
+        assert post_processor.DEFAULT_COLOR_RANGES["U"][0] == 0
+        assert post_processor.DEFAULT_COLOR_RANGES["U"][1] == 1
 
     def test_wss_range(self):
         """Test WSS default range."""
         from aortacfd_lib import post_processor
 
-        assert post_processor.DEFAULT_COLOR_RANGES['WSS'][0] == 0
-        assert post_processor.DEFAULT_COLOR_RANGES['WSS'][1] == 50
+        assert post_processor.DEFAULT_COLOR_RANGES["WSS"][0] == 0
+        assert post_processor.DEFAULT_COLOR_RANGES["WSS"][1] == 50
 
     def test_osi_range(self):
         """Test OSI default range (0 to 0.5)."""
         from aortacfd_lib import post_processor
 
-        assert post_processor.DEFAULT_COLOR_RANGES['OSI'] == [0, 0.5]
+        assert post_processor.DEFAULT_COLOR_RANGES["OSI"] == [0, 0.5]
 
 
 class TestHelperFunctionsMocked:
     """Test helper functions with mocked VTK."""
 
-    @patch('aortacfd_lib.post_processor.vtk')
+    @patch("aortacfd_lib.post_processor.vtk")
     def test_get_all_points_from_multiblock_empty(self, mock_vtk):
         """Test get_all_points with empty dataset."""
         from aortacfd_lib.post_processor import get_all_points_from_multiblock
@@ -192,9 +192,9 @@ class TestHelperFunctionsMocked:
 class TestOpenFOAMParaViewMocked:
     """Test OpenFOAMParaView class with mocking."""
 
-    @patch('aortacfd_lib.post_processor.OpenFOAMReader')
-    @patch('aortacfd_lib.post_processor.CreateView')
-    @patch('aortacfd_lib.post_processor.servermanager')
+    @patch("aortacfd_lib.post_processor.OpenFOAMReader")
+    @patch("aortacfd_lib.post_processor.CreateView")
+    @patch("aortacfd_lib.post_processor.servermanager")
     def test_init_basic(self, mock_sm, mock_create_view, mock_reader):
         """Test basic initialization."""
         from aortacfd_lib.post_processor import OpenFOAMParaView
@@ -202,10 +202,10 @@ class TestOpenFOAMParaViewMocked:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create minimal case structure
             case_path = Path(tmpdir)
-            (case_path / 'system').mkdir()
+            (case_path / "system").mkdir()
 
             # Create a .foam file
-            foam_file = case_path / 'case.foam'
+            foam_file = case_path / "case.foam"
             foam_file.touch()
 
             # Mock reader
@@ -222,16 +222,16 @@ class TestOpenFOAMParaViewMocked:
             except Exception:
                 pass  # Expected without ParaView
 
-    @patch('aortacfd_lib.post_processor.OpenFOAMReader')
+    @patch("aortacfd_lib.post_processor.OpenFOAMReader")
     def test_find_foam_file(self, mock_reader):
         """Test .foam file discovery."""
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create .foam file
-            foam_file = Path(tmpdir) / 'test.foam'
+            foam_file = Path(tmpdir) / "test.foam"
             foam_file.touch()
 
             # Check file exists
-            foam_files = list(Path(tmpdir).glob('*.foam'))
+            foam_files = list(Path(tmpdir).glob("*.foam"))
             assert len(foam_files) == 1
 
 
@@ -242,7 +242,7 @@ class TestOutputGeneration:
         """Test expected output directory structure."""
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create expected output structure
-            output_dir = Path(tmpdir) / 'postProcessing' / 'images'
+            output_dir = Path(tmpdir) / "postProcessing" / "images"
             output_dir.mkdir(parents=True)
 
             assert output_dir.exists()
@@ -257,7 +257,7 @@ class TestOutputGeneration:
 
         assert "Velocity" in expected_name
         assert "0.5" in expected_name
-        assert expected_name.endswith('.png')
+        assert expected_name.endswith(".png")
 
 
 class TestColorPresets:
@@ -267,21 +267,21 @@ class TestColorPresets:
         """Test velocity uses rainbow preset."""
         from aortacfd_lib import post_processor
 
-        preset = post_processor.DEFAULT_PROPERTY_MAP['U']['preset']
+        preset = post_processor.DEFAULT_PROPERTY_MAP["U"]["preset"]
         assert preset == "Rainbow Desaturated"
 
     def test_wss_preset(self):
         """Test WSS uses viridis preset."""
         from aortacfd_lib import post_processor
 
-        preset = post_processor.DEFAULT_PROPERTY_MAP['TAWSS']['preset']
+        preset = post_processor.DEFAULT_PROPERTY_MAP["TAWSS"]["preset"]
         assert preset == "Viridis (matplotlib)"
 
     def test_osi_preset(self):
         """Test OSI uses cool to warm preset."""
         from aortacfd_lib import post_processor
 
-        preset = post_processor.DEFAULT_PROPERTY_MAP['OSI']['preset']
+        preset = post_processor.DEFAULT_PROPERTY_MAP["OSI"]["preset"]
         assert preset == "Cool to Warm"
 
 
@@ -292,17 +292,17 @@ class TestRepresentationTypes:
         """Test velocity uses volume representation."""
         from aortacfd_lib import post_processor
 
-        rep = post_processor.DEFAULT_PROPERTY_MAP['U']['representation']
+        rep = post_processor.DEFAULT_PROPERTY_MAP["U"]["representation"]
         assert rep == "Volume"
 
     def test_surface_fields(self):
         """Test surface fields use surface representation."""
         from aortacfd_lib import post_processor
 
-        surface_fields = ['p', 'wallShearStress', 'TAWSS', 'OSI', 'RRT']
+        surface_fields = ["p", "wallShearStress", "TAWSS", "OSI", "RRT"]
 
         for field in surface_fields:
-            rep = post_processor.DEFAULT_PROPERTY_MAP[field]['representation']
+            rep = post_processor.DEFAULT_PROPERTY_MAP[field]["representation"]
             assert rep == "Surface"
 
 
@@ -313,28 +313,28 @@ class TestFieldUnits:
         """Test velocity units."""
         from aortacfd_lib import post_processor
 
-        unit = post_processor.DEFAULT_PROPERTY_MAP['U']['unit']
+        unit = post_processor.DEFAULT_PROPERTY_MAP["U"]["unit"]
         assert unit == "m/s"
 
     def test_pressure_units(self):
         """Test pressure units (mmHg)."""
         from aortacfd_lib import post_processor
 
-        unit = post_processor.DEFAULT_PROPERTY_MAP['p']['unit']
+        unit = post_processor.DEFAULT_PROPERTY_MAP["p"]["unit"]
         assert unit == "mmHg"
 
     def test_wss_units(self):
         """Test WSS units (Pa)."""
         from aortacfd_lib import post_processor
 
-        unit = post_processor.DEFAULT_PROPERTY_MAP['wallShearStress']['unit']
+        unit = post_processor.DEFAULT_PROPERTY_MAP["wallShearStress"]["unit"]
         assert unit == "Pa"
 
     def test_osi_dimensionless(self):
         """Test OSI is dimensionless."""
         from aortacfd_lib import post_processor
 
-        unit = post_processor.DEFAULT_PROPERTY_MAP['OSI']['unit']
+        unit = post_processor.DEFAULT_PROPERTY_MAP["OSI"]["unit"]
         assert unit == ""
 
 
@@ -346,12 +346,12 @@ class TestDerivedFields:
         from aortacfd_lib import post_processor
 
         # Derived fields require calculation
-        assert post_processor.DEFAULT_PROPERTY_MAP['p']['derived'] is True
-        assert post_processor.DEFAULT_PROPERTY_MAP['wallShearStress']['derived'] is True
+        assert post_processor.DEFAULT_PROPERTY_MAP["p"]["derived"] is True
+        assert post_processor.DEFAULT_PROPERTY_MAP["wallShearStress"]["derived"] is True
 
         # Direct fields don't
-        assert post_processor.DEFAULT_PROPERTY_MAP['U']['derived'] is False
-        assert post_processor.DEFAULT_PROPERTY_MAP['TAWSS']['derived'] is False
+        assert post_processor.DEFAULT_PROPERTY_MAP["U"]["derived"] is False
+        assert post_processor.DEFAULT_PROPERTY_MAP["TAWSS"]["derived"] is False
 
 
 class TestPressureConversion:
@@ -389,12 +389,12 @@ class TestKEFieldConfiguration:
         """Test KE field properties."""
         from aortacfd_lib import post_processor
 
-        ke_props = post_processor.DEFAULT_PROPERTY_MAP['KE']
+        ke_props = post_processor.DEFAULT_PROPERTY_MAP["KE"]
 
-        assert ke_props['derived'] is True
-        assert ke_props['representation'] == 'Volume'
-        assert ke_props['preset'] == 'Inferno (matplotlib)'
+        assert ke_props["derived"] is True
+        assert ke_props["representation"] == "Volume"
+        assert ke_props["preset"] == "Inferno (matplotlib)"
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

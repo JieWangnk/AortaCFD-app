@@ -81,10 +81,7 @@ class TestValidationResult:
     def test_init_with_values(self):
         """Test initialization with preset values."""
         result = ValidationResult(
-            is_valid=False,
-            errors=["Error 1", "Error 2"],
-            warnings=["Warning 1"],
-            cell_count=12345
+            is_valid=False, errors=["Error 1", "Error 2"], warnings=["Warning 1"], cell_count=12345
         )
 
         assert result.is_valid is False
@@ -146,8 +143,8 @@ class TestGeometryValidator:
         """Test STL integrity check with file too small for header."""
         with tempfile.TemporaryDirectory() as tmpdir:
             stl_path = Path(tmpdir) / "tiny.stl"
-            with open(stl_path, 'wb') as f:
-                f.write(b'x' * 50)  # Less than 84 bytes
+            with open(stl_path, "wb") as f:
+                f.write(b"x" * 50)  # Less than 84 bytes
 
             validator = GeometryValidator(tmpdir)
             result = validator.check_stl_integrity(stl_path)
@@ -161,17 +158,17 @@ class TestGeometryValidator:
             stl_path = Path(tmpdir) / "test.stl"
 
             # Create valid binary STL with 1 triangle
-            with open(stl_path, 'wb') as f:
+            with open(stl_path, "wb") as f:
                 # Header (80 bytes)
-                f.write(b'\x00' * 80)
+                f.write(b"\x00" * 80)
                 # Number of triangles (4 bytes)
-                f.write(struct.pack('<I', 1))
+                f.write(struct.pack("<I", 1))
                 # Triangle data (50 bytes): normal + 3 vertices + attribute
-                f.write(struct.pack('<fff', 0.0, 0.0, 1.0))  # Normal
-                f.write(struct.pack('<fff', 0.0, 0.0, 0.0))  # V1
-                f.write(struct.pack('<fff', 1.0, 0.0, 0.0))  # V2
-                f.write(struct.pack('<fff', 0.0, 1.0, 0.0))  # V3
-                f.write(struct.pack('<H', 0))  # Attribute byte count
+                f.write(struct.pack("<fff", 0.0, 0.0, 1.0))  # Normal
+                f.write(struct.pack("<fff", 0.0, 0.0, 0.0))  # V1
+                f.write(struct.pack("<fff", 1.0, 0.0, 0.0))  # V2
+                f.write(struct.pack("<fff", 0.0, 1.0, 0.0))  # V3
+                f.write(struct.pack("<H", 0))  # Attribute byte count
 
             validator = GeometryValidator(tmpdir)
             result = validator.check_stl_integrity(stl_path)
@@ -273,17 +270,17 @@ Max aspect ratio = 45.6
         checker = MeshQualityChecker("/test")
         metrics = checker._parse_checkmesh_output(content)
 
-        assert metrics['max_non_orthogonality'] == 65.4
-        assert metrics['max_skewness'] == 2.3
-        assert metrics['max_aspect_ratio'] == 45.6
-        assert metrics['num_cells'] == 100000
-        assert metrics['num_points'] == 123456
-        assert metrics['num_faces'] == 234567
+        assert metrics["max_non_orthogonality"] == 65.4
+        assert metrics["max_skewness"] == 2.3
+        assert metrics["max_aspect_ratio"] == 45.6
+        assert metrics["num_cells"] == 100000
+        assert metrics["num_points"] == 123456
+        assert metrics["num_faces"] == 234567
 
     def test_check_orthogonality_ok(self):
         """Test orthogonality check with good values."""
         checker = MeshQualityChecker("/test")
-        metrics = {'max_non_orthogonality': 50.0}
+        metrics = {"max_non_orthogonality": 50.0}
         result = checker.check_orthogonality(metrics)
 
         assert result.is_valid is True
@@ -293,7 +290,7 @@ Max aspect ratio = 45.6
     def test_check_orthogonality_warning(self):
         """Test orthogonality check with warning level."""
         checker = MeshQualityChecker("/test")
-        metrics = {'max_non_orthogonality': 72.0}
+        metrics = {"max_non_orthogonality": 72.0}
         result = checker.check_orthogonality(metrics)
 
         assert result.is_valid is True
@@ -302,7 +299,7 @@ Max aspect ratio = 45.6
     def test_check_orthogonality_error(self):
         """Test orthogonality check with error level."""
         checker = MeshQualityChecker("/test")
-        metrics = {'max_non_orthogonality': 80.0}
+        metrics = {"max_non_orthogonality": 80.0}
         result = checker.check_orthogonality(metrics)
 
         assert result.is_valid is False
@@ -311,7 +308,7 @@ Max aspect ratio = 45.6
     def test_check_skewness_ok(self):
         """Test skewness check with good values."""
         checker = MeshQualityChecker("/test")
-        metrics = {'max_skewness': 2.0}
+        metrics = {"max_skewness": 2.0}
         result = checker.check_skewness(metrics)
 
         assert result.is_valid is True
@@ -319,7 +316,7 @@ Max aspect ratio = 45.6
     def test_check_skewness_error(self):
         """Test skewness check with error level."""
         checker = MeshQualityChecker("/test")
-        metrics = {'max_skewness': 10.0}
+        metrics = {"max_skewness": 10.0}
         result = checker.check_skewness(metrics)
 
         assert result.is_valid is False
@@ -327,7 +324,7 @@ Max aspect ratio = 45.6
     def test_check_aspect_ratio_ok(self):
         """Test aspect ratio check with good values."""
         checker = MeshQualityChecker("/test")
-        metrics = {'max_aspect_ratio': 50.0}
+        metrics = {"max_aspect_ratio": 50.0}
         result = checker.check_aspect_ratio(metrics)
 
         assert result.is_valid is True
@@ -335,7 +332,7 @@ Max aspect ratio = 45.6
     def test_check_aspect_ratio_error(self):
         """Test aspect ratio check with error level."""
         checker = MeshQualityChecker("/test")
-        metrics = {'max_aspect_ratio': 1500.0}
+        metrics = {"max_aspect_ratio": 1500.0}
         result = checker.check_aspect_ratio(metrics)
 
         assert result.is_valid is False
@@ -346,14 +343,16 @@ Max aspect ratio = 45.6
             logs_dir = Path(tmpdir) / "logs"
             logs_dir.mkdir()
             log_path = logs_dir / "log.checkMesh"
-            log_path.write_text("""
+            log_path.write_text(
+                """
 Mesh stats
     cells: 50000
 Max non-orthogonality = 60
 Max skewness = 3.0
 Max aspect ratio = 80
 ***FAILED*** - mesh check failed
-""")
+"""
+            )
 
             checker = MeshQualityChecker(tmpdir)
             result = checker.validate_mesh_quality()
@@ -368,7 +367,7 @@ class TestBoundaryConditionValidator:
 
     def test_init(self):
         """Test validator initialization."""
-        config = {'boundary_conditions': {}}
+        config = {"boundary_conditions": {}}
         validator = BoundaryConditionValidator(config, "/test/case")
 
         assert validator.config == config
@@ -377,22 +376,22 @@ class TestBoundaryConditionValidator:
     def test_normalize_data_type(self):
         """Test data type normalization."""
         # flowrate variations
-        assert BoundaryConditionValidator.normalize_data_type('flowRate') == 'flowrate'
-        assert BoundaryConditionValidator.normalize_data_type('FLOWRATE') == 'flowrate'
-        assert BoundaryConditionValidator.normalize_data_type('flow_rate') == 'flowrate'
-        assert BoundaryConditionValidator.normalize_data_type('q') == 'flowrate'
+        assert BoundaryConditionValidator.normalize_data_type("flowRate") == "flowrate"
+        assert BoundaryConditionValidator.normalize_data_type("FLOWRATE") == "flowrate"
+        assert BoundaryConditionValidator.normalize_data_type("flow_rate") == "flowrate"
+        assert BoundaryConditionValidator.normalize_data_type("q") == "flowrate"
 
         # velocity variations
-        assert BoundaryConditionValidator.normalize_data_type('velocity') == 'velocity'
-        assert BoundaryConditionValidator.normalize_data_type('Velocity') == 'velocity'
-        assert BoundaryConditionValidator.normalize_data_type('vel') == 'velocity'
+        assert BoundaryConditionValidator.normalize_data_type("velocity") == "velocity"
+        assert BoundaryConditionValidator.normalize_data_type("Velocity") == "velocity"
+        assert BoundaryConditionValidator.normalize_data_type("vel") == "velocity"
 
         # pressure
-        assert BoundaryConditionValidator.normalize_data_type('pressure') == 'pressure'
+        assert BoundaryConditionValidator.normalize_data_type("pressure") == "pressure"
 
         # None/empty
         assert BoundaryConditionValidator.normalize_data_type(None) is None
-        assert BoundaryConditionValidator.normalize_data_type('') is None
+        assert BoundaryConditionValidator.normalize_data_type("") is None
 
     def test_validate_all_no_bc_config(self):
         """Test validation with missing BC configuration."""
@@ -406,9 +405,9 @@ class TestBoundaryConditionValidator:
     def test_validate_all_nested_structure(self):
         """Test validation with nested BC structure."""
         config = {
-            'boundary_conditions': {
-                'inlet': {'type': 'CONSTANT', 'velocity': 0.5, 'profile': 'parabolic'},
-                'outlets': {'type': 'ZEROGRADIENT'}
+            "boundary_conditions": {
+                "inlet": {"type": "CONSTANT", "velocity": 0.5, "profile": "parabolic"},
+                "outlets": {"type": "ZEROGRADIENT"},
             }
         }
         validator = BoundaryConditionValidator(config)
@@ -420,8 +419,8 @@ class TestBoundaryConditionValidator:
     def test_validate_all_flattened_structure(self):
         """Test validation with flattened BC structure."""
         config = {
-            'inlet': {'type': 'CONSTANT', 'velocity': 0.5, 'profile': 'parabolic'},
-            'outlets': {'type': 'ZEROGRADIENT'}
+            "inlet": {"type": "CONSTANT", "velocity": 0.5, "profile": "parabolic"},
+            "outlets": {"type": "ZEROGRADIENT"},
         }
         validator = BoundaryConditionValidator(config)
         result = validator.validate_all()
@@ -430,7 +429,7 @@ class TestBoundaryConditionValidator:
 
     def test_validate_inlet_missing_type(self):
         """Test inlet validation with missing type."""
-        config = {'boundary_conditions': {'inlet': {}}}
+        config = {"boundary_conditions": {"inlet": {}}}
         validator = BoundaryConditionValidator(config)
         result = validator.validate_inlet_configuration({})
 
@@ -441,7 +440,7 @@ class TestBoundaryConditionValidator:
         """Test inlet validation with invalid type."""
         config = {}
         validator = BoundaryConditionValidator(config)
-        result = validator.validate_inlet_configuration({'type': 'INVALID'})
+        result = validator.validate_inlet_configuration({"type": "INVALID"})
 
         assert result.is_valid is False
         assert any("invalid inlet type" in err.lower() for err in result.errors)
@@ -451,16 +450,16 @@ class TestBoundaryConditionValidator:
         config = {}
         validator = BoundaryConditionValidator(config)
 
-        for inlet_type in ['TIMEVARYING', 'CONSTANT', 'WOMERSLEY']:
+        for inlet_type in ["TIMEVARYING", "CONSTANT", "WOMERSLEY"]:
             # Create minimal valid config for each type
-            inlet_config = {'type': inlet_type}
-            if inlet_type in ['TIMEVARYING', 'WOMERSLEY']:
-                inlet_config['csv_file'] = 'test.csv'
-                inlet_config['data_type'] = 'flowrate'
-                inlet_config['profile'] = 'parabolic'
+            inlet_config = {"type": inlet_type}
+            if inlet_type in ["TIMEVARYING", "WOMERSLEY"]:
+                inlet_config["csv_file"] = "test.csv"
+                inlet_config["data_type"] = "flowrate"
+                inlet_config["profile"] = "parabolic"
             else:
-                inlet_config['velocity'] = 0.5
-                inlet_config['profile'] = 'parabolic'
+                inlet_config["velocity"] = 0.5
+                inlet_config["profile"] = "parabolic"
 
             result = validator.validate_inlet_configuration(inlet_config)
             # Just check it processes without crashing
@@ -471,12 +470,14 @@ class TestBoundaryConditionValidator:
         validator = BoundaryConditionValidator(config)
 
         # WOMERSLEY requires womersley profile
-        result = validator.validate_inlet_configuration({
-            'type': 'WOMERSLEY',
-            'csv_file': 'test.csv',
-            'data_type': 'flowrate',
-            'profile': 'parabolic'  # Wrong profile
-        })
+        result = validator.validate_inlet_configuration(
+            {
+                "type": "WOMERSLEY",
+                "csv_file": "test.csv",
+                "data_type": "flowrate",
+                "profile": "parabolic",  # Wrong profile
+            }
+        )
         assert any("incompatible" in err.lower() for err in result.errors)
 
     def test_validate_outlet_missing_type(self):
@@ -491,7 +492,7 @@ class TestBoundaryConditionValidator:
         """Test outlet validation with invalid type."""
         config = {}
         validator = BoundaryConditionValidator(config)
-        result = validator.validate_outlet_configuration({'type': 'INVALID'})
+        result = validator.validate_outlet_configuration({"type": "INVALID"})
 
         assert result.is_valid is False
 
@@ -500,13 +501,10 @@ class TestBoundaryConditionValidator:
         config = {}
         validator = BoundaryConditionValidator(config)
 
-        for outlet_type in ['ZEROGRADIENT', 'FIXEDVALUE', '2EWINDKESSEL']:
-            inlet_config = {'type': outlet_type}
-            if 'WINDKESSEL' in outlet_type:
-                inlet_config['windkessel_settings'] = {
-                    'systolic_pressure': 120,
-                    'diastolic_pressure': 80
-                }
+        for outlet_type in ["ZEROGRADIENT", "FIXEDVALUE", "2EWINDKESSEL"]:
+            inlet_config = {"type": outlet_type}
+            if "WINDKESSEL" in outlet_type:
+                inlet_config["windkessel_settings"] = {"systolic_pressure": 120, "diastolic_pressure": 80}
             result = validator.validate_outlet_configuration(inlet_config)
             # Just check it processes
 
@@ -514,7 +512,7 @@ class TestBoundaryConditionValidator:
         """Test Windkessel validation with missing settings."""
         config = {}
         validator = BoundaryConditionValidator(config)
-        result = validator.validate_windkessel_parameters({'type': '3EWINDKESSEL'})
+        result = validator.validate_windkessel_parameters({"type": "3EWINDKESSEL"})
 
         assert result.is_valid is False
         assert any("windkessel_settings" in err.lower() for err in result.errors)
@@ -523,10 +521,7 @@ class TestBoundaryConditionValidator:
         """Test Windkessel validation with missing pressure."""
         config = {}
         validator = BoundaryConditionValidator(config)
-        result = validator.validate_windkessel_parameters({
-            'type': '3EWINDKESSEL',
-            'windkessel_settings': {}
-        })
+        result = validator.validate_windkessel_parameters({"type": "3EWINDKESSEL", "windkessel_settings": {}})
 
         assert result.is_valid is False
         # Should complain about missing pressure
@@ -535,13 +530,12 @@ class TestBoundaryConditionValidator:
         """Test Windkessel validation with SP <= DP."""
         config = {}
         validator = BoundaryConditionValidator(config)
-        result = validator.validate_windkessel_parameters({
-            'type': '3EWINDKESSEL',
-            'windkessel_settings': {
-                'systolic_pressure': 80,
-                'diastolic_pressure': 120  # DP > SP
+        result = validator.validate_windkessel_parameters(
+            {
+                "type": "3EWINDKESSEL",
+                "windkessel_settings": {"systolic_pressure": 80, "diastolic_pressure": 120},  # DP > SP
             }
-        })
+        )
 
         assert result.is_valid is False
         assert any("greater than" in err.lower() for err in result.errors)
@@ -552,14 +546,12 @@ class TestBoundaryConditionValidator:
         validator = BoundaryConditionValidator(config)
 
         # Direct RCZ mode - pressure not required
-        result = validator.validate_windkessel_parameters({
-            'type': '3EWINDKESSEL',
-            'windkessel_settings': {
-                'outlet_parameters': {
-                    'outlet1': {'R': 1e8, 'C': 1e-9, 'Z': 1e7}
-                }
+        result = validator.validate_windkessel_parameters(
+            {
+                "type": "3EWINDKESSEL",
+                "windkessel_settings": {"outlet_parameters": {"outlet1": {"R": 1e8, "C": 1e-9, "Z": 1e7}}},
             }
-        })
+        )
 
         # Should not complain about missing pressure in direct RCZ mode
         # May have other validation issues but not pressure-related
@@ -571,14 +563,13 @@ class TestBoundaryConditionValidator:
 
         # Not direct mode
         assert validator._check_direct_rcz_mode({}) is False
-        assert validator._check_direct_rcz_mode({'outlet_parameters': {}}) is False
+        assert validator._check_direct_rcz_mode({"outlet_parameters": {}}) is False
 
         # Direct mode
-        assert validator._check_direct_rcz_mode({
-            'outlet_parameters': {
-                'outlet1': {'R': 1e8, 'C': 1e-9, 'Z': 1e7}
-            }
-        }) is True
+        assert (
+            validator._check_direct_rcz_mode({"outlet_parameters": {"outlet1": {"R": 1e8, "C": 1e-9, "Z": 1e7}}})
+            is True
+        )
 
     def test_validate_bc_consistency(self):
         """Test BC consistency validation."""
@@ -586,10 +577,7 @@ class TestBoundaryConditionValidator:
         validator = BoundaryConditionValidator(config)
 
         # Time-varying with Windkessel - recommended
-        result = validator.validate_bc_consistency(
-            {'type': 'TIMEVARYING'},
-            {'type': '3EWINDKESSEL'}
-        )
+        result = validator.validate_bc_consistency({"type": "TIMEVARYING"}, {"type": "3EWINDKESSEL"})
         # Should have no warnings about this combo
 
     def test_validate_bc_consistency_constant_windkessel(self):
@@ -597,10 +585,7 @@ class TestBoundaryConditionValidator:
         config = {}
         validator = BoundaryConditionValidator(config)
 
-        result = validator.validate_bc_consistency(
-            {'type': 'CONSTANT'},
-            {'type': '3EWINDKESSEL'}
-        )
+        result = validator.validate_bc_consistency({"type": "CONSTANT"}, {"type": "3EWINDKESSEL"})
 
         # Should warn about using 2E instead
         assert len(result.warnings) > 0
@@ -672,15 +657,15 @@ class TestGeometryValidatorSurfaceArea:
         with tempfile.TemporaryDirectory() as tmpdir:
             stl_path = Path(tmpdir) / "inlet.stl"
             # Create binary STL with a reasonable-sized triangle
-            with open(stl_path, 'wb') as f:
-                f.write(b'\x00' * 80)  # Header
-                f.write(struct.pack('<I', 1))  # 1 triangle
+            with open(stl_path, "wb") as f:
+                f.write(b"\x00" * 80)  # Header
+                f.write(struct.pack("<I", 1))  # 1 triangle
                 # Triangle with some area
-                f.write(struct.pack('<fff', 0.0, 0.0, 1.0))  # Normal
-                f.write(struct.pack('<fff', 0.0, 0.0, 0.0))  # V1
-                f.write(struct.pack('<fff', 0.01, 0.0, 0.0))  # V2 (10mm)
-                f.write(struct.pack('<fff', 0.0, 0.01, 0.0))  # V3 (10mm)
-                f.write(struct.pack('<H', 0))
+                f.write(struct.pack("<fff", 0.0, 0.0, 1.0))  # Normal
+                f.write(struct.pack("<fff", 0.0, 0.0, 0.0))  # V1
+                f.write(struct.pack("<fff", 0.01, 0.0, 0.0))  # V2 (10mm)
+                f.write(struct.pack("<fff", 0.0, 0.01, 0.0))  # V3 (10mm)
+                f.write(struct.pack("<H", 0))
 
             validator = GeometryValidator(tmpdir)
             result = validator.check_minimum_surface_area(stl_path, "inlet")
@@ -692,14 +677,14 @@ class TestGeometryValidatorSurfaceArea:
         with tempfile.TemporaryDirectory() as tmpdir:
             stl_path = Path(tmpdir) / "tiny_outlet.stl"
             # Create very small triangle
-            with open(stl_path, 'wb') as f:
-                f.write(b'\x00' * 80)
-                f.write(struct.pack('<I', 1))
-                f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
-                f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
-                f.write(struct.pack('<fff', 1e-5, 0.0, 0.0))  # Very tiny
-                f.write(struct.pack('<fff', 0.0, 1e-5, 0.0))
-                f.write(struct.pack('<H', 0))
+            with open(stl_path, "wb") as f:
+                f.write(b"\x00" * 80)
+                f.write(struct.pack("<I", 1))
+                f.write(struct.pack("<fff", 0.0, 0.0, 1.0))
+                f.write(struct.pack("<fff", 0.0, 0.0, 0.0))
+                f.write(struct.pack("<fff", 1e-5, 0.0, 0.0))  # Very tiny
+                f.write(struct.pack("<fff", 0.0, 1e-5, 0.0))
+                f.write(struct.pack("<H", 0))
 
             validator = GeometryValidator(tmpdir)
             result = validator.check_minimum_surface_area(stl_path, "outlet")
@@ -711,14 +696,14 @@ class TestGeometryValidatorSurfaceArea:
         with tempfile.TemporaryDirectory() as tmpdir:
             stl_path = Path(tmpdir) / "wall.stl"
             # Create STL with larger area
-            with open(stl_path, 'wb') as f:
-                f.write(b'\x00' * 80)
-                f.write(struct.pack('<I', 1))
-                f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
-                f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
-                f.write(struct.pack('<fff', 0.1, 0.0, 0.0))  # 100mm
-                f.write(struct.pack('<fff', 0.0, 0.1, 0.0))  # 100mm
-                f.write(struct.pack('<H', 0))
+            with open(stl_path, "wb") as f:
+                f.write(b"\x00" * 80)
+                f.write(struct.pack("<I", 1))
+                f.write(struct.pack("<fff", 0.0, 0.0, 1.0))
+                f.write(struct.pack("<fff", 0.0, 0.0, 0.0))
+                f.write(struct.pack("<fff", 0.1, 0.0, 0.0))  # 100mm
+                f.write(struct.pack("<fff", 0.0, 0.1, 0.0))  # 100mm
+                f.write(struct.pack("<H", 0))
 
             validator = GeometryValidator(tmpdir)
             result = validator.check_minimum_surface_area(stl_path, "wall")
@@ -729,14 +714,14 @@ class TestGeometryValidatorSurfaceArea:
         """Test minimum surface area for unknown patch type."""
         with tempfile.TemporaryDirectory() as tmpdir:
             stl_path = Path(tmpdir) / "other.stl"
-            with open(stl_path, 'wb') as f:
-                f.write(b'\x00' * 80)
-                f.write(struct.pack('<I', 1))
-                f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
-                f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
-                f.write(struct.pack('<fff', 0.01, 0.0, 0.0))
-                f.write(struct.pack('<fff', 0.0, 0.01, 0.0))
-                f.write(struct.pack('<H', 0))
+            with open(stl_path, "wb") as f:
+                f.write(b"\x00" * 80)
+                f.write(struct.pack("<I", 1))
+                f.write(struct.pack("<fff", 0.0, 0.0, 1.0))
+                f.write(struct.pack("<fff", 0.0, 0.0, 0.0))
+                f.write(struct.pack("<fff", 0.01, 0.0, 0.0))
+                f.write(struct.pack("<fff", 0.0, 0.01, 0.0))
+                f.write(struct.pack("<H", 0))
 
             validator = GeometryValidator(tmpdir)
             result = validator.check_minimum_surface_area(stl_path, "unknown")
@@ -748,14 +733,14 @@ class TestGeometryValidatorSurfaceArea:
         with tempfile.TemporaryDirectory() as tmpdir:
             stl_path = Path(tmpdir) / "inlet.stl"
             # Create STL with large coords (assuming mm input)
-            with open(stl_path, 'wb') as f:
-                f.write(b'\x00' * 80)
-                f.write(struct.pack('<I', 1))
-                f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
-                f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
-                f.write(struct.pack('<fff', 10.0, 0.0, 0.0))  # 10mm in mm units
-                f.write(struct.pack('<fff', 0.0, 10.0, 0.0))
-                f.write(struct.pack('<H', 0))
+            with open(stl_path, "wb") as f:
+                f.write(b"\x00" * 80)
+                f.write(struct.pack("<I", 1))
+                f.write(struct.pack("<fff", 0.0, 0.0, 1.0))
+                f.write(struct.pack("<fff", 0.0, 0.0, 0.0))
+                f.write(struct.pack("<fff", 10.0, 0.0, 0.0))  # 10mm in mm units
+                f.write(struct.pack("<fff", 0.0, 10.0, 0.0))
+                f.write(struct.pack("<H", 0))
 
             # Scale factor 0.001 for mm -> m
             validator = GeometryValidator(tmpdir, scale_factor=0.001)
@@ -772,14 +757,14 @@ class TestCalculateSTLArea:
         with tempfile.TemporaryDirectory() as tmpdir:
             stl_path = Path(tmpdir) / "test.stl"
             # Create binary STL with known area (right triangle 1x1)
-            with open(stl_path, 'wb') as f:
-                f.write(b'\x00' * 80)
-                f.write(struct.pack('<I', 1))
-                f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
-                f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
-                f.write(struct.pack('<fff', 1.0, 0.0, 0.0))
-                f.write(struct.pack('<fff', 0.0, 1.0, 0.0))
-                f.write(struct.pack('<H', 0))
+            with open(stl_path, "wb") as f:
+                f.write(b"\x00" * 80)
+                f.write(struct.pack("<I", 1))
+                f.write(struct.pack("<fff", 0.0, 0.0, 1.0))
+                f.write(struct.pack("<fff", 0.0, 0.0, 0.0))
+                f.write(struct.pack("<fff", 1.0, 0.0, 0.0))
+                f.write(struct.pack("<fff", 0.0, 1.0, 0.0))
+                f.write(struct.pack("<H", 0))
 
             validator = GeometryValidator(tmpdir)
             area = validator._calculate_stl_area(stl_path)
@@ -812,21 +797,21 @@ endsolid test
         with tempfile.TemporaryDirectory() as tmpdir:
             stl_path = Path(tmpdir) / "test.stl"
             # Create 2 triangles (makes a 1x1 square)
-            with open(stl_path, 'wb') as f:
-                f.write(b'\x00' * 80)
-                f.write(struct.pack('<I', 2))  # 2 triangles
+            with open(stl_path, "wb") as f:
+                f.write(b"\x00" * 80)
+                f.write(struct.pack("<I", 2))  # 2 triangles
                 # First triangle
-                f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
-                f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
-                f.write(struct.pack('<fff', 1.0, 0.0, 0.0))
-                f.write(struct.pack('<fff', 0.0, 1.0, 0.0))
-                f.write(struct.pack('<H', 0))
+                f.write(struct.pack("<fff", 0.0, 0.0, 1.0))
+                f.write(struct.pack("<fff", 0.0, 0.0, 0.0))
+                f.write(struct.pack("<fff", 1.0, 0.0, 0.0))
+                f.write(struct.pack("<fff", 0.0, 1.0, 0.0))
+                f.write(struct.pack("<H", 0))
                 # Second triangle
-                f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
-                f.write(struct.pack('<fff', 1.0, 0.0, 0.0))
-                f.write(struct.pack('<fff', 1.0, 1.0, 0.0))
-                f.write(struct.pack('<fff', 0.0, 1.0, 0.0))
-                f.write(struct.pack('<H', 0))
+                f.write(struct.pack("<fff", 0.0, 0.0, 1.0))
+                f.write(struct.pack("<fff", 1.0, 0.0, 0.0))
+                f.write(struct.pack("<fff", 1.0, 1.0, 0.0))
+                f.write(struct.pack("<fff", 0.0, 1.0, 0.0))
+                f.write(struct.pack("<H", 0))
 
             validator = GeometryValidator(tmpdir)
             area = validator._calculate_stl_area(stl_path)
@@ -837,7 +822,7 @@ endsolid test
         """Test area calculation error handling."""
         with tempfile.TemporaryDirectory() as tmpdir:
             stl_path = Path(tmpdir) / "bad.stl"
-            stl_path.write_bytes(b'corrupted data')
+            stl_path.write_bytes(b"corrupted data")
 
             validator = GeometryValidator(tmpdir)
             area = validator._calculate_stl_area(stl_path)
@@ -853,39 +838,35 @@ class TestVerifyInletOutletOrientation:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create inlet (larger)
             inlet_path = Path(tmpdir) / "inlet.stl"
-            with open(inlet_path, 'wb') as f:
-                f.write(b'\x00' * 80)
-                f.write(struct.pack('<I', 1))
-                f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
-                f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
-                f.write(struct.pack('<fff', 0.02, 0.0, 0.0))  # Larger inlet
-                f.write(struct.pack('<fff', 0.0, 0.02, 0.0))
-                f.write(struct.pack('<H', 0))
+            with open(inlet_path, "wb") as f:
+                f.write(b"\x00" * 80)
+                f.write(struct.pack("<I", 1))
+                f.write(struct.pack("<fff", 0.0, 0.0, 1.0))
+                f.write(struct.pack("<fff", 0.0, 0.0, 0.0))
+                f.write(struct.pack("<fff", 0.02, 0.0, 0.0))  # Larger inlet
+                f.write(struct.pack("<fff", 0.0, 0.02, 0.0))
+                f.write(struct.pack("<H", 0))
 
             # Create outlet (smaller - typical for aorta)
             outlet_path = Path(tmpdir) / "outlet1.stl"
-            with open(outlet_path, 'wb') as f:
-                f.write(b'\x00' * 80)
-                f.write(struct.pack('<I', 1))
-                f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
-                f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
-                f.write(struct.pack('<fff', 0.01, 0.0, 0.0))  # Smaller outlet
-                f.write(struct.pack('<fff', 0.0, 0.01, 0.0))
-                f.write(struct.pack('<H', 0))
+            with open(outlet_path, "wb") as f:
+                f.write(b"\x00" * 80)
+                f.write(struct.pack("<I", 1))
+                f.write(struct.pack("<fff", 0.0, 0.0, 1.0))
+                f.write(struct.pack("<fff", 0.0, 0.0, 0.0))
+                f.write(struct.pack("<fff", 0.01, 0.0, 0.0))  # Smaller outlet
+                f.write(struct.pack("<fff", 0.0, 0.01, 0.0))
+                f.write(struct.pack("<H", 0))
 
             validator = GeometryValidator(tmpdir)
-            result = validator.verify_inlet_outlet_orientation(
-                inlet_path, [outlet_path]
-            )
+            result = validator.verify_inlet_outlet_orientation(inlet_path, [outlet_path])
             assert result.is_valid is True
 
     def test_verify_orientation_missing_inlet(self):
         """Test orientation verification with missing inlet."""
         with tempfile.TemporaryDirectory() as tmpdir:
             validator = GeometryValidator(tmpdir)
-            result = validator.verify_inlet_outlet_orientation(
-                Path(tmpdir) / "nonexistent.stl", []
-            )
+            result = validator.verify_inlet_outlet_orientation(Path(tmpdir) / "nonexistent.stl", [])
             assert result.is_valid is False
             assert any("not found" in err.lower() for err in result.errors)
 
@@ -894,30 +875,28 @@ class TestVerifyInletOutletOrientation:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create small inlet
             inlet_path = Path(tmpdir) / "inlet.stl"
-            with open(inlet_path, 'wb') as f:
-                f.write(b'\x00' * 80)
-                f.write(struct.pack('<I', 1))
-                f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
-                f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
-                f.write(struct.pack('<fff', 0.005, 0.0, 0.0))
-                f.write(struct.pack('<fff', 0.0, 0.005, 0.0))
-                f.write(struct.pack('<H', 0))
+            with open(inlet_path, "wb") as f:
+                f.write(b"\x00" * 80)
+                f.write(struct.pack("<I", 1))
+                f.write(struct.pack("<fff", 0.0, 0.0, 1.0))
+                f.write(struct.pack("<fff", 0.0, 0.0, 0.0))
+                f.write(struct.pack("<fff", 0.005, 0.0, 0.0))
+                f.write(struct.pack("<fff", 0.0, 0.005, 0.0))
+                f.write(struct.pack("<H", 0))
 
             # Create large outlet (3x inlet area)
             outlet_path = Path(tmpdir) / "outlet1.stl"
-            with open(outlet_path, 'wb') as f:
-                f.write(b'\x00' * 80)
-                f.write(struct.pack('<I', 1))
-                f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
-                f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
-                f.write(struct.pack('<fff', 0.02, 0.0, 0.0))  # Much larger
-                f.write(struct.pack('<fff', 0.0, 0.02, 0.0))
-                f.write(struct.pack('<H', 0))
+            with open(outlet_path, "wb") as f:
+                f.write(b"\x00" * 80)
+                f.write(struct.pack("<I", 1))
+                f.write(struct.pack("<fff", 0.0, 0.0, 1.0))
+                f.write(struct.pack("<fff", 0.0, 0.0, 0.0))
+                f.write(struct.pack("<fff", 0.02, 0.0, 0.0))  # Much larger
+                f.write(struct.pack("<fff", 0.0, 0.02, 0.0))
+                f.write(struct.pack("<H", 0))
 
             validator = GeometryValidator(tmpdir)
-            result = validator.verify_inlet_outlet_orientation(
-                inlet_path, [outlet_path]
-            )
+            result = validator.verify_inlet_outlet_orientation(inlet_path, [outlet_path])
             # Should warn about outlet being larger
             assert len(result.warnings) > 0
             assert any("larger" in w.lower() for w in result.warnings)
@@ -927,30 +906,28 @@ class TestVerifyInletOutletOrientation:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create large inlet
             inlet_path = Path(tmpdir) / "inlet.stl"
-            with open(inlet_path, 'wb') as f:
-                f.write(b'\x00' * 80)
-                f.write(struct.pack('<I', 1))
-                f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
-                f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
-                f.write(struct.pack('<fff', 0.1, 0.0, 0.0))
-                f.write(struct.pack('<fff', 0.0, 0.1, 0.0))
-                f.write(struct.pack('<H', 0))
+            with open(inlet_path, "wb") as f:
+                f.write(b"\x00" * 80)
+                f.write(struct.pack("<I", 1))
+                f.write(struct.pack("<fff", 0.0, 0.0, 1.0))
+                f.write(struct.pack("<fff", 0.0, 0.0, 0.0))
+                f.write(struct.pack("<fff", 0.1, 0.0, 0.0))
+                f.write(struct.pack("<fff", 0.0, 0.1, 0.0))
+                f.write(struct.pack("<H", 0))
 
             # Create tiny outlet (<10% inlet area)
             outlet_path = Path(tmpdir) / "outlet1.stl"
-            with open(outlet_path, 'wb') as f:
-                f.write(b'\x00' * 80)
-                f.write(struct.pack('<I', 1))
-                f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
-                f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
-                f.write(struct.pack('<fff', 0.005, 0.0, 0.0))  # Very small
-                f.write(struct.pack('<fff', 0.0, 0.005, 0.0))
-                f.write(struct.pack('<H', 0))
+            with open(outlet_path, "wb") as f:
+                f.write(b"\x00" * 80)
+                f.write(struct.pack("<I", 1))
+                f.write(struct.pack("<fff", 0.0, 0.0, 1.0))
+                f.write(struct.pack("<fff", 0.0, 0.0, 0.0))
+                f.write(struct.pack("<fff", 0.005, 0.0, 0.0))  # Very small
+                f.write(struct.pack("<fff", 0.0, 0.005, 0.0))
+                f.write(struct.pack("<H", 0))
 
             validator = GeometryValidator(tmpdir)
-            result = validator.verify_inlet_outlet_orientation(
-                inlet_path, [outlet_path]
-            )
+            result = validator.verify_inlet_outlet_orientation(inlet_path, [outlet_path])
             # Should warn about small outlet
             assert len(result.warnings) > 0
             assert any("small" in w.lower() for w in result.warnings)
@@ -963,12 +940,14 @@ class TestMeshQualityCheckerExtended:
         """Test boundary layer coverage detection."""
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / "log.checkMesh"
-            log_path.write_text("""
+            log_path.write_text(
+                """
 Mesh stats
     cells: 100000
 layer thickness info
 Max non-orthogonality = 45.0
-""")
+"""
+            )
 
             checker = MeshQualityChecker(tmpdir)
             result = checker.validate_boundary_layer_coverage()
@@ -980,11 +959,13 @@ Max non-orthogonality = 45.0
             logs_dir = Path(tmpdir) / "logs"
             logs_dir.mkdir()
             log_path = logs_dir / "log.checkMesh"
-            log_path.write_text("""
+            log_path.write_text(
+                """
 Mesh stats
     cells: 100000
 Max non-orthogonality = 45.0
-""")
+"""
+            )
 
             checker = MeshQualityChecker(tmpdir)
             result = checker.validate_boundary_layer_coverage()
@@ -1032,7 +1013,7 @@ Max non-orthogonality = 45.0
     def test_check_skewness_warning_level(self):
         """Test skewness check at warning level."""
         checker = MeshQualityChecker("/test")
-        metrics = {'max_skewness': 5.0}  # Between warning (4) and error (8)
+        metrics = {"max_skewness": 5.0}  # Between warning (4) and error (8)
         result = checker.check_skewness(metrics)
         assert result.is_valid is True
         assert len(result.warnings) > 0
@@ -1040,7 +1021,7 @@ Max non-orthogonality = 45.0
     def test_check_aspect_ratio_warning_level(self):
         """Test aspect ratio check at warning level."""
         checker = MeshQualityChecker("/test")
-        metrics = {'max_aspect_ratio': 200.0}  # Between warning (100) and error (1000)
+        metrics = {"max_aspect_ratio": 200.0}  # Between warning (100) and error (1000)
         result = checker.check_aspect_ratio(metrics)
         assert result.is_valid is True
         assert len(result.warnings) > 0
@@ -1049,13 +1030,15 @@ Max non-orthogonality = 45.0
         """Test mesh validation with custom log file path."""
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / "custom.log"
-            log_path.write_text("""
+            log_path.write_text(
+                """
 Mesh stats
     cells: 50000
 Max non-orthogonality = 50
 Max skewness = 2.0
 Max aspect ratio = 50
-""")
+"""
+            )
 
             checker = MeshQualityChecker(tmpdir)
             result = checker.validate_mesh_quality(str(log_path))
@@ -1070,49 +1053,35 @@ class TestBoundaryConditionValidatorExtended:
         """Test Womersley inlet requiring physics.nu."""
         config = {}
         validator = BoundaryConditionValidator(config)
-        result = validator.validate_inlet_configuration({
-            'type': 'WOMERSLEY',
-            'csv_file': 'test.csv',
-            'data_type': 'flowrate',
-            'profile': 'womersley'
-        })
+        result = validator.validate_inlet_configuration(
+            {"type": "WOMERSLEY", "csv_file": "test.csv", "data_type": "flowrate", "profile": "womersley"}
+        )
         assert any("physics.nu" in err.lower() for err in result.errors)
 
     def test_validate_inlet_womersley_invalid_nu(self):
         """Test Womersley inlet with invalid physics.nu."""
-        config = {'physics': {'nu': -1e-6}}
+        config = {"physics": {"nu": -1e-6}}
         validator = BoundaryConditionValidator(config)
-        result = validator.validate_inlet_configuration({
-            'type': 'WOMERSLEY',
-            'csv_file': 'test.csv',
-            'data_type': 'flowrate',
-            'profile': 'womersley'
-        })
+        result = validator.validate_inlet_configuration(
+            {"type": "WOMERSLEY", "csv_file": "test.csv", "data_type": "flowrate", "profile": "womersley"}
+        )
         assert any("positive" in err.lower() for err in result.errors)
 
     def test_validate_inlet_constant_with_flowrate_alias(self):
         """Test CONSTANT inlet with flowrate (alias for cardiac_output)."""
         config = {}
         validator = BoundaryConditionValidator(config)
-        result = validator.validate_inlet_configuration({
-            'type': 'CONSTANT',
-            'flowrate': 5.0,
-            'profile': 'parabolic'
-        })
+        result = validator.validate_inlet_configuration({"type": "CONSTANT", "flowrate": 5.0, "profile": "parabolic"})
         # Should accept flowrate as alias for cardiac_output
-        assert all("flowrate" not in err.lower() and "cardiac_output" not in err.lower()
-                  for err in result.errors)
+        assert all("flowrate" not in err.lower() and "cardiac_output" not in err.lower() for err in result.errors)
 
     def test_validate_inlet_constant_both_velocity_and_cardiac(self):
         """Test CONSTANT inlet with both velocity and cardiac_output."""
         config = {}
         validator = BoundaryConditionValidator(config)
-        result = validator.validate_inlet_configuration({
-            'type': 'CONSTANT',
-            'velocity': 0.5,
-            'cardiac_output': 5.0,
-            'profile': 'parabolic'
-        })
+        result = validator.validate_inlet_configuration(
+            {"type": "CONSTANT", "velocity": 0.5, "cardiac_output": 5.0, "profile": "parabolic"}
+        )
         # Should warn about using both
         assert len(result.warnings) > 0
 
@@ -1120,24 +1089,17 @@ class TestBoundaryConditionValidatorExtended:
         """Test CONSTANT inlet with invalid velocity."""
         config = {}
         validator = BoundaryConditionValidator(config)
-        result = validator.validate_inlet_configuration({
-            'type': 'CONSTANT',
-            'velocity': -0.5,
-            'profile': 'parabolic'
-        })
+        result = validator.validate_inlet_configuration({"type": "CONSTANT", "velocity": -0.5, "profile": "parabolic"})
         assert any("positive" in err.lower() for err in result.errors)
 
     def test_validate_inlet_constant_invalid_cardiac_output(self):
         """Test CONSTANT inlet with invalid cardiac_output."""
         config = {}
         validator = BoundaryConditionValidator(config)
-        result = validator.validate_inlet_configuration({
-            'type': 'CONSTANT',
-            'cardiac_output': 'invalid',
-            'profile': 'parabolic'
-        })
-        assert any("positive" in err.lower() or "must be" in err.lower()
-                  for err in result.errors)
+        result = validator.validate_inlet_configuration(
+            {"type": "CONSTANT", "cardiac_output": "invalid", "profile": "parabolic"}
+        )
+        assert any("positive" in err.lower() or "must be" in err.lower() for err in result.errors)
 
     def test_validate_inlet_constant_extreme_cardiac_output(self):
         """Test CONSTANT inlet with extreme cardiac_output."""
@@ -1145,42 +1107,33 @@ class TestBoundaryConditionValidatorExtended:
         validator = BoundaryConditionValidator(config)
 
         # Very low
-        result = validator.validate_inlet_configuration({
-            'type': 'CONSTANT',
-            'cardiac_output': 1.5,  # Below typical 2-30 range
-            'profile': 'parabolic'
-        })
+        result = validator.validate_inlet_configuration(
+            {"type": "CONSTANT", "cardiac_output": 1.5, "profile": "parabolic"}  # Below typical 2-30 range
+        )
         assert len(result.warnings) > 0
 
         # Very high
-        result = validator.validate_inlet_configuration({
-            'type': 'CONSTANT',
-            'cardiac_output': 35.0,  # Above typical range
-            'profile': 'parabolic'
-        })
+        result = validator.validate_inlet_configuration(
+            {"type": "CONSTANT", "cardiac_output": 35.0, "profile": "parabolic"}  # Above typical range
+        )
         assert len(result.warnings) > 0
 
     def test_validate_inlet_invalid_profile(self):
         """Test inlet with invalid profile."""
         config = {}
         validator = BoundaryConditionValidator(config)
-        result = validator.validate_inlet_configuration({
-            'type': 'CONSTANT',
-            'velocity': 0.5,
-            'profile': 'invalid_profile'
-        })
+        result = validator.validate_inlet_configuration(
+            {"type": "CONSTANT", "velocity": 0.5, "profile": "invalid_profile"}
+        )
         assert any("invalid profile" in err.lower() for err in result.errors)
 
     def test_validate_inlet_invalid_data_type(self):
         """Test inlet with invalid data_type."""
         config = {}
         validator = BoundaryConditionValidator(config)
-        result = validator.validate_inlet_configuration({
-            'type': 'TIMEVARYING',
-            'csv_file': 'test.csv',
-            'data_type': 'invalid_type',
-            'profile': 'parabolic'
-        })
+        result = validator.validate_inlet_configuration(
+            {"type": "TIMEVARYING", "csv_file": "test.csv", "data_type": "invalid_type", "profile": "parabolic"}
+        )
         assert any("data_type" in err.lower() for err in result.errors)
 
     def test_validate_inlet_period_validation(self):
@@ -1189,30 +1142,21 @@ class TestBoundaryConditionValidatorExtended:
         validator = BoundaryConditionValidator(config)
 
         # Invalid period (non-numeric)
-        result = validator.validate_inlet_configuration({
-            'type': 'CONSTANT',
-            'velocity': 0.5,
-            'profile': 'parabolic',
-            'period': 'invalid'
-        })
+        result = validator.validate_inlet_configuration(
+            {"type": "CONSTANT", "velocity": 0.5, "profile": "parabolic", "period": "invalid"}
+        )
         assert any("period" in err.lower() for err in result.errors)
 
         # Period too short
-        result = validator.validate_inlet_configuration({
-            'type': 'CONSTANT',
-            'velocity': 0.5,
-            'profile': 'parabolic',
-            'period': 0.2  # Below 0.3s
-        })
+        result = validator.validate_inlet_configuration(
+            {"type": "CONSTANT", "velocity": 0.5, "profile": "parabolic", "period": 0.2}  # Below 0.3s
+        )
         assert len(result.warnings) > 0
 
         # Period too long
-        result = validator.validate_inlet_configuration({
-            'type': 'CONSTANT',
-            'velocity': 0.5,
-            'profile': 'parabolic',
-            'period': 3.0  # Above 2.0s
-        })
+        result = validator.validate_inlet_configuration(
+            {"type": "CONSTANT", "velocity": 0.5, "profile": "parabolic", "period": 3.0}  # Above 2.0s
+        )
         assert len(result.warnings) > 0
 
     def test_validate_windkessel_pressure_range_warnings(self):
@@ -1221,23 +1165,21 @@ class TestBoundaryConditionValidatorExtended:
         validator = BoundaryConditionValidator(config)
 
         # Extreme systolic pressure
-        result = validator.validate_windkessel_parameters({
-            'type': '3EWINDKESSEL',
-            'windkessel_settings': {
-                'systolic_pressure': 250,  # Very high
-                'diastolic_pressure': 80
+        result = validator.validate_windkessel_parameters(
+            {
+                "type": "3EWINDKESSEL",
+                "windkessel_settings": {"systolic_pressure": 250, "diastolic_pressure": 80},  # Very high
             }
-        })
+        )
         assert len(result.warnings) > 0
 
         # Extreme diastolic pressure
-        result = validator.validate_windkessel_parameters({
-            'type': '3EWINDKESSEL',
-            'windkessel_settings': {
-                'systolic_pressure': 120,
-                'diastolic_pressure': 30  # Very low
+        result = validator.validate_windkessel_parameters(
+            {
+                "type": "3EWINDKESSEL",
+                "windkessel_settings": {"systolic_pressure": 120, "diastolic_pressure": 30},  # Very low
             }
-        })
+        )
         assert len(result.warnings) > 0
 
     def test_validate_windkessel_pulse_pressure(self):
@@ -1246,37 +1188,37 @@ class TestBoundaryConditionValidatorExtended:
         validator = BoundaryConditionValidator(config)
 
         # Very low pulse pressure
-        result = validator.validate_windkessel_parameters({
-            'type': '3EWINDKESSEL',
-            'windkessel_settings': {
-                'systolic_pressure': 100,
-                'diastolic_pressure': 90  # Only 10 mmHg difference
+        result = validator.validate_windkessel_parameters(
+            {
+                "type": "3EWINDKESSEL",
+                "windkessel_settings": {"systolic_pressure": 100, "diastolic_pressure": 90},  # Only 10 mmHg difference
             }
-        })
+        )
         assert len(result.warnings) > 0
 
         # Very high pulse pressure
-        result = validator.validate_windkessel_parameters({
-            'type': '3EWINDKESSEL',
-            'windkessel_settings': {
-                'systolic_pressure': 180,
-                'diastolic_pressure': 80  # 100 mmHg difference
+        result = validator.validate_windkessel_parameters(
+            {
+                "type": "3EWINDKESSEL",
+                "windkessel_settings": {"systolic_pressure": 180, "diastolic_pressure": 80},  # 100 mmHg difference
             }
-        })
+        )
         assert len(result.warnings) > 0
 
     def test_validate_windkessel_invalid_methodology(self):
         """Test Windkessel with invalid methodology."""
         config = {}
         validator = BoundaryConditionValidator(config)
-        result = validator.validate_windkessel_parameters({
-            'type': '3EWINDKESSEL',
-            'windkessel_settings': {
-                'systolic_pressure': 120,
-                'diastolic_pressure': 80,
-                'methodology': 'invalid_methodology'
+        result = validator.validate_windkessel_parameters(
+            {
+                "type": "3EWINDKESSEL",
+                "windkessel_settings": {
+                    "systolic_pressure": 120,
+                    "diastolic_pressure": 80,
+                    "methodology": "invalid_methodology",
+                },
             }
-        })
+        )
         assert len(result.warnings) > 0
 
     def test_validate_windkessel_manual_mode(self):
@@ -1285,42 +1227,44 @@ class TestBoundaryConditionValidatorExtended:
         validator = BoundaryConditionValidator(config)
 
         # Missing manual parameters
-        result = validator.validate_windkessel_parameters({
-            'type': '3EWINDKESSEL',
-            'windkessel_settings': {
-                'systolic_pressure': 120,
-                'diastolic_pressure': 80,
-                'methodology': 'manual'
+        result = validator.validate_windkessel_parameters(
+            {
+                "type": "3EWINDKESSEL",
+                "windkessel_settings": {"systolic_pressure": 120, "diastolic_pressure": 80, "methodology": "manual"},
             }
-        })
+        )
         assert len(result.errors) > 0
 
         # Invalid manual parameter (negative)
-        result = validator.validate_windkessel_parameters({
-            'type': '3EWINDKESSEL',
-            'windkessel_settings': {
-                'systolic_pressure': 120,
-                'diastolic_pressure': 80,
-                'methodology': 'manual',
-                'C_compliance': -1e-8,
-                'R_proximal': 1e7,
-                'R_distal': 1e8
+        result = validator.validate_windkessel_parameters(
+            {
+                "type": "3EWINDKESSEL",
+                "windkessel_settings": {
+                    "systolic_pressure": 120,
+                    "diastolic_pressure": 80,
+                    "methodology": "manual",
+                    "C_compliance": -1e-8,
+                    "R_proximal": 1e7,
+                    "R_distal": 1e8,
+                },
             }
-        })
+        )
         assert any("positive" in err.lower() for err in result.errors)
 
     def test_validate_windkessel_deprecated_init_method(self):
         """Test Windkessel deprecated initial_pressure_method."""
         config = {}
         validator = BoundaryConditionValidator(config)
-        result = validator.validate_windkessel_parameters({
-            'type': '3EWINDKESSEL',
-            'windkessel_settings': {
-                'systolic_pressure': 120,
-                'diastolic_pressure': 80,
-                'initial_pressure_method': 'windkessel'  # Deprecated
+        result = validator.validate_windkessel_parameters(
+            {
+                "type": "3EWINDKESSEL",
+                "windkessel_settings": {
+                    "systolic_pressure": 120,
+                    "diastolic_pressure": 80,
+                    "initial_pressure_method": "windkessel",  # Deprecated
+                },
             }
-        })
+        )
         assert len(result.warnings) > 0
         assert any("deprecated" in w.lower() for w in result.warnings)
 
@@ -1328,36 +1272,35 @@ class TestBoundaryConditionValidatorExtended:
         """Test Windkessel invalid initial_pressure_method."""
         config = {}
         validator = BoundaryConditionValidator(config)
-        result = validator.validate_windkessel_parameters({
-            'type': '3EWINDKESSEL',
-            'windkessel_settings': {
-                'systolic_pressure': 120,
-                'diastolic_pressure': 80,
-                'initial_pressure_method': 'invalid'
+        result = validator.validate_windkessel_parameters(
+            {
+                "type": "3EWINDKESSEL",
+                "windkessel_settings": {
+                    "systolic_pressure": 120,
+                    "diastolic_pressure": 80,
+                    "initial_pressure_method": "invalid",
+                },
             }
-        })
+        )
         assert any("initial_pressure_method" in err.lower() for err in result.errors)
 
     def test_validate_bc_consistency_constant_zerogradient(self):
         """Test BC consistency for CONSTANT + ZEROGRADIENT."""
         config = {}
         validator = BoundaryConditionValidator(config)
-        result = validator.validate_bc_consistency(
-            {'type': 'CONSTANT'},
-            {'type': 'ZEROGRADIENT'}
-        )
+        result = validator.validate_bc_consistency({"type": "CONSTANT"}, {"type": "ZEROGRADIENT"})
         assert len(result.warnings) > 0
 
     def test_validate_all_missing_inlet(self):
         """Test validate_all with missing inlet."""
-        config = {'boundary_conditions': {'outlets': {'type': 'ZEROGRADIENT'}}}
+        config = {"boundary_conditions": {"outlets": {"type": "ZEROGRADIENT"}}}
         validator = BoundaryConditionValidator(config)
         result = validator.validate_all()
         assert any("inlet" in err.lower() for err in result.errors)
 
     def test_validate_all_missing_outlets(self):
         """Test validate_all with missing outlets."""
-        config = {'boundary_conditions': {'inlet': {'type': 'CONSTANT', 'velocity': 0.5, 'profile': 'parabolic'}}}
+        config = {"boundary_conditions": {"inlet": {"type": "CONSTANT", "velocity": 0.5, "profile": "parabolic"}}}
         validator = BoundaryConditionValidator(config)
         result = validator.validate_all()
         assert any("outlet" in err.lower() for err in result.errors)
@@ -1370,9 +1313,9 @@ class TestValidateBinarySTLEdgeCases:
         """Test binary STL with corrupted triangle count."""
         with tempfile.TemporaryDirectory() as tmpdir:
             stl_path = Path(tmpdir) / "bad.stl"
-            with open(stl_path, 'wb') as f:
-                f.write(b'\x00' * 80)  # Header
-                f.write(b'xx')  # Incomplete count
+            with open(stl_path, "wb") as f:
+                f.write(b"\x00" * 80)  # Header
+                f.write(b"xx")  # Incomplete count
 
             validator = GeometryValidator(tmpdir)
             result = validator._validate_binary_stl(stl_path)
@@ -1382,11 +1325,11 @@ class TestValidateBinarySTLEdgeCases:
         """Test binary STL with incorrect file size."""
         with tempfile.TemporaryDirectory() as tmpdir:
             stl_path = Path(tmpdir) / "bad.stl"
-            with open(stl_path, 'wb') as f:
-                f.write(b'\x00' * 80)  # Header
-                f.write(struct.pack('<I', 10))  # Claims 10 triangles
+            with open(stl_path, "wb") as f:
+                f.write(b"\x00" * 80)  # Header
+                f.write(struct.pack("<I", 10))  # Claims 10 triangles
                 # But only write 1 triangle worth of data
-                f.write(b'\x00' * 50)
+                f.write(b"\x00" * 50)
 
             validator = GeometryValidator(tmpdir)
             result = validator._validate_binary_stl(stl_path)
@@ -1422,12 +1365,14 @@ class TestValidateASCIISTLEdgeCases:
         """Test ASCII STL with mismatched facet/endfacet count."""
         with tempfile.TemporaryDirectory() as tmpdir:
             stl_path = Path(tmpdir) / "bad.stl"
-            stl_path.write_text("""solid test
+            stl_path.write_text(
+                """solid test
 facet normal 0 0 1
 facet normal 0 0 1
 endfacet
 endsolid test
-""")
+"""
+            )
 
             validator = GeometryValidator(tmpdir)
             result = validator._validate_ascii_stl(stl_path)
@@ -1452,39 +1397,39 @@ class TestGeometryValidatorValidateAll:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create valid inlet STL
             inlet_path = Path(tmpdir) / "inlet.stl"
-            with open(inlet_path, 'wb') as f:
-                f.write(b'\x00' * 80)
-                f.write(struct.pack('<I', 100))  # 100 triangles
+            with open(inlet_path, "wb") as f:
+                f.write(b"\x00" * 80)
+                f.write(struct.pack("<I", 100))  # 100 triangles
                 for _ in range(100):
-                    f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
-                    f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
-                    f.write(struct.pack('<fff', 0.01, 0.0, 0.0))
-                    f.write(struct.pack('<fff', 0.0, 0.01, 0.0))
-                    f.write(struct.pack('<H', 0))
+                    f.write(struct.pack("<fff", 0.0, 0.0, 1.0))
+                    f.write(struct.pack("<fff", 0.0, 0.0, 0.0))
+                    f.write(struct.pack("<fff", 0.01, 0.0, 0.0))
+                    f.write(struct.pack("<fff", 0.0, 0.01, 0.0))
+                    f.write(struct.pack("<H", 0))
 
             # Create outlet
             outlet_path = Path(tmpdir) / "outlet1.stl"
-            with open(outlet_path, 'wb') as f:
-                f.write(b'\x00' * 80)
-                f.write(struct.pack('<I', 50))
+            with open(outlet_path, "wb") as f:
+                f.write(b"\x00" * 80)
+                f.write(struct.pack("<I", 50))
                 for _ in range(50):
-                    f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
-                    f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
-                    f.write(struct.pack('<fff', 0.01, 0.0, 0.0))
-                    f.write(struct.pack('<fff', 0.0, 0.01, 0.0))
-                    f.write(struct.pack('<H', 0))
+                    f.write(struct.pack("<fff", 0.0, 0.0, 1.0))
+                    f.write(struct.pack("<fff", 0.0, 0.0, 0.0))
+                    f.write(struct.pack("<fff", 0.01, 0.0, 0.0))
+                    f.write(struct.pack("<fff", 0.0, 0.01, 0.0))
+                    f.write(struct.pack("<H", 0))
 
             # Create wall
             wall_path = Path(tmpdir) / "wall_aorta.stl"
-            with open(wall_path, 'wb') as f:
-                f.write(b'\x00' * 80)
-                f.write(struct.pack('<I', 200))
+            with open(wall_path, "wb") as f:
+                f.write(b"\x00" * 80)
+                f.write(struct.pack("<I", 200))
                 for _ in range(200):
-                    f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
-                    f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
-                    f.write(struct.pack('<fff', 0.01, 0.0, 0.0))
-                    f.write(struct.pack('<fff', 0.0, 0.01, 0.0))
-                    f.write(struct.pack('<H', 0))
+                    f.write(struct.pack("<fff", 0.0, 0.0, 1.0))
+                    f.write(struct.pack("<fff", 0.0, 0.0, 0.0))
+                    f.write(struct.pack("<fff", 0.01, 0.0, 0.0))
+                    f.write(struct.pack("<fff", 0.0, 0.01, 0.0))
+                    f.write(struct.pack("<H", 0))
 
             validator = GeometryValidator(tmpdir)
             result = validator.validate_all()
@@ -1512,7 +1457,8 @@ class TestCSVValidationEdgeCases:
         """Test CSV with non-monotonic time."""
         with tempfile.TemporaryDirectory() as tmpdir:
             csv_path = Path(tmpdir) / "flow.csv"
-            csv_path.write_text("""time,flowrate
+            csv_path.write_text(
+                """time,flowrate
 0.0,0.5
 0.1,0.6
 0.05,0.7
@@ -1523,7 +1469,8 @@ class TestCSVValidationEdgeCases:
 0.6,0.8
 0.7,0.7
 0.8,0.6
-""")
+"""
+            )
 
             config = {}
             validator = BoundaryConditionValidator(config, tmpdir)
@@ -1534,7 +1481,8 @@ class TestCSVValidationEdgeCases:
         """Test CSV with duplicate time values."""
         with tempfile.TemporaryDirectory() as tmpdir:
             csv_path = Path(tmpdir) / "flow.csv"
-            csv_path.write_text("""time,flowrate
+            csv_path.write_text(
+                """time,flowrate
 0.0,0.5
 0.1,0.6
 0.1,0.7
@@ -1545,7 +1493,8 @@ class TestCSVValidationEdgeCases:
 0.6,0.8
 0.7,0.7
 0.8,0.6
-""")
+"""
+            )
 
             config = {}
             validator = BoundaryConditionValidator(config, tmpdir)
@@ -1553,5 +1502,5 @@ class TestCSVValidationEdgeCases:
             assert any("duplicate" in err.lower() for err in result.errors)
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

@@ -42,7 +42,7 @@ class TestInletAuditDataclass:
             detected_period_s=0.8,
             inlet_type="TIMEVARYING",
             profile="parabolic",
-            orientation="auto"
+            orientation="auto",
         )
 
         assert audit.inlet_area_m2 == 1e-4
@@ -64,7 +64,7 @@ class TestInletAuditDataclass:
             detected_period_s=0.8,
             inlet_type="TIMEVARYING",
             profile="parabolic",
-            orientation="auto"
+            orientation="auto",
         )
 
         # Check defaults
@@ -97,7 +97,7 @@ class TestInletAuditDataclass:
             profile="parabolic",
             orientation="auto",
             warnings=None,
-            errors=None
+            errors=None,
         )
 
         assert audit.warnings == []
@@ -118,16 +118,16 @@ class TestInletAuditDataclass:
             detected_period_s=0.8,
             inlet_type="TIMEVARYING",
             profile="parabolic",
-            orientation="auto"
+            orientation="auto",
         )
 
         result = audit.to_dict()
 
         assert isinstance(result, dict)
-        assert result['inlet_area_m2'] == 1e-4
-        assert result['inlet_radius_eq_m'] == 0.005
-        assert result['csv_file'] == "flow.csv"
-        assert result['inlet_type'] == "TIMEVARYING"
+        assert result["inlet_area_m2"] == 1e-4
+        assert result["inlet_radius_eq_m"] == 0.005
+        assert result["csv_file"] == "flow.csv"
+        assert result["inlet_type"] == "TIMEVARYING"
 
     def test_save_json(self, tmp_path):
         """Test save_json method writes valid JSON."""
@@ -144,7 +144,7 @@ class TestInletAuditDataclass:
             detected_period_s=0.8,
             inlet_type="TIMEVARYING",
             profile="parabolic",
-            orientation="auto"
+            orientation="auto",
         )
 
         json_path = tmp_path / "audit.json"
@@ -156,8 +156,8 @@ class TestInletAuditDataclass:
         with open(json_path) as f:
             loaded = json.load(f)
 
-        assert loaded['inlet_area_m2'] == 1e-4
-        assert loaded['inlet_type'] == "TIMEVARYING"
+        assert loaded["inlet_area_m2"] == 1e-4
+        assert loaded["inlet_type"] == "TIMEVARYING"
 
     def test_get_summary_report_basic(self):
         """Test get_summary_report returns formatted string."""
@@ -174,7 +174,7 @@ class TestInletAuditDataclass:
             detected_period_s=0.8,
             inlet_type="TIMEVARYING",
             profile="parabolic",
-            orientation="manual"
+            orientation="manual",
         )
 
         report = audit.get_summary_report()
@@ -203,7 +203,7 @@ class TestInletAuditDataclass:
             profile="parabolic",
             orientation="auto",
             mean_flow_m3s=5e-5,  # 50 mL/s
-            mean_velocity_ms=0.5
+            mean_velocity_ms=0.5,
         )
 
         report = audit.get_summary_report()
@@ -231,7 +231,7 @@ class TestInletAuditDataclass:
             orientation="auto",
             nu_m2s=3.5e-6,
             womersley_alpha=4.5,
-            womersley_recommendation="womersley (transitional)"
+            womersley_recommendation="womersley (transitional)",
         )
 
         report = audit.get_summary_report()
@@ -258,7 +258,7 @@ class TestInletAuditDataclass:
             orientation="auto",
             auto_orientation_detected=True,
             dot_product_normal_flow=-0.9,
-            orientation_flipped=True
+            orientation_flipped=True,
         )
 
         report = audit.get_summary_report()
@@ -286,7 +286,7 @@ class TestInletAuditDataclass:
             scaling_applied=True,
             target_CO_Lmin=5.0,
             original_mean_flow_m3s=4e-5,
-            scale_factor=1.25
+            scale_factor=1.25,
         )
 
         report = audit.get_summary_report()
@@ -313,7 +313,7 @@ class TestInletAuditDataclass:
             orientation="auto",
             filter_method="linear",
             target_dt_s=0.005,
-            n_output_timesteps=160
+            n_output_timesteps=160,
         )
 
         report = audit.get_summary_report()
@@ -338,7 +338,7 @@ class TestInletAuditDataclass:
             profile="parabolic",
             orientation="auto",
             warnings=["Profile may not be optimal"],
-            errors=["CSV file not found"]
+            errors=["CSV file not found"],
         )
 
         report = audit.get_summary_report()
@@ -356,32 +356,24 @@ class TestInletQCInit:
         """Test basic initialization."""
         from aortacfd_lib.inlet_qc import InletQC
 
-        config = {
-            'inlet': {'type': 'TIMEVARYING'},
-            'physics': {'nu': 3.5e-6}
-        }
+        config = {"inlet": {"type": "TIMEVARYING"}, "physics": {"nu": 3.5e-6}}
 
         qc = InletQC(config, tmp_path)
 
         assert qc.config == config
         assert qc.case_dir == tmp_path
-        assert qc.inlet_config == {'type': 'TIMEVARYING'}
-        assert qc.physics == {'nu': 3.5e-6}
+        assert qc.inlet_config == {"type": "TIMEVARYING"}
+        assert qc.physics == {"nu": 3.5e-6}
 
     def test_initialization_boundary_conditions_fallback(self, tmp_path):
         """Test initialization with boundary_conditions structure."""
         from aortacfd_lib.inlet_qc import InletQC
 
-        config = {
-            'boundary_conditions': {
-                'inlet': {'type': 'WOMERSLEY'}
-            },
-            'physics': {}
-        }
+        config = {"boundary_conditions": {"inlet": {"type": "WOMERSLEY"}}, "physics": {}}
 
         qc = InletQC(config, tmp_path)
 
-        assert qc.inlet_config == {'type': 'WOMERSLEY'}
+        assert qc.inlet_config == {"type": "WOMERSLEY"}
 
     def test_initialization_empty_config(self, tmp_path):
         """Test initialization with empty config."""
@@ -523,7 +515,7 @@ class TestComputeAreaFromPoints:
         # Create circular points
         n_points = 36
         radius = 0.01  # 10mm radius
-        angles = np.linspace(0, 2*np.pi, n_points, endpoint=False)
+        angles = np.linspace(0, 2 * np.pi, n_points, endpoint=False)
         x = radius * np.cos(angles)
         y = radius * np.sin(angles)
         z = np.zeros(n_points)
@@ -550,7 +542,7 @@ class TestComputeAreaFromPoints:
         # Create points for known area
         n_points = 36
         radius = 0.01
-        angles = np.linspace(0, 2*np.pi, n_points, endpoint=False)
+        angles = np.linspace(0, 2 * np.pi, n_points, endpoint=False)
         x = radius * np.cos(angles)
         y = radius * np.sin(angles)
         z = np.zeros(n_points)
@@ -588,11 +580,11 @@ class TestAnalyzeCsvWaveform:
 
         stats = qc.analyze_csv_waveform(csv_file, "flowrate")
 
-        assert stats['n_points'] == 5
-        assert stats['period_s'] == pytest.approx(0.8, rel=1e-6)
-        assert stats['mean_value'] == pytest.approx(0.0016, rel=1e-6)
-        assert stats['peak_value'] == pytest.approx(0.003, rel=1e-6)
-        assert stats['backflow_fraction'] == 0.0
+        assert stats["n_points"] == 5
+        assert stats["period_s"] == pytest.approx(0.8, rel=1e-6)
+        assert stats["mean_value"] == pytest.approx(0.0016, rel=1e-6)
+        assert stats["peak_value"] == pytest.approx(0.003, rel=1e-6)
+        assert stats["backflow_fraction"] == 0.0
 
     def test_analyze_csv_with_header(self, tmp_path):
         """Test analysis of CSV with header line."""
@@ -609,8 +601,8 @@ class TestAnalyzeCsvWaveform:
 
         stats = qc.analyze_csv_waveform(csv_file, "flowrate")
 
-        assert stats['n_points'] == 3
-        assert stats['period_s'] == pytest.approx(0.8, rel=1e-6)
+        assert stats["n_points"] == 3
+        assert stats["period_s"] == pytest.approx(0.8, rel=1e-6)
 
     def test_analyze_csv_with_comments(self, tmp_path):
         """Test analysis of CSV with comment lines."""
@@ -628,7 +620,7 @@ class TestAnalyzeCsvWaveform:
 
         stats = qc.analyze_csv_waveform(csv_file, "flowrate")
 
-        assert stats['n_points'] == 3
+        assert stats["n_points"] == 3
 
     def test_analyze_csv_with_backflow(self, tmp_path):
         """Test analysis of CSV with backflow (negative values)."""
@@ -646,7 +638,7 @@ class TestAnalyzeCsvWaveform:
 
         stats = qc.analyze_csv_waveform(csv_file, "velocity")
 
-        assert stats['backflow_fraction'] == pytest.approx(2/5, rel=1e-6)  # 2 negative out of 5
+        assert stats["backflow_fraction"] == pytest.approx(2 / 5, rel=1e-6)  # 2 negative out of 5
 
     def test_analyze_csv_unsorted_times(self, tmp_path):
         """Test analysis sorts by time."""
@@ -664,9 +656,9 @@ class TestAnalyzeCsvWaveform:
         stats = qc.analyze_csv_waveform(csv_file, "flowrate")
 
         # Times should be sorted
-        assert stats['times'][0] == 0.0
-        assert stats['times'][-1] == 0.8
-        assert stats['n_points'] == 4
+        assert stats["times"][0] == 0.0
+        assert stats["times"][-1] == 0.8
+        assert stats["n_points"] == 4
 
     def test_analyze_csv_invalid_format_raises(self, tmp_path):
         """Test that invalid CSV format raises ValueError."""
@@ -768,14 +760,14 @@ class TestRunFullQC:
         csv_file.write_text("0.0,0.001\n0.8,0.001")
 
         config = {
-            'inlet': {
-                'type': 'TIMEVARYING',  # Need TIMEVARYING to trigger CSV analysis
-                'profile': 'parabolic',
-                'orientation': 'auto',
-                'csv_file': 'flow.csv',
-                'data_type': 'flowrate'
+            "inlet": {
+                "type": "TIMEVARYING",  # Need TIMEVARYING to trigger CSV analysis
+                "profile": "parabolic",
+                "orientation": "auto",
+                "csv_file": "flow.csv",
+                "data_type": "flowrate",
             },
-            'physics': {}
+            "physics": {},
         }
 
         qc = InletQC(config, tmp_path)
@@ -785,13 +777,13 @@ class TestRunFullQC:
             inlet_area=1e-4,
             inlet_radius=0.005,
             inlet_center=np.array([0.0, 0.0, 0.0]),
-            inlet_normal=np.array([0.0, 0.0, 1.0])
+            inlet_normal=np.array([0.0, 0.0, 1.0]),
         )
 
         assert audit is not None
         assert audit.inlet_area_m2 == 1e-4
         assert audit.inlet_radius_eq_m == 0.005
-        assert audit.inlet_type == 'TIMEVARYING'
+        assert audit.inlet_type == "TIMEVARYING"
 
     def test_run_full_qc_with_csv(self, tmp_path):
         """Test full QC with CSV waveform."""
@@ -804,14 +796,14 @@ class TestRunFullQC:
         csv_file.write_text("0.0,0.00005\n0.2,0.00006\n0.4,0.00007\n0.8,0.00004\n")
 
         config = {
-            'inlet': {
-                'type': 'TIMEVARYING',
-                'profile': 'parabolic',
-                'orientation': 'auto',
-                'csv_file': 'flow.csv',
-                'data_type': 'flowrate'
+            "inlet": {
+                "type": "TIMEVARYING",
+                "profile": "parabolic",
+                "orientation": "auto",
+                "csv_file": "flow.csv",
+                "data_type": "flowrate",
             },
-            'physics': {'nu': 3.5e-6}
+            "physics": {"nu": 3.5e-6},
         }
 
         qc = InletQC(config, tmp_path)
@@ -821,7 +813,7 @@ class TestRunFullQC:
             inlet_area=1e-4,
             inlet_radius=0.005,
             inlet_center=np.array([0.0, 0.0, 0.0]),
-            inlet_normal=np.array([0.0, 0.0, 1.0])
+            inlet_normal=np.array([0.0, 0.0, 1.0]),
         )
 
         assert audit.n_points == 4
@@ -840,14 +832,14 @@ class TestRunFullQC:
         csv_file.write_text("0.0,5e-5\n0.4,7e-5\n0.8,4e-5")
 
         config = {
-            'inlet': {
-                'type': 'TIMEVARYING',
-                'profile': 'parabolic',
-                'orientation': 'auto',
-                'csv_file': 'flow.csv',
-                'data_type': 'flowrate'
+            "inlet": {
+                "type": "TIMEVARYING",
+                "profile": "parabolic",
+                "orientation": "auto",
+                "csv_file": "flow.csv",
+                "data_type": "flowrate",
             },
-            'physics': {'nu': 3.5e-6}
+            "physics": {"nu": 3.5e-6},
         }
 
         qc = InletQC(config, tmp_path)
@@ -857,7 +849,7 @@ class TestRunFullQC:
             inlet_area=1e-4,
             inlet_radius=0.005,
             inlet_center=np.array([0.0, 0.0, 0.0]),
-            inlet_normal=np.array([0.0, 0.0, 1.0])
+            inlet_normal=np.array([0.0, 0.0, 1.0]),
         )
 
         assert audit.nu_m2s == 3.5e-6
@@ -875,15 +867,15 @@ class TestRunFullQC:
         csv_file.write_text("0.0,5e-5\n0.4,7e-5\n0.8,4e-5")
 
         config = {
-            'inlet': {
-                'type': 'TIMEVARYING',
-                'profile': 'parabolic',
-                'orientation': 'auto',
-                'csv_file': 'flow.csv',
-                'data_type': 'flowrate',
-                'scaling': {'target_CO': 5.0}  # 5 L/min
+            "inlet": {
+                "type": "TIMEVARYING",
+                "profile": "parabolic",
+                "orientation": "auto",
+                "csv_file": "flow.csv",
+                "data_type": "flowrate",
+                "scaling": {"target_CO": 5.0},  # 5 L/min
             },
-            'physics': {}
+            "physics": {},
         }
 
         qc = InletQC(config, tmp_path)
@@ -893,7 +885,7 @@ class TestRunFullQC:
             inlet_area=1e-4,
             inlet_radius=0.005,
             inlet_center=np.array([0.0, 0.0, 0.0]),
-            inlet_normal=np.array([0.0, 0.0, 1.0])
+            inlet_normal=np.array([0.0, 0.0, 1.0]),
         )
 
         assert audit.scaling_applied is True
@@ -911,15 +903,15 @@ class TestRunFullQC:
         csv_file.write_text("0.0,0.001\n0.8,0.001\n")
 
         config = {
-            'inlet': {
-                'type': 'TIMEVARYING',
-                'profile': 'parabolic',
-                'orientation': 'auto',
-                'csv_file': 'flow.csv',
-                'data_type': 'flowrate',
-                'filter': {'method': 'linear', 'target_dt': 0.005}
+            "inlet": {
+                "type": "TIMEVARYING",
+                "profile": "parabolic",
+                "orientation": "auto",
+                "csv_file": "flow.csv",
+                "data_type": "flowrate",
+                "filter": {"method": "linear", "target_dt": 0.005},
             },
-            'physics': {}
+            "physics": {},
         }
 
         qc = InletQC(config, tmp_path)
@@ -929,10 +921,10 @@ class TestRunFullQC:
             inlet_area=1e-4,
             inlet_radius=0.005,
             inlet_center=np.array([0.0, 0.0, 0.0]),
-            inlet_normal=np.array([0.0, 0.0, 1.0])
+            inlet_normal=np.array([0.0, 0.0, 1.0]),
         )
 
-        assert audit.filter_method == 'linear'
+        assert audit.filter_method == "linear"
         assert audit.target_dt_s == 0.005
 
     def test_run_full_qc_csv_not_found(self, tmp_path):
@@ -940,12 +932,12 @@ class TestRunFullQC:
         from aortacfd_lib.inlet_qc import InletQC
 
         config = {
-            'inlet': {
-                'type': 'FIXED',  # Use FIXED type so no CSV analysis is attempted
-                'profile': 'parabolic',
-                'orientation': 'auto'
+            "inlet": {
+                "type": "FIXED",  # Use FIXED type so no CSV analysis is attempted
+                "profile": "parabolic",
+                "orientation": "auto",
             },
-            'physics': {}
+            "physics": {},
         }
 
         # Create a minimal CSV for the report to avoid zero period
@@ -956,14 +948,14 @@ class TestRunFullQC:
 
         # Use a different config with missing CSV for TIMEVARYING
         config_missing = {
-            'inlet': {
-                'type': 'TIMEVARYING',
-                'profile': 'parabolic',
-                'orientation': 'auto',
-                'csv_file': 'nonexistent.csv',
-                'data_type': 'flowrate'
+            "inlet": {
+                "type": "TIMEVARYING",
+                "profile": "parabolic",
+                "orientation": "auto",
+                "csv_file": "nonexistent.csv",
+                "data_type": "flowrate",
             },
-            'physics': {}
+            "physics": {},
         }
 
         qc = InletQC(config_missing, tmp_path)
@@ -974,7 +966,7 @@ class TestRunFullQC:
             inlet_area=1e-4,
             inlet_radius=0.005,
             inlet_center=np.array([0.0, 0.0, 0.0]),
-            inlet_normal=np.array([0.0, 0.0, 1.0])
+            inlet_normal=np.array([0.0, 0.0, 1.0]),
         )
 
         # Since CSV wasn't found, audit should have default values
@@ -993,14 +985,14 @@ class TestRunFullQC:
         csv_file.write_text("0.0,0.5\n0.4,0.7\n0.8,0.4")
 
         config = {
-            'inlet': {
-                'type': 'TIMEVARYING',
-                'profile': 'parabolic',
-                'orientation': 'auto',
-                'csv_file': 'velocity.csv',
-                'data_type': 'velocity'
+            "inlet": {
+                "type": "TIMEVARYING",
+                "profile": "parabolic",
+                "orientation": "auto",
+                "csv_file": "velocity.csv",
+                "data_type": "velocity",
             },
-            'physics': {'nu': 3.5e-6}
+            "physics": {"nu": 3.5e-6},
         }
 
         qc = InletQC(config, tmp_path)
@@ -1010,7 +1002,7 @@ class TestRunFullQC:
             inlet_area=1e-4,
             inlet_radius=0.005,
             inlet_center=np.array([0.0, 0.0, 0.0]),
-            inlet_normal=np.array([0.0, 0.0, 1.0])
+            inlet_normal=np.array([0.0, 0.0, 1.0]),
         )
 
         # For velocity data, mean_velocity is from CSV, mean_flow is calculated
@@ -1029,14 +1021,14 @@ class TestRunFullQC:
         csv_file.write_text("0.0,5e-5\n0.4,7e-5\n0.8,4e-5")
 
         config = {
-            'inlet': {
-                'type': 'TIMEVARYING',
-                'profile': 'plug',  # Using plug profile
-                'orientation': 'auto',
-                'csv_file': 'flow.csv',
-                'data_type': 'flowrate'
+            "inlet": {
+                "type": "TIMEVARYING",
+                "profile": "plug",  # Using plug profile
+                "orientation": "auto",
+                "csv_file": "flow.csv",
+                "data_type": "flowrate",
             },
-            'physics': {'nu': 3.5e-6}  # With this ν and R=0.005, α would suggest womersley
+            "physics": {"nu": 3.5e-6},  # With this ν and R=0.005, α would suggest womersley
         }
 
         qc = InletQC(config, tmp_path)
@@ -1046,7 +1038,7 @@ class TestRunFullQC:
             inlet_area=1e-4,
             inlet_radius=0.005,
             inlet_center=np.array([0.0, 0.0, 0.0]),
-            inlet_normal=np.array([0.0, 0.0, 1.0])
+            inlet_normal=np.array([0.0, 0.0, 1.0]),
         )
 
         # Check that a warning was generated about profile mismatch
@@ -1065,14 +1057,14 @@ class TestRunFullQC:
         csv_file.write_text("0.0,0.001\n0.8,0.001\n")
 
         config = {
-            'inlet': {
-                'type': 'TIMEVARYING',
-                'profile': 'parabolic',
-                'orientation': 'auto',
-                'csv_file': 'flow.csv',
-                'data_type': 'flowrate'
+            "inlet": {
+                "type": "TIMEVARYING",
+                "profile": "parabolic",
+                "orientation": "auto",
+                "csv_file": "flow.csv",
+                "data_type": "flowrate",
             },
-            'physics': {}
+            "physics": {},
         }
 
         qc = InletQC(config, tmp_path)
@@ -1083,12 +1075,12 @@ class TestRunFullQC:
             inlet_area=1e-4,
             inlet_radius=0.005,
             inlet_center=[0.0, 0.0, 0.0],
-            inlet_normal=[0.0, 0.0, 1.0]
+            inlet_normal=[0.0, 0.0, 1.0],
         )
 
         assert audit.inlet_center == [0.0, 0.0, 0.0]
         assert audit.inlet_normal == [0.0, 0.0, 1.0]
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

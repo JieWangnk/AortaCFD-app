@@ -31,8 +31,9 @@ def mock_plotting_libs():
     mock_ax = MagicMock()
     mock_plt.subplots.return_value = (mock_fig, mock_ax)
 
-    with patch.dict('sys.modules', {'matplotlib': MagicMock(), 'matplotlib.pyplot': mock_plt,
-                                    'matplotlib.dates': MagicMock()}):
+    with patch.dict(
+        "sys.modules", {"matplotlib": MagicMock(), "matplotlib.pyplot": mock_plt, "matplotlib.dates": MagicMock()}
+    ):
         yield mock_plt
 
 
@@ -99,12 +100,12 @@ class TestExtractMeshStats:
             reporter = SimulationReporter(tmpdir)
             stats = reporter.extract_mesh_stats()
 
-            assert stats.get('points') == 123456
-            assert stats.get('faces') == 345678
-            assert stats.get('cells') == 100000
-            assert stats.get('boundary_patches') == 5
-            assert abs(stats.get('max_aspect_ratio', 0) - 25.3) < 0.1
-            assert abs(stats.get('max_skewness', 0) - 2.45) < 0.1
+            assert stats.get("points") == 123456
+            assert stats.get("faces") == 345678
+            assert stats.get("cells") == 100000
+            assert stats.get("boundary_patches") == 5
+            assert abs(stats.get("max_aspect_ratio", 0) - 25.3) < 0.1
+            assert abs(stats.get("max_skewness", 0) - 2.45) < 0.1
 
 
 class TestExtractTransportProperties:
@@ -146,11 +147,11 @@ class TestExtractTransportProperties:
             reporter = SimulationReporter(tmpdir)
             props = reporter.extract_transport_properties()
 
-            assert 'kinematic_viscosity' in props
-            assert abs(props['kinematic_viscosity'] - 3.5e-6) < 1e-10
-            assert 'density' in props
-            assert abs(props['density'] - 1060) < 0.1
-            assert 'dynamic_viscosity' in props
+            assert "kinematic_viscosity" in props
+            assert abs(props["kinematic_viscosity"] - 3.5e-6) < 1e-10
+            assert "density" in props
+            assert abs(props["density"] - 1060) < 0.1
+            assert "dynamic_viscosity" in props
 
 
 class TestExtractWindkesselCoefficients:
@@ -258,10 +259,10 @@ class TestExtractSolverSettings:
             reporter = SimulationReporter(tmpdir)
             settings = reporter.extract_solver_settings()
 
-            assert 'end_time' in settings
-            assert abs(settings['end_time'] - 1.0) < 0.01
-            assert 'delta_t' in settings
-            assert abs(settings['delta_t'] - 0.001) < 0.0001
+            assert "end_time" in settings
+            assert abs(settings["end_time"] - 1.0) < 0.01
+            assert "delta_t" in settings
+            assert abs(settings["delta_t"] - 0.001) < 0.0001
 
     def test_extract_solver_with_fv_schemes(self):
         """Test with fvSchemes file."""
@@ -293,8 +294,8 @@ class TestExtractSolverSettings:
             reporter = SimulationReporter(tmpdir)
             settings = reporter.extract_solver_settings()
 
-            assert 'time_scheme' in settings
-            assert settings['time_scheme'] == 'backward'
+            assert "time_scheme" in settings
+            assert settings["time_scheme"] == "backward"
 
 
 class TestCalculateOutletFlows:
@@ -308,10 +309,7 @@ class TestCalculateOutletFlows:
         with tempfile.TemporaryDirectory() as tmpdir:
             reporter = SimulationReporter(tmpdir)
 
-            inlet_data = pd.DataFrame({
-                'time': [0.0, 0.5, 1.0],
-                'flow_rate': [0.1, 0.2, 0.1]
-            })
+            inlet_data = pd.DataFrame({"time": [0.0, 0.5, 1.0], "flow_rate": [0.1, 0.2, 0.1]})
 
             outlet_flows = reporter._calculate_outlet_flows(inlet_data, {})
 
@@ -325,25 +323,19 @@ class TestCalculateOutletFlows:
         with tempfile.TemporaryDirectory() as tmpdir:
             reporter = SimulationReporter(tmpdir)
 
-            inlet_data = pd.DataFrame({
-                'time': [0.0, 0.5, 1.0],
-                'flow_rate': [0.1, 0.2, 0.1]
-            })
+            inlet_data = pd.DataFrame({"time": [0.0, 0.5, 1.0], "flow_rate": [0.1, 0.2, 0.1]})
 
-            windkessel_data = {
-                'outlet1': {'R': 1000},
-                'outlet2': {'R': 1000}  # Equal resistances
-            }
+            windkessel_data = {"outlet1": {"R": 1000}, "outlet2": {"R": 1000}}  # Equal resistances
 
             outlet_flows = reporter._calculate_outlet_flows(inlet_data, windkessel_data)
 
             # With equal resistances, flows should be equal and sum to inlet
-            assert 'outlet1' in outlet_flows
-            assert 'outlet2' in outlet_flows
+            assert "outlet1" in outlet_flows
+            assert "outlet2" in outlet_flows
 
             # Each outlet should get ~50% of inlet flow
-            outlet1_flow = outlet_flows['outlet1']['flow_rate'].iloc[1]
-            outlet2_flow = outlet_flows['outlet2']['flow_rate'].iloc[1]
+            outlet1_flow = outlet_flows["outlet1"]["flow_rate"].iloc[1]
+            outlet2_flow = outlet_flows["outlet2"]["flow_rate"].iloc[1]
 
             assert abs(outlet1_flow - outlet2_flow) < 0.001  # Equal flows
             assert abs(outlet1_flow + outlet2_flow - 0.2) < 0.001  # Sum equals inlet
@@ -356,21 +348,18 @@ class TestCalculateOutletFlows:
         with tempfile.TemporaryDirectory() as tmpdir:
             reporter = SimulationReporter(tmpdir)
 
-            inlet_data = pd.DataFrame({
-                'time': [0.0, 0.5, 1.0],
-                'flow_rate': [0.0, 1.0, 0.0]  # Peak at t=0.5
-            })
+            inlet_data = pd.DataFrame({"time": [0.0, 0.5, 1.0], "flow_rate": [0.0, 1.0, 0.0]})  # Peak at t=0.5
 
             windkessel_data = {
-                'outlet1': {'R': 1000},   # Low resistance = high flow
-                'outlet2': {'R': 2000}    # High resistance = low flow
+                "outlet1": {"R": 1000},  # Low resistance = high flow
+                "outlet2": {"R": 2000},  # High resistance = low flow
             }
 
             outlet_flows = reporter._calculate_outlet_flows(inlet_data, windkessel_data)
 
             # Lower resistance should have higher flow
-            outlet1_flow = outlet_flows['outlet1']['flow_rate'].iloc[1]
-            outlet2_flow = outlet_flows['outlet2']['flow_rate'].iloc[1]
+            outlet1_flow = outlet_flows["outlet1"]["flow_rate"].iloc[1]
+            outlet2_flow = outlet_flows["outlet2"]["flow_rate"].iloc[1]
 
             assert outlet1_flow > outlet2_flow  # outlet1 has lower R, higher flow
 
@@ -408,7 +397,7 @@ class TestExtractFlowRates:
 
             if inlet_data is not None:
                 assert len(inlet_data) == 3
-                assert 'time' in inlet_data.columns or 'Time' in inlet_data.columns
+                assert "time" in inlet_data.columns or "Time" in inlet_data.columns
 
 
 class TestCreateFlowRatePlot:
@@ -433,23 +422,15 @@ class TestCreateFlowRatePlot:
         with tempfile.TemporaryDirectory() as tmpdir:
             reporter = SimulationReporter(tmpdir)
 
-            inlet_data = pd.DataFrame({
-                'time': [0.0, 0.5, 1.0],
-                'flow_rate': [0.1, 0.2, 0.1]
-            })
+            inlet_data = pd.DataFrame({"time": [0.0, 0.5, 1.0], "flow_rate": [0.1, 0.2, 0.1]})
 
-            outlet_flows = {
-                'outlet1': pd.DataFrame({
-                    'time': [0.0, 0.5, 1.0],
-                    'flow_rate': [0.05, 0.1, 0.05]
-                })
-            }
+            outlet_flows = {"outlet1": pd.DataFrame({"time": [0.0, 0.5, 1.0], "flow_rate": [0.05, 0.1, 0.05]})}
 
             # Mock matplotlib at module level for this test
             mock_fig = MagicMock()
             mock_ax = MagicMock()
 
-            with patch('aortacfd_lib.simulation_reporter.plt') as mock_plt:
+            with patch("aortacfd_lib.simulation_reporter.plt") as mock_plt:
                 mock_plt.subplots.return_value = (mock_fig, mock_ax)
                 result = reporter.create_flow_rate_plot(inlet_data, outlet_flows, tmpdir)
 
@@ -459,7 +440,7 @@ class TestCreateFlowRatePlot:
 
                 # Result should be a path string
                 assert result is not None
-                assert 'flow_rates' in result
+                assert "flow_rates" in result
 
 
 class TestCaseName:
@@ -492,9 +473,9 @@ class TestRegexPatterns:
         cells:            100000
         """
 
-        points_match = re.search(r'points:\s+(\d+)', content)
-        faces_match = re.search(r'faces:\s+(\d+)', content)
-        cells_match = re.search(r'cells:\s+(\d+)', content)
+        points_match = re.search(r"points:\s+(\d+)", content)
+        faces_match = re.search(r"faces:\s+(\d+)", content)
+        cells_match = re.search(r"cells:\s+(\d+)", content)
 
         assert points_match and int(points_match.group(1)) == 123456
         assert faces_match and int(faces_match.group(1)) == 345678
@@ -509,8 +490,8 @@ class TestRegexPatterns:
         rho   [1 -3 0 0 0 0 0] 1060;
         """
 
-        nu_match = re.search(r'nu\s+\[.*?\]\s+([\d.e-]+)', content)
-        rho_match = re.search(r'rho\s+\[.*?\]\s+([\d.e-]+)', content)
+        nu_match = re.search(r"nu\s+\[.*?\]\s+([\d.e-]+)", content)
+        rho_match = re.search(r"rho\s+\[.*?\]\s+([\d.e-]+)", content)
 
         assert nu_match and abs(float(nu_match.group(1)) - 3.5e-6) < 1e-10
         assert rho_match and abs(float(rho_match.group(1)) - 1060) < 0.1
@@ -525,8 +506,8 @@ class TestRegexPatterns:
         deltaT          0.001;
         """
 
-        end_time_match = re.search(r'endTime\s+([\d.e-]+)', content)
-        delta_t_match = re.search(r'deltaT\s+([\d.e-]+)', content)
+        end_time_match = re.search(r"endTime\s+([\d.e-]+)", content)
+        delta_t_match = re.search(r"deltaT\s+([\d.e-]+)", content)
 
         assert end_time_match and abs(float(end_time_match.group(1)) - 1.5) < 0.01
         assert delta_t_match and abs(float(delta_t_match.group(1)) - 0.001) < 0.0001
@@ -553,9 +534,7 @@ class TestGenerateHTMLReport:
 
             system_dir = Path(tmpdir) / "system"
             system_dir.mkdir()
-            (system_dir / "controlDict").write_text(
-                "endTime 1.0;\ndeltaT 0.001;"
-            )
+            (system_dir / "controlDict").write_text("endTime 1.0;\ndeltaT 0.001;")
 
             output_dir = Path(tmpdir) / "output"
             output_dir.mkdir()
@@ -563,7 +542,7 @@ class TestGenerateHTMLReport:
             reporter = SimulationReporter(tmpdir)
 
             # Mock matplotlib for this test
-            with patch('aortacfd_lib.simulation_reporter.plt') as mock_plt:
+            with patch("aortacfd_lib.simulation_reporter.plt") as mock_plt:
                 mock_fig = MagicMock()
                 mock_ax = MagicMock()
                 mock_plt.subplots.return_value = (mock_fig, mock_ax)
@@ -572,10 +551,10 @@ class TestGenerateHTMLReport:
 
             # Check HTML file was created
             assert Path(report_path).exists()
-            assert report_path.endswith('.html')
+            assert report_path.endswith(".html")
 
             # Check Markdown file was created
-            md_path = str(report_path).replace('_simulation_report.html', '_report.md')
+            md_path = str(report_path).replace("_simulation_report.html", "_report.md")
             assert Path(md_path).exists()
 
     def test_generate_html_report_with_windkessel(self, mock_plotting_libs):
@@ -598,7 +577,8 @@ class TestGenerateHTMLReport:
             # Create pressure file with Windkessel BCs
             zero_dir = Path(tmpdir) / "0"
             zero_dir.mkdir()
-            (zero_dir / "p").write_text("""
+            (zero_dir / "p").write_text(
+                """
 boundaryField
 {
     outlet1
@@ -610,14 +590,15 @@ boundaryField
         p0              10000;
     }
 }
-""")
+"""
+            )
 
             output_dir = Path(tmpdir) / "output"
             output_dir.mkdir()
 
             reporter = SimulationReporter(tmpdir)
 
-            with patch('aortacfd_lib.simulation_reporter.plt') as mock_plt:
+            with patch("aortacfd_lib.simulation_reporter.plt") as mock_plt:
                 mock_fig = MagicMock()
                 mock_ax = MagicMock()
                 mock_plt.subplots.return_value = (mock_fig, mock_ax)
@@ -627,7 +608,7 @@ boundaryField
             # Check HTML contains Windkessel info
             with open(report_path) as f:
                 content = f.read()
-            assert 'Windkessel' in content or 'windkessel' in content.lower()
+            assert "Windkessel" in content or "windkessel" in content.lower()
 
 
 class TestExtractFlowRatesPostprocessing:
@@ -641,9 +622,7 @@ class TestExtractFlowRatesPostprocessing:
             # Create postProcessing structure
             inlet_dir = Path(tmpdir) / "postProcessing" / "inletFlowRate" / "0"
             inlet_dir.mkdir(parents=True)
-            (inlet_dir / "surfaceFieldValue.dat").write_text(
-                "# Time value\n0.0 0.0001\n0.5 0.0002\n1.0 0.0001"
-            )
+            (inlet_dir / "surfaceFieldValue.dat").write_text("# Time value\n0.0 0.0001\n0.5 0.0002\n1.0 0.0001")
 
             reporter = SimulationReporter(tmpdir)
             inlet_data, outlet_flows = reporter.extract_flow_rates()
@@ -688,11 +667,11 @@ Checking geometry...
             reporter = SimulationReporter(tmpdir)
             stats = reporter.extract_mesh_stats()
 
-            assert stats.get('points') == 123456
-            assert stats.get('cells') == 100000
-            assert 'patches' in stats
-            assert 'inlet' in stats['patches']
-            assert stats['patches']['inlet']['faces'] == 1000
+            assert stats.get("points") == 123456
+            assert stats.get("cells") == 100000
+            assert "patches" in stats
+            assert "inlet" in stats["patches"]
+            assert stats["patches"]["inlet"]["faces"] == 1000
 
 
 class TestExtractTransportPropertiesEdgeCases:
@@ -730,8 +709,8 @@ rho   [1 -3 0 0 0 0 0] 1060;
             reporter = SimulationReporter(tmpdir)
             props = reporter.extract_transport_properties()
 
-            assert 'kinematic_viscosity' in props
-            assert abs(props['kinematic_viscosity'] - 3.5e-6) < 1e-10
+            assert "kinematic_viscosity" in props
+            assert abs(props["kinematic_viscosity"] - 3.5e-6) < 1e-10
 
 
 class TestExtractSolverSettingsEdgeCases:
@@ -794,12 +773,9 @@ class TestCreateFlowRatePlotEdgeCases:
         with tempfile.TemporaryDirectory() as tmpdir:
             reporter = SimulationReporter(tmpdir)
 
-            inlet_data = pd.DataFrame({
-                'time': [0.0, 0.5, 1.0],
-                'flow_rate': [0.1, 0.2, 0.1]
-            })
+            inlet_data = pd.DataFrame({"time": [0.0, 0.5, 1.0], "flow_rate": [0.1, 0.2, 0.1]})
 
-            with patch('aortacfd_lib.simulation_reporter.plt') as mock_plt:
+            with patch("aortacfd_lib.simulation_reporter.plt") as mock_plt:
                 mock_fig = MagicMock()
                 mock_ax = MagicMock()
                 mock_plt.subplots.return_value = (mock_fig, mock_ax)
@@ -818,14 +794,9 @@ class TestCreateFlowRatePlotEdgeCases:
         with tempfile.TemporaryDirectory() as tmpdir:
             reporter = SimulationReporter(tmpdir)
 
-            outlet_flows = {
-                'outlet1': pd.DataFrame({
-                    'time': [0.0, 0.5, 1.0],
-                    'flow_rate': [0.05, 0.1, 0.05]
-                })
-            }
+            outlet_flows = {"outlet1": pd.DataFrame({"time": [0.0, 0.5, 1.0], "flow_rate": [0.05, 0.1, 0.05]})}
 
-            with patch('aortacfd_lib.simulation_reporter.plt') as mock_plt:
+            with patch("aortacfd_lib.simulation_reporter.plt") as mock_plt:
                 mock_fig = MagicMock()
                 mock_ax = MagicMock()
                 mock_plt.subplots.return_value = (mock_fig, mock_ax)
@@ -896,7 +867,7 @@ class TestGenerateMarkdownTemplate:
 
             reporter = SimulationReporter(tmpdir)
 
-            with patch('aortacfd_lib.simulation_reporter.plt') as mock_plt:
+            with patch("aortacfd_lib.simulation_reporter.plt") as mock_plt:
                 mock_fig = MagicMock()
                 mock_ax = MagicMock()
                 mock_plt.subplots.return_value = (mock_fig, mock_ax)
@@ -962,21 +933,18 @@ class TestCalculateOutletFlowsEdgeCases:
         with tempfile.TemporaryDirectory() as tmpdir:
             reporter = SimulationReporter(tmpdir)
 
-            inlet_data = pd.DataFrame({
-                'time': [0.0, 0.5, 1.0],
-                'flow_rate': [0.0, 1.0, 0.0]
-            })
+            inlet_data = pd.DataFrame({"time": [0.0, 0.5, 1.0], "flow_rate": [0.0, 1.0, 0.0]})
 
             windkessel_data = {
-                'outlet1': {'R': 1e8},    # Low resistance
-                'outlet2': {'R': 1e10}    # High resistance (100x)
+                "outlet1": {"R": 1e8},  # Low resistance
+                "outlet2": {"R": 1e10},  # High resistance (100x)
             }
 
             outlet_flows = reporter._calculate_outlet_flows(inlet_data, windkessel_data)
 
             # outlet1 should have ~99% of flow, outlet2 ~1%
-            outlet1_flow = outlet_flows['outlet1']['flow_rate'].iloc[1]
-            outlet2_flow = outlet_flows['outlet2']['flow_rate'].iloc[1]
+            outlet1_flow = outlet_flows["outlet1"]["flow_rate"].iloc[1]
+            outlet2_flow = outlet_flows["outlet2"]["flow_rate"].iloc[1]
 
             assert outlet1_flow > outlet2_flow * 10  # Much higher flow to lower R
 
@@ -988,22 +956,16 @@ class TestCalculateOutletFlowsEdgeCases:
         with tempfile.TemporaryDirectory() as tmpdir:
             reporter = SimulationReporter(tmpdir)
 
-            inlet_data = pd.DataFrame({
-                'time': [0.0, 1.0],
-                'flow_rate': [0.1, 0.1]
-            })
+            inlet_data = pd.DataFrame({"time": [0.0, 1.0], "flow_rate": [0.1, 0.1]})
 
-            windkessel_data = {
-                'outlet1': {'C': 1e-9},  # R key missing
-                'outlet2': {'C': 1e-9}
-            }
+            windkessel_data = {"outlet1": {"C": 1e-9}, "outlet2": {"C": 1e-9}}  # R key missing
 
             outlet_flows = reporter._calculate_outlet_flows(inlet_data, windkessel_data)
 
             # Should use default R value and still work
-            assert 'outlet1' in outlet_flows
-            assert 'outlet2' in outlet_flows
+            assert "outlet1" in outlet_flows
+            assert "outlet2" in outlet_flows
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

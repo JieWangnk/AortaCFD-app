@@ -28,13 +28,7 @@ class TestExecuteMeshingTask:
 
     def test_task_initialization(self):
         """Test task initialization."""
-        config = {
-            'mesh': {
-                'SNAPPY_SETTINGS': {
-                    'parallel': False
-                }
-            }
-        }
+        config = {"mesh": {"SNAPPY_SETTINGS": {"parallel": False}}}
 
         from workflow.tasks.execution_tasks import ExecuteMeshingTask
 
@@ -44,18 +38,12 @@ class TestExecuteMeshingTask:
     def test_serial_meshing_commands(self):
         """Test serial meshing command sequence."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            config = {
-                'mesh': {
-                    'SNAPPY_SETTINGS': {
-                        'parallel': False
-                    }
-                }
-            }
+            config = {"mesh": {"SNAPPY_SETTINGS": {"parallel": False}}}
 
             from workflow.tasks.execution_tasks import ExecuteMeshingTask
 
             task = ExecuteMeshingTask(config)
-            context = {'case_directory': tmpdir}
+            context = {"case_directory": tmpdir}
 
             # Track commands called
             commands_called = []
@@ -63,58 +51,51 @@ class TestExecuteMeshingTask:
             def mock_run_command(config, command, case_dir, log_file):
                 commands_called.append(command)
 
-            with patch('workflow.tasks.execution_tasks.run_command', mock_run_command):
-                with patch.object(task, '_check_mesh_quality', return_value="100 cells"):
-                    with patch.object(task, '_create_foam_file'):
+            with patch("workflow.tasks.execution_tasks.run_command", mock_run_command):
+                with patch.object(task, "_check_mesh_quality", return_value="100 cells"):
+                    with patch.object(task, "_create_foam_file"):
                         result = task.execute(context)
 
             # Should call blockMesh, surfaceFeatures, snappyHexMesh, checkMesh
-            assert any('blockMesh' in str(cmd) for cmd in commands_called)
-            assert any('surfaceFeatures' in str(cmd) for cmd in commands_called)
-            assert any('snappyHexMesh' in str(cmd) for cmd in commands_called)
-            assert any('checkMesh' in str(cmd) for cmd in commands_called)
+            assert any("blockMesh" in str(cmd) for cmd in commands_called)
+            assert any("surfaceFeatures" in str(cmd) for cmd in commands_called)
+            assert any("snappyHexMesh" in str(cmd) for cmd in commands_called)
+            assert any("checkMesh" in str(cmd) for cmd in commands_called)
 
     def test_parallel_meshing_commands(self):
         """Test parallel meshing command sequence."""
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create system directory for decomposeParDict
             os.makedirs(os.path.join(tmpdir, "system"))
-            with open(os.path.join(tmpdir, "system", "decomposeParDict"), 'w') as f:
+            with open(os.path.join(tmpdir, "system", "decomposeParDict"), "w") as f:
                 f.write("numberOfSubdomains  4;")
 
             config = {
-                'mesh': {
-                    'SNAPPY_SETTINGS': {
-                        'parallel': True,
-                        'nProcessors': 4
-                    }
-                },
-                'run_settings': {
-                    'subdomains': 8  # Different from meshing
-                }
+                "mesh": {"SNAPPY_SETTINGS": {"parallel": True, "nProcessors": 4}},
+                "run_settings": {"subdomains": 8},  # Different from meshing
             }
 
             from workflow.tasks.execution_tasks import ExecuteMeshingTask
 
             task = ExecuteMeshingTask(config)
-            context = {'case_directory': tmpdir}
+            context = {"case_directory": tmpdir}
 
             commands_called = []
 
             def mock_run_command(config, command, case_dir, log_file):
                 commands_called.append(command)
 
-            with patch('workflow.tasks.execution_tasks.run_command', mock_run_command):
-                with patch.object(task, '_check_mesh_quality', return_value="100 cells"):
-                    with patch.object(task, '_create_foam_file'):
-                        with patch.object(task, '_distribute_closeness_files'):
-                            with patch.object(task, '_cleanup_processor_directories'):
+            with patch("workflow.tasks.execution_tasks.run_command", mock_run_command):
+                with patch.object(task, "_check_mesh_quality", return_value="100 cells"):
+                    with patch.object(task, "_create_foam_file"):
+                        with patch.object(task, "_distribute_closeness_files"):
+                            with patch.object(task, "_cleanup_processor_directories"):
                                 result = task.execute(context)
 
             # Should include parallel commands
-            assert any('decomposePar' in str(cmd) for cmd in commands_called)
-            assert any('mpirun' in str(cmd) for cmd in commands_called)
-            assert any('reconstructPar' in str(cmd) for cmd in commands_called)
+            assert any("decomposePar" in str(cmd) for cmd in commands_called)
+            assert any("mpirun" in str(cmd) for cmd in commands_called)
+            assert any("reconstructPar" in str(cmd) for cmd in commands_called)
 
     def test_create_foam_file(self):
         """Test .foam file creation."""
@@ -144,7 +125,7 @@ Mesh OK.
 """
             logs_dir = os.path.join(tmpdir, "logs")
             os.makedirs(logs_dir)
-            with open(os.path.join(logs_dir, "log.checkMesh"), 'w') as f:
+            with open(os.path.join(logs_dir, "log.checkMesh"), "w") as f:
                 f.write(log_content)
 
             config = {}
@@ -165,7 +146,7 @@ Mesh OK.
             os.makedirs(system_dir)
 
             decompose_dict = os.path.join(system_dir, "decomposeParDict")
-            with open(decompose_dict, 'w') as f:
+            with open(decompose_dict, "w") as f:
                 f.write("numberOfSubdomains  4;\nn               (1 1 4);")
 
             config = {}
@@ -175,7 +156,7 @@ Mesh OK.
             task = ExecuteMeshingTask(config)
             task._override_decompose_par_dict(tmpdir, 8)
 
-            with open(decompose_dict, 'r') as f:
+            with open(decompose_dict, "r") as f:
                 content = f.read()
 
             assert "numberOfSubdomains  8;" in content
@@ -188,7 +169,7 @@ Mesh OK.
             for i in range(4):
                 proc_dir = os.path.join(tmpdir, f"processor{i}")
                 os.makedirs(proc_dir)
-                with open(os.path.join(proc_dir, "test.txt"), 'w') as f:
+                with open(os.path.join(proc_dir, "test.txt"), "w") as f:
                     f.write("test")
 
             config = {}
@@ -287,6 +268,7 @@ class TestParseLayerCoverage:
         log.write_text(_BPM120_ATTEMPT1_LOG)
 
         from workflow.tasks.execution_tasks import ExecuteMeshingTask
+
         patches = ExecuteMeshingTask._parse_layer_coverage(str(log))
         assert "wall_aorta" in patches
         assert patches["wall_aorta"]["faces"] == 18778
@@ -298,14 +280,14 @@ class TestParseLayerCoverage:
         log.write_text(_HEALTHY_MESH_LOG)
 
         from workflow.tasks.execution_tasks import ExecuteMeshingTask
+
         patches = ExecuteMeshingTask._parse_layer_coverage(str(log))
         assert patches["wall_aorta"]["coverage_pct"] == pytest.approx(62.0)
 
     def test_missing_file_returns_empty_dict(self, tmp_path):
         from workflow.tasks.execution_tasks import ExecuteMeshingTask
-        patches = ExecuteMeshingTask._parse_layer_coverage(
-            str(tmp_path / "nope.log")
-        )
+
+        patches = ExecuteMeshingTask._parse_layer_coverage(str(tmp_path / "nope.log"))
         assert patches == {}
 
     def test_log_without_summary_returns_empty_dict(self, tmp_path):
@@ -313,10 +295,12 @@ class TestParseLayerCoverage:
         log.write_text("some snappy output without a final layer report\n")
 
         from workflow.tasks.execution_tasks import ExecuteMeshingTask
+
         assert ExecuteMeshingTask._parse_layer_coverage(str(log)) == {}
 
     def test_max_layer_coverage_picks_highest(self):
         from workflow.tasks.execution_tasks import ExecuteMeshingTask
+
         patches = {
             "wall_aorta": {"coverage_pct": 31.6},
             "wall_secondary": {"coverage_pct": 0.0},
@@ -325,6 +309,7 @@ class TestParseLayerCoverage:
 
     def test_max_layer_coverage_empty_dict(self):
         from workflow.tasks.execution_tasks import ExecuteMeshingTask
+
         assert ExecuteMeshingTask._max_layer_coverage({}) == 0.0
 
 
@@ -333,6 +318,7 @@ class TestMeshNeedsLayerRetry:
 
     def _make_task(self, config=None):
         from workflow.tasks.execution_tasks import ExecuteMeshingTask
+
         return ExecuteMeshingTask(config or {})
 
     def test_healthy_mesh_does_not_retry(self, tmp_path):
@@ -371,18 +357,14 @@ class TestMeshNeedsLayerRetry:
 
     def test_no_retry_when_layers_disabled(self, tmp_path):
         _write_logs(str(tmp_path), _HARD_FAILURE_LOG, "Mesh OK.\n")
-        task = self._make_task(
-            {"mesh": {"SNAPPY_SETTINGS": {"addLayers": False}}}
-        )
+        task = self._make_task({"mesh": {"SNAPPY_SETTINGS": {"addLayers": False}}})
         assert task._mesh_needs_layer_retry(str(tmp_path)) is False
 
     def test_respects_custom_threshold(self, tmp_path):
         # With threshold raised to 40 %, the BPM120 attempt 1 result
         # (31.6 %) should now trigger a retry.
         _write_logs(str(tmp_path), _BPM120_ATTEMPT1_LOG, "Mesh OK.\n")
-        task = self._make_task(
-            {"mesh": {"layer_coverage_threshold": 40.0}}
-        )
+        task = self._make_task({"mesh": {"layer_coverage_threshold": 40.0}})
         assert task._mesh_needs_layer_retry(str(tmp_path)) is True
 
     def test_missing_snappy_log_does_not_retry(self, tmp_path):
@@ -396,28 +378,23 @@ class TestParseCurrentNLayers:
 
     def test_reads_five_layers(self, tmp_path):
         dict_path = tmp_path / "snappyHexMeshDict"
-        dict_path.write_text(
-            "addLayersControls\n"
-            "{\n"
-            "    nSurfaceLayers 5;\n"
-            "    expansionRatio 1.2;\n"
-            "}\n"
-        )
+        dict_path.write_text("addLayersControls\n" "{\n" "    nSurfaceLayers 5;\n" "    expansionRatio 1.2;\n" "}\n")
 
         from workflow.tasks.execution_tasks import ExecuteMeshingTask
+
         assert ExecuteMeshingTask._parse_current_nlayers(str(dict_path)) == 5
 
     def test_missing_dict_returns_zero(self, tmp_path):
         from workflow.tasks.execution_tasks import ExecuteMeshingTask
-        assert ExecuteMeshingTask._parse_current_nlayers(
-            str(tmp_path / "nope")
-        ) == 0
+
+        assert ExecuteMeshingTask._parse_current_nlayers(str(tmp_path / "nope")) == 0
 
     def test_dict_without_nsurfacelayers_returns_zero(self, tmp_path):
         dict_path = tmp_path / "snappyHexMeshDict"
         dict_path.write_text("addLayers false;\n")
 
         from workflow.tasks.execution_tasks import ExecuteMeshingTask
+
         assert ExecuteMeshingTask._parse_current_nlayers(str(dict_path)) == 0
 
 
@@ -426,6 +403,7 @@ class TestPolyMeshSnapshot:
 
     def _make_task(self):
         from workflow.tasks.execution_tasks import ExecuteMeshingTask
+
         return ExecuteMeshingTask({})
 
     def _make_fake_polymesh(self, case_dir, marker):
@@ -467,10 +445,7 @@ class TestPolyMeshSnapshot:
 
     def test_restore_noop_when_snapshot_missing(self, tmp_path):
         task = self._make_task()
-        assert (
-            task._restore_polymesh(str(tmp_path), str(tmp_path / "nope"))
-            is False
-        )
+        assert task._restore_polymesh(str(tmp_path), str(tmp_path / "nope")) is False
 
 
 class TestExecuteSolverTask:
@@ -480,126 +455,102 @@ class TestExecuteSolverTask:
         """Test serial solver execution."""
         with tempfile.TemporaryDirectory() as tmpdir:
             config = {
-                'run_settings': {
-                    'solution_type': 'serial'
-                },
-                'simulation_control': {
-                    'controlDict': {
-                        'application': 'foamRun'
-                    }
-                }
+                "run_settings": {"solution_type": "serial"},
+                "simulation_control": {"controlDict": {"application": "foamRun"}},
             }
 
             from workflow.tasks.execution_tasks import ExecuteSolverTask
 
             task = ExecuteSolverTask(config)
-            context = {'case_directory': tmpdir}
+            context = {"case_directory": tmpdir}
 
             commands_called = []
 
             def mock_run_command(config, command, case_dir, log_file):
                 commands_called.append(command)
 
-            with patch('workflow.tasks.execution_tasks.run_command', mock_run_command):
+            with patch("workflow.tasks.execution_tasks.run_command", mock_run_command):
                 result = task.execute(context)
 
             # Should call solver directly
-            assert any('foamRun' in str(cmd) for cmd in commands_called)
+            assert any("foamRun" in str(cmd) for cmd in commands_called)
             # Should NOT call decomposePar for serial
-            assert not any('decomposePar' in str(cmd) for cmd in commands_called)
+            assert not any("decomposePar" in str(cmd) for cmd in commands_called)
 
     def test_parallel_solver(self):
         """Test parallel solver execution."""
         with tempfile.TemporaryDirectory() as tmpdir:
             config = {
-                'run_settings': {
-                    'solution_type': 'parallel',
-                    'subdomains': 4,
-                    'skip_reconstruction': False,
-                    'cleanup_processors': False  # Don't cleanup in test
+                "run_settings": {
+                    "solution_type": "parallel",
+                    "subdomains": 4,
+                    "skip_reconstruction": False,
+                    "cleanup_processors": False,  # Don't cleanup in test
                 },
-                'simulation_control': {
-                    'controlDict': {
-                        'application': 'foamRun'
-                    }
-                }
+                "simulation_control": {"controlDict": {"application": "foamRun"}},
             }
 
             from workflow.tasks.execution_tasks import ExecuteSolverTask
 
             task = ExecuteSolverTask(config)
-            context = {'case_directory': tmpdir}
+            context = {"case_directory": tmpdir}
 
             commands_called = []
 
             def mock_run_command(config, command, case_dir, log_file):
                 commands_called.append(command)
 
-            with patch('workflow.tasks.execution_tasks.run_command', mock_run_command):
+            with patch("workflow.tasks.execution_tasks.run_command", mock_run_command):
                 result = task.execute(context)
 
             # Should call decomposePar and mpirun
-            assert any('decomposePar' in str(cmd) for cmd in commands_called)
-            assert any('mpirun' in str(cmd) for cmd in commands_called)
-            assert any('reconstructPar' in str(cmd) for cmd in commands_called)
+            assert any("decomposePar" in str(cmd) for cmd in commands_called)
+            assert any("mpirun" in str(cmd) for cmd in commands_called)
+            assert any("reconstructPar" in str(cmd) for cmd in commands_called)
 
     def test_parallel_solver_skip_reconstruction(self):
         """Test parallel solver with skip_reconstruction."""
         with tempfile.TemporaryDirectory() as tmpdir:
             config = {
-                'run_settings': {
-                    'solution_type': 'parallel',
-                    'subdomains': 4,
-                    'skip_reconstruction': True
-                },
-                'simulation_control': {
-                    'controlDict': {
-                        'application': 'foamRun'
-                    }
-                }
+                "run_settings": {"solution_type": "parallel", "subdomains": 4, "skip_reconstruction": True},
+                "simulation_control": {"controlDict": {"application": "foamRun"}},
             }
 
             from workflow.tasks.execution_tasks import ExecuteSolverTask
 
             task = ExecuteSolverTask(config)
-            context = {'case_directory': tmpdir}
+            context = {"case_directory": tmpdir}
 
             commands_called = []
 
             def mock_run_command(config, command, case_dir, log_file):
                 commands_called.append(command)
 
-            with patch('workflow.tasks.execution_tasks.run_command', mock_run_command):
+            with patch("workflow.tasks.execution_tasks.run_command", mock_run_command):
                 result = task.execute(context)
 
             # Should NOT call reconstructPar
-            assert not any('reconstructPar' in str(cmd) for cmd in commands_called)
+            assert not any("reconstructPar" in str(cmd) for cmd in commands_called)
             # Context should mark case as decomposed
-            assert context.get('case_decomposed') is True
+            assert context.get("case_decomposed") is True
 
     def test_solver_failure_handling(self):
         """Test solver failure handling."""
         config = {
-            'run_settings': {
-                'solution_type': 'serial'
-            },
-            'simulation_control': {
-                'controlDict': {
-                    'application': 'foamRun'
-                }
-            }
+            "run_settings": {"solution_type": "serial"},
+            "simulation_control": {"controlDict": {"application": "foamRun"}},
         }
 
         from workflow.tasks.execution_tasks import ExecuteSolverTask
         from aortacfd_lib.utils.runner import CommandExecutionError
 
         task = ExecuteSolverTask(config)
-        context = {'case_directory': '/tmp/test'}
+        context = {"case_directory": "/tmp/test"}
 
         def mock_run_command_fail(config, command, case_dir, log_file):
             raise CommandExecutionError("Solver failed")
 
-        with patch('workflow.tasks.execution_tasks.run_command', mock_run_command_fail):
+        with patch("workflow.tasks.execution_tasks.run_command", mock_run_command_fail):
             result = task.execute(context)
 
         assert result is False
@@ -611,12 +562,12 @@ class TestExecuteReconstructionTask:
     def test_reconstruction_no_processor_dirs(self):
         """Test reconstruction when no processor directories exist."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            config = {'run_settings': {}}
+            config = {"run_settings": {}}
 
             from workflow.tasks.execution_tasks import ExecuteReconstructionTask
 
             task = ExecuteReconstructionTask(config)
-            context = {'case_directory': tmpdir}
+            context = {"case_directory": tmpdir}
 
             # Should return True (nothing to reconstruct)
             result = task.execute(context)
@@ -629,24 +580,24 @@ class TestExecuteReconstructionTask:
             for i in range(4):
                 os.makedirs(os.path.join(tmpdir, f"processor{i}"))
 
-            config = {'run_settings': {}}
+            config = {"run_settings": {}}
 
             from workflow.tasks.execution_tasks import ExecuteReconstructionTask
 
             task = ExecuteReconstructionTask(config)
-            context = {'case_directory': tmpdir}
+            context = {"case_directory": tmpdir}
 
             commands_called = []
 
             def mock_run_command(config, command, case_dir, log_file):
                 commands_called.append(command)
 
-            with patch('workflow.tasks.execution_tasks.run_command', mock_run_command):
+            with patch("workflow.tasks.execution_tasks.run_command", mock_run_command):
                 result = task.execute(context)
 
             # Should call reconstructPar
-            assert any('reconstructPar' in str(cmd) for cmd in commands_called)
-            assert context.get('case_decomposed') is False
+            assert any("reconstructPar" in str(cmd) for cmd in commands_called)
+            assert context.get("case_decomposed") is False
 
 
 class TestExecutePostProcessingTask:
@@ -654,16 +605,14 @@ class TestExecutePostProcessingTask:
 
     def test_pvbatch_not_found(self):
         """Test behavior when pvbatch is not found."""
-        config = {
-            'post_processing': {}
-        }
+        config = {"post_processing": {}}
 
         from workflow.tasks.execution_tasks import ExecutePostProcessingTask
 
         task = ExecutePostProcessingTask(config)
-        context = {'case_directory': '/tmp/test'}
+        context = {"case_directory": "/tmp/test"}
 
-        with patch('shutil.which', return_value=None):
+        with patch("shutil.which", return_value=None):
             result = task.execute(context)
 
         assert result is False
@@ -673,7 +622,7 @@ class TestExecutePostProcessingTask:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create mock pvbatch executable
             pvbatch_path = os.path.join(tmpdir, "pvbatch")
-            with open(pvbatch_path, 'w') as f:
+            with open(pvbatch_path, "w") as f:
                 f.write("#!/bin/bash\necho test")
             os.chmod(pvbatch_path, 0o755)
 
@@ -681,19 +630,15 @@ class TestExecutePostProcessingTask:
             script_dir = os.path.join(tmpdir, "src", "aortacfd_lib")
             os.makedirs(script_dir)
             script_path = os.path.join(script_dir, "post_processor.py")
-            with open(script_path, 'w') as f:
+            with open(script_path, "w") as f:
                 f.write("# mock script")
 
-            config = {
-                'post_processing': {
-                    'pvbatch_exe': pvbatch_path
-                }
-            }
+            config = {"post_processing": {"pvbatch_exe": pvbatch_path}}
 
             from workflow.tasks.execution_tasks import ExecutePostProcessingTask
 
             task = ExecutePostProcessingTask(config)
-            context = {'case_directory': tmpdir}
+            context = {"case_directory": tmpdir}
 
             # Change to tmpdir so script path works
             original_cwd = os.getcwd()
@@ -705,7 +650,7 @@ class TestExecutePostProcessingTask:
                 def mock_run_command(config, command, case_dir, log_file):
                     commands_called.append(command)
 
-                with patch('workflow.tasks.execution_tasks.run_command', mock_run_command):
+                with patch("workflow.tasks.execution_tasks.run_command", mock_run_command):
                     result = task.execute(context)
 
                 # Should have called pvbatch
@@ -729,13 +674,13 @@ class TestExecuteHemodynamicsTask:
             from workflow.tasks.execution_tasks import ExecuteHemodynamicsTask
 
             task = ExecuteHemodynamicsTask(config)
-            context = {'case_directory': case_dir}
+            context = {"case_directory": case_dir}
 
             # Mock the analysis function (imported inside execute)
             mock_results = Mock()
             mock_results.wss_mean = 0.5
             mock_results.wss_max = 2.0
-            mock_results.inlet_type = 'CONSTANT'
+            mock_results.inlet_type = "CONSTANT"
             mock_results.is_pulsatile = False
             mock_results.tawss_mean = 0
             mock_results.tawss_max = 0
@@ -745,7 +690,7 @@ class TestExecuteHemodynamicsTask:
             mock_results.rrt_max = 0
             mock_results.pressure_drop_mmhg = {}
 
-            with patch('aortacfd_lib.hemodynamics_postprocessor.run_hemodynamics_analysis', return_value=mock_results):
+            with patch("aortacfd_lib.hemodynamics_postprocessor.run_hemodynamics_analysis", return_value=mock_results):
                 result = task.execute(context)
 
             # Reports directory should exist
@@ -772,12 +717,12 @@ class TestExecuteHemodynamicsTask:
             from workflow.tasks.execution_tasks import ExecuteHemodynamicsTask
 
             task = ExecuteHemodynamicsTask(config)
-            context = {'case_directory': case_dir}
+            context = {"case_directory": case_dir}
 
             mock_results = Mock()
             mock_results.wss_mean = 0.5
             mock_results.wss_max = 2.0
-            mock_results.inlet_type = 'TIMEVARYING'
+            mock_results.inlet_type = "TIMEVARYING"
             mock_results.is_pulsatile = True
             mock_results.tawss_mean = 0.4
             mock_results.tawss_max = 1.8
@@ -785,9 +730,9 @@ class TestExecuteHemodynamicsTask:
             mock_results.osi_max = 0.45
             mock_results.rrt_mean = 2.5
             mock_results.rrt_max = 8.0
-            mock_results.pressure_drop_mmhg = {'outlet1': 5.2, 'outlet2': 3.1}
+            mock_results.pressure_drop_mmhg = {"outlet1": 5.2, "outlet2": 3.1}
 
-            with patch('aortacfd_lib.hemodynamics_postprocessor.run_hemodynamics_analysis', return_value=mock_results):
+            with patch("aortacfd_lib.hemodynamics_postprocessor.run_hemodynamics_analysis", return_value=mock_results):
                 result = task.execute(context)
 
             assert result is True
@@ -806,10 +751,10 @@ class TestMeshDistribution:
             # Create closeness files (already renamed with .stl, as _rename does before _distribute)
             closeness_files = [
                 "wall_aorta.stl.closeness.internalPointCloseness",
-                "wall_aorta.stl.closeness.cellPointCloseness"
+                "wall_aorta.stl.closeness.cellPointCloseness",
             ]
             for f in closeness_files:
-                with open(os.path.join(tri_surface_dir, f), 'w') as fh:
+                with open(os.path.join(tri_surface_dir, f), "w") as fh:
                     fh.write("test")
 
             config = {}
@@ -828,5 +773,5 @@ class TestMeshDistribution:
                     assert os.path.exists(os.path.join(proc_tri_dir, f))
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

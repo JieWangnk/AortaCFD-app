@@ -25,12 +25,9 @@ class TestFvSchemesWriterInit:
         """Test that initialization creates a valid instance."""
         from aortacfd_lib.numerical_setup import FvSchemesWriter
 
-        config = {
-            'openfoam_version': '12',
-            'physics': {'model': 'laminar'}
-        }
+        config = {"openfoam_version": "12", "physics": {"model": "laminar"}}
 
-        with patch('aortacfd_lib.numerical_setup.Logger'):
+        with patch("aortacfd_lib.numerical_setup.Logger"):
             writer = FvSchemesWriter(config, str(tmp_path))
 
         assert writer.config == config
@@ -41,12 +38,9 @@ class TestFvSchemesWriterInit:
         """Test that initialization creates OFVersionAdapter."""
         from aortacfd_lib.numerical_setup import FvSchemesWriter
 
-        config = {
-            'openfoam_version': '8',
-            'physics': {'model': 'rans'}
-        }
+        config = {"openfoam_version": "8", "physics": {"model": "rans"}}
 
-        with patch('aortacfd_lib.numerical_setup.Logger'):
+        with patch("aortacfd_lib.numerical_setup.Logger"):
             writer = FvSchemesWriter(config, str(tmp_path))
 
         assert writer.version_adapter is not None
@@ -64,49 +58,43 @@ class TestWriteFvSchemesFile:
         (tmp_path / "system").mkdir()
 
         config = {
-            'openfoam_version': '12',
-            'openfoam_major_version': 12,
-            'physics': {
-                'model': 'laminar',
-                'simulation_type': 'transient'
+            "openfoam_version": "12",
+            "openfoam_major_version": 12,
+            "physics": {"model": "laminar", "simulation_type": "transient"},
+            "numerics": {"profile": "standard", "mesh_adaptive": False},
+            "schemes": {
+                "ddtSchemes": {"default": "backward"},
+                "gradSchemes": {"default": "Gauss linear"},
+                "divSchemes": {},
+                "laplacianSchemes": {"default": "Gauss linear corrected"},
+                "interpolationSchemes": {"default": "linear"},
+                "snGradSchemes": {"default": "corrected"},
             },
-            'numerics': {
-                'profile': 'standard',
-                'mesh_adaptive': False
-            },
-            'schemes': {
-                'ddtSchemes': {'default': 'backward'},
-                'gradSchemes': {'default': 'Gauss linear'},
-                'divSchemes': {},
-                'laplacianSchemes': {'default': 'Gauss linear corrected'},
-                'interpolationSchemes': {'default': 'linear'},
-                'snGradSchemes': {'default': 'corrected'}
-            }
         }
 
-        with patch('aortacfd_lib.numerical_setup.Logger'):
+        with patch("aortacfd_lib.numerical_setup.Logger"):
             writer = FvSchemesWriter(config, str(tmp_path))
 
         return writer
 
     def test_write_creates_file(self, writer, tmp_path):
         """Test that write_fvSchemes_file creates the file."""
-        with patch.object(writer, 'jinja_env') as mock_env:
+        with patch.object(writer, "jinja_env") as mock_env:
             mock_template = MagicMock()
             mock_template.render.return_value = "// fvSchemes content"
             mock_env.get_template.return_value = mock_template
 
-            with patch('aortacfd_lib.numerical_setup.prepare_fv_schemes_context') as mock_context:
+            with patch("aortacfd_lib.numerical_setup.prepare_fv_schemes_context") as mock_context:
                 mock_context.return_value = {
-                    'is_steady': False,
-                    'simulation_type': 'transient',
-                    'profile': 'standard',
-                    'ddt_scheme': 'backward',
-                    'div_scheme_U': 'Gauss limitedLinearV 1',
-                    'div_scheme_k': 'Gauss limitedLinear 1',
-                    'grad_limiter': 0.5,
-                    'laplacian_scheme': 'Gauss linear limited 0.5',
-                    'sngrad_scheme': 'limited 0.5',
+                    "is_steady": False,
+                    "simulation_type": "transient",
+                    "profile": "standard",
+                    "ddt_scheme": "backward",
+                    "div_scheme_U": "Gauss limitedLinearV 1",
+                    "div_scheme_k": "Gauss limitedLinear 1",
+                    "grad_limiter": 0.5,
+                    "laplacian_scheme": "Gauss linear limited 0.5",
+                    "sngrad_scheme": "limited 0.5",
                 }
 
                 writer.write_fvSchemes_file()
@@ -121,29 +109,33 @@ class TestWriteFvSchemesFile:
         (tmp_path / "system").mkdir()
 
         config = {
-            'openfoam_version': '12',
-            'openfoam_major_version': 12,
-            'physics': {'model': 'laminar', 'simulation_type': 'transient'},
-            'numerics': {'profile': 'standard', 'mesh_adaptive': False},
-            'schemes': {'ddtSchemes': {'default': 'Euler'}}
+            "openfoam_version": "12",
+            "openfoam_major_version": 12,
+            "physics": {"model": "laminar", "simulation_type": "transient"},
+            "numerics": {"profile": "standard", "mesh_adaptive": False},
+            "schemes": {"ddtSchemes": {"default": "Euler"}},
         }
 
-        with patch('aortacfd_lib.numerical_setup.Logger'):
+        with patch("aortacfd_lib.numerical_setup.Logger"):
             writer = FvSchemesWriter(config, str(tmp_path))
 
-        with patch.object(writer, '_apply_mesh_adaptive_schemes') as mock_adaptive:
-            with patch.object(writer, 'jinja_env') as mock_env:
+        with patch.object(writer, "_apply_mesh_adaptive_schemes") as mock_adaptive:
+            with patch.object(writer, "jinja_env") as mock_env:
                 mock_template = MagicMock()
                 mock_template.render.return_value = "// content"
                 mock_env.get_template.return_value = mock_template
 
-                with patch('aortacfd_lib.numerical_setup.prepare_fv_schemes_context') as mock_context:
+                with patch("aortacfd_lib.numerical_setup.prepare_fv_schemes_context") as mock_context:
                     mock_context.return_value = {
-                        'is_steady': False, 'simulation_type': 'transient',
-                        'profile': 'standard', 'ddt_scheme': 'Euler',
-                        'div_scheme_U': '', 'div_scheme_k': '', 'grad_limiter': 0.5,
-                        'laplacian_scheme': 'Gauss linear limited 0.5',
-                        'sngrad_scheme': 'limited 0.5',
+                        "is_steady": False,
+                        "simulation_type": "transient",
+                        "profile": "standard",
+                        "ddt_scheme": "Euler",
+                        "div_scheme_U": "",
+                        "div_scheme_k": "",
+                        "grad_limiter": 0.5,
+                        "laplacian_scheme": "Gauss linear limited 0.5",
+                        "sngrad_scheme": "limited 0.5",
                     }
 
                     writer.write_fvSchemes_file()
@@ -160,20 +152,16 @@ class TestApplyMeshAdaptiveSchemes:
         """Create a FvSchemesWriter instance for testing."""
         from aortacfd_lib.numerical_setup import FvSchemesWriter
 
-        config = {
-            'openfoam_version': '12',
-            'physics': {'model': 'laminar'},
-            'numerics': {'profile': 'standard'}
-        }
+        config = {"openfoam_version": "12", "physics": {"model": "laminar"}, "numerics": {"profile": "standard"}}
 
-        with patch('aortacfd_lib.numerical_setup.Logger'):
+        with patch("aortacfd_lib.numerical_setup.Logger"):
             writer = FvSchemesWriter(config, str(tmp_path))
 
         return writer
 
     def test_returns_base_schemes_when_no_log(self, writer, tmp_path):
         """Test that base schemes are returned when checkMesh log doesn't exist."""
-        base_schemes = {'ddtSchemes': {'default': 'Euler'}}
+        base_schemes = {"ddtSchemes": {"default": "Euler"}}
 
         result = writer._apply_mesh_adaptive_schemes(base_schemes)
 
@@ -186,23 +174,23 @@ class TestApplyMeshAdaptiveSchemes:
         logs_dir.mkdir()
 
         checkmesh_log = logs_dir / "log.checkMesh"
-        checkmesh_log.write_text("""
+        checkmesh_log.write_text(
+            """
     Max skewness = 3.5 OK.
     Mesh non-orthogonality Max: 65.0 average: 10
     Max aspect ratio = 25.0 OK.
     Mesh OK.
-        """)
+        """
+        )
 
-        base_schemes = {
-            'laplacianSchemes': {'default': 'Gauss linear corrected'}
-        }
+        base_schemes = {"laplacianSchemes": {"default": "Gauss linear corrected"}}
 
         # Patch at the config module level since it's imported inside the method
-        with patch('config.mesh_adaptive_solver.MeshAdaptiveSolverSettings') as mock_adapter:
+        with patch("config.mesh_adaptive_solver.MeshAdaptiveSolverSettings") as mock_adapter:
             mock_instance = MagicMock()
-            mock_instance.mesh_quality_tier = 'FAIR'
+            mock_instance.mesh_quality_tier = "FAIR"
             mock_instance.adjust_fvschemes_for_mesh.return_value = {
-                'laplacianSchemes': {'default': 'Gauss linear limited corrected 0.5'}
+                "laplacianSchemes": {"default": "Gauss linear limited corrected 0.5"}
             }
             mock_adapter.return_value = mock_instance
 
@@ -213,7 +201,7 @@ class TestApplyMeshAdaptiveSchemes:
 
     def test_returns_base_schemes_on_import_error(self, writer, tmp_path):
         """Test that base schemes are returned when import fails."""
-        base_schemes = {'ddtSchemes': {'default': 'Euler'}}
+        base_schemes = {"ddtSchemes": {"default": "Euler"}}
 
         # The method catches ImportError when config.mesh_adaptive_solver import fails
         # Since no log exists, it returns base_schemes before import
@@ -227,9 +215,9 @@ class TestApplyMeshAdaptiveSchemes:
         logs_dir.mkdir()
         (logs_dir / "log.checkMesh").write_text("corrupted content")
 
-        base_schemes = {'ddtSchemes': {'default': 'Euler'}}
+        base_schemes = {"ddtSchemes": {"default": "Euler"}}
 
-        with patch('config.mesh_adaptive_solver.MeshAdaptiveSolverSettings') as mock_adapter:
+        with patch("config.mesh_adaptive_solver.MeshAdaptiveSolverSettings") as mock_adapter:
             mock_adapter.return_value.analyze_checkmesh_log.side_effect = ValueError("Parse error")
 
             result = writer._apply_mesh_adaptive_schemes(base_schemes)
@@ -248,31 +236,25 @@ class TestFvSchemesWriterIntegration:
         (tmp_path / "system").mkdir()
 
         config = {
-            'openfoam_version': '12',
-            'openfoam_major_version': 12,
-            'physics': {
-                'model': 'laminar',
-                'simulation_type': 'transient'
+            "openfoam_version": "12",
+            "openfoam_major_version": 12,
+            "physics": {"model": "laminar", "simulation_type": "transient"},
+            "numerics": {"profile": "standard", "mesh_adaptive": False},
+            "schemes": {
+                "ddtSchemes": {"default": "backward"},
+                "gradSchemes": {"default": "Gauss linear"},
+                "divSchemes": {"default": "none"},
+                "laplacianSchemes": {"default": "Gauss linear corrected"},
+                "interpolationSchemes": {"default": "linear"},
+                "snGradSchemes": {"default": "corrected"},
             },
-            'numerics': {
-                'profile': 'standard',
-                'mesh_adaptive': False
-            },
-            'schemes': {
-                'ddtSchemes': {'default': 'backward'},
-                'gradSchemes': {'default': 'Gauss linear'},
-                'divSchemes': {'default': 'none'},
-                'laplacianSchemes': {'default': 'Gauss linear corrected'},
-                'interpolationSchemes': {'default': 'linear'},
-                'snGradSchemes': {'default': 'corrected'}
-            }
         }
 
-        with patch('aortacfd_lib.numerical_setup.Logger'):
+        with patch("aortacfd_lib.numerical_setup.Logger"):
             writer = FvSchemesWriter(config, str(tmp_path))
 
         # Mock the template rendering
-        with patch.object(writer.jinja_env, 'get_template') as mock_get_template:
+        with patch.object(writer.jinja_env, "get_template") as mock_get_template:
             mock_template = MagicMock()
             mock_template.render.return_value = """FoamFile
 {
@@ -289,17 +271,17 @@ ddtSchemes
 """
             mock_get_template.return_value = mock_template
 
-            with patch('aortacfd_lib.numerical_setup.prepare_fv_schemes_context') as mock_context:
+            with patch("aortacfd_lib.numerical_setup.prepare_fv_schemes_context") as mock_context:
                 mock_context.return_value = {
-                    'is_steady': False,
-                    'simulation_type': 'transient',
-                    'profile': 'standard',
-                    'ddt_scheme': 'backward',
-                    'div_scheme_U': 'Gauss limitedLinearV 1',
-                    'div_scheme_k': 'Gauss limitedLinear 1',
-                    'grad_limiter': 0.5,
-                    'laplacian_scheme': 'Gauss linear limited 0.5',
-                    'sngrad_scheme': 'limited 0.5',
+                    "is_steady": False,
+                    "simulation_type": "transient",
+                    "profile": "standard",
+                    "ddt_scheme": "backward",
+                    "div_scheme_U": "Gauss limitedLinearV 1",
+                    "div_scheme_k": "Gauss limitedLinear 1",
+                    "grad_limiter": 0.5,
+                    "laplacian_scheme": "Gauss linear limited 0.5",
+                    "sngrad_scheme": "limited 0.5",
                 }
 
                 writer.write_fvSchemes_file()
@@ -325,35 +307,39 @@ class TestWriteFvSchemesWithMeshAdaptive:
         (logs_dir / "log.checkMesh").write_text("Max skewness = 2.5\n")
 
         config = {
-            'openfoam_version': '12',
-            'openfoam_major_version': 12,
-            'physics': {'model': 'laminar', 'simulation_type': 'transient'},
-            'numerics': {'profile': 'standard', 'mesh_adaptive': True},
-            'schemes': {
-                'ddtSchemes': {'default': 'backward'},
-                'laplacianSchemes': {'default': 'Gauss linear corrected'}
-            }
+            "openfoam_version": "12",
+            "openfoam_major_version": 12,
+            "physics": {"model": "laminar", "simulation_type": "transient"},
+            "numerics": {"profile": "standard", "mesh_adaptive": True},
+            "schemes": {
+                "ddtSchemes": {"default": "backward"},
+                "laplacianSchemes": {"default": "Gauss linear corrected"},
+            },
         }
 
-        with patch('aortacfd_lib.numerical_setup.Logger'):
+        with patch("aortacfd_lib.numerical_setup.Logger"):
             writer = FvSchemesWriter(config, str(tmp_path))
 
         # Mock the adaptive mesh method to verify it's called
-        with patch.object(writer, '_apply_mesh_adaptive_schemes') as mock_adaptive:
-            mock_adaptive.return_value = config['schemes']
+        with patch.object(writer, "_apply_mesh_adaptive_schemes") as mock_adaptive:
+            mock_adaptive.return_value = config["schemes"]
 
-            with patch.object(writer, 'jinja_env') as mock_env:
+            with patch.object(writer, "jinja_env") as mock_env:
                 mock_template = MagicMock()
                 mock_template.render.return_value = "// content"
                 mock_env.get_template.return_value = mock_template
 
-                with patch('aortacfd_lib.numerical_setup.prepare_fv_schemes_context') as mock_context:
+                with patch("aortacfd_lib.numerical_setup.prepare_fv_schemes_context") as mock_context:
                     mock_context.return_value = {
-                        'is_steady': False, 'simulation_type': 'transient',
-                        'profile': 'standard', 'ddt_scheme': 'backward',
-                        'div_scheme_U': '', 'div_scheme_k': '', 'grad_limiter': 0.5,
-                        'laplacian_scheme': 'Gauss linear limited 0.5',
-                        'sngrad_scheme': 'limited 0.5',
+                        "is_steady": False,
+                        "simulation_type": "transient",
+                        "profile": "standard",
+                        "ddt_scheme": "backward",
+                        "div_scheme_U": "",
+                        "div_scheme_k": "",
+                        "grad_limiter": 0.5,
+                        "laplacian_scheme": "Gauss linear limited 0.5",
+                        "sngrad_scheme": "limited 0.5",
                     }
 
                     writer.write_fvSchemes_file()
@@ -374,36 +360,32 @@ class TestApplyMeshAdaptiveSchemesSuccess:
         (logs_dir / "log.checkMesh").write_text("Max skewness = 4.5\n")
 
         config = {
-            'openfoam_version': '12',
-            'physics': {'model': 'laminar'},
-            'numerics': {'profile': 'standard', 'mesh_adaptive': True}
+            "openfoam_version": "12",
+            "physics": {"model": "laminar"},
+            "numerics": {"profile": "standard", "mesh_adaptive": True},
         }
 
         mock_log_instance = MagicMock()
 
-        with patch('aortacfd_lib.numerical_setup.Logger') as mock_logger:
+        with patch("aortacfd_lib.numerical_setup.Logger") as mock_logger:
             mock_logger.return_value.get_logger.return_value = mock_log_instance
             writer = FvSchemesWriter(config, str(tmp_path))
             writer.log = mock_log_instance
 
-        base_schemes = {
-            'laplacianSchemes': {'default': 'Gauss linear corrected'}
-        }
+        base_schemes = {"laplacianSchemes": {"default": "Gauss linear corrected"}}
 
-        adjusted_schemes = {
-            'laplacianSchemes': {'default': 'Gauss linear limited corrected 0.5'}
-        }
+        adjusted_schemes = {"laplacianSchemes": {"default": "Gauss linear limited corrected 0.5"}}
 
         # Mock successful import and adjustment
         mock_mesh_adaptive = MagicMock()
         mock_mesh_adaptive.analyze_checkmesh_log = MagicMock()
         mock_mesh_adaptive.adjust_fvschemes_for_mesh.return_value = adjusted_schemes
-        mock_mesh_adaptive.mesh_quality_tier = 'POOR'
+        mock_mesh_adaptive.mesh_quality_tier = "POOR"
 
         mock_module = MagicMock()
         mock_module.MeshAdaptiveSolverSettings = lambda: mock_mesh_adaptive
 
-        with patch.dict('sys.modules', {'config.mesh_adaptive_solver': mock_module}):
+        with patch.dict("sys.modules", {"config.mesh_adaptive_solver": mock_module}):
             result = writer._apply_mesh_adaptive_schemes(base_schemes)
 
         # Should return adjusted schemes
@@ -420,28 +402,26 @@ class TestApplyMeshAdaptiveSchemesSuccess:
         (logs_dir / "log.checkMesh").write_text("Max skewness = 1.0\n")
 
         config = {
-            'openfoam_version': '12',
-            'physics': {'model': 'laminar'},
-            'numerics': {'profile': 'standard', 'mesh_adaptive': True}
+            "openfoam_version": "12",
+            "physics": {"model": "laminar"},
+            "numerics": {"profile": "standard", "mesh_adaptive": True},
         }
 
-        with patch('aortacfd_lib.numerical_setup.Logger'):
+        with patch("aortacfd_lib.numerical_setup.Logger"):
             writer = FvSchemesWriter(config, str(tmp_path))
 
-        base_schemes = {
-            'laplacianSchemes': {'default': 'Gauss linear corrected'}
-        }
+        base_schemes = {"laplacianSchemes": {"default": "Gauss linear corrected"}}
 
         # Mock to return same schemes (no adjustment needed)
         mock_mesh_adaptive = MagicMock()
         mock_mesh_adaptive.analyze_checkmesh_log = MagicMock()
         mock_mesh_adaptive.adjust_fvschemes_for_mesh.return_value = base_schemes
-        mock_mesh_adaptive.mesh_quality_tier = 'GOOD'
+        mock_mesh_adaptive.mesh_quality_tier = "GOOD"
 
         mock_module = MagicMock()
         mock_module.MeshAdaptiveSolverSettings = lambda: mock_mesh_adaptive
 
-        with patch.dict('sys.modules', {'config.mesh_adaptive_solver': mock_module}):
+        with patch.dict("sys.modules", {"config.mesh_adaptive_solver": mock_module}):
             result = writer._apply_mesh_adaptive_schemes(base_schemes)
 
         # Should return same schemes
@@ -456,40 +436,36 @@ class TestApplyMeshAdaptiveSchemesSuccess:
         (logs_dir / "log.checkMesh").write_text("Max skewness = 5.0\n")
 
         config = {
-            'openfoam_version': '12',
-            'physics': {'model': 'laminar'},
-            'numerics': {'profile': 'standard', 'mesh_adaptive': True}
+            "openfoam_version": "12",
+            "physics": {"model": "laminar"},
+            "numerics": {"profile": "standard", "mesh_adaptive": True},
         }
 
         mock_log_instance = MagicMock()
 
-        with patch('aortacfd_lib.numerical_setup.Logger') as mock_logger:
+        with patch("aortacfd_lib.numerical_setup.Logger") as mock_logger:
             mock_logger.return_value.get_logger.return_value = mock_log_instance
             writer = FvSchemesWriter(config, str(tmp_path))
             writer.log = mock_log_instance
 
-        base_schemes = {
-            'laplacianSchemes': {'default': 'Gauss linear corrected'}
-        }
+        base_schemes = {"laplacianSchemes": {"default": "Gauss linear corrected"}}
 
-        adjusted_schemes = {
-            'laplacianSchemes': {'default': 'Gauss linear limited corrected 0.33'}
-        }
+        adjusted_schemes = {"laplacianSchemes": {"default": "Gauss linear limited corrected 0.33"}}
 
         mock_mesh_adaptive = MagicMock()
         mock_mesh_adaptive.analyze_checkmesh_log = MagicMock()
         mock_mesh_adaptive.adjust_fvschemes_for_mesh.return_value = adjusted_schemes
-        mock_mesh_adaptive.mesh_quality_tier = 'CRITICAL'
+        mock_mesh_adaptive.mesh_quality_tier = "CRITICAL"
 
         mock_module = MagicMock()
         mock_module.MeshAdaptiveSolverSettings = lambda: mock_mesh_adaptive
 
-        with patch.dict('sys.modules', {'config.mesh_adaptive_solver': mock_module}):
+        with patch.dict("sys.modules", {"config.mesh_adaptive_solver": mock_module}):
             result = writer._apply_mesh_adaptive_schemes(base_schemes)
 
         # Should log laplacian change
         info_calls = [str(call) for call in mock_log_instance.info.call_args_list]
-        assert any('Laplacian' in str(call) for call in info_calls)
+        assert any("Laplacian" in str(call) for call in info_calls)
 
 
 class TestApplyMeshAdaptiveImportError:
@@ -503,20 +479,16 @@ class TestApplyMeshAdaptiveImportError:
         logs_dir.mkdir()
         (logs_dir / "log.checkMesh").write_text("Max skewness = 2.0\n")
 
-        config = {
-            'openfoam_version': '12',
-            'physics': {'model': 'laminar'},
-            'numerics': {'profile': 'standard'}
-        }
+        config = {"openfoam_version": "12", "physics": {"model": "laminar"}, "numerics": {"profile": "standard"}}
 
         mock_log_instance = MagicMock()
 
-        with patch('aortacfd_lib.numerical_setup.Logger') as mock_logger:
+        with patch("aortacfd_lib.numerical_setup.Logger") as mock_logger:
             mock_logger.return_value.get_logger.return_value = mock_log_instance
             writer = FvSchemesWriter(config, str(tmp_path))
             writer.log = mock_log_instance
 
-        base_schemes = {'ddtSchemes': {'default': 'Euler'}}
+        base_schemes = {"ddtSchemes": {"default": "Euler"}}
 
         # Create a mock module that raises RuntimeError when used
         mock_mesh_adaptive = MagicMock()
@@ -526,7 +498,7 @@ class TestApplyMeshAdaptiveImportError:
         mock_module.MeshAdaptiveSolverSettings.return_value = mock_mesh_adaptive
 
         # Use patch.dict to temporarily modify sys.modules
-        with patch.dict('sys.modules', {'config.mesh_adaptive_solver': mock_module}):
+        with patch.dict("sys.modules", {"config.mesh_adaptive_solver": mock_module}):
             result = writer._apply_mesh_adaptive_schemes(base_schemes)
 
         # Should return base schemes on error
@@ -535,5 +507,5 @@ class TestApplyMeshAdaptiveImportError:
         assert mock_log_instance.warning.called
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

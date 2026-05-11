@@ -27,12 +27,14 @@ jobs:
     - name: Run quick test suite
       id: tests
       run: |
-        pytest tests/ test_patient1_e2e.py test_multi_patient_e2e.py \
+        PYTHONPATH=src pytest tests/ \
+          -m "not slow and not e2e" \
           --tb=short \
           --maxfail=10 \
           -v \
           --cov=src \
           --cov-report=term-missing \
+          --cov-fail-under=60 \
           | tee test_output.txt
 
         # Extract test count and coverage

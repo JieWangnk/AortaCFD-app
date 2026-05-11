@@ -31,11 +31,12 @@ class MeshQualityTier(Enum):
     Based on OpenFOAM checkMesh metrics and cardiovascular CFD best practices.
     Higher tiers allow more aggressive solver settings.
     """
+
     EXCELLENT = "EXCELLENT"  # Publication quality, can use aggressive schemes
-    GOOD = "GOOD"            # Standard production runs
-    FAIR = "FAIR"            # May need conservative settings
-    POOR = "POOR"            # Requires robust/conservative schemes
-    CRITICAL = "CRITICAL"    # High risk of divergence, mesh needs improvement
+    GOOD = "GOOD"  # Standard production runs
+    FAIR = "FAIR"  # May need conservative settings
+    POOR = "POOR"  # Requires robust/conservative schemes
+    CRITICAL = "CRITICAL"  # High risk of divergence, mesh needs improvement
 
 
 @dataclass
@@ -55,6 +56,7 @@ class BoundaryLayerMetrics:
 
     Status: UNDER DEVELOPMENT
     """
+
     coverage_percent: float = 0.0
     layers_added: int = 0
     layers_requested: int = 0
@@ -81,6 +83,7 @@ class MeshQualityMetrics:
 
     Status: UNDER DEVELOPMENT
     """
+
     max_skewness: float = 0.0
     max_non_orthogonality: float = 0.0
     max_aspect_ratio: float = 0.0
@@ -103,6 +106,7 @@ class SolverRecommendation:
 
     Status: UNDER DEVELOPMENT
     """
+
     profile: str  # "accurate", "standard", "robust", "aggressive"
     relaxation_U: float
     relaxation_p: float
@@ -135,28 +139,28 @@ class MeshQualityAnalyzer:
     # Priority order (CF-Mesh): 1. Volume ratio, 2. Non-ortho, 3. Skewness
     THRESHOLDS = {
         MeshQualityTier.EXCELLENT: {
-            'max_skewness': 1.5,
-            'max_non_orthogonality': 55.0,
-            'max_aspect_ratio': 20.0,
-            'max_volume_ratio': 10.0,    # Very smooth transitions
+            "max_skewness": 1.5,
+            "max_non_orthogonality": 55.0,
+            "max_aspect_ratio": 20.0,
+            "max_volume_ratio": 10.0,  # Very smooth transitions
         },
         MeshQualityTier.GOOD: {
-            'max_skewness': 2.5,
-            'max_non_orthogonality': 65.0,
-            'max_aspect_ratio': 30.0,
-            'max_volume_ratio': 20.0,    # Good transitions
+            "max_skewness": 2.5,
+            "max_non_orthogonality": 65.0,
+            "max_aspect_ratio": 30.0,
+            "max_volume_ratio": 20.0,  # Good transitions
         },
         MeshQualityTier.FAIR: {
-            'max_skewness': 4.0,
-            'max_non_orthogonality': 70.0,
-            'max_aspect_ratio': 50.0,
-            'max_volume_ratio': 50.0,    # Acceptable
+            "max_skewness": 4.0,
+            "max_non_orthogonality": 70.0,
+            "max_aspect_ratio": 50.0,
+            "max_volume_ratio": 50.0,  # Acceptable
         },
         MeshQualityTier.POOR: {
-            'max_skewness': 6.0,
-            'max_non_orthogonality': 75.0,
-            'max_aspect_ratio': 100.0,
-            'max_volume_ratio': 100.0,   # CF-Mesh: "secret killer" above this
+            "max_skewness": 6.0,
+            "max_non_orthogonality": 75.0,
+            "max_aspect_ratio": 100.0,
+            "max_volume_ratio": 100.0,  # CF-Mesh: "secret killer" above this
         },
         # CRITICAL: anything worse than POOR thresholds
     }
@@ -196,7 +200,7 @@ class MeshQualityAnalyzer:
             else:
                 cmd = f"checkMesh -case {safe_case_dir}"
 
-            result = subprocess.run(
+            result = subprocess.run(  # nosec B602 - case_dir is shlex.quoted; n_procs is int; trusted internal call
                 cmd, shell=True, capture_output=True, text=True, timeout=300
             )
 
@@ -223,57 +227,57 @@ class MeshQualityAnalyzer:
         metrics = MeshQualityMetrics()
 
         # Parse cell count
-        match = re.search(r'cells:\s*(\d+)', output)
+        match = re.search(r"cells:\s*(\d+)", output)
         if match:
             metrics.num_cells = int(match.group(1))
 
         # Parse face count
-        match = re.search(r'faces:\s*(\d+)', output)
+        match = re.search(r"faces:\s*(\d+)", output)
         if match:
             metrics.num_faces = int(match.group(1))
 
         # Parse point count
-        match = re.search(r'points:\s*(\d+)', output)
+        match = re.search(r"points:\s*(\d+)", output)
         if match:
             metrics.num_points = int(match.group(1))
 
         # Parse max skewness
-        match = re.search(r'Max skewness\s*=\s*([\d.e+-]+)', output)
+        match = re.search(r"Max skewness\s*=\s*([\d.e+-]+)", output)
         if match:
             metrics.max_skewness = float(match.group(1))
 
         # Parse max non-orthogonality
-        match = re.search(r'Mesh non-orthogonality Max:\s*([\d.e+-]+)', output)
+        match = re.search(r"Mesh non-orthogonality Max:\s*([\d.e+-]+)", output)
         if match:
             metrics.max_non_orthogonality = float(match.group(1))
 
         # Parse average non-orthogonality
-        match = re.search(r'average:\s*([\d.e+-]+)', output)
+        match = re.search(r"average:\s*([\d.e+-]+)", output)
         if match:
             metrics.avg_non_orthogonality = float(match.group(1))
 
         # Parse max aspect ratio
-        match = re.search(r'Max aspect ratio\s*=\s*([\d.e+-]+)', output)
+        match = re.search(r"Max aspect ratio\s*=\s*([\d.e+-]+)", output)
         if match:
             metrics.max_aspect_ratio = float(match.group(1))
 
         # Parse max volume ratio (CF-Mesh priority #1 for convergence)
         # OpenFOAM outputs: "Max volume ratio = X.XX OK" or similar
-        match = re.search(r'Max volume ratio\s*=\s*([\d.e+-]+)', output)
+        match = re.search(r"Max volume ratio\s*=\s*([\d.e+-]+)", output)
         if match:
             metrics.max_volume_ratio = float(match.group(1))
 
         # Check for mesh errors
-        if 'FAILED' in output or 'Mesh has invalid' in output:
+        if "FAILED" in output or "Mesh has invalid" in output:
             metrics.mesh_ok = False
             # Extract error messages
-            for line in output.split('\n'):
-                if 'FAILED' in line or 'invalid' in line.lower():
+            for line in output.split("\n"):
+                if "FAILED" in line or "invalid" in line.lower():
                     metrics.errors.append(line.strip())
 
         # Check for warnings
-        for line in output.split('\n'):
-            if 'warning' in line.lower() or '***' in line:
+        for line in output.split("\n"):
+            if "warning" in line.lower() or "***" in line:
                 metrics.warnings.append(line.strip())
 
         return metrics
@@ -298,7 +302,7 @@ class MeshQualityAnalyzer:
             return None
 
         try:
-            with open(log_path, 'r') as f:
+            with open(log_path, "r") as f:
                 content = f.read()
         except Exception as e:
             self.log.error(f"Failed to read snappyHexMesh log: {e}")
@@ -313,10 +317,10 @@ class MeshQualityAnalyzer:
 
         # Try to find coverage percentage
         coverage_patterns = [
-            r'Extruded\s+([\d.]+)%\s+of\s+patch\s+(\w+)',
-            r'layer addition.*?\(([\d.]+)%\)',
-            r'Adding layers.*?([\d.]+)%',
-            r'patch\s+(\w+).*?coverage.*?([\d.]+)%',
+            r"Extruded\s+([\d.]+)%\s+of\s+patch\s+(\w+)",
+            r"layer addition.*?\(([\d.]+)%\)",
+            r"Adding layers.*?([\d.]+)%",
+            r"patch\s+(\w+).*?coverage.*?([\d.]+)%",
         ]
 
         for pattern in coverage_patterns:
@@ -340,26 +344,19 @@ class MeshQualityAnalyzer:
 
         # Parse number of layers added
         # Example: "Adding 5 layers to patch wall_aorta"
-        layers_match = re.search(r'(?:Adding|Added)\s+(\d+)\s+layers', content, re.IGNORECASE)
+        layers_match = re.search(r"(?:Adding|Added)\s+(\d+)\s+layers", content, re.IGNORECASE)
         if layers_match:
             metrics.layers_added = int(layers_match.group(1))
 
         # Parse collapsed faces
         # Example: "Layer collapse at 1234 faces"
-        collapsed_match = re.search(r'collapse.*?(\d+)\s+faces', content, re.IGNORECASE)
+        collapsed_match = re.search(r"collapse.*?(\d+)\s+faces", content, re.IGNORECASE)
         if collapsed_match:
             metrics.collapsed_faces = int(collapsed_match.group(1))
 
         # If we found any metrics, return them
         if metrics.coverage_percent > 0 or metrics.layers_added > 0:
             return metrics
-
-        # Try alternative parsing for coverage from final statistics
-        # Look for "nSurfaceLayers" in output
-        final_stats_match = re.search(
-            r'Final mesh.*?(\d+)\s+cells.*?(\d+)\s+faces',
-            content, re.DOTALL | re.IGNORECASE
-        )
 
         return metrics if metrics.coverage_percent > 0 else None
 
@@ -384,20 +381,21 @@ class MeshQualityAnalyzer:
             return MeshQualityTier.CRITICAL
 
         # Check against thresholds from best to worst
-        for tier in [MeshQualityTier.EXCELLENT, MeshQualityTier.GOOD,
-                     MeshQualityTier.FAIR, MeshQualityTier.POOR]:
+        for tier in [MeshQualityTier.EXCELLENT, MeshQualityTier.GOOD, MeshQualityTier.FAIR, MeshQualityTier.POOR]:
             thresholds = self.THRESHOLDS[tier]
 
             # Volume ratio check (only if parsed - may be 0 if not in output)
             volume_ratio_ok = (
-                metrics.max_volume_ratio == 0.0 or  # Not parsed
-                metrics.max_volume_ratio <= thresholds['max_volume_ratio']
+                metrics.max_volume_ratio == 0.0  # Not parsed
+                or metrics.max_volume_ratio <= thresholds["max_volume_ratio"]
             )
 
-            if (metrics.max_skewness <= thresholds['max_skewness'] and
-                metrics.max_non_orthogonality <= thresholds['max_non_orthogonality'] and
-                metrics.max_aspect_ratio <= thresholds['max_aspect_ratio'] and
-                volume_ratio_ok):
+            if (
+                metrics.max_skewness <= thresholds["max_skewness"]
+                and metrics.max_non_orthogonality <= thresholds["max_non_orthogonality"]
+                and metrics.max_aspect_ratio <= thresholds["max_aspect_ratio"]
+                and volume_ratio_ok
+            ):
                 return tier
 
         return MeshQualityTier.CRITICAL
@@ -424,8 +422,7 @@ class MeshQualityAnalyzer:
                 n_non_ortho_correctors=1,
                 convection_scheme="Gauss LUST grad(U)",
                 time_scheme="CrankNicolson 0.9",
-                notes=["Mesh quality allows aggressive schemes",
-                       "Can use higher-order discretization"]
+                notes=["Mesh quality allows aggressive schemes", "Can use higher-order discretization"],
             ),
             MeshQualityTier.GOOD: SolverRecommendation(
                 profile="standard",
@@ -436,7 +433,7 @@ class MeshQualityAnalyzer:
                 n_non_ortho_correctors=1,
                 convection_scheme="Gauss linearUpwind grad(U)",
                 time_scheme="backward",
-                notes=["Standard settings for production runs"]
+                notes=["Standard settings for production runs"],
             ),
             MeshQualityTier.FAIR: SolverRecommendation(
                 profile="standard",
@@ -447,8 +444,10 @@ class MeshQualityAnalyzer:
                 n_non_ortho_correctors=2,
                 convection_scheme="Gauss linearUpwind grad(U)",
                 time_scheme="backward",
-                notes=["Increased non-orthogonal corrections recommended",
-                       "Consider mesh improvement for better accuracy"]
+                notes=[
+                    "Increased non-orthogonal corrections recommended",
+                    "Consider mesh improvement for better accuracy",
+                ],
             ),
             MeshQualityTier.POOR: SolverRecommendation(
                 profile="robust",
@@ -459,9 +458,11 @@ class MeshQualityAnalyzer:
                 n_non_ortho_correctors=2,
                 convection_scheme="Gauss upwind",
                 time_scheme="Euler",
-                notes=["Using conservative schemes for stability",
-                       "Accuracy reduced - recommend mesh improvement",
-                       "First-order schemes may introduce numerical diffusion"]
+                notes=[
+                    "Using conservative schemes for stability",
+                    "Accuracy reduced - recommend mesh improvement",
+                    "First-order schemes may introduce numerical diffusion",
+                ],
             ),
             MeshQualityTier.CRITICAL: SolverRecommendation(
                 profile="robust",
@@ -472,9 +473,11 @@ class MeshQualityAnalyzer:
                 n_non_ortho_correctors=3,
                 convection_scheme="Gauss upwind",
                 time_scheme="Euler",
-                notes=["HIGH RISK OF DIVERGENCE",
-                       "Mesh quality is critical - strongly recommend remeshing",
-                       "Results may not be reliable even if converged"]
+                notes=[
+                    "HIGH RISK OF DIVERGENCE",
+                    "Mesh quality is critical - strongly recommend remeshing",
+                    "Results may not be reliable even if converged",
+                ],
             ),
         }
 
@@ -568,8 +571,7 @@ class GridConvergenceIndex:
         self.Fs = safety_factor
         self.log = Logger("gci").get_logger()
 
-    def calculate(self, h: List[float], f: List[float],
-                  p_expected: float = 2.0) -> Dict:
+    def calculate(self, h: List[float], f: List[float], p_expected: float = 2.0) -> Dict:
         """
         Calculate Grid Convergence Index.
 
@@ -610,13 +612,13 @@ class GridConvergenceIndex:
         if abs(eps21) < 1e-15 or abs(eps32) < 1e-15:
             self.log.warning("Solutions are nearly identical - may be converged or oscillating")
             return {
-                'p_observed': p_expected,
-                'GCI_fine_percent': 0.0,
-                'GCI_medium_percent': 0.0,
-                'asymptotic_check': 1.0,
-                'extrapolated_value': f1,
-                'converged': True,
-                'notes': ['Solutions nearly identical across meshes']
+                "p_observed": p_expected,
+                "GCI_fine_percent": 0.0,
+                "GCI_medium_percent": 0.0,
+                "asymptotic_check": 1.0,
+                "extrapolated_value": f1,
+                "converged": True,
+                "notes": ["Solutions nearly identical across meshes"],
             }
 
         # Check convergence type
@@ -645,38 +647,30 @@ class GridConvergenceIndex:
         converged = (0.95 <= asymptotic_ratio <= 1.05) and (GCI_fine * 100 < 5.0)
 
         result = {
-            'p_observed': p,
-            'GCI_fine_percent': GCI_fine * 100,
-            'GCI_medium_percent': GCI_medium * 100,
-            'asymptotic_check': asymptotic_ratio,
-            'extrapolated_value': f_extrapolated,
-            'converged': converged,
-            'refinement_ratio_21': r21,
-            'refinement_ratio_32': r32,
-            'notes': []
+            "p_observed": p,
+            "GCI_fine_percent": GCI_fine * 100,
+            "GCI_medium_percent": GCI_medium * 100,
+            "asymptotic_check": asymptotic_ratio,
+            "extrapolated_value": f_extrapolated,
+            "converged": converged,
+            "refinement_ratio_21": r21,
+            "refinement_ratio_32": r32,
+            "notes": [],
         }
 
         # Add notes
         if not converged:
             if asymptotic_ratio < 0.95 or asymptotic_ratio > 1.05:
-                result['notes'].append(
-                    f"Not in asymptotic range (ratio={asymptotic_ratio:.3f}, should be ~1.0)"
-                )
+                result["notes"].append(f"Not in asymptotic range (ratio={asymptotic_ratio:.3f}, should be ~1.0)")
             if GCI_fine * 100 >= 5.0:
-                result['notes'].append(
-                    f"GCI_fine ({GCI_fine*100:.1f}%) exceeds 5% - consider finer mesh"
-                )
+                result["notes"].append(f"GCI_fine ({GCI_fine*100:.1f}%) exceeds 5% - consider finer mesh")
 
         if p < 0.5 * p_expected:
-            result['notes'].append(
-                f"Observed order ({p:.2f}) much lower than expected ({p_expected})"
-            )
+            result["notes"].append(f"Observed order ({p:.2f}) much lower than expected ({p_expected})")
 
         return result
 
-    def _calculate_order(self, r21: float, r32: float,
-                         eps21: float, eps32: float,
-                         p_init: float) -> float:
+    def _calculate_order(self, r21: float, r32: float, eps21: float, eps32: float, p_init: float) -> float:
         """
         Calculate observed order of convergence using fixed-point iteration.
 
@@ -705,8 +699,7 @@ class GridConvergenceIndex:
 
         return max(0.1, min(p, 5.0))  # Bound to reasonable range
 
-    def generate_report(self, h: List[float], f: List[float],
-                        quantity_name: str = "Value") -> str:
+    def generate_report(self, h: List[float], f: List[float], quantity_name: str = "Value") -> str:
         """
         Generate a formatted GCI report.
 
@@ -735,14 +728,14 @@ class GridConvergenceIndex:
         report.append(f"  Mesh Independence:      {'YES' if result['converged'] else 'NO'}")
         report.append("")
 
-        if result['notes']:
+        if result["notes"]:
             report.append("Notes:")
-            for note in result['notes']:
+            for note in result["notes"]:
                 report.append(f"  - {note}")
             report.append("")
 
         report.append("Interpretation:")
-        if result['converged']:
+        if result["converged"]:
             report.append("  Solution is in asymptotic range and GCI < 5%.")
             report.append("  Mesh independence achieved - fine mesh results are reliable.")
         else:
@@ -794,10 +787,7 @@ class IterativeBoundaryLayerImprover:
         return None
 
     def calculate_improved_params(
-        self,
-        current_params: Dict[str, any],
-        coverage_percent: float,
-        iteration: int
+        self, current_params: Dict[str, any], coverage_percent: float, iteration: int
     ) -> Dict[str, any]:
         """
         Calculate improved snappyHexMesh parameters for next retry.
@@ -819,10 +809,10 @@ class IterativeBoundaryLayerImprover:
 
         # Key parameters for boundary layer improvement
         layer_params = {
-            'nSmoothSurfaceNormals': current_params.get('nSmoothSurfaceNormals', 15),
-            'nLayerIter': current_params.get('nLayerIter', 50),
-            'addLayers_nRelaxIter': current_params.get('addLayers_nRelaxIter', 8),
-            'nSmoothThickness': current_params.get('nSmoothThickness', 10),
+            "nSmoothSurfaceNormals": current_params.get("nSmoothSurfaceNormals", 15),
+            "nLayerIter": current_params.get("nLayerIter", 50),
+            "addLayers_nRelaxIter": current_params.get("addLayers_nRelaxIter", 8),
+            "nSmoothThickness": current_params.get("nSmoothThickness", 10),
         }
 
         for param, base_value in layer_params.items():
@@ -831,20 +821,15 @@ class IterativeBoundaryLayerImprover:
 
         # Additional adjustments for very low coverage (< 60%)
         if coverage_percent < 60:
-            improved_params['maxThicknessToMedialRatio'] = min(
-                0.6, current_params.get('maxThicknessToMedialRatio', 0.3) + (iteration * 0.1)
+            improved_params["maxThicknessToMedialRatio"] = min(
+                0.6, current_params.get("maxThicknessToMedialRatio", 0.3) + (iteration * 0.1)
             )
-            improved_params['featureAngle'] = max(
-                90, current_params.get('featureAngle', 130) - (iteration * 10)
-            )
+            improved_params["featureAngle"] = max(90, current_params.get("featureAngle", 130) - (iteration * 10))
             # May need fewer layers to achieve coverage
             if iteration >= 2:
-                current_layers = current_params.get('addLayer', 7)
-                improved_params['addLayer'] = max(4, current_layers - 1)
-                self.log.warning(
-                    f"Reducing nSurfaceLayers to {improved_params['addLayer']} "
-                    "to improve coverage"
-                )
+                current_layers = current_params.get("addLayer", 7)
+                improved_params["addLayer"] = max(4, current_layers - 1)
+                self.log.warning(f"Reducing nSurfaceLayers to {improved_params['addLayer']} " "to improve coverage")
 
         return improved_params
 
@@ -865,14 +850,14 @@ class IterativeBoundaryLayerImprover:
 
         for i, attempt in enumerate(self.history):
             lines.append(f"\nAttempt {i + 1}:")
-            coverage = attempt.get('coverage', 0.0)
+            coverage = attempt.get("coverage", 0.0)
             if coverage > 0:
                 lines.append(f"  Coverage: {coverage:.1f}%")
             else:
                 lines.append("  Coverage: N/A")
             lines.append(f"  Status: {attempt.get('status', 'unknown')}")
 
-            params_changed = attempt.get('params_changed', {})
+            params_changed = attempt.get("params_changed", {})
             if params_changed:
                 lines.append("  Parameters adjusted:")
                 for param, value in params_changed.items():
@@ -882,7 +867,7 @@ class IterativeBoundaryLayerImprover:
             final = self.history[-1]
             lines.append("")
             lines.append(f"Final status: {final.get('status', 'unknown')}")
-            final_coverage = final.get('coverage', 0.0)
+            final_coverage = final.get("coverage", 0.0)
             if final_coverage > 0:
                 lines.append(f"Final coverage: {final_coverage:.1f}%")
 
@@ -912,8 +897,7 @@ class MassBalanceChecker:
         self.tolerance = tolerance_percent / 100.0
         self.log = Logger("mass_balance").get_logger()
 
-    def check_instantaneous(self, inlet_flow: float,
-                            outlet_flows: Dict[str, float]) -> Dict:
+    def check_instantaneous(self, inlet_flow: float, outlet_flows: Dict[str, float]) -> Dict:
         """
         Check instantaneous mass balance.
 
@@ -933,24 +917,24 @@ class MassBalanceChecker:
         balanced = error_percent <= self.tolerance * 100
 
         result = {
-            'inlet_flow': inlet_flow,
-            'total_outlet_flow': total_outlet,
-            'outlet_flows': outlet_flows,
-            'error_absolute': error,
-            'error_percent': error_percent,
-            'balanced': balanced,
-            'flow_splits': {}
+            "inlet_flow": inlet_flow,
+            "total_outlet_flow": total_outlet,
+            "outlet_flows": outlet_flows,
+            "error_absolute": error,
+            "error_percent": error_percent,
+            "balanced": balanced,
+            "flow_splits": {},
         }
 
         # Calculate flow splits
         for outlet, flow in outlet_flows.items():
-            result['flow_splits'][outlet] = (flow / inlet_flow * 100) if abs(inlet_flow) > 1e-15 else 0.0
+            result["flow_splits"][outlet] = (flow / inlet_flow * 100) if abs(inlet_flow) > 1e-15 else 0.0
 
         return result
 
-    def check_time_averaged(self, inlet_flows: List[float],
-                            outlet_flows_series: List[Dict[str, float]],
-                            times: Optional[List[float]] = None) -> Dict:
+    def check_time_averaged(
+        self, inlet_flows: List[float], outlet_flows_series: List[Dict[str, float]], times: Optional[List[float]] = None
+    ) -> Dict:
         """
         Check time-averaged mass balance over a cardiac cycle.
 
@@ -989,12 +973,12 @@ class MassBalanceChecker:
         max_error = 0.0
         for i, (inlet_q, outlet_q) in enumerate(zip(inlet_flows, outlet_flows_series)):
             step_result = self.check_instantaneous(inlet_q, outlet_q)
-            max_error = max(max_error, step_result['error_percent'])
+            max_error = max(max_error, step_result["error_percent"])
 
         # Time-averaged result
         result = self.check_instantaneous(inlet_avg, outlet_avgs)
-        result['max_instantaneous_error'] = max_error
-        result['n_timesteps'] = n_steps
+        result["max_instantaneous_error"] = max_error
+        result["n_timesteps"] = n_steps
 
         return result
 
@@ -1014,13 +998,13 @@ class MassBalanceChecker:
         report.append(f"Mass Balance Error: {result['error_percent']:.4f}%")
         report.append("")
         report.append("Outlet Flow Distribution:")
-        for outlet, split in result['flow_splits'].items():
-            flow = result['outlet_flows'][outlet]
+        for outlet, split in result["flow_splits"].items():
+            flow = result["outlet_flows"][outlet]
             report.append(f"  {outlet}: {flow*1e6:.2f} mL/s ({split:.1f}%)")
         report.append("")
         report.append(f"Mass Conservation: {'PASS' if result['balanced'] else 'FAIL'}")
 
-        if 'max_instantaneous_error' in result:
+        if "max_instantaneous_error" in result:
             report.append(f"Max Instantaneous Error: {result['max_instantaneous_error']:.4f}%")
             report.append(f"Timesteps Analyzed: {result['n_timesteps']}")
 

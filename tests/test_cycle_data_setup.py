@@ -25,31 +25,26 @@ class TestCycleDataSetupInit:
         """Test initialization with valid config."""
         from aortacfd_lib.cycle_data_setup import CycleDataSetup
 
-        config = {
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'simulation_control': {'number_of_cycles': 3}
-        }
+        config = {"geometry": {"inlet_keywords_ordered": "inlet"}, "simulation_control": {"number_of_cycles": 3}}
 
-        with patch('aortacfd_lib.cycle_data_setup.Logger'):
+        with patch("aortacfd_lib.cycle_data_setup.Logger"):
             setup = CycleDataSetup(config, str(tmp_path), cardiac_cycle=0.8)
 
         assert setup.cardiac_period == 0.8
         assert setup.number_of_cycles == 3
-        assert 'inlet' in setup.data_directory
+        assert "inlet" in setup.data_directory
 
     def test_init_with_nested_inlet_config(self, tmp_path):
         """Test initialization with nested boundary_conditions.inlet config."""
         from aortacfd_lib.cycle_data_setup import CycleDataSetup
 
         config = {
-            'geometry': {'inlet_keywords_ordered': 'inlet_patch'},
-            'boundary_conditions': {
-                'inlet': {'type': 'TIMEVARYING'}
-            },
-            'simulation_control': {'number_of_cycles': 2}
+            "geometry": {"inlet_keywords_ordered": "inlet_patch"},
+            "boundary_conditions": {"inlet": {"type": "TIMEVARYING"}},
+            "simulation_control": {"number_of_cycles": 2},
         }
 
-        with patch('aortacfd_lib.cycle_data_setup.Logger'):
+        with patch("aortacfd_lib.cycle_data_setup.Logger"):
             setup = CycleDataSetup(config, str(tmp_path), cardiac_cycle=1.0)
 
         assert setup.cardiac_period == 1.0
@@ -60,11 +55,11 @@ class TestCycleDataSetupInit:
         from aortacfd_lib.cycle_data_setup import CycleDataSetup
 
         config = {
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
             # No simulation_control
         }
 
-        with patch('aortacfd_lib.cycle_data_setup.Logger'):
+        with patch("aortacfd_lib.cycle_data_setup.Logger"):
             setup = CycleDataSetup(config, str(tmp_path), cardiac_cycle=0.9)
 
         assert setup.number_of_cycles == 1
@@ -78,10 +73,7 @@ class TestCycleDataSetupExecute:
         """Create CycleDataSetup with mock boundary data directory."""
         from aortacfd_lib.cycle_data_setup import CycleDataSetup
 
-        config = {
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'simulation_control': {'number_of_cycles': 3}
-        }
+        config = {"geometry": {"inlet_keywords_ordered": "inlet"}, "simulation_control": {"number_of_cycles": 3}}
 
         # Create the boundary data directory structure
         boundary_data_dir = tmp_path / "constant" / "boundaryData" / "inlet"
@@ -95,7 +87,7 @@ class TestCycleDataSetupExecute:
         (boundary_data_dir / "0.200000").mkdir()
         (boundary_data_dir / "0.200000" / "U").write_text("velocity data")
 
-        with patch('aortacfd_lib.cycle_data_setup.Logger'):
+        with patch("aortacfd_lib.cycle_data_setup.Logger"):
             setup = CycleDataSetup(config, str(tmp_path), cardiac_cycle=0.5)
 
         return setup, boundary_data_dir
@@ -158,14 +150,11 @@ class TestCycleDataSetupExecute:
         """Test that execute raises FileNotFoundError for missing directory."""
         from aortacfd_lib.cycle_data_setup import CycleDataSetup
 
-        config = {
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'simulation_control': {'number_of_cycles': 2}
-        }
+        config = {"geometry": {"inlet_keywords_ordered": "inlet"}, "simulation_control": {"number_of_cycles": 2}}
 
         # Don't create the boundary data directory
 
-        with patch('aortacfd_lib.cycle_data_setup.Logger'):
+        with patch("aortacfd_lib.cycle_data_setup.Logger"):
             setup = CycleDataSetup(config, str(tmp_path), cardiac_cycle=0.8)
 
         with pytest.raises(FileNotFoundError) as exc_info:
@@ -177,10 +166,7 @@ class TestCycleDataSetupExecute:
         """Test that execute raises ValueError for empty time directory."""
         from aortacfd_lib.cycle_data_setup import CycleDataSetup
 
-        config = {
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'simulation_control': {'number_of_cycles': 2}
-        }
+        config = {"geometry": {"inlet_keywords_ordered": "inlet"}, "simulation_control": {"number_of_cycles": 2}}
 
         # Create directory but with no time directories
         boundary_data_dir = tmp_path / "constant" / "boundaryData" / "inlet"
@@ -188,7 +174,7 @@ class TestCycleDataSetupExecute:
         # Create a non-time file/directory
         (boundary_data_dir / "points").write_text("points file")
 
-        with patch('aortacfd_lib.cycle_data_setup.Logger'):
+        with patch("aortacfd_lib.cycle_data_setup.Logger"):
             setup = CycleDataSetup(config, str(tmp_path), cardiac_cycle=0.8)
 
         with pytest.raises(ValueError) as exc_info:
@@ -201,8 +187,8 @@ class TestCycleDataSetupExecute:
         from aortacfd_lib.cycle_data_setup import CycleDataSetup
 
         config = {
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'simulation_control': {'number_of_cycles': 1}  # Single cycle
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "simulation_control": {"number_of_cycles": 1},  # Single cycle
         }
 
         boundary_data_dir = tmp_path / "constant" / "boundaryData" / "inlet"
@@ -210,7 +196,7 @@ class TestCycleDataSetupExecute:
         (boundary_data_dir / "0.000000").mkdir()
         (boundary_data_dir / "0.100000").mkdir()
 
-        with patch('aortacfd_lib.cycle_data_setup.Logger'):
+        with patch("aortacfd_lib.cycle_data_setup.Logger"):
             setup = CycleDataSetup(config, str(tmp_path), cardiac_cycle=0.5)
 
         setup.execute()
@@ -241,10 +227,7 @@ class TestCycleDataSetupIntegration:
         """Test complete cycle setup with realistic data."""
         from aortacfd_lib.cycle_data_setup import CycleDataSetup
 
-        config = {
-            'geometry': {'inlet_keywords_ordered': 'inlet'},
-            'simulation_control': {'number_of_cycles': 4}
-        }
+        config = {"geometry": {"inlet_keywords_ordered": "inlet"}, "simulation_control": {"number_of_cycles": 4}}
 
         cardiac_cycle = 0.8  # 800ms cardiac cycle
 
@@ -259,7 +242,7 @@ class TestCycleDataSetupIntegration:
             time_dir.mkdir()
             (time_dir / "U").write_text(f"velocity at t={t}")
 
-        with patch('aortacfd_lib.cycle_data_setup.Logger'):
+        with patch("aortacfd_lib.cycle_data_setup.Logger"):
             setup = CycleDataSetup(config, str(tmp_path), cardiac_cycle=cardiac_cycle)
 
         setup.execute()
@@ -281,5 +264,5 @@ class TestCycleDataSetupIntegration:
         assert (boundary_data_dir / f"{2.4:.6f}").is_symlink()  # Cycle 4, t=0
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

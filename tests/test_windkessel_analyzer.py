@@ -24,27 +24,18 @@ class TestWindkesselAnalyzerInit:
 
     def test_init_with_valid_config(self):
         """Test initialization with valid config."""
-        config = {
-            'geometry': {
-                'case_name': 'test_case',
-                'outlet_keywords_ordered': ['outlet1', 'outlet2']
-            }
-        }
+        config = {"geometry": {"case_name": "test_case", "outlet_keywords_ordered": ["outlet1", "outlet2"]}}
 
         with tempfile.TemporaryDirectory() as tmpdir:
             analyzer = WindkesselAnalyzer(tmpdir, config)
 
             assert analyzer.case_dir == Path(tmpdir)
             assert analyzer.config == config
-            assert analyzer.outlet_patches == ['outlet1', 'outlet2']
+            assert analyzer.outlet_patches == ["outlet1", "outlet2"]
 
     def test_init_with_empty_outlets(self):
         """Test initialization with no outlets."""
-        config = {
-            'geometry': {
-                'case_name': 'test_case'
-            }
-        }
+        config = {"geometry": {"case_name": "test_case"}}
 
         with tempfile.TemporaryDirectory() as tmpdir:
             analyzer = WindkesselAnalyzer(tmpdir, config)
@@ -67,42 +58,34 @@ class TestGetWKParameters:
     def test_extract_3element_params(self):
         """Test extraction of 3-element Windkessel parameters."""
         config = {
-            'geometry': {
-                'outlet_keywords_ordered': ['outlet1', 'outlet2']
-            },
-            'boundary_conditions': {
-                'outlets': {
-                    'type': '3EWINDKESSEL',
-                    'windkessel_params': {
-                        'outlet1': {'R': 1e8, 'C': 1e-9, 'Z': 1e7},
-                        'outlet2': {'R': 2e8, 'C': 2e-9, 'Z': 2e7}
-                    }
+            "geometry": {"outlet_keywords_ordered": ["outlet1", "outlet2"]},
+            "boundary_conditions": {
+                "outlets": {
+                    "type": "3EWINDKESSEL",
+                    "windkessel_params": {
+                        "outlet1": {"R": 1e8, "C": 1e-9, "Z": 1e7},
+                        "outlet2": {"R": 2e8, "C": 2e-9, "Z": 2e7},
+                    },
                 }
-            }
+            },
         }
 
         with tempfile.TemporaryDirectory() as tmpdir:
             analyzer = WindkesselAnalyzer(tmpdir, config)
             params = analyzer._get_wk_parameters()
 
-            assert 'outlet1' in params
-            assert 'outlet2' in params
-            assert params['outlet1']['R'] == 1e8
-            assert params['outlet1']['C'] == 1e-9
-            assert params['outlet1']['Z'] == 1e7
-            assert params['outlet2']['R'] == 2e8
+            assert "outlet1" in params
+            assert "outlet2" in params
+            assert params["outlet1"]["R"] == 1e8
+            assert params["outlet1"]["C"] == 1e-9
+            assert params["outlet1"]["Z"] == 1e7
+            assert params["outlet2"]["R"] == 2e8
 
     def test_extract_params_non_windkessel(self):
         """Test extraction with non-Windkessel outlet type returns empty."""
         config = {
-            'geometry': {
-                'outlet_keywords_ordered': ['outlet1']
-            },
-            'boundary_conditions': {
-                'outlets': {
-                    'type': 'zeroGradient'
-                }
-            }
+            "geometry": {"outlet_keywords_ordered": ["outlet1"]},
+            "boundary_conditions": {"outlets": {"type": "zeroGradient"}},
         }
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -114,26 +97,24 @@ class TestGetWKParameters:
     def test_extract_params_missing_outlet_data(self):
         """Test extraction when outlet not in windkessel_params."""
         config = {
-            'geometry': {
-                'outlet_keywords_ordered': ['outlet1', 'outlet2']
-            },
-            'boundary_conditions': {
-                'outlets': {
-                    'type': '3EWINDKESSEL',
-                    'windkessel_params': {
-                        'outlet1': {'R': 1e8, 'C': 1e-9, 'Z': 1e7}
+            "geometry": {"outlet_keywords_ordered": ["outlet1", "outlet2"]},
+            "boundary_conditions": {
+                "outlets": {
+                    "type": "3EWINDKESSEL",
+                    "windkessel_params": {
+                        "outlet1": {"R": 1e8, "C": 1e-9, "Z": 1e7}
                         # outlet2 missing
-                    }
+                    },
                 }
-            }
+            },
         }
 
         with tempfile.TemporaryDirectory() as tmpdir:
             analyzer = WindkesselAnalyzer(tmpdir, config)
             params = analyzer._get_wk_parameters()
 
-            assert 'outlet1' in params
-            assert 'outlet2' not in params
+            assert "outlet1" in params
+            assert "outlet2" not in params
 
 
 class TestExtractFlowRates:
@@ -141,11 +122,7 @@ class TestExtractFlowRates:
 
     def test_extract_raises_without_postprocessing(self):
         """Test that extraction raises error without postProcessing dir."""
-        config = {
-            'geometry': {
-                'outlet_keywords_ordered': ['outlet1']
-            }
-        }
+        config = {"geometry": {"outlet_keywords_ordered": ["outlet1"]}}
 
         with tempfile.TemporaryDirectory() as tmpdir:
             analyzer = WindkesselAnalyzer(tmpdir, config)
@@ -155,11 +132,7 @@ class TestExtractFlowRates:
 
     def test_extract_with_empty_postprocessing(self):
         """Test extraction with empty postProcessing directory."""
-        config = {
-            'geometry': {
-                'outlet_keywords_ordered': ['outlet1']
-            }
-        }
+        config = {"geometry": {"outlet_keywords_ordered": ["outlet1"]}}
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create empty postProcessing directory
@@ -176,11 +149,7 @@ class TestExtractFlowRates:
 
     def test_extract_from_surfacefieldvalue(self):
         """Test extraction from surfaceFieldValue data."""
-        config = {
-            'geometry': {
-                'outlet_keywords_ordered': ['outlet1']
-            }
-        }
+        config = {"geometry": {"outlet_keywords_ordered": ["outlet1"]}}
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create mock surfaceFieldValue data
@@ -189,7 +158,7 @@ class TestExtractFlowRates:
 
             # Create data file with time and flow rate columns
             data_file = post_dir / "surfaceFieldValue.dat"
-            with open(data_file, 'w') as f:
+            with open(data_file, "w") as f:
                 f.write("# Time    Flow\n")
                 f.write("0.0    1.0e-5\n")
                 f.write("0.1    2.0e-5\n")
@@ -199,9 +168,9 @@ class TestExtractFlowRates:
             times, flow_data = analyzer.extract_flow_rates()
 
             assert len(times) == 3
-            assert 'outlet1' in flow_data
-            assert len(flow_data['outlet1']) == 3
-            assert flow_data['outlet1'][0] == pytest.approx(1e-5, rel=1e-6)
+            assert "outlet1" in flow_data
+            assert len(flow_data["outlet1"]) == 3
+            assert flow_data["outlet1"][0] == pytest.approx(1e-5, rel=1e-6)
 
 
 class TestExtractFromBoundaryFields:
@@ -209,22 +178,19 @@ class TestExtractFromBoundaryFields:
 
     def test_extract_from_time_directories(self):
         """Test extraction from time directory structure."""
-        config = {
-            'geometry': {
-                'outlet_keywords_ordered': ['outlet1']
-            }
-        }
+        config = {"geometry": {"outlet_keywords_ordered": ["outlet1"]}}
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create time directories with p files
-            for t in ['0', '0.1', '0.2']:
+            for t in ["0", "0.1", "0.2"]:
                 time_dir = Path(tmpdir) / t
                 time_dir.mkdir()
 
                 # Create minimal p file with outlet section
                 p_file = time_dir / "p"
-                with open(p_file, 'w') as f:
-                    f.write(f"""
+                with open(p_file, "w") as f:
+                    f.write(
+                        f"""
 boundaryField
 {{
     outlet1
@@ -233,29 +199,26 @@ boundaryField
         q_1             {float(t) * 1e-5};
     }}
 }}
-""")
+"""
+                    )
 
             analyzer = WindkesselAnalyzer(tmpdir, config)
             times, flow_data = analyzer._extract_from_boundary_fields()
 
             assert len(times) == 3
-            assert 'outlet1' in flow_data
+            assert "outlet1" in flow_data
 
     def test_extract_no_time_directories(self):
         """Test extraction with no time directories."""
-        config = {
-            'geometry': {
-                'outlet_keywords_ordered': ['outlet1']
-            }
-        }
+        config = {"geometry": {"outlet_keywords_ordered": ["outlet1"]}}
 
         with tempfile.TemporaryDirectory() as tmpdir:
             analyzer = WindkesselAnalyzer(tmpdir, config)
             times, flow_data = analyzer._extract_from_boundary_fields()
 
             assert len(times) == 0
-            assert 'outlet1' in flow_data
-            assert len(flow_data['outlet1']) == 0
+            assert "outlet1" in flow_data
+            assert len(flow_data["outlet1"]) == 0
 
 
 class TestGenerateReport:
@@ -264,26 +227,12 @@ class TestGenerateReport:
     def test_generate_report_creates_pdf(self):
         """Test that generate_report creates a PDF file."""
         config = {
-            'geometry': {
-                'case_name': 'test_case',
-                'outlet_keywords_ordered': ['outlet1']
+            "geometry": {"case_name": "test_case", "outlet_keywords_ordered": ["outlet1"]},
+            "case_info": {"patient_id": "TEST001", "description": "Test simulation"},
+            "simulation_settings": {"solver_type": "pimpleFoam", "analysis_type": "transient"},
+            "boundary_conditions": {
+                "outlets": {"type": "3EWINDKESSEL", "windkessel_params": {"outlet1": {"R": 1e8, "C": 1e-9, "Z": 1e7}}}
             },
-            'case_info': {
-                'patient_id': 'TEST001',
-                'description': 'Test simulation'
-            },
-            'simulation_settings': {
-                'solver_type': 'pimpleFoam',
-                'analysis_type': 'transient'
-            },
-            'boundary_conditions': {
-                'outlets': {
-                    'type': '3EWINDKESSEL',
-                    'windkessel_params': {
-                        'outlet1': {'R': 1e8, 'C': 1e-9, 'Z': 1e7}
-                    }
-                }
-            }
         }
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -300,16 +249,12 @@ class TestGenerateReport:
             pdf_path = analyzer.generate_report(str(output_dir))
 
             assert Path(pdf_path).exists()
-            assert pdf_path.endswith('.pdf')
-            assert 'windkessel_analysis.pdf' in pdf_path
+            assert pdf_path.endswith(".pdf")
+            assert "windkessel_analysis.pdf" in pdf_path
 
     def test_generate_report_creates_output_dir(self):
         """Test that generate_report creates output directory if needed."""
-        config = {
-            'geometry': {
-                'outlet_keywords_ordered': ['outlet1']
-            }
-        }
+        config = {"geometry": {"outlet_keywords_ordered": ["outlet1"]}}
 
         with tempfile.TemporaryDirectory() as tmpdir:
             case_dir = Path(tmpdir) / "case"
@@ -365,9 +310,9 @@ class TestFlowAnalysis:
     def test_total_flow_calculation(self):
         """Test sum of outlet flows equals inlet."""
         flow_rates = {
-            'outlet1': np.array([1e-5, 2e-5, 3e-5]),
-            'outlet2': np.array([0.5e-5, 1e-5, 1.5e-5]),
-            'outlet3': np.array([0.5e-5, 1e-5, 1.5e-5])
+            "outlet1": np.array([1e-5, 2e-5, 3e-5]),
+            "outlet2": np.array([0.5e-5, 1e-5, 1.5e-5]),
+            "outlet3": np.array([0.5e-5, 1e-5, 1.5e-5]),
         }
 
         total_flow = np.zeros(3)
@@ -381,19 +326,19 @@ class TestFlowAnalysis:
     def test_mean_flow_calculation(self):
         """Test mean flow calculation for distribution."""
         flow_rates = {
-            'outlet1': np.array([1e-5, 2e-5, 3e-5]),  # mean = 2e-5
-            'outlet2': np.array([0.5e-5, 0.5e-5, 0.5e-5])  # mean = 0.5e-5
+            "outlet1": np.array([1e-5, 2e-5, 3e-5]),  # mean = 2e-5
+            "outlet2": np.array([0.5e-5, 0.5e-5, 0.5e-5]),  # mean = 0.5e-5
         }
 
         mean_flows = {name: np.mean(np.abs(flow)) for name, flow in flow_rates.items()}
 
-        assert mean_flows['outlet1'] == pytest.approx(2e-5, rel=1e-6)
-        assert mean_flows['outlet2'] == pytest.approx(0.5e-5, rel=1e-6)
+        assert mean_flows["outlet1"] == pytest.approx(2e-5, rel=1e-6)
+        assert mean_flows["outlet2"] == pytest.approx(0.5e-5, rel=1e-6)
 
         # Check percentage distribution
         total = sum(mean_flows.values())
-        pct_outlet1 = mean_flows['outlet1'] / total * 100
-        pct_outlet2 = mean_flows['outlet2'] / total * 100
+        pct_outlet1 = mean_flows["outlet1"] / total * 100
+        pct_outlet2 = mean_flows["outlet2"] / total * 100
 
         assert pct_outlet1 == pytest.approx(80.0, rel=1e-3)
         assert pct_outlet2 == pytest.approx(20.0, rel=1e-3)
@@ -404,20 +349,16 @@ class TestExtractFlowRatesWithData:
 
     def test_extract_multiple_outlets(self):
         """Test extraction with multiple outlets having data."""
-        config = {
-            'geometry': {
-                'outlet_keywords_ordered': ['outlet1', 'outlet2']
-            }
-        }
+        config = {"geometry": {"outlet_keywords_ordered": ["outlet1", "outlet2"]}}
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create surfaceFieldValue data for multiple outlets
-            for i, outlet in enumerate(['outlet1', 'outlet2']):
+            for i, outlet in enumerate(["outlet1", "outlet2"]):
                 post_dir = Path(tmpdir) / "postProcessing" / f"surfaceFieldValue_{outlet}" / "0"
                 post_dir.mkdir(parents=True)
 
                 data_file = post_dir / "surfaceFieldValue.dat"
-                with open(data_file, 'w') as f:
+                with open(data_file, "w") as f:
                     f.write("# Time    Flow\n")
                     for t in [0.0, 0.1, 0.2, 0.3, 0.4]:
                         f.write(f"{t}    {(i + 1) * t * 1e-5}\n")
@@ -426,10 +367,10 @@ class TestExtractFlowRatesWithData:
             times, flow_data = analyzer.extract_flow_rates()
 
             assert len(times) == 5
-            assert 'outlet1' in flow_data
-            assert 'outlet2' in flow_data
-            assert len(flow_data['outlet1']) == 5
-            assert len(flow_data['outlet2']) == 5
+            assert "outlet1" in flow_data
+            assert "outlet2" in flow_data
+            assert len(flow_data["outlet1"]) == 5
+            assert len(flow_data["outlet2"]) == 5
 
 
 class TestBoundaryFieldExtraction:
@@ -437,21 +378,18 @@ class TestBoundaryFieldExtraction:
 
     def test_extract_with_unmatched_outlet(self):
         """Test extraction when outlet pattern doesn't match in p file."""
-        config = {
-            'geometry': {
-                'outlet_keywords_ordered': ['outlet1', 'missing_outlet']
-            }
-        }
+        config = {"geometry": {"outlet_keywords_ordered": ["outlet1", "missing_outlet"]}}
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create time directories with p files only mentioning outlet1
-            for t in ['0', '0.1', '0.2']:
+            for t in ["0", "0.1", "0.2"]:
                 time_dir = Path(tmpdir) / t
                 time_dir.mkdir()
 
                 p_file = time_dir / "p"
-                with open(p_file, 'w') as f:
-                    f.write(f"""
+                with open(p_file, "w") as f:
+                    f.write(
+                        f"""
 boundaryField
 {{
     outlet1
@@ -460,24 +398,21 @@ boundaryField
         q_1             {float(t) * 1e-5};
     }}
 }}
-""")
+"""
+                    )
 
             analyzer = WindkesselAnalyzer(tmpdir, config)
             times, flow_data = analyzer._extract_from_boundary_fields()
 
             assert len(times) == 3
-            assert 'outlet1' in flow_data
-            assert 'missing_outlet' in flow_data
+            assert "outlet1" in flow_data
+            assert "missing_outlet" in flow_data
             # missing_outlet should have zeros
-            assert all(v == 0.0 for v in flow_data['missing_outlet'])
+            assert all(v == 0.0 for v in flow_data["missing_outlet"])
 
     def test_extract_handles_parse_errors(self):
         """Test extraction handles files that can't be parsed."""
-        config = {
-            'geometry': {
-                'outlet_keywords_ordered': ['outlet1']
-            }
-        }
+        config = {"geometry": {"outlet_keywords_ordered": ["outlet1"]}}
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create a non-numeric time directory (should be skipped)
@@ -487,7 +422,7 @@ boundaryField
             time_dir = Path(tmpdir) / "0.1"
             time_dir.mkdir()
             p_file = time_dir / "p"
-            with open(p_file, 'w') as f:
+            with open(p_file, "w") as f:
                 f.write("outlet1 { q_1 1e-5; }")
 
             analyzer = WindkesselAnalyzer(tmpdir, config)
@@ -503,27 +438,18 @@ class TestGenerateReportWithData:
     def test_generate_report_with_flow_data(self):
         """Test report generation with sufficient flow data for plots."""
         config = {
-            'geometry': {
-                'case_name': 'test_case',
-                'outlet_keywords_ordered': ['outlet1', 'outlet2']
-            },
-            'case_info': {
-                'patient_id': 'TEST001',
-                'description': 'Test simulation'
-            },
-            'simulation_settings': {
-                'solver_type': 'pimpleFoam',
-                'analysis_type': 'transient'
-            },
-            'boundary_conditions': {
-                'outlets': {
-                    'type': '3EWINDKESSEL',
-                    'windkessel_params': {
-                        'outlet1': {'R': 1e8, 'C': 1e-9, 'Z': 1e7},
-                        'outlet2': {'R': 2e8, 'C': 2e-9, 'Z': 2e7}
-                    }
+            "geometry": {"case_name": "test_case", "outlet_keywords_ordered": ["outlet1", "outlet2"]},
+            "case_info": {"patient_id": "TEST001", "description": "Test simulation"},
+            "simulation_settings": {"solver_type": "pimpleFoam", "analysis_type": "transient"},
+            "boundary_conditions": {
+                "outlets": {
+                    "type": "3EWINDKESSEL",
+                    "windkessel_params": {
+                        "outlet1": {"R": 1e8, "C": 1e-9, "Z": 1e7},
+                        "outlet2": {"R": 2e8, "C": 2e-9, "Z": 2e7},
+                    },
                 }
-            }
+            },
         }
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -531,12 +457,12 @@ class TestGenerateReportWithData:
             case_dir.mkdir()
 
             # Create surfaceFieldValue data with enough points for plots
-            for i, outlet in enumerate(['outlet1', 'outlet2']):
+            for i, outlet in enumerate(["outlet1", "outlet2"]):
                 post_dir = case_dir / "postProcessing" / f"surfaceFieldValue_{outlet}" / "0"
                 post_dir.mkdir(parents=True)
 
                 data_file = post_dir / "surfaceFieldValue.dat"
-                with open(data_file, 'w') as f:
+                with open(data_file, "w") as f:
                     f.write("# Time    Flow\n")
                     for t in np.linspace(0, 1, 20):  # 20 time points
                         f.write(f"{t}    {(i + 1) * t * 1e-5}\n")
@@ -552,11 +478,7 @@ class TestGenerateReportWithData:
 
     def test_generate_report_with_exception_in_extraction(self):
         """Test report generation handles exception during extraction."""
-        config = {
-            'geometry': {
-                'outlet_keywords_ordered': ['outlet1']
-            }
-        }
+        config = {"geometry": {"outlet_keywords_ordered": ["outlet1"]}}
 
         with tempfile.TemporaryDirectory() as tmpdir:
             case_dir = Path(tmpdir) / "case"
@@ -568,7 +490,7 @@ class TestGenerateReportWithData:
 
             # Create data file with unparseable content
             data_file = post_dir / "surfaceFieldValue.dat"
-            with open(data_file, 'w') as f:
+            with open(data_file, "w") as f:
                 f.write("invalid\ndata\nformat\n")
 
             output_dir = Path(tmpdir) / "output"
@@ -587,11 +509,7 @@ class TestPlotCreation:
         """Test _create_flow_rate_plots method."""
         from matplotlib.backends.backend_pdf import PdfPages
 
-        config = {
-            'geometry': {
-                'outlet_keywords_ordered': ['outlet1', 'outlet2']
-            }
-        }
+        config = {"geometry": {"outlet_keywords_ordered": ["outlet1", "outlet2"]}}
 
         with tempfile.TemporaryDirectory() as tmpdir:
             case_dir = Path(tmpdir) / "case"
@@ -600,10 +518,7 @@ class TestPlotCreation:
             pdf_file = Path(tmpdir) / "test.pdf"
 
             times = np.linspace(0, 1, 10)
-            flow_rates = {
-                'outlet1': np.sin(times) * 1e-5,
-                'outlet2': np.cos(times) * 0.5e-5
-            }
+            flow_rates = {"outlet1": np.sin(times) * 1e-5, "outlet2": np.cos(times) * 0.5e-5}
 
             analyzer = WindkesselAnalyzer(str(case_dir), config)
 
@@ -617,11 +532,7 @@ class TestPlotCreation:
         """Test _create_flow_distribution_plot with valid data."""
         from matplotlib.backends.backend_pdf import PdfPages
 
-        config = {
-            'geometry': {
-                'outlet_keywords_ordered': ['outlet1', 'outlet2']
-            }
-        }
+        config = {"geometry": {"outlet_keywords_ordered": ["outlet1", "outlet2"]}}
 
         with tempfile.TemporaryDirectory() as tmpdir:
             case_dir = Path(tmpdir) / "case"
@@ -629,10 +540,7 @@ class TestPlotCreation:
 
             pdf_file = Path(tmpdir) / "test.pdf"
 
-            flow_rates = {
-                'outlet1': np.array([1e-5, 2e-5, 3e-5]),
-                'outlet2': np.array([0.5e-5, 1e-5, 1.5e-5])
-            }
+            flow_rates = {"outlet1": np.array([1e-5, 2e-5, 3e-5]), "outlet2": np.array([0.5e-5, 1e-5, 1.5e-5])}
 
             analyzer = WindkesselAnalyzer(str(case_dir), config)
 
@@ -646,11 +554,7 @@ class TestPlotCreation:
         """Test _create_flow_distribution_plot with empty/zero data."""
         from matplotlib.backends.backend_pdf import PdfPages
 
-        config = {
-            'geometry': {
-                'outlet_keywords_ordered': ['outlet1']
-            }
-        }
+        config = {"geometry": {"outlet_keywords_ordered": ["outlet1"]}}
 
         with tempfile.TemporaryDirectory() as tmpdir:
             case_dir = Path(tmpdir) / "case"
@@ -658,9 +562,7 @@ class TestPlotCreation:
 
             pdf_file = Path(tmpdir) / "test.pdf"
 
-            flow_rates = {
-                'outlet1': np.array([0.0, 0.0, 0.0])
-            }
+            flow_rates = {"outlet1": np.array([0.0, 0.0, 0.0])}
 
             analyzer = WindkesselAnalyzer(str(case_dir), config)
 
@@ -673,11 +575,7 @@ class TestPlotCreation:
         """Test _create_pressure_analysis_plots method."""
         from matplotlib.backends.backend_pdf import PdfPages
 
-        config = {
-            'geometry': {
-                'outlet_keywords_ordered': ['outlet1']
-            }
-        }
+        config = {"geometry": {"outlet_keywords_ordered": ["outlet1"]}}
 
         with tempfile.TemporaryDirectory() as tmpdir:
             case_dir = Path(tmpdir) / "case"
@@ -695,5 +593,5 @@ class TestPlotCreation:
             assert pdf_file.exists()
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

@@ -40,7 +40,7 @@ CHARACTERISTICS
 ===============
 Time Integration:    backward (2nd order, A-stable)
 Convection:          Gauss LUST grad(U) (hybrid: 75% central + 25% upwind, low diffusion)
-Gradients:           cellLimited Gauss linear 0.5 (tighter limiting than standard)
+Gradients:           cellLimited Gauss linear 1 (full limiting; conservative for excellent meshes)
 Laplacian:           Gauss linear limited 0.5 (bounded non-orthogonal correction)
 Solver:              PIMPLE with many correctors (3 outer, 3 inner)
 Relaxation:          Light (U: 0.9, p: 0.5) - rely on correctors for stability
@@ -239,20 +239,18 @@ config: Dict[str, Any] = {
             "CN0.9 crashed 0/3 cases with Windkessel BCs due to pressure "
             "oscillation amplification from the 10% explicit component. "
             "backward is unconditionally stable and pairs reliably with LUST."
-        )
+        ),
     },
-
     # Gradient discretization
     "gradSchemes": {
         "default": "cellLimited Gauss linear 1",
         "grad(U)": "cellLimited Gauss linear 1",
         "_comment": (
-            "Tighter limiting (0.5) than standard (1.0). "
-            "Reduces overshoots on complex geometries. "
-            "Requires ortho > 70° for stability."
-        )
+            "Full limiting (coefficient 1.0) — more conservative than standard's 0.5. "
+            "Reduces overshoots on complex geometries; pairs with LUST's low-diffusion "
+            "convection scheme. Requires ortho > 70° for stability."
+        ),
     },
-
     # Convection discretization
     "divSchemes": {
         "default": "none",
@@ -269,9 +267,8 @@ config: Dict[str, Any] = {
             "Bounded stability suitable for all physics models. "
             "Turbulence: limitedLinear 1 (bounded, conservative for k/ω/ε). "
             "See: Friess et al. (2015), Computers & Fluids 122:233-246."
-        )
+        ),
     },
-
     # Laplacian discretization
     "laplacianSchemes": {
         "default": "Gauss linear limited 0.5",
@@ -280,21 +277,12 @@ config: Dict[str, Any] = {
             "Coefficient 0.5 limits correction for stability. "
             "Better than plain 'corrected' on imperfect meshes. "
             "Prevents overshoot on non-orthogonal cells."
-        )
+        ),
     },
-
     # Interpolation
-    "interpolationSchemes": {
-        "default": "linear",
-        "_comment": "Second-order linear interpolation"
-    },
-
+    "interpolationSchemes": {"default": "linear", "_comment": "Second-order linear interpolation"},
     # Surface-normal gradients
-    "snGradSchemes": {
-        "default": "limited 0.5",
-        "_comment": "Limited correction matching Laplacian scheme"
-    },
-
+    "snGradSchemes": {"default": "limited 0.5", "_comment": "Limited correction matching Laplacian scheme"},
     # Solver settings
     # Updated March 2026: Same PIMPLE philosophy as standard but with tighter
     # U target for LES/validation accuracy. User can override all values.
@@ -312,16 +300,15 @@ config: Dict[str, Any] = {
                 "U": {"tolerance": 1e-4, "relTol": 0},
                 "(k|epsilon|omega)": {"tolerance": 1e-3, "relTol": 0},
                 "_comment": (
-                    "Same reachable targets as standard. "
-                    "User can tighten via numerics.correctors in config.json."
-                )
-            }
+                    "Same reachable targets as standard. " "User can tighten via numerics.correctors in config.json."
+                ),
+            },
         },
         "relaxationFactors": {
             "fields": {
                 "p": 0.5,
                 "pFinal": 1.0,
-                "_comment": "Same as standard. User can override via numerics.relaxation_factors."
+                "_comment": "Same as standard. User can override via numerics.relaxation_factors.",
             },
             "equations": {
                 "U": 0.8,
@@ -332,32 +319,30 @@ config: Dict[str, Any] = {
                 "omegaFinal": 1.0,
                 "epsilon": 0.8,
                 "epsilonFinal": 1.0,
-                "_comment": "Same as standard. User can override via numerics.relaxation_factors."
-            }
+                "_comment": "Same as standard. User can override via numerics.relaxation_factors.",
+            },
         },
         "residualControl": {
             "p": 1e-8,
             "U": 1e-8,
             "k": 1e-8,
             "omega": 1e-8,
-            "_comment": "Tight tolerances for converged solutions per timestep"
-        }
+            "_comment": "Tight tolerances for converged solutions per timestep",
+        },
     },
-
     # Time stepping
     "time_stepping": {
         "max_co": 0.5,
         "initial_delta_t": 1e-6,  # Safe startup timestep to avoid Courant spike
-        "max_delta_t": 0.0008,    # Maximum allowed timestep after flow develops
+        "max_delta_t": 0.0008,  # Maximum allowed timestep after flow develops
         "adjustable_time_step": True,
         "_comment": (
             "Co=0.5 for accuracy with LUST. "
             "Smaller than standard (Co=1.0) for temporal accuracy. "
             "Larger than aggressive/LES-only profiles (Co=0.3-0.5). "
             "Suitable for laminar, RANS, and LES."
-        )
+        ),
     },
-
     # Metadata
     "_profile_metadata": {
         "name": "precise",
@@ -377,13 +362,13 @@ config: Dict[str, Any] = {
             "LUST convection (less diffusion than linearUpwind)",
             "Tighter tolerances (1e-8 vs 1e-6)",
             "More correctors (3/3 vs 2/2)",
-            "Limited Laplacian (better non-orthogonal handling)"
+            "Limited Laplacian (better non-orthogonal handling)",
         ],
         "literature": [
             "Friess et al. (2015). LUST scheme. Computers & Fluids 122:233-246",
             "Crank & Nicolson (1947). Practical method for PDEs. Math Proc Cambridge",
             "Roache, P.J. (1998). Grid Convergence Index. AIAA Journal 36(5):696-702",
-            "OpenFOAM User Guide v11+, Sections 4.4-4.5 (Numerical Schemes)"
+            "OpenFOAM User Guide v11+, Sections 4.4-4.5 (Numerical Schemes)",
         ],
         "convergence_requirements": [
             "MANDATORY: Mesh independence study (3+ levels, GCI analysis)",
@@ -391,10 +376,10 @@ config: Dict[str, Any] = {
             "Run checkMesh - resolve major warnings (ortho > 70°, skewness < 2)",
             "Residuals < 1e-8 for all variables (p, U, k, ω) per timestep",
             "Mass conservation error < 0.01%",
-            "Compare to experimental/analytical data if available"
+            "Compare to experimental/analytical data if available",
         ],
-        "computational_cost_multiplier": "2-3x vs standard profile"
-    }
+        "computational_cost_multiplier": "2-3x vs standard profile",
+    },
 }
 
 __all__ = ["config"]

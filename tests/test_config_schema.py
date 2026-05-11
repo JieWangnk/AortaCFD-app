@@ -112,11 +112,7 @@ class TestPhysicsConfig:
 
     def test_custom_values(self):
         """Test physics configuration with custom values."""
-        config = PhysicsConfig(
-            model=PhysicsModel.LES,
-            blood_density=1050.0,
-            blood_viscosity=0.0035
-        )
+        config = PhysicsConfig(model=PhysicsModel.LES, blood_density=1050.0, blood_viscosity=0.0035)
 
         assert config.model == PhysicsModel.LES
         assert config.blood_density == 1050.0
@@ -303,10 +299,7 @@ class TestInletConfig:
 
     def test_timevarying_inlet(self):
         """Test time-varying inlet configuration."""
-        config = InletConfig(
-            type=InletType.TIMEVARYING,
-            csv_file="inlet_flow.csv"
-        )
+        config = InletConfig(type=InletType.TIMEVARYING, csv_file="inlet_flow.csv")
 
         assert config.type == InletType.TIMEVARYING
         assert config.csv_file == "inlet_flow.csv"
@@ -358,7 +351,7 @@ class TestSimulationConfig:
             patient={"id": "PAT001", "age": 65},
             geometry=GeometryConfig(scale_factor=0.001),
             physics=PhysicsConfig(model=PhysicsModel.LAMINAR),
-            run_settings={"solution_type": "parallel", "subdomains": 8}
+            run_settings={"solution_type": "parallel", "subdomains": 8},
         )
 
         assert config.patient["id"] == "PAT001"
@@ -367,12 +360,10 @@ class TestSimulationConfig:
 
     def test_extra_fields_allowed(self):
         """Test that extra fields are allowed."""
-        config = SimulationConfig(
-            custom_field="custom_value"
-        )
+        config = SimulationConfig(custom_field="custom_value")
 
         # Extra fields should be allowed
-        assert hasattr(config, 'custom_field') or 'custom_field' in config.__dict__
+        assert hasattr(config, "custom_field") or "custom_field" in config.__dict__
 
 
 class TestValidateConfig:
@@ -387,12 +378,7 @@ class TestValidateConfig:
 
     def test_validate_minimal_config(self):
         """Test validation of minimal config."""
-        config_dict = {
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet1']
-            }
-        }
+        config_dict = {"geometry": {"inlet_keywords_ordered": "inlet", "outlet_keywords_ordered": ["outlet1"]}}
 
         result = validate_config(config_dict)
         assert result is not None
@@ -400,28 +386,16 @@ class TestValidateConfig:
     def test_validate_complete_config(self):
         """Test validation of complete config."""
         config_dict = {
-            'patient': {'id': 'PAT001'},
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'outlet_keywords_ordered': ['outlet1', 'outlet2'],
-                'wall_keywords_ordered': 'wall_aorta',
-                'scale_factor': 0.001
+            "patient": {"id": "PAT001"},
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet1", "outlet2"],
+                "wall_keywords_ordered": "wall_aorta",
+                "scale_factor": 0.001,
             },
-            'physics': {
-                'simulation_type': 'laminar',
-                'blood_density': 1060.0,
-                'blood_viscosity': 0.004
-            },
-            'mesh': {
-                'SNAPPY_SETTINGS': {
-                    'parallel': True,
-                    'nProcessors': 4
-                }
-            },
-            'run_settings': {
-                'solution_type': 'parallel',
-                'subdomains': 4
-            }
+            "physics": {"simulation_type": "laminar", "blood_density": 1060.0, "blood_viscosity": 0.004},
+            "mesh": {"SNAPPY_SETTINGS": {"parallel": True, "nProcessors": 4}},
+            "run_settings": {"solution_type": "parallel", "subdomains": 4},
         }
 
         result = validate_config(config_dict)
@@ -436,11 +410,7 @@ class TestValidationErrors:
         """Test that invalid blood density raises error."""
         from pydantic import ValidationError
 
-        config_dict = {
-            'physics': {
-                'blood_density': -1000.0  # Invalid
-            }
-        }
+        config_dict = {"physics": {"blood_density": -1000.0}}  # Invalid
 
         with pytest.raises(ValidationError):
             validate_config(config_dict)
@@ -449,11 +419,7 @@ class TestValidationErrors:
         """Test that invalid scale factor raises error."""
         from pydantic import ValidationError
 
-        config_dict = {
-            'geometry': {
-                'scale_factor': 0.0  # Invalid - must be positive
-            }
-        }
+        config_dict = {"geometry": {"scale_factor": 0.0}}  # Invalid - must be positive
 
         with pytest.raises(ValidationError):
             validate_config(config_dict)
@@ -469,20 +435,16 @@ class TestFallbackBehavior:
 
         if not PYDANTIC_AVAILABLE:
             from config.schema import GeometryConfig
+
             assert is_dataclass(GeometryConfig)
 
     def test_validate_config_fallback(self):
         """Test validate_config with fallback path."""
-        config_dict = {
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'scale_factor': 0.001
-            }
-        }
+        config_dict = {"geometry": {"inlet_keywords_ordered": "inlet", "scale_factor": 0.001}}
 
         result = validate_config(config_dict)
         assert result is not None
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

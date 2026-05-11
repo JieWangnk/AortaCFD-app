@@ -29,32 +29,32 @@ class TestMurrayFlowSplitExtended:
 
     def test_murray_three_outlets_equal(self):
         """Test Murray's law with three equal outlets."""
-        radii = {'o1': 0.01, 'o2': 0.01, 'o3': 0.01}  # All equal radii
+        radii = {"o1": 0.01, "o2": 0.01, "o3": 0.01}  # All equal radii
 
         # Murray's law: f_i = r_i³ / Σr_j³
-        total_r3 = sum(r ** MURRAY_LAW_EXPONENT for r in radii.values())
-        expected = {name: (r ** MURRAY_LAW_EXPONENT) / total_r3 for name, r in radii.items()}
+        total_r3 = sum(r**MURRAY_LAW_EXPONENT for r in radii.values())
+        expected = {name: (r**MURRAY_LAW_EXPONENT) / total_r3 for name, r in radii.items()}
 
         # All should be ~33.3%
         for name, fraction in expected.items():
-            assert fraction == pytest.approx(1/3, rel=1e-6)
+            assert fraction == pytest.approx(1 / 3, rel=1e-6)
 
     def test_murray_dominant_outlet(self):
         """Test Murray's law with one dominant outlet."""
-        radii = {'main': 0.02, 'branch1': 0.005, 'branch2': 0.005}
+        radii = {"main": 0.02, "branch1": 0.005, "branch2": 0.005}
 
-        total_r3 = sum(r ** MURRAY_LAW_EXPONENT for r in radii.values())
-        main_fraction = (0.02 ** MURRAY_LAW_EXPONENT) / total_r3
+        total_r3 = sum(r**MURRAY_LAW_EXPONENT for r in radii.values())
+        main_fraction = (0.02**MURRAY_LAW_EXPONENT) / total_r3
 
         # Main outlet should get most of the flow
         assert main_fraction > 0.9  # Should be >90%
 
     def test_murray_preserves_total_flow(self):
         """Test that Murray's law fractions sum to 1."""
-        radii = {'o1': 0.015, 'o2': 0.01, 'o3': 0.008, 'o4': 0.005}
+        radii = {"o1": 0.015, "o2": 0.01, "o3": 0.008, "o4": 0.005}
 
-        total_r3 = sum(r ** MURRAY_LAW_EXPONENT for r in radii.values())
-        fractions = {name: (r ** MURRAY_LAW_EXPONENT) / total_r3 for name, r in radii.items()}
+        total_r3 = sum(r**MURRAY_LAW_EXPONENT for r in radii.values())
+        fractions = {name: (r**MURRAY_LAW_EXPONENT) / total_r3 for name, r in radii.items()}
 
         assert sum(fractions.values()) == pytest.approx(1.0, rel=1e-9)
 
@@ -147,7 +147,7 @@ class TestPWVCalculation:
         """Test that PWV decreases with larger vessel area."""
         a, b = 13.3, 0.3
 
-        A_small = 50   # mm²
+        A_small = 50  # mm²
         A_large = 200  # mm²
 
         c_small = a / (2 * np.sqrt(A_small / np.pi)) ** b
@@ -157,6 +157,7 @@ class TestPWVCalculation:
 
     def test_pwv_empirical_tiers(self):
         """Test empirical PWV tier selection."""
+
         def get_empirical_pwv(diameter_mm):
             if diameter_mm > 15:
                 return 5.0
@@ -165,9 +166,9 @@ class TestPWVCalculation:
             else:
                 return 7.0
 
-        assert get_empirical_pwv(20) == 5.0   # Large vessel
-        assert get_empirical_pwv(10) == 6.0   # Medium vessel
-        assert get_empirical_pwv(5) == 7.0    # Small vessel
+        assert get_empirical_pwv(20) == 5.0  # Large vessel
+        assert get_empirical_pwv(10) == 6.0  # Medium vessel
+        assert get_empirical_pwv(5) == 7.0  # Small vessel
 
 
 class TestCharacteristicImpedance:
@@ -176,8 +177,8 @@ class TestCharacteristicImpedance:
     def test_z0_formula(self):
         """Test Z0 = ρc/A formula."""
         rho = 1060  # kg/m³
-        c = 6.0     # m/s (PWV)
-        A = 1e-4    # 100 mm² = 1e-4 m²
+        c = 6.0  # m/s (PWV)
+        A = 1e-4  # 100 mm² = 1e-4 m²
 
         Z0 = rho * c / A
 
@@ -204,7 +205,7 @@ class TestComplianceCalculation:
     def test_compliance_formula(self):
         """Test C = τ / R2 formula."""
         tau = 1.8  # s (diastolic decay time)
-        R2 = 1e8   # Pa·s/m³
+        R2 = 1e8  # Pa·s/m³
 
         C = tau / R2
 
@@ -241,7 +242,7 @@ class TestTwoElementWindkessel:
         # In 2-element model:
         R1 = 0.0  # No proximal impedance
         R2 = 1e8  # Full resistance
-        Z = R1    # Z = 0 in 2-element
+        Z = R1  # Z = 0 in 2-element
 
         assert Z == 0.0
 
@@ -261,7 +262,7 @@ class TestThreeElementWindkessel:
     def test_r1_plus_r2_equals_rtotal(self):
         """Test that R1 + R2 = R_total in 3-element model."""
         R_total = 1.5e8
-        R1 = 1e7     # Characteristic impedance
+        R1 = 1e7  # Characteristic impedance
         R2 = R_total - R1
 
         assert R1 + R2 == R_total
@@ -290,22 +291,14 @@ class TestFlowSplitParsing:
 
     def test_custom_flow_split_dict(self):
         """Test custom flow split dictionary parsing."""
-        flow_split = {
-            'outlet1': 0.3,
-            'outlet2': 0.5,
-            'outlet3': 0.2
-        }
+        flow_split = {"outlet1": 0.3, "outlet2": 0.5, "outlet3": 0.2}
 
         total = sum(flow_split.values())
         assert total == pytest.approx(1.0, rel=1e-9)
 
     def test_flow_split_normalization(self):
         """Test that unnormalized splits get normalized."""
-        raw_split = {
-            'outlet1': 30,
-            'outlet2': 50,
-            'outlet3': 20
-        }
+        raw_split = {"outlet1": 30, "outlet2": 50, "outlet3": 20}
 
         total = sum(raw_split.values())
         normalized = {k: v / total for k, v in raw_split.items()}
@@ -360,7 +353,7 @@ class TestEdgeCasesExtended:
     def test_very_small_outlet(self):
         """Test handling of very small outlet."""
         r_small = 0.001  # 1 mm radius
-        A_small = math.pi * r_small ** 2
+        A_small = math.pi * r_small**2
 
         # Calculate impedance
         rho = 1060
@@ -373,7 +366,7 @@ class TestEdgeCasesExtended:
     def test_very_large_outlet(self):
         """Test handling of very large outlet."""
         r_large = 0.015  # 15 mm radius (ascending aorta)
-        A_large = math.pi * r_large ** 2
+        A_large = math.pi * r_large**2
 
         # Calculate impedance
         rho = 1060
@@ -421,5 +414,5 @@ class TestPhysiologicalValidation:
             assert 0.5 < tau < 5.0  # Extended acceptable range
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

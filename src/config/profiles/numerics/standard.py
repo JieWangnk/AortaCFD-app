@@ -89,17 +89,15 @@ config: Dict[str, Any] = {
     # Time discretization
     "ddtSchemes": {
         "default": "backward",
-        "_comment": "Second-order implicit - good accuracy and stability for transient flows"
+        "_comment": "Second-order implicit - good accuracy and stability for transient flows",
     },
-
     # Gradient discretization
     "gradSchemes": {
         "default": "cellLimited Gauss linear 0.5",
         "grad(U)": "cellLimited Gauss linear 0.5",
         "grad(p)": "Gauss linear",
-        "_comment": "Bounded gradient with limiter=0.5 - tighter than 1.0 for enhanced stability"
+        "_comment": "Bounded gradient with limiter=0.5 - tighter than 1.0 for enhanced stability",
     },
-
     # Convection discretization
     "divSchemes": {
         "default": "none",
@@ -112,27 +110,17 @@ config: Dict[str, Any] = {
             "limitedLinearV: 2nd order TVD bounded for vectors - prevents outlet oscillations. "
             "limitedLinear: 2nd order TVD bounded for scalars. "
             "Coefficient '1' = full limiting for maximum boundedness."
-        )
+        ),
     },
-
     # Laplacian discretization
     "laplacianSchemes": {
         "default": "Gauss linear limited 0.5",
-        "_comment": "Second-order with limited non-orthogonal correction. Coefficient 0.5 for stability on typical cardiovascular meshes (65-75° orthogonality)"
+        "_comment": "Second-order with limited non-orthogonal correction. Coefficient 0.5 for stability on typical cardiovascular meshes (65-75° orthogonality)",
     },
-
     # Interpolation
-    "interpolationSchemes": {
-        "default": "linear",
-        "_comment": "Second-order linear interpolation"
-    },
-
+    "interpolationSchemes": {"default": "linear", "_comment": "Second-order linear interpolation"},
     # Surface-normal gradients
-    "snGradSchemes": {
-        "default": "limited 0.5",
-        "_comment": "Coefficient 0.5 matches laplacianSchemes for consistency"
-    },
-
+    "snGradSchemes": {"default": "limited 0.5", "_comment": "Coefficient 0.5 matches laplacianSchemes for consistency"},
     # Solver settings
     # Updated March 2026: Previous settings (nOuter=50, p=0.3, targets=1e-4/1e-5)
     # caused PIMPLE outer loop divergence during diastolic flow reversal on all
@@ -159,8 +147,8 @@ config: Dict[str, Any] = {
                     "p target 1e-3 is reachable with p relaxation 0.5 (floor ~2e-4). "
                     "U target 1e-4 for better velocity accuracy. "
                     "User can override via numerics.correctors in config.json."
-                )
-            }
+                ),
+            },
         },
         "relaxationFactors": {
             "fields": {
@@ -170,7 +158,7 @@ config: Dict[str, Any] = {
                     "p=0.5 (was 0.3): lower residual floor, faster convergence. "
                     "pFinal MUST be 1.0 for Windkessel outlets. "
                     "User can override via numerics.relaxation_factors.p in config.json."
-                )
+                ),
             },
             "equations": {
                 "U": 0.8,
@@ -181,27 +169,25 @@ config: Dict[str, Any] = {
                 "omegaFinal": 1.0,
                 "epsilon": 0.7,
                 "epsilonFinal": 1.0,
-                "_comment": "U=0.8 (was 0.7) for faster convergence. User can override via numerics.relaxation_factors."
-            }
+                "_comment": "U=0.8 (was 0.7) for faster convergence. User can override via numerics.relaxation_factors.",
+            },
         },
         "residualControl": {
             "p": 1e-6,
             "U": 1e-6,
             "k": 1e-6,
             "omega": 1e-6,
-            "_comment": "Standard tolerance for clinical/engineering applications"
-        }
+            "_comment": "Standard tolerance for clinical/engineering applications",
+        },
     },
-
     # Time stepping
     "time_stepping": {
         "max_co": 0.8,
         "initial_delta_t": 1e-6,  # Safe startup timestep to avoid Courant spike
-        "max_delta_t": 1e-3,      # Maximum allowed timestep after flow develops
+        "max_delta_t": 1e-3,  # Maximum allowed timestep after flow develops
         "adjustable_time_step": True,
-        "_comment": "Conservative initial time step (1e-6s). Co=1 with adjustable time-stepping for efficiency."
+        "_comment": "Conservative initial time step (1e-6s). Co=1 with adjustable time-stepping for efficiency.",
     },
-
     # Metadata
     "_profile_metadata": {
         "name": "standard",
@@ -215,14 +201,14 @@ config: Dict[str, Any] = {
             "limitedLinearV for TVD bounded convection",
             "cellLimited 0.5 for tighter gradient limiting",
             "limited corrected 0.5 for stable non-orthogonal correction",
-            "pFinal = 1.0 for correct Windkessel coupling (UFinal = 1.0)"
+            "pFinal = 1.0 for correct Windkessel coupling (UFinal = 1.0)",
         ],
         "literature": [
             "OpenFOAM User Guide v11, Section 4.4 (Numerical Schemes)",
             "Jasak, H. (1996). Error Analysis for FVM. PhD Thesis, Imperial College",
-            "Roache, P.J. (1998). Verification and Validation in CFD. AIAA Journal 36(5)"
-        ]
-    }
+            "Roache, P.J. (1998). Verification and Validation in CFD. AIAA Journal 36(5)",
+        ],
+    },
 }
 
 __all__ = ["config"]

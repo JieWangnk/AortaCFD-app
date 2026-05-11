@@ -169,30 +169,27 @@ logger = logging.getLogger(__name__)
 
 # Profile registry - 3 PROFILES
 NUMERICS_PROFILES = {
-    "robust": robust_config,       # 1st order, maximum stability
-    "standard": standard_config,   # 2nd order TVD bounded (backward + limitedLinearV)
-    "precise": precise_config,     # 2nd order minimal diffusion (CN 0.9 + LUST)
+    "robust": robust_config,  # 1st order, maximum stability
+    "standard": standard_config,  # 2nd order TVD bounded (backward + limitedLinearV)
+    "precise": precise_config,  # 2nd order minimal diffusion (CN 0.9 + LUST)
 }
 
 # Deprecated profile mapping for helpful error messages
 DEPRECATED_PROFILES = {
-    "conservative": {
-        "replacement": "robust",
-        "reason": "Identical schemes (Euler + upwind), simplified naming"
-    },
+    "conservative": {"replacement": "robust", "reason": "Identical schemes (Euler + upwind), simplified naming"},
     "publication": {
         "replacement": "precise",
-        "reason": "Misleading name removed. LUST scheme in 'precise' has minimal diffusion. Note: profile choice alone does not make results publication-ready - convergence study required."
+        "reason": "Misleading name removed. LUST scheme in 'precise' has minimal diffusion. Note: profile choice alone does not make results publication-ready - convergence study required.",
     },
     "aggressive": {
         "replacement": "precise",
         "reason": "Pure central differencing is unstable. LUST provides comparable accuracy with stability.",
-        "note": "If you need unbounded schemes for DNS, manually override divSchemes in your config."
+        "note": "If you need unbounded schemes for DNS, manually override divSchemes in your config.",
     },
     "accurate": {
         "replacement": "precise",
-        "reason": "Consolidated into 3-profile system. 'precise' (LUST + CrankNicolson) has lower diffusion than 'accurate' (linearUpwind + backward) while maintaining stability."
-    }
+        "reason": "Consolidated into 3-profile system. 'precise' (LUST + CrankNicolson) has lower diffusion than 'accurate' (linearUpwind + backward) while maintaining stability.",
+    },
 }
 
 # Profile metadata for quick reference
@@ -206,7 +203,7 @@ PROFILE_METADATA = {
         "physics_models": ["laminar", "rans", "les"],
         "best_for": "debug runs and stability testing",
         "limitations": "high numerical diffusion masks physics",
-        "mesh_requirements": "orthogonality > 50°, skewness < 4"
+        "mesh_requirements": "orthogonality > 50°, skewness < 4",
     },
     "standard": {
         "order_of_accuracy": 2,
@@ -215,7 +212,7 @@ PROFILE_METADATA = {
         "intended_use": "production runs, clinical studies, Windkessel outlets",
         "physics_models": ["laminar", "rans", "les"],
         "best_for": "stable production simulations with 2nd order accuracy",
-        "mesh_requirements": "orthogonality > 50°, skewness < 4"
+        "mesh_requirements": "orthogonality > 50°, skewness < 4",
     },
     "precise": {
         "order_of_accuracy": 2,
@@ -225,8 +222,8 @@ PROFILE_METADATA = {
         "physics_models": ["laminar", "rans", "les"],
         "best_for": "LES (LUST preserves turbulence), minimal diffusion cases",
         "mesh_requirements": "orthogonality > 70°, skewness < 2, y+ < 1 for LES",
-        "note": "LUST is REQUIRED for LES to preserve resolved turbulence"
-    }
+        "note": "LUST is REQUIRED for LES to preserve resolved turbulence",
+    },
 }
 
 
@@ -251,7 +248,7 @@ def get_profile(name: str) -> Dict[str, Any]:
     # Check if using deprecated profile name - auto-migrate with warning
     if name in DEPRECATED_PROFILES:
         info = DEPRECATED_PROFILES[name]
-        replacement = info['replacement']
+        replacement = info["replacement"]
         warning_msg = (
             f"\n{'='*70}\n"
             f"⚠️  DEPRECATED PROFILE: '{name}' → auto-migrated to '{replacement}'\n"
@@ -265,7 +262,7 @@ def get_profile(name: str) -> Dict[str, Any]:
             f"\nPlease update your config to silence this warning:\n"
             f'  "numerics": {{\n'
             f'    "profile": "{replacement}"  // ← Change from "{name}"\n'
-            f'  }}\n'
+            f"  }}\n"
             f"{'='*70}\n"
         )
         logger.warning(warning_msg)
@@ -275,10 +272,7 @@ def get_profile(name: str) -> Dict[str, Any]:
     # Check if profile exists
     if name not in NUMERICS_PROFILES:
         available = ", ".join(NUMERICS_PROFILES.keys())
-        raise ValueError(
-            f"Unknown numeric profile '{name}'. "
-            f"Available profiles: {available}"
-        )
+        raise ValueError(f"Unknown numeric profile '{name}'. " f"Available profiles: {available}")
 
     return NUMERICS_PROFILES[name]
 
@@ -301,7 +295,7 @@ def list_profiles() -> Dict[str, Dict[str, Any]]:
             "stability": PROFILE_METADATA[name]["stability"],
             "use": PROFILE_METADATA[name]["intended_use"],
             "physics": PROFILE_METADATA[name]["physics_models"],
-            "best_for": PROFILE_METADATA[name]["best_for"]
+            "best_for": PROFILE_METADATA[name]["best_for"],
         }
         for name in NUMERICS_PROFILES.keys()
     }
@@ -354,9 +348,9 @@ def recommend_profile(mesh_quality: dict, physics_model: str = "rans", objective
     if objective in ("convergence", "validation"):
         if ortho > 70 and skew < 2:
             logger.info(
-                f"Recommending 'precise' profile (minimal numerical diffusion). "
-                f"REMINDER: Profile choice does not guarantee solution accuracy - "
-                f"mesh independence study required."
+                "Recommending 'precise' profile (minimal numerical diffusion). "
+                "REMINDER: Profile choice does not guarantee solution accuracy - "
+                "mesh independence study required."
             )
             return "precise"
         else:

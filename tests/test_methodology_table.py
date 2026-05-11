@@ -34,88 +34,92 @@ class TestMethodologyProfileTable:
 
     def test_numerics_profiles_exist(self):
         """Verify all numeric profiles mentioned in documentation exist."""
-        documented_profiles = ['robust', 'standard', 'precise']
+        documented_profiles = ["robust", "standard", "precise"]
 
         for profile in documented_profiles:
-            assert profile in NUMERICS_PROFILES, \
-                f"Documented profile '{profile}' not found in NUMERICS_PROFILES"
+            assert profile in NUMERICS_PROFILES, f"Documented profile '{profile}' not found in NUMERICS_PROFILES"
 
     def test_robust_profile_specifications(self):
         """Verify robust profile matches methodology description."""
-        profile = NUMERICS_PROFILES['robust']
+        profile = NUMERICS_PROFILES["robust"]
 
         # Should be first-order (upwind)
-        assert profile['divSchemes']['div(phi,U)'] == 'Gauss upwind', \
-            "Robust profile should use first-order upwind for velocity"
+        assert (
+            profile["divSchemes"]["div(phi,U)"] == "Gauss upwind"
+        ), "Robust profile should use first-order upwind for velocity"
 
         # Time integration should be Euler (first-order)
-        assert profile['ddtSchemes']['default'] == 'Euler', \
-            "Robust profile should use Euler time integration"
+        assert profile["ddtSchemes"]["default"] == "Euler", "Robust profile should use Euler time integration"
 
         # Correctors - should be moderate with convergence-based exit (25 max outer correctors)
-        assert profile['solvers']['PIMPLE']['nOuterCorrectors'] == 25, \
-            "Robust profile should use 25 max outer correctors (convergence-based exit)"
-        assert 'outerCorrectorResidualControl' in profile['solvers']['PIMPLE'], \
-            "Robust profile must have outerCorrectorResidualControl for early exit"
+        assert (
+            profile["solvers"]["PIMPLE"]["nOuterCorrectors"] == 25
+        ), "Robust profile should use 25 max outer correctors (convergence-based exit)"
+        assert (
+            "outerCorrectorResidualControl" in profile["solvers"]["PIMPLE"]
+        ), "Robust profile must have outerCorrectorResidualControl for early exit"
 
         # Max Courant number (1.0 - first-order schemes are inherently stable)
-        assert profile['time_stepping']['max_co'] == 1.0, \
-            "Robust profile uses max_co = 1.0 (first-order schemes are stable)"
+        assert (
+            profile["time_stepping"]["max_co"] == 1.0
+        ), "Robust profile uses max_co = 1.0 (first-order schemes are stable)"
 
         # Order of accuracy
-        assert profile['_profile_metadata']['order_of_accuracy'] == 1, \
-            "Robust profile should be first-order accurate"
+        assert profile["_profile_metadata"]["order_of_accuracy"] == 1, "Robust profile should be first-order accurate"
 
     def test_standard_profile_specifications(self):
         """Verify standard profile matches methodology description."""
-        profile = NUMERICS_PROFILES['standard']
+        profile = NUMERICS_PROFILES["standard"]
 
         # Should be second-order TVD bounded (limitedLinearV)
-        assert 'limitedLinearV' in profile['divSchemes']['div(phi,U)'], \
-            "Standard profile should use limitedLinearV (2nd order TVD bounded)"
+        assert (
+            "limitedLinearV" in profile["divSchemes"]["div(phi,U)"]
+        ), "Standard profile should use limitedLinearV (2nd order TVD bounded)"
 
         # Time integration should be backward (second-order)
-        assert profile['ddtSchemes']['default'] == 'backward', \
-            "Standard profile should use backward time integration"
+        assert profile["ddtSchemes"]["default"] == "backward", "Standard profile should use backward time integration"
 
         # Correctors - convergence-based exit (10 max outer correctors)
-        assert profile['solvers']['PIMPLE']['nOuterCorrectors'] == 10, \
-            "Standard profile should use 10 max outer correctors (convergence-based exit)"
-        assert 'outerCorrectorResidualControl' in profile['solvers']['PIMPLE'], \
-            "Standard profile must have outerCorrectorResidualControl for early exit"
+        assert (
+            profile["solvers"]["PIMPLE"]["nOuterCorrectors"] == 10
+        ), "Standard profile should use 10 max outer correctors (convergence-based exit)"
+        assert (
+            "outerCorrectorResidualControl" in profile["solvers"]["PIMPLE"]
+        ), "Standard profile must have outerCorrectorResidualControl for early exit"
 
         # Max Courant number
-        assert profile['time_stepping']['max_co'] == 0.8, \
-            "Standard profile should use max_co = 0.8"
+        assert profile["time_stepping"]["max_co"] == 0.8, "Standard profile should use max_co = 0.8"
 
         # Order of accuracy
-        assert profile['_profile_metadata']['order_of_accuracy'] == 2, \
-            "Standard profile should be second-order accurate"
+        assert (
+            profile["_profile_metadata"]["order_of_accuracy"] == 2
+        ), "Standard profile should be second-order accurate"
 
     def test_precise_profile_specifications(self):
         """Verify precise profile matches methodology description."""
-        profile = NUMERICS_PROFILES['precise']
+        profile = NUMERICS_PROFILES["precise"]
 
         # Should use LUST (minimal diffusion scheme)
-        conv_scheme = profile['divSchemes']['div(phi,U)']
-        assert 'LUST' in conv_scheme, \
-            "Precise profile should use LUST (minimal diffusion scheme)"
+        conv_scheme = profile["divSchemes"]["div(phi,U)"]
+        assert "LUST" in conv_scheme, "Precise profile should use LUST (minimal diffusion scheme)"
 
         # Time integration should be backward (2nd order implicit-explicit)
-        assert profile['ddtSchemes']['default'] == 'backward', \
-            "Precise profile should use backward time integration"
+        assert profile["ddtSchemes"]["default"] == "backward", "Precise profile should use backward time integration"
 
         # Should have tight residual tolerances (1e-8)
-        assert profile['solvers']['residualControl']['p'] <= 1e-8, \
-            "Precise profile should have tight residual tolerances (<=1e-8)"
+        assert (
+            profile["solvers"]["residualControl"]["p"] <= 1e-8
+        ), "Precise profile should have tight residual tolerances (<=1e-8)"
 
         # Max Courant number (0.5 for temporal accuracy)
-        assert profile['time_stepping']['max_co'] == 0.5, \
-            "Precise profile should use max_co = 0.5 for temporal accuracy"
+        assert (
+            profile["time_stepping"]["max_co"] == 0.5
+        ), "Precise profile should use max_co = 0.5 for temporal accuracy"
 
         # Order of accuracy (formal_order_of_accuracy in precise profile)
-        assert profile['_profile_metadata']['formal_order_of_accuracy'] == 2, \
-            "Precise profile should be second-order accurate"
+        assert (
+            profile["_profile_metadata"]["formal_order_of_accuracy"] == 2
+        ), "Precise profile should be second-order accurate"
 
 
 class TestMethodologyPhysicsModels:
@@ -127,11 +131,9 @@ class TestMethodologyPhysicsModels:
         # The base.py config should support this
         from config.base import config
 
-        assert 'physics' in config, "Base config should have physics section"
-        assert 'default_turbulence' in config['physics'], \
-            "Base config should specify default turbulence model"
-        assert config['physics']['default_turbulence'] == 'laminar', \
-            "Default turbulence should be laminar"
+        assert "physics" in config, "Base config should have physics section"
+        assert "default_turbulence" in config["physics"], "Base config should specify default turbulence model"
+        assert config["physics"]["default_turbulence"] == "laminar", "Default turbulence should be laminar"
 
     def test_rans_model_configuration(self):
         """Verify RANS k-omega SST is properly supported."""
@@ -139,10 +141,10 @@ class TestMethodologyPhysicsModels:
         # Check that divSchemes for k and omega exist in profiles
 
         for profile_name, profile in NUMERICS_PROFILES.items():
-            assert 'div(phi,k)' in profile['divSchemes'], \
-                f"Profile '{profile_name}' missing div(phi,k) scheme for RANS"
-            assert 'div(phi,omega)' in profile['divSchemes'], \
-                f"Profile '{profile_name}' missing div(phi,omega) scheme for RANS"
+            assert "div(phi,k)" in profile["divSchemes"], f"Profile '{profile_name}' missing div(phi,k) scheme for RANS"
+            assert (
+                "div(phi,omega)" in profile["divSchemes"]
+            ), f"Profile '{profile_name}' missing div(phi,omega) scheme for RANS"
 
     def test_les_model_configuration(self):
         """Verify LES WALE model support."""
@@ -164,18 +166,21 @@ class TestMethodologyMeshResolution:
 
         # Coarse: ~10 cells/diameter
         cell_size_coarse = compute_cell_size(10, D_ref)
-        assert cell_size_coarse == pytest.approx(2.0, rel=0.01), \
-            "Coarse mesh should be ~2mm (10 cells across 20mm diameter)"
+        assert cell_size_coarse == pytest.approx(
+            2.0, rel=0.01
+        ), "Coarse mesh should be ~2mm (10 cells across 20mm diameter)"
 
         # Medium: ~15 cells/diameter
         cell_size_medium = compute_cell_size(15, D_ref)
-        assert cell_size_medium == pytest.approx(1.33, rel=0.01), \
-            "Medium mesh should be ~1.33mm (15 cells across 20mm diameter)"
+        assert cell_size_medium == pytest.approx(
+            1.33, rel=0.01
+        ), "Medium mesh should be ~1.33mm (15 cells across 20mm diameter)"
 
         # Fine: ~20 cells/diameter
         cell_size_fine = compute_cell_size(20, D_ref)
-        assert cell_size_fine == pytest.approx(1.0, rel=0.01), \
-            "Fine mesh should be ~1mm (20 cells across 20mm diameter)"
+        assert cell_size_fine == pytest.approx(
+            1.0, rel=0.01
+        ), "Fine mesh should be ~1mm (20 cells across 20mm diameter)"
 
     def test_absolute_cell_size_method(self):
         """Verify absolute cell size specification exists."""
@@ -197,10 +202,9 @@ class TestMethodologyBoundaryConditions:
 
         # Test MAP calculation: MAP = dia + (sys - dia)/3
         p_sys = 120  # mmHg
-        p_dia = 80   # mmHg
+        p_dia = 80  # mmHg
         expected_map = p_dia + (p_sys - p_dia) / 3
-        assert expected_map == pytest.approx(93.33, rel=0.01), \
-            "MAP calculation should match methodology equation"
+        assert expected_map == pytest.approx(93.33, rel=0.01), "MAP calculation should match methodology equation"
 
     def test_murray_law_implementation(self):
         """Verify Murray's law flow distribution matches equation."""
@@ -212,47 +216,53 @@ class TestMethodologyBoundaryConditions:
 
         r_cubed_sum = sum(r**3 for r in radii)
 
-        Q1 = Q_total * (radii[0]**3 / r_cubed_sum)
-        Q2 = Q_total * (radii[1]**3 / r_cubed_sum)
-        Q3 = Q_total * (radii[2]**3 / r_cubed_sum)
+        Q1 = Q_total * (radii[0] ** 3 / r_cubed_sum)
+        Q2 = Q_total * (radii[1] ** 3 / r_cubed_sum)
+        Q3 = Q_total * (radii[2] ** 3 / r_cubed_sum)
 
         # Verify sum equals total
-        assert Q1 + Q2 + Q3 == pytest.approx(Q_total, rel=0.001), \
-            "Murray's law flow split should sum to total flow"
+        assert Q1 + Q2 + Q3 == pytest.approx(Q_total, rel=0.001), "Murray's law flow split should sum to total flow"
 
         # Verify Q1 > Q2 > Q3 (larger vessels get more flow)
-        assert Q1 > Q2 > Q3, \
-            "Murray's law should assign more flow to larger vessels"
+        assert Q1 > Q2 > Q3, "Murray's law should assign more flow to larger vessels"
 
 
 class TestMethodologyNumericalSchemes:
     """Test that numerical schemes match methodology descriptions."""
 
-    @pytest.mark.parametrize("profile_name,expected_gradient", [
-        ('robust', 'cellLimited Gauss linear'),
-        ('standard', 'cellLimited Gauss linear'),
-        ('precise', 'cellLimited Gauss linear'),
-    ])
+    @pytest.mark.parametrize(
+        "profile_name,expected_gradient",
+        [
+            ("robust", "cellLimited Gauss linear"),
+            ("standard", "cellLimited Gauss linear"),
+            ("precise", "cellLimited Gauss linear"),
+        ],
+    )
     def test_gradient_schemes(self, profile_name, expected_gradient):
         """Verify gradient schemes match methodology."""
         profile = NUMERICS_PROFILES[profile_name]
-        grad_scheme = profile['gradSchemes']['default']
+        grad_scheme = profile["gradSchemes"]["default"]
 
-        assert expected_gradient in grad_scheme, \
-            f"Profile '{profile_name}' should use '{expected_gradient}' for gradients"
+        assert (
+            expected_gradient in grad_scheme
+        ), f"Profile '{profile_name}' should use '{expected_gradient}' for gradients"
 
-    @pytest.mark.parametrize("profile_name,expected_laplacian", [
-        ('robust', 'Gauss linear limited'),
-        ('standard', 'Gauss linear limited'),
-        ('precise', 'Gauss linear limited'),  # All use limited for stability
-    ])
+    @pytest.mark.parametrize(
+        "profile_name,expected_laplacian",
+        [
+            ("robust", "Gauss linear limited"),
+            ("standard", "Gauss linear limited"),
+            ("precise", "Gauss linear limited"),  # All use limited for stability
+        ],
+    )
     def test_laplacian_schemes(self, profile_name, expected_laplacian):
         """Verify Laplacian schemes match methodology."""
         profile = NUMERICS_PROFILES[profile_name]
-        laplacian_scheme = profile['laplacianSchemes']['default']
+        laplacian_scheme = profile["laplacianSchemes"]["default"]
 
-        assert expected_laplacian in laplacian_scheme, \
-            f"Profile '{profile_name}' should use '{expected_laplacian}' for Laplacian"
+        assert (
+            expected_laplacian in laplacian_scheme
+        ), f"Profile '{profile_name}' should use '{expected_laplacian}' for Laplacian"
 
 
 class TestMethodologyValidation:
@@ -270,17 +280,14 @@ class TestMethodologyValidation:
         dx_medium = dx_coarse / r
         dx_fine = dx_medium / r
 
-        assert dx_medium == pytest.approx(0.707, rel=0.01), \
-            "Medium mesh should be dx/sqrt(2)"
-        assert dx_fine == pytest.approx(0.5, rel=0.01), \
-            "Fine mesh should be dx/2"
+        assert dx_medium == pytest.approx(0.707, rel=0.01), "Medium mesh should be dx/sqrt(2)"
+        assert dx_fine == pytest.approx(0.5, rel=0.01), "Fine mesh should be dx/2"
 
         # Verify this is systematic refinement
         ratio_1 = dx_coarse / dx_medium
         ratio_2 = dx_medium / dx_fine
 
-        assert ratio_1 == pytest.approx(ratio_2, rel=0.01), \
-            "Refinement ratio should be constant"
+        assert ratio_1 == pytest.approx(ratio_2, rel=0.01), "Refinement ratio should be constant"
 
 
 def test_methodology_table_is_outdated():
@@ -297,22 +304,25 @@ def test_methodology_table_is_outdated():
     - Physics model: specified separately (laminar, rans, les)
     """
     old_profile_names = [
-        'laminar_coarse', 'laminar_medium', 'laminar_fine',
-        'rans_coarse', 'rans_medium', 'rans_fine',
-        'les_medium', 'les_fine'
+        "laminar_coarse",
+        "laminar_medium",
+        "laminar_fine",
+        "rans_coarse",
+        "rans_medium",
+        "rans_fine",
+        "les_medium",
+        "les_fine",
     ]
 
     for old_profile in old_profile_names:
-        assert old_profile not in NUMERICS_PROFILES, \
-            f"Old profile '{old_profile}' should not exist in new system"
+        assert old_profile not in NUMERICS_PROFILES, f"Old profile '{old_profile}' should not exist in new system"
 
     # New 3-profile system should exist
-    new_profile_names = ['robust', 'standard', 'precise']
+    new_profile_names = ["robust", "standard", "precise"]
 
     for new_profile in new_profile_names:
-        assert new_profile in NUMERICS_PROFILES, \
-            f"New profile '{new_profile}' should exist"
+        assert new_profile in NUMERICS_PROFILES, f"New profile '{new_profile}' should exist"
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

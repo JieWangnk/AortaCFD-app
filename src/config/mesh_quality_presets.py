@@ -61,25 +61,21 @@ MESH_QUALITY_PRESETS: Dict[str, Dict[str, Any]] = {
     # Philosophy: Speed over quality - reduce iterations, relax constraints
     "draft": {
         # Reduced iterations for speed
-        "nCellsBetweenLevels": 2,       # base.py: 3 → faster but less smooth
-        "nSolveIter": 10,               # Proven: 10 works well
-        "nFeatureSnapIter": 5,          # Proven: 5 sufficient
-        "nLayerIter": 30,               # base.py: 50 → faster layer addition
-        "nRelaxedIter": 10,             # Switch to relaxed sooner
-
+        "nCellsBetweenLevels": 2,  # base.py: 3 → faster but less smooth
+        "nSolveIter": 10,  # Proven: 10 works well
+        "nFeatureSnapIter": 5,  # Proven: 5 sufficient
+        "nLayerIter": 30,  # base.py: 50 → faster layer addition
+        "nRelaxedIter": 10,  # Switch to relaxed sooner
         # Relaxed quality thresholds
-        "maxNonOrtho": 70,              # base.py: 65 → more permissive
-        "maxInternalSkewness": 10,      # More permissive for draft
-
+        "maxNonOrtho": 70,  # base.py: 65 → more permissive
+        "maxInternalSkewness": 10,  # More permissive for draft
         # Minimal smoothing for speed
-        "nSmoothSurfaceNormals": 10,    # Reduced from standard
-        "nSmoothThickness": 10,         # Reduced from standard
-
+        "nSmoothSurfaceNormals": 10,  # Reduced from standard
+        "nSmoothThickness": 10,  # Reduced from standard
         # Proven parameters
-        "snapTolerance": 1.0,           # Proven: 1.0 works better than 2.0
-        "featureAngle": 160,            # Conservative layer coverage
+        "snapTolerance": 1.0,  # Proven: 1.0 works better than 2.0
+        "featureAngle": 160,  # Conservative layer coverage
     },
-
     # =========================================================================
     # STANDARD: Proven robust for cardiovascular CFD [RECOMMENDED]
     # =========================================================================
@@ -89,18 +85,15 @@ MESH_QUALITY_PRESETS: Dict[str, Dict[str, Any]] = {
     "standard": {
         # Base.py now has tightened defaults, standard preset uses base defaults
         # Only override what differs from the new tightened base.py
-
         # Layer parameters
-        "nSmoothSurfaceNormals": 30,    # Match base.py default
-        "nSmoothThickness": 15,         # Match base.py default
-        "nLayerIter": 100,              # Match base.py default
-        "featureAngle": 150,            # Match base.py default
-        "maxFaceThicknessRatio": 0.4,   # Match base.py default
-
+        "nSmoothSurfaceNormals": 30,  # Match base.py default
+        "nSmoothThickness": 15,  # Match base.py default
+        "nLayerIter": 100,  # Match base.py default
+        "featureAngle": 150,  # Match base.py default
+        "maxFaceThicknessRatio": 0.4,  # Match base.py default
         # Refinement transitions
-        "nCellsBetweenLevels": 3,       # DOE: insensitive
+        "nCellsBetweenLevels": 3,  # DOE: insensitive
     },
-
     # =========================================================================
     # HIGH_QUALITY: Maximum quality for LES and second-order schemes
     # =========================================================================
@@ -110,49 +103,40 @@ MESH_QUALITY_PRESETS: Dict[str, Dict[str, Any]] = {
     # Meshing time: ~5-10x baseline
     "high_quality": {
         # Snap parameters - maximum iterations for complex geometry
-        "snapTolerance": 2.0,           # Higher tolerance for better snapping
-        "nSolveIter": 150,              # Maximum iterations for complex geometry
-        "nFeatureSnapIter": 15,         # More iterations for feature edges
-
+        "snapTolerance": 2.0,  # Higher tolerance for better snapping
+        "nSolveIter": 150,  # Maximum iterations for complex geometry
+        "nFeatureSnapIter": 15,  # More iterations for feature edges
         # Enhanced smoothing for low skewness and no negative volumes
-        "nSmoothSurfaceNormals": 50,    # Maximum for smoother surface
-        "nSmoothThickness": 20,         # Increased smoothing
-        "nSmoothPatch": 10,             # More pre-snap smoothing
-        "nSmoothNormals": 10,           # Additional normal smoothing
-        "nSmoothDisplacement": 20,      # More displacement smoothing
-
+        "nSmoothSurfaceNormals": 50,  # Maximum for smoother surface
+        "nSmoothThickness": 20,  # Increased smoothing
+        "nSmoothPatch": 10,  # More pre-snap smoothing
+        "nSmoothNormals": 10,  # Additional normal smoothing
+        "nSmoothDisplacement": 20,  # More displacement smoothing
         # Relaxation iterations
-        "nRelaxIter": 15,               # More relaxation iterations
-
+        "nRelaxIter": 15,  # More relaxation iterations
         # Layer iterations - maximum effort
-        "nLayerIter": 150,              # More iterations for complex cases
-        "nRelaxedIter": 75,             # More iterations before relaxing
-        "featureAngle": 140,            # Conservative for better quality
-
+        "nLayerIter": 150,  # More iterations for complex cases
+        "nRelaxedIter": 75,  # More iterations before relaxing
+        "featureAngle": 140,  # Conservative for better quality
         # Conservative expansion ratio
-        "expansionRatio": 1.08,         # Very gentle growth for LES
-
+        "expansionRatio": 1.08,  # Very gentle growth for LES
         # Transition smoothness
-        "nCellsBetweenLevels": 4,       # More cells between levels for smoothness
-
+        "nCellsBetweenLevels": 4,  # More cells between levels for smoothness
         # STRICT quality thresholds for LES and second-order schemes
-        "maxNonOrtho": 55,              # Strict non-orthogonality for LES
-        "maxInternalSkewness": 2.0,     # STRICT: Required for LES/second-order
-        "maxBoundarySkewness": 3,       # Very strict boundary skewness for WSS
-
+        "maxNonOrtho": 55,  # Strict non-orthogonality for LES
+        "maxInternalSkewness": 2.0,  # STRICT: Required for LES/second-order
+        "maxBoundarySkewness": 3,  # Very strict boundary skewness for WSS
         # Cell quality - ultra-tight to prevent negative volumes
-        "minVol": 1e-20,                # Ultra-tight volume threshold
-        "minDeterminant": 0.02,         # Stricter determinant
-        "minTwist": 0.005,              # Stricter twist
-
+        "minVol": 1e-20,  # Ultra-tight volume threshold
+        "minDeterminant": 0.02,  # Stricter determinant
+        "minTwist": 0.005,  # Stricter twist
         # Layer coverage
-        "maxFaceThicknessRatio": 0.3,   # Even lower for quality
+        "maxFaceThicknessRatio": 0.3,  # Even lower for quality
         "maxThicknessToMedialRatio": 0.2,  # Tighter for narrow regions
-
         # Mesh quality controls
-        "minMedianAxisAngle": 90,       # Better medial axis for layers
-        "minThickness": 0.1,            # Conservative minimum thickness
-        "nSmoothScale": 8,              # More smoothing iterations
+        "minMedianAxisAngle": 90,  # Better medial axis for layers
+        "minThickness": 0.1,  # Conservative minimum thickness
+        "nSmoothScale": 8,  # More smoothing iterations
     },
 }
 
@@ -172,10 +156,7 @@ def get_mesh_preset(preset_name: str) -> Dict[str, Any]:
     """
     if preset_name not in MESH_QUALITY_PRESETS:
         valid_presets = list(MESH_QUALITY_PRESETS.keys())
-        raise ValueError(
-            f"Unknown mesh quality preset: '{preset_name}'. "
-            f"Valid options: {valid_presets}"
-        )
+        raise ValueError(f"Unknown mesh quality preset: '{preset_name}'. " f"Valid options: {valid_presets}")
     return MESH_QUALITY_PRESETS[preset_name].copy()
 
 
@@ -271,8 +252,8 @@ def print_preset_info():
         print(f"  Quality: {info['quality_level']}")
         print(f"  Time: {info['relative_time']} baseline")
         print(f"  Key changes: {info['key_changes']}")
-        print(f"  Use cases:")
-        for use_case in info['use_cases']:
+        print("  Use cases:")
+        for use_case in info["use_cases"]:
             print(f"    - {use_case}")
 
         # Show override count

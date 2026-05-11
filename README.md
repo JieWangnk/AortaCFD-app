@@ -40,7 +40,7 @@ pip install -e ".[dev]"           # runtime + test/lint/security tools
 Verify the install:
 
 ```bash
-python run_patient.py --version       # → AortaCFD 1.1.0
+python run_patient.py --version       # → AortaCFD 1.1.1
 python run_patient.py --list          # → BPM120, PAT002, VOL04
 ```
 
@@ -51,6 +51,18 @@ source /opt/openfoam12/etc/bashrc
 ```
 
 The `case` step (generates OpenFOAM dictionaries) and `postprocess` step work without OpenFOAM sourced — useful for quick config sanity-checks.
+
+### HPC / non-default OpenFOAM installs
+
+On HPC clusters where OpenFOAM is sourced from a non-default location, point the workflow at the right `bashrc` via either env variable (checked in this order):
+
+```bash
+export OPENFOAM_ENV_PATH=/opt/openfoam12/etc/bashrc      # preferred
+# or honour Foundation's own variable:
+export foamDotFile=/share/apps/openfoam/12/etc/bashrc
+```
+
+`run_patient.py` and `run_batch.py` pick these up automatically — no config edit needed.
 
 If you plan to use 3-element Windkessel outlets, install the custom boundary condition:
 
@@ -429,6 +441,8 @@ Post-processing exports percentile-based quantities of interest:
 | `tawss_p95_pa` | Pa | 95th percentile TAWSS |
 | `wss_p99_pa` | Pa | 99th percentile peak systolic WSS |
 | `osi_mean_masked` | - | Mean OSI where TAWSS > 0.5 Pa |
+| `rrt_p99_per_pa` | 1/Pa | 99th percentile relative residence time |
+| `rrt_p95_per_pa` | 1/Pa | 95th percentile relative residence time |
 
 Percentiles (p99, p95) are used instead of maximum values because max WSS is sensitive to mesh topology artifacts at refinement boundaries and corner cells. Percentiles provide robust descriptors that converge with mesh refinement.
 
@@ -540,7 +554,7 @@ If you use AortaCFD in academic work, please cite via `CITATION.cff`.
   title={AortaCFD: Patient-Specific Aortic Blood Flow Simulation},
   author={Wang, Jie},
   year={2026},
-  version={1.1.0},
+  version={1.1.1},
   url={https://github.com/JieWangnk/AortaCFD-app}
 }
 ```

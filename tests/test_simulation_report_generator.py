@@ -59,10 +59,10 @@ class TestGenerateFullReport:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'geometry': {'case_name': 'PAT001'},
-                'simulation_settings': {'analysis_type': 'laminar', 'solver_type': 'pimpleFoam'},
-                'physics': {'blood_density': 1060, 'nu': 3.5e-6},
-                'openfoam_version': '8'
+                "geometry": {"case_name": "PAT001"},
+                "simulation_settings": {"analysis_type": "laminar", "solver_type": "pimpleFoam"},
+                "physics": {"blood_density": 1060, "nu": 3.5e-6},
+                "openfoam_version": "8",
             }
 
             report_path = generator.generate_full_report(config)
@@ -81,11 +81,11 @@ class TestGenerateFullReport:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {'openfoam_version': '8'}
+            config = {"openfoam_version": "8"}
             geometry_info = {
-                'inlet': {'area': 0.001, 'radius': 0.018},
-                'outlet1': {'area': 0.0005, 'radius': 0.013},
-                'wall_aorta': {'area': 0.01}
+                "inlet": {"area": 0.001, "radius": 0.018},
+                "outlet1": {"area": 0.0005, "radius": 0.013},
+                "wall_aorta": {"area": 0.01},
             }
 
             report_path = generator.generate_full_report(config, geometry_info=geometry_info)
@@ -174,11 +174,7 @@ class TestSaveConfigJson:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {
-                'key1': 'value1',
-                'key2': 123,
-                '_internal': 'hidden'
-            }
+            config = {"key1": "value1", "key2": 123, "_internal": "hidden"}
             output_path = generator.report_dir / "test_config.json"
 
             generator._save_config_json(config, output_path, "2024-01-01 12:00:00")
@@ -188,9 +184,9 @@ class TestSaveConfigJson:
             with open(output_path) as f:
                 saved = json.load(f)
 
-            assert '_metadata' in saved
-            assert 'key1' in saved
-            assert saved['key1'] == 'value1'
+            assert "_metadata" in saved
+            assert "key1" in saved
+            assert saved["key1"] == "value1"
 
 
 class TestHelperMethods:
@@ -203,7 +199,7 @@ class TestHelperMethods:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {'physics': {'blood_density': 1060}}
+            config = {"physics": {"blood_density": 1060}}
             density = generator._get_density(config)
 
             assert density == "1060"
@@ -215,7 +211,7 @@ class TestHelperMethods:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {'physical_properties': {'density': 1050}}
+            config = {"physical_properties": {"density": 1050}}
             density = generator._get_density(config)
 
             assert density == "1050"
@@ -238,7 +234,7 @@ class TestHelperMethods:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {'physics': {'nu': 3.5e-6}}
+            config = {"physics": {"nu": 3.5e-6}}
             nu = generator._get_kinematic_viscosity(config)
 
             assert "3.5" in nu
@@ -251,12 +247,7 @@ class TestHelperMethods:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {
-                'physics': {
-                    'nu': 3.5e-6,
-                    'blood_density': 1060
-                }
-            }
+            config = {"physics": {"nu": 3.5e-6, "blood_density": 1060}}
             mu = generator._calculate_dynamic_viscosity(config)
 
             # μ = ν * ρ = 3.5e-6 * 1060 ≈ 3.71e-3
@@ -270,8 +261,8 @@ class TestHelperMethods:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'config_source': {'profile_key': 'sim_laminar_coarse'},
-                'profile_metadata': {'display_name': 'Laminar Coarse'}
+                "config_source": {"profile_key": "sim_laminar_coarse"},
+                "profile_metadata": {"display_name": "Laminar Coarse"},
             }
             display = generator._get_profile_display(config)
 
@@ -285,12 +276,7 @@ class TestHelperMethods:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {
-                'simulation_settings': {
-                    'analysis_type': 'coarse',
-                    'solver_type': 'laminar'
-                }
-            }
+            config = {"simulation_settings": {"analysis_type": "coarse", "solver_type": "laminar"}}
             name = generator._get_profile_name(config)
 
             assert name == "sim_laminar_coarse"
@@ -302,9 +288,7 @@ class TestHelperMethods:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {
-                'config_source': {'case_config_file': '/path/to/config.json'}
-            }
+            config = {"config_source": {"case_config_file": "/path/to/config.json"}}
             path = generator._get_case_config_path(config)
 
             assert "/path/to/config.json" in path
@@ -320,7 +304,7 @@ class TestDescribeFlowRegime:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {'physics': {'simulation_type': 'laminar'}}
+            config = {"physics": {"simulation_type": "laminar"}}
             desc = generator._describe_flow_regime(config)
 
             assert "Laminar" in desc
@@ -333,10 +317,7 @@ class TestDescribeFlowRegime:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {
-                'physics': {'simulation_type': 'RANS'},
-                'turbulence_settings': {'RASModel': 'kOmegaSST'}
-            }
+            config = {"physics": {"simulation_type": "RANS"}, "turbulence_settings": {"RASModel": "kOmegaSST"}}
             desc = generator._describe_flow_regime(config)
 
             assert "RANS" in desc
@@ -349,7 +330,7 @@ class TestDescribeFlowRegime:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {'physics': {'simulation_type': 'LES', 'subgrid_model': 'WALE'}}
+            config = {"physics": {"simulation_type": "LES", "subgrid_model": "WALE"}}
             desc = generator._describe_flow_regime(config)
 
             assert "LES" in desc
@@ -367,18 +348,15 @@ class TestGenerateSummaryTxt:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'simulation_settings': {'analysis_type': 'laminar', 'solver_type': 'pimpleFoam'},
-                'boundary_conditions': {
-                    'inlet': {'type': 'velocity'},
-                    'outlets': {'type': 'pressure'}
+                "simulation_settings": {"analysis_type": "laminar", "solver_type": "pimpleFoam"},
+                "boundary_conditions": {"inlet": {"type": "velocity"}, "outlets": {"type": "pressure"}},
+                "mesh": {
+                    "resolution_level": "medium",
+                    "mesh_resolution": {"target_cell_size_mm": 0.5},
+                    "boundary_layers": {"n_surface_layers": 5},
                 },
-                'mesh': {
-                    'resolution_level': 'medium',
-                    'mesh_resolution': {'target_cell_size_mm': 0.5},
-                    'boundary_layers': {'n_surface_layers': 5}
-                },
-                'physics': {'blood_density': 1060, 'nu': 3.5e-6},
-                'simulation_control': {'end_time': 1.0, 'writeInterval': 0.01}
+                "physics": {"blood_density": 1060, "nu": 3.5e-6},
+                "simulation_control": {"end_time": 1.0, "writeInterval": 0.01},
             }
 
             summary = generator._generate_summary_txt(config, "2024-01-01 12:00:00")
@@ -400,12 +378,12 @@ class TestFormatGeometrySection:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'geometry': {
-                    'case_name': 'PAT001',
-                    'scale_factor': 0.001,
-                    'inlet_keywords_ordered': 'inlet',
-                    'outlet_keywords_ordered': ['outlet1', 'outlet2'],
-                    'wall_keywords_ordered': 'wall'
+                "geometry": {
+                    "case_name": "PAT001",
+                    "scale_factor": 0.001,
+                    "inlet_keywords_ordered": "inlet",
+                    "outlet_keywords_ordered": ["outlet1", "outlet2"],
+                    "wall_keywords_ordered": "wall",
                 }
             }
 
@@ -423,11 +401,8 @@ class TestFormatGeometrySection:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {'geometry': {}}
-            geometry_info = {
-                'inlet': {'area': 0.001, 'radius': 0.018},
-                'outlet1': {'area': 0.0005, 'radius': 0.013}
-            }
+            config = {"geometry": {}}
+            geometry_info = {"inlet": {"area": 0.001, "radius": 0.018}, "outlet1": {"area": 0.0005, "radius": 0.013}}
 
             section = generator._format_geometry_section(config, geometry_info)
 
@@ -445,19 +420,19 @@ class TestGenerateJsonReport:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {'openfoam_version': '8'}
+            config = {"openfoam_version": "8"}
             timestamp = "2024-01-01 12:00:00"
 
             report = generator._generate_json_report(config, None, None, timestamp)
 
-            assert 'metadata' in report
-            assert 'configuration' in report
-            assert 'geometry' in report
-            assert 'mesh_quality' in report
-            assert 'reproducibility' in report
+            assert "metadata" in report
+            assert "configuration" in report
+            assert "geometry" in report
+            assert "mesh_quality" in report
+            assert "reproducibility" in report
 
-            assert report['metadata']['case_name'] == "PAT001"
-            assert report['metadata']['openfoam_version'] == '8'
+            assert report["metadata"]["case_name"] == "PAT001"
+            assert report["metadata"]["openfoam_version"] == "8"
 
 
 class TestConvertMdToTxtExtended:
@@ -555,7 +530,7 @@ class TestDescribeFlowRegimeExtended:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {'physics': {'simulation_type': 'TURBULENT'}}
+            config = {"physics": {"simulation_type": "TURBULENT"}}
             desc = generator._describe_flow_regime(config)
 
             assert "RANS" in desc or "Turbulent" in desc
@@ -567,7 +542,7 @@ class TestDescribeFlowRegimeExtended:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {'physics': {'default_turbulence': 'laminar'}}
+            config = {"physics": {"default_turbulence": "laminar"}}
             desc = generator._describe_flow_regime(config)
 
             assert "Laminar" in desc
@@ -579,7 +554,7 @@ class TestDescribeFlowRegimeExtended:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {'physics': {}}  # No simulation type
+            config = {"physics": {}}  # No simulation type
             desc = generator._describe_flow_regime(config)
 
             assert "Unknown" in desc
@@ -595,13 +570,10 @@ class TestProfileDisplay:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {
-                'config_source': {'profile_key': 'sim_laminar_coarse'},
-                'profile_metadata': {}  # No display_name
-            }
+            config = {"config_source": {"profile_key": "sim_laminar_coarse"}, "profile_metadata": {}}  # No display_name
             display = generator._get_profile_display(config)
 
-            assert display == 'sim_laminar_coarse'
+            assert display == "sim_laminar_coarse"
 
     def test_get_profile_display_fallback(self):
         """Test profile display fallback to _get_profile_name."""
@@ -610,15 +582,10 @@ class TestProfileDisplay:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {
-                'simulation_settings': {
-                    'analysis_type': 'coarse',
-                    'solver_type': 'laminar'
-                }
-            }
+            config = {"simulation_settings": {"analysis_type": "coarse", "solver_type": "laminar"}}
             display = generator._get_profile_display(config)
 
-            assert display == 'sim_laminar_coarse'
+            assert display == "sim_laminar_coarse"
 
 
 class TestDynamicViscosityCalculation:
@@ -631,12 +598,7 @@ class TestDynamicViscosityCalculation:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {
-                'physics': {
-                    'nu': 'invalid',
-                    'blood_density': 1060
-                }
-            }
+            config = {"physics": {"nu": "invalid", "blood_density": 1060}}
             mu = generator._calculate_dynamic_viscosity(config)
 
             assert mu == "N/A"
@@ -648,7 +610,7 @@ class TestDynamicViscosityCalculation:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {'physics': {'nu': 3.5e-6}}  # Missing density
+            config = {"physics": {"nu": 3.5e-6}}  # Missing density
             mu = generator._calculate_dynamic_viscosity(config)
 
             assert mu == "N/A"
@@ -664,12 +626,7 @@ class TestFormatGeometrySectionExtended:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {
-                'geometry': {
-                    'case_name': 'PAT001',
-                    'outlet_keywords_ordered': 'outlet1'  # String, not list
-                }
-            }
+            config = {"geometry": {"case_name": "PAT001", "outlet_keywords_ordered": "outlet1"}}  # String, not list
 
             section = generator._format_geometry_section(config, None)
 
@@ -682,12 +639,12 @@ class TestFormatGeometrySectionExtended:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {'geometry': {}}
+            config = {"geometry": {}}
             geometry_info = {
-                'inlet': {'area': 0.001, 'radius': 0.018},
-                'outlet1': {'area': 0.0005, 'radius': 0.013},
-                'outlet2': {'area': 0.0003, 'radius': 0.01},
-                'wall': {'area': 0.01}
+                "inlet": {"area": 0.001, "radius": 0.018},
+                "outlet1": {"area": 0.0005, "radius": 0.013},
+                "outlet2": {"area": 0.0003, "radius": 0.01},
+                "wall": {"area": 0.01},
             }
 
             section = generator._format_geometry_section(config, geometry_info)
@@ -708,14 +665,14 @@ class TestFormatBoundaryConditions:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'boundary_conditions': {
-                    'inlet': {
-                        'type': 'TIMEVARYING',
-                        'csv_file': 'flow.csv',
-                        'data_type': 'flowrate',
-                        'profile': 'parabolic'
+                "boundary_conditions": {
+                    "inlet": {
+                        "type": "TIMEVARYING",
+                        "csv_file": "flow.csv",
+                        "data_type": "flowrate",
+                        "profile": "parabolic",
                     },
-                    'outlets': {'type': 'ZEROGRADIENT'}
+                    "outlets": {"type": "ZEROGRADIENT"},
                 }
             }
 
@@ -734,14 +691,14 @@ class TestFormatBoundaryConditions:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'boundary_conditions': {
-                    'inlet': {
-                        'type': 'WOMERSLEY',
-                        'csv_file': 'waveform.csv',
-                        'womersley_number': 12.5,
-                        'fourier_modes': 10
+                "boundary_conditions": {
+                    "inlet": {
+                        "type": "WOMERSLEY",
+                        "csv_file": "waveform.csv",
+                        "womersley_number": 12.5,
+                        "fourier_modes": 10,
                     },
-                    'outlets': {'type': 'ZEROGRADIENT'}
+                    "outlets": {"type": "ZEROGRADIENT"},
                 }
             }
 
@@ -760,12 +717,9 @@ class TestFormatBoundaryConditions:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'boundary_conditions': {
-                    'inlet': {
-                        'type': 'CONSTANT',
-                        'cardiac_output': 5.5
-                    },
-                    'outlets': {'type': 'ZEROGRADIENT'}
+                "boundary_conditions": {
+                    "inlet": {"type": "CONSTANT", "cardiac_output": 5.5},
+                    "outlets": {"type": "ZEROGRADIENT"},
                 }
             }
 
@@ -783,12 +737,9 @@ class TestFormatBoundaryConditions:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'boundary_conditions': {
-                    'inlet': {
-                        'type': 'CONSTANT',
-                        'velocity_magnitude': 0.5
-                    },
-                    'outlets': {'type': 'ZEROGRADIENT'}
+                "boundary_conditions": {
+                    "inlet": {"type": "CONSTANT", "velocity_magnitude": 0.5},
+                    "outlets": {"type": "ZEROGRADIENT"},
                 }
             }
 
@@ -805,18 +756,18 @@ class TestFormatBoundaryConditions:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'boundary_conditions': {
-                    'inlet': {'type': 'CONSTANT', 'velocity': 0.5},
-                    'outlets': {
-                        'type': '3EWINDKESSEL',
-                        'windkessel_settings': {
-                            'systolic_pressure': 120,
-                            'diastolic_pressure': 80,
-                            'venous_pressure': 5,
-                            'flow_split': 'auto',
-                            'outlet_parameters': {'outlet1': {'R': 1e8, 'C': 1e-9, 'Z': 1e7}}
-                        }
-                    }
+                "boundary_conditions": {
+                    "inlet": {"type": "CONSTANT", "velocity": 0.5},
+                    "outlets": {
+                        "type": "3EWINDKESSEL",
+                        "windkessel_settings": {
+                            "systolic_pressure": 120,
+                            "diastolic_pressure": 80,
+                            "venous_pressure": 5,
+                            "flow_split": "auto",
+                            "outlet_parameters": {"outlet1": {"R": 1e8, "C": 1e-9, "Z": 1e7}},
+                        },
+                    },
                 }
             }
 
@@ -835,16 +786,16 @@ class TestFormatBoundaryConditions:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'boundary_conditions': {
-                    'inlet': {'type': 'CONSTANT', 'velocity': 0.5},
-                    'outlets': {
-                        'type': '3EWINDKESSEL',
-                        'windkessel_settings': {
-                            'systolic_pressure': 120,
-                            'diastolic_pressure': 80,
-                            'flow_split': {'outlet1': 0.7, 'outlet2': 0.3}
-                        }
-                    }
+                "boundary_conditions": {
+                    "inlet": {"type": "CONSTANT", "velocity": 0.5},
+                    "outlets": {
+                        "type": "3EWINDKESSEL",
+                        "windkessel_settings": {
+                            "systolic_pressure": 120,
+                            "diastolic_pressure": 80,
+                            "flow_split": {"outlet1": 0.7, "outlet2": 0.3},
+                        },
+                    },
                 }
             }
 
@@ -860,16 +811,12 @@ class TestFormatBoundaryConditions:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'boundary_conditions': {
-                    'inlet': {'type': 'CONSTANT', 'velocity': 0.5},
-                    'outlets': {
-                        'type': '3EWINDKESSEL',
-                        'windkessel_settings': {
-                            'systolic_pressure': 120,
-                            'diastolic_pressure': 80,
-                            'flow_split': 70
-                        }
-                    }
+                "boundary_conditions": {
+                    "inlet": {"type": "CONSTANT", "velocity": 0.5},
+                    "outlets": {
+                        "type": "3EWINDKESSEL",
+                        "windkessel_settings": {"systolic_pressure": 120, "diastolic_pressure": 80, "flow_split": 70},
+                    },
                 }
             }
 
@@ -885,9 +832,9 @@ class TestFormatBoundaryConditions:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'boundary_conditions': {
-                    'inlet': {'type': 'CONSTANT', 'velocity': 0.5},
-                    'outlets': {'type': 'zeroGradient'}
+                "boundary_conditions": {
+                    "inlet": {"type": "CONSTANT", "velocity": 0.5},
+                    "outlets": {"type": "zeroGradient"},
                 }
             }
 
@@ -904,9 +851,9 @@ class TestFormatBoundaryConditions:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'boundary_conditions': {
-                    'inlet': {'type': 'CONSTANT', 'velocity': 0.5},
-                    'outlets': {'type': 'fixedValue', 'pressure': 10000}
+                "boundary_conditions": {
+                    "inlet": {"type": "CONSTANT", "velocity": 0.5},
+                    "outlets": {"type": "fixedValue", "pressure": 10000},
                 }
             }
 
@@ -923,13 +870,10 @@ class TestFormatBoundaryConditions:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'boundary_conditions': {
-                    'inlet': {'type': 'CONSTANT', 'velocity': 0.5},
-                    'outlets': {'type': 'ZEROGRADIENT'},
-                    'walls': {
-                        'type': 'no_slip',
-                        'roughness': 0.001
-                    }
+                "boundary_conditions": {
+                    "inlet": {"type": "CONSTANT", "velocity": 0.5},
+                    "outlets": {"type": "ZEROGRADIENT"},
+                    "walls": {"type": "no_slip", "roughness": 0.001},
                 }
             }
 
@@ -951,12 +895,9 @@ class TestFormatMeshSettings:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'mesh': {
-                    'resolution_level': 'custom',
-                    'mesh_resolution': {
-                        'target_cell_size_mm': 0.8,
-                        'base_cell_size_mm': 1.2
-                    }
+                "mesh": {
+                    "resolution_level": "custom",
+                    "mesh_resolution": {"target_cell_size_mm": 0.8, "base_cell_size_mm": 1.2},
                 }
             }
 
@@ -973,13 +914,13 @@ class TestFormatMeshSettings:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'mesh': {
-                    'resolution_level': 'medium',
-                    'boundary_layers': {
-                        'n_surface_layers': 5,
-                        'expansion_ratio': 1.2,
-                        'final_layer_thickness': 0.0001  # 0.1mm
-                    }
+                "mesh": {
+                    "resolution_level": "medium",
+                    "boundary_layers": {
+                        "n_surface_layers": 5,
+                        "expansion_ratio": 1.2,
+                        "final_layer_thickness": 0.0001,  # 0.1mm
+                    },
                 }
             }
 
@@ -996,11 +937,7 @@ class TestFormatMeshSettings:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {
-                'mesh': {
-                    'resolution_level': 'coarse'
-                }
-            }
+            config = {"mesh": {"resolution_level": "coarse"}}
 
             section = generator._format_mesh_settings(config, None)
 
@@ -1013,12 +950,8 @@ class TestFormatMeshSettings:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {'mesh': {'resolution_level': 'medium'}}
-            mesh_info = {
-                'n_cells': 1000000,
-                'max_non_ortho': 45.5,
-                'max_skewness': 2.1
-            }
+            config = {"mesh": {"resolution_level": "medium"}}
+            mesh_info = {"n_cells": 1000000, "max_non_ortho": 45.5, "max_skewness": 2.1}
 
             section = generator._format_mesh_settings(config, mesh_info)
 
@@ -1037,13 +970,7 @@ class TestFormatNumericalSettings:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {
-                'numerical_settings': {
-                    'divSchemes': {
-                        'div(phi,U)': 'Gauss vanLeer'
-                    }
-                }
-            }
+            config = {"numerical_settings": {"divSchemes": {"div(phi,U)": "Gauss vanLeer"}}}
 
             section = generator._format_numerical_settings(config)
 
@@ -1061,13 +988,8 @@ class TestFormatSimulationControl:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'simulation_control': {
-                    'end_time': 'auto',
-                    'number_of_cycles': 4
-                },
-                'case_info': {
-                    'heart_rate': 75
-                }
+                "simulation_control": {"end_time": "auto", "number_of_cycles": 4},
+                "case_info": {"heart_rate": 75},
             }
 
             section = generator._format_simulation_control(config)
@@ -1082,12 +1004,7 @@ class TestFormatSimulationControl:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {
-                'simulation_control': {
-                    'end_time': 2.4,
-                    'number_of_cycles': 3
-                }
-            }
+            config = {"simulation_control": {"end_time": 2.4, "number_of_cycles": 3}}
 
             section = generator._format_simulation_control(config)
 
@@ -1101,11 +1018,7 @@ class TestFormatSimulationControl:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {
-                'simulation_control': {
-                    'deltaT': 'auto'
-                }
-            }
+            config = {"simulation_control": {"deltaT": "auto"}}
 
             section = generator._format_simulation_control(config)
 
@@ -1118,12 +1031,7 @@ class TestFormatSimulationControl:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {
-                'simulation_control': {
-                    'adjustTimeStep': True,
-                    'maxDeltaT': 0.001
-                }
-            }
+            config = {"simulation_control": {"adjustTimeStep": True, "maxDeltaT": 0.001}}
 
             section = generator._format_simulation_control(config)
 
@@ -1142,15 +1050,9 @@ class TestFormatSolverSettings:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'run_settings': {
-                    'solution_type': 'parallel',
-                    'subdomains': 8,
-                    'decomposition_method': 'scotch'
-                },
-                'simulation_settings': {
-                    'solver_type': 'laminar'
-                },
-                'openfoam_version': '12'
+                "run_settings": {"solution_type": "parallel", "subdomains": 8, "decomposition_method": "scotch"},
+                "simulation_settings": {"solver_type": "laminar"},
+                "openfoam_version": "12",
             }
 
             section = generator._format_solver_settings(config)
@@ -1168,13 +1070,9 @@ class TestFormatSolverSettings:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
             config = {
-                'run_settings': {
-                    'solution_type': 'serial'
-                },
-                'simulation_settings': {
-                    'solver_type': 'turbulent'
-                },
-                'openfoam_version': '12'
+                "run_settings": {"solution_type": "serial"},
+                "simulation_settings": {"solver_type": "turbulent"},
+                "openfoam_version": "12",
             }
 
             section = generator._format_solver_settings(config)
@@ -1210,7 +1108,7 @@ class TestGetKinematicViscosity:
         with tempfile.TemporaryDirectory() as tmpdir:
             generator = SimulationReportGenerator(tmpdir, "PAT001")
 
-            config = {'physical_properties': {'kinematic_viscosity': 3.5e-6}}
+            config = {"physical_properties": {"kinematic_viscosity": 3.5e-6}}
             nu = generator._get_kinematic_viscosity(config)
 
             assert "3.5" in nu
@@ -1227,5 +1125,5 @@ class TestGetKinematicViscosity:
             assert nu == "N/A"
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

@@ -1,13 +1,12 @@
 import os
 import re
 import shutil
-import threading
-import time
 
-from ..base_task import Task, AortaCFDError, logger
+from ..base_task import Task, logger
 from aortacfd_lib.utils.runner import run_command, CommandExecutionError
 from aortacfd_lib.utils.validation import MeshQualityChecker
 from aortacfd_lib.utils.logger import Logger
+
 
 class ExecuteMeshingTask(Task):
     """Runs the external meshing commands. STLs are pre-scaled to meters during case setup."""
@@ -80,13 +79,13 @@ class ExecuteMeshingTask(Task):
         except CommandExecutionError as e:
             logger.error(f"Meshing failed: {e}")
             return False
-        
+
         # Create .foam file for easy ParaView loading
         self._create_foam_file(case_dir)
-            
+
         logger.info("Meshing commands completed successfully.")
         return True
-    
+
     def _create_foam_file(self, case_dir: str):
         """
         Creates a .foam file in the case directory for easy ParaView loading.
@@ -94,7 +93,7 @@ class ExecuteMeshingTask(Task):
         """
         foam_file_path = os.path.join(case_dir, f"{os.path.basename(case_dir)}.foam")
         try:
-            with open(foam_file_path, 'w') as f:
+            with open(foam_file_path, "w") as f:
                 f.write("// OpenFOAM case file for ParaView\n")
                 f.write("// Created automatically after mesh generation\n")
             logger.info(f"Created .foam file: {foam_file_path}")
@@ -160,11 +159,11 @@ class ExecuteMeshingTask(Task):
 
             if not result.is_valid:
                 logger.warning("=" * 60)
-                logger.warning(f"MESH QUALITY vs NUMERICS MISMATCH")
+                logger.warning("MESH QUALITY vs NUMERICS MISMATCH")
                 logger.warning(f"  Profile '{profile}' uses 2nd-order schemes")
-                logger.warning(f"  but mesh quality has issues that may cause divergence.")
-                logger.warning(f"  Consider: --steps regenerate-numerics (auto-adjusts)")
-                logger.warning(f"  Or switch to: \"profile\": \"robust\" in config.json")
+                logger.warning("  but mesh quality has issues that may cause divergence.")
+                logger.warning("  Consider: --steps regenerate-numerics (auto-adjusts)")
+                logger.warning('  Or switch to: "profile": "robust" in config.json')
                 logger.warning("=" * 60)
                 Logger.console(f"     WARNING: mesh quality may be too poor for '{profile}' profile")
         except Exception:
@@ -196,20 +195,18 @@ class ExecuteMeshingTask(Task):
 
             # Parse mesh metrics from checkMesh
             quality_checker = MeshQualityChecker(case_dir)
-            result = quality_checker.validate_mesh_quality()
+            quality_checker.validate_mesh_quality()
 
             # Build metrics dict from checkMesh
             checkmesh_log = os.path.join(case_dir, "logs", "log.checkMesh")
             mesh_metrics = None
             if os.path.exists(checkmesh_log):
-                with open(checkmesh_log, 'r') as f:
+                with open(checkmesh_log, "r") as f:
                     content = f.read()
                 mesh_metrics = quality_checker._parse_checkmesh_output(content)
 
             # Run compatibility check
-            warnings = check_mesh_turbulence_compatibility(
-                self.config, sim_type, mesh_metrics
-            )
+            warnings = check_mesh_turbulence_compatibility(self.config, sim_type, mesh_metrics)
 
             if warnings:
                 logger.warning("=" * 65)
@@ -228,8 +225,7 @@ class ExecuteMeshingTask(Task):
 
                 logger.warning("=" * 65)
                 Logger.console(
-                    f"     WARNING: mesh quality may cause {sim_type.upper()} instability "
-                    f"(see log for details)"
+                    f"     WARNING: mesh quality may cause {sim_type.upper()} instability " f"(see log for details)"
                 )
 
         except Exception as e:
@@ -288,14 +284,12 @@ class ExecuteMeshingTask(Task):
         # and consume data rows until we hit a blank line or a non-matching
         # row. The header may appear more than once (e.g. if snappy reprints
         # it after a dry run); keep only the last occurrence.
-        header_re = re.compile(
-            r"patch\s+faces\s+layers\s+overall\s+thickness", re.IGNORECASE
-        )
+        header_re = re.compile(r"patch\s+faces\s+layers\s+overall\s+thickness", re.IGNORECASE)
         header_matches = list(header_re.finditer(content))
         if not header_matches:
             return {}
 
-        tail = content[header_matches[-1].end():]
+        tail = content[header_matches[-1].end() :]
         patches: dict = {}
         for line in tail.splitlines():
             stripped = line.strip()
@@ -482,9 +476,7 @@ class ExecuteMeshingTask(Task):
 
         # Snapshot attempt 1's polyMesh and measure its layer coverage
         # so we have a baseline to beat.
-        attempt1_coverage = self._max_layer_coverage(
-            self._parse_layer_coverage(snappy_log)
-        )
+        attempt1_coverage = self._max_layer_coverage(self._parse_layer_coverage(snappy_log))
         attempt1_snapshot = self._snapshot_polymesh(case_dir, "attempt1")
         attempt1_dict = original_content
 
@@ -533,25 +525,27 @@ class ExecuteMeshingTask(Task):
             modified = original_content
             if cfg["disable"]:
                 modified = re.sub(
-                    r'(addLayers\s+)(true|false)',
-                    r'\g<1>false',
+                    r"(addLayers\s+)(true|false)",
+                    r"\g<1>false",
                     modified,
                     flags=re.IGNORECASE,
                 )
             else:
                 # Reduce nSurfaceLayers
                 modified = re.sub(
-                    r'(nSurfaceLayers\s+)\d+',
+                    r"(nSurfaceLayers\s+)\d+",
                     rf'\g<1>{cfg["n_layers"]}',
                     modified,
                 )
+
                 # Increase finalLayerThickness (more room for layers to fit)
                 def _scale_thickness(m):
                     old_val = float(m.group(2))
                     new_val = min(0.8, old_val * cfg["final_thickness_factor"])
-                    return f'{m.group(1)}{new_val:.4f}'
+                    return f"{m.group(1)}{new_val:.4f}"
+
                 modified = re.sub(
-                    r'(finalLayerThickness\s+)([\d.]+)',
+                    r"(finalLayerThickness\s+)([\d.]+)",
                     _scale_thickness,
                     modified,
                 )
@@ -565,12 +559,15 @@ class ExecuteMeshingTask(Task):
             try:
                 if snappy_settings.get("parallel"):
                     n_proc = snappy_settings.get("nProcessors", 1)
-                    run_command(self.config, ["decomposePar", "-force", "-noFields"], case_dir, "log.decomposePar.preMesh")
+                    run_command(
+                        self.config, ["decomposePar", "-force", "-noFields"], case_dir, "log.decomposePar.preMesh"
+                    )
                     self._distribute_closeness_files(case_dir, n_proc)
                     run_command(
                         self.config,
                         ["mpirun", "-np", str(n_proc), "snappyHexMesh", "-parallel", "-overwrite"],
-                        case_dir, retry_log,
+                        case_dir,
+                        retry_log,
                     )
                     run_command(self.config, ["reconstructPar", "-constant"], case_dir, "log.reconstructPar")
                     self._cleanup_processor_directories(case_dir)
@@ -581,9 +578,7 @@ class ExecuteMeshingTask(Task):
 
                 # Measure this attempt's layer coverage for the best-of
                 # comparison below.
-                attempt_coverage = self._max_layer_coverage(
-                    self._parse_layer_coverage(retry_log_path)
-                )
+                attempt_coverage = self._max_layer_coverage(self._parse_layer_coverage(retry_log_path))
                 logger.info(
                     "Layer retry attempt %d: coverage %.1f %% (best so far: %.1f %%)",
                     attempt,
@@ -596,9 +591,7 @@ class ExecuteMeshingTask(Task):
                     # restore it if later attempts are worse.
                     if best["snapshot"] and os.path.isdir(best["snapshot"]):
                         shutil.rmtree(best["snapshot"], ignore_errors=True)
-                    new_snapshot = self._snapshot_polymesh(
-                        case_dir, f"attempt{attempt}"
-                    )
+                    new_snapshot = self._snapshot_polymesh(case_dir, f"attempt{attempt}")
                     best = {
                         "attempt": attempt,
                         "coverage_pct": attempt_coverage,
@@ -613,8 +606,7 @@ class ExecuteMeshingTask(Task):
                 if not self._mesh_needs_layer_retry(case_dir):
                     mesh_result = self._check_mesh_quality(case_dir)
                     Logger.console(
-                        f"     Mesh retry #{attempt} succeeded: {mesh_result} "
-                        f"(coverage {attempt_coverage:.1f}%)"
+                        f"     Mesh retry #{attempt} succeeded: {mesh_result} " f"(coverage {attempt_coverage:.1f}%)"
                     )
                     logger.info(
                         "Layer retry attempt %d succeeded with coverage %.1f %%",
@@ -646,8 +638,7 @@ class ExecuteMeshingTask(Task):
                 f.write(original_content)
             if restored:
                 Logger.console(
-                    f"     Kept attempt 1 ({best['coverage_pct']:.1f}% coverage) — "
-                    f"retries did not improve"
+                    f"     Kept attempt 1 ({best['coverage_pct']:.1f}% coverage) — " f"retries did not improve"
                 )
                 logger.info(
                     "Retries exhausted. Rolled back to attempt 1 (coverage %.1f %%).",
@@ -660,10 +651,7 @@ class ExecuteMeshingTask(Task):
                 except CommandExecutionError:
                     pass
             else:
-                logger.warning(
-                    "Retries exhausted but attempt 1 snapshot was missing; "
-                    "proceeding with current mesh."
-                )
+                logger.warning("Retries exhausted but attempt 1 snapshot was missing; " "proceeding with current mesh.")
         else:
             # Best was one of the retries. Make sure polyMesh matches
             # (it will if the best attempt was the most recent one; if
@@ -716,7 +704,7 @@ class ExecuteMeshingTask(Task):
             basename = os.path.basename(old_path)
             if ".stl.closeness." in basename:
                 continue  # Already has .stl
-            new_basename = re.sub(r'\.closeness\.', '.stl.closeness.', basename)
+            new_basename = re.sub(r"\.closeness\.", ".stl.closeness.", basename)
             new_path = os.path.join(tri_surface_dir, new_basename)
             try:
                 os.rename(old_path, new_path)
@@ -824,31 +812,24 @@ class ExecuteMeshingTask(Task):
 
         try:
             # Read current file
-            with open(decompose_dict_path, 'r') as f:
+            with open(decompose_dict_path, "r") as f:
                 content = f.read()
 
             # Replace numberOfSubdomains
-            content = re.sub(
-                r'numberOfSubdomains\s+\d+;',
-                f'numberOfSubdomains  {n_subdomains};',
-                content
-            )
+            content = re.sub(r"numberOfSubdomains\s+\d+;", f"numberOfSubdomains  {n_subdomains};", content)
 
             # Replace n coefficients (for simple and hierarchical methods)
-            content = re.sub(
-                r'\bn\s+\(1 1 \d+\);',
-                f'n               (1 1 {n_subdomains});',
-                content
-            )
+            content = re.sub(r"\bn\s+\(1 1 \d+\);", f"n               (1 1 {n_subdomains});", content)
 
             # Write back
-            with open(decompose_dict_path, 'w') as f:
+            with open(decompose_dict_path, "w") as f:
                 f.write(content)
 
             logger.info(f"Updated decomposeParDict: numberOfSubdomains = {n_subdomains}")
 
         except Exception as e:
             logger.warning(f"Could not update decomposeParDict: {e}")
+
 
 class ExecuteSolverTask(Task):
     """Runs the OpenFOAM 12 solver (foamRun with incompressibleFluid)."""
@@ -869,14 +850,18 @@ class ExecuteSolverTask(Task):
             if run_settings.get("solution_type") == "parallel":
                 n_proc = run_settings.get("subdomains", 1)
                 run_command(self.config, ["decomposePar", "-force"], case_dir, "log.decomposePar")
-                run_command(self.config, ["mpirun", "-np", str(n_proc), solver_cmd, "-parallel"], case_dir, "log.solver")
+                run_command(
+                    self.config, ["mpirun", "-np", str(n_proc), solver_cmd, "-parallel"], case_dir, "log.solver"
+                )
 
                 # Handle reconstruction based on skip_reconstruction flag
                 skip_reconstruction = run_settings.get("skip_reconstruction", False)
                 if skip_reconstruction:
                     logger.info("⏭️  Skipping reconstruction (skip_reconstruction=True)")
                     logger.info("📂 Case remains in decomposed state (processor directories)")
-                    logger.info("💡 Use 'reconstructPar' manually if needed, or run: python run_patient.py <patient> --step reconstruct")
+                    logger.info(
+                        "💡 Use 'reconstructPar' manually if needed, or run: python run_patient.py <patient> --step reconstruct"
+                    )
                     context["case_decomposed"] = True  # Flag for downstream tasks
                 else:
                     logger.info("🔄 Reconstructing case...")
@@ -940,14 +925,14 @@ class ExecuteSolverTask(Task):
             # Check for fatal indicators
             if "FOAM FATAL ERROR" in tail or "FOAM FATAL IO ERROR" in tail:
                 # Extract the error message
-                m = re.search(r'FOAM FATAL (?:IO )?ERROR[:\s]*\n(.*?)(?:\n\n|\nFrom )', tail, re.DOTALL)
+                m = re.search(r"FOAM FATAL (?:IO )?ERROR[:\s]*\n(.*?)(?:\n\n|\nFrom )", tail, re.DOTALL)
                 msg = m.group(1).strip()[:200] if m else "see log.solver"
                 return f"OpenFOAM fatal error: {msg}"
 
             if "nan" in tail.lower() or "Nan" in tail:
                 # Find which field diverged
                 nan_fields = set()
-                for m in re.finditer(r'Solving for (\w+).*?Initial residual = [Nn]a[Nn]', tail):
+                for m in re.finditer(r"Solving for (\w+).*?Initial residual = [Nn]a[Nn]", tail):
                     nan_fields.add(m.group(1))
                 if nan_fields:
                     return f"Divergence detected (NaN in: {', '.join(nan_fields)})"
@@ -957,14 +942,14 @@ class ExecuteSolverTask(Task):
                 return "Floating point exception (likely divergence)"
 
             # Check for very high Courant numbers (sign of instability)
-            co_values = re.findall(r'Courant Number mean:\s*([\d.e+-]+)\s*max:\s*([\d.e+-]+)', tail)
+            co_values = re.findall(r"Courant Number mean:\s*([\d.e+-]+)\s*max:\s*([\d.e+-]+)", tail)
             if co_values:
                 last_co_max = float(co_values[-1][1])
                 if last_co_max > 100:
                     return f"Extreme Courant number ({last_co_max:.0f}) - likely unstable"
 
             # Check if simulation actually progressed
-            time_matches = re.findall(r'^Time = ([\d.e+-]+)', tail, re.MULTILINE)
+            time_matches = re.findall(r"^Time = ([\d.e+-]+)", tail, re.MULTILINE)
             if time_matches:
                 end_time_cfg = self.config.get("simulation_control", {}).get("controlDict", {}).get("endTime", 0)
                 last_time = float(time_matches[-1])
@@ -990,7 +975,7 @@ class ExecuteSolverTask(Task):
         if os.path.exists(control_dict):
             try:
                 content = open(control_dict).read()
-                m = re.search(r'endTime\s+([\d.e+-]+)', content)
+                m = re.search(r"endTime\s+([\d.e+-]+)", content)
                 if m and float(m.group(1)) <= 0:
                     logger.warning("endTime is 0 or negative -- solver will exit immediately")
             except Exception:
@@ -1060,10 +1045,11 @@ class ExecuteReconstructionTask(Task):
         """Reconstruct decomposed OpenFOAM case."""
         logger.info("Reconstructing case from processor directories...")
         case_dir = context["case_directory"]
-        run_settings = self.config.get("run_settings", {})
+        self.config.get("run_settings", {})
 
         # Check if case is actually decomposed
         import glob
+
         processor_dirs = glob.glob(os.path.join(case_dir, "processor*"))
         if not processor_dirs:
             logger.warning("No processor directories found - case may already be reconstructed")
@@ -1098,6 +1084,7 @@ class ExecutePostProcessingTask(Task):
         if not pvbatch_exe:
             # Try to find pvbatch in PATH
             import shutil as sh
+
             pvbatch_exe = sh.which("pvbatch")
             if not pvbatch_exe:
                 logger.error("pvbatch executable not found in PATH")
@@ -1168,10 +1155,7 @@ class ExecuteHemodynamicsTask(Task):
         os.makedirs(reports_dir, exist_ok=True)
 
         try:
-            from aortacfd_lib.hemodynamics_postprocessor import (
-                HemodynamicsPostProcessor,
-                run_hemodynamics_analysis
-            )
+            from aortacfd_lib.hemodynamics_postprocessor import run_hemodynamics_analysis
 
             # Run complete analysis
             results = run_hemodynamics_analysis(case_dir, self.config, reports_dir)
@@ -1212,5 +1196,6 @@ class ExecuteHemodynamicsTask(Task):
         except Exception as e:
             logger.error(f"Hemodynamics analysis failed: {e}")
             import traceback
+
             traceback.print_exc()
             return False

@@ -6,7 +6,7 @@ snappyHexMeshDict, surfaceFeaturesDict).
 """
 
 import os
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Dict, Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -19,9 +19,9 @@ from .utils.mesh_constants import (
     DEFAULT_CELLS_PER_DIAMETER,
     MIN_CELLS_PER_DIAMETER,
     DEFAULT_SURFACE_REFINEMENT_LEVELS,
-    compute_cell_size,
-    check_blockmesh_size
+    check_blockmesh_size,
 )
+
 
 class GeometryAnalyzer:
     """
@@ -55,23 +55,26 @@ class GeometryAnalyzer:
         config: Full configuration dictionary with 'geometry', 'mesh', 'physics' sections
         case_directory: OpenFOAM case path (e.g., output/patient1/run_*/openfoam)
     """
+
     def __init__(self, config: dict, case_directory: str):
         self.config = config
         self.case_dir = case_directory
         self.log = Logger("mesh_setup").get_logger()
 
-        template_path = os.path.join(os.path.dirname(__file__), '..', 'templates')
-        self.jinja_env = Environment(loader=FileSystemLoader(template_path), trim_blocks=True, lstrip_blocks=True)
+        template_path = os.path.join(os.path.dirname(__file__), "..", "templates")
+        self.jinja_env = Environment(  # nosec B701 - renders OpenFOAM dictionaries, not HTML
+            loader=FileSystemLoader(template_path), trim_blocks=True, lstrip_blocks=True
+        )
 
-        self.geom_settings = self.config['geometry']
-        self.mesh_settings = self.config['mesh']
-        self.snappy_settings = self.mesh_settings['SNAPPY_SETTINGS']
-        
-        self.wall_patch = self.geom_settings['wall_keywords_ordered']
-        self.inlet_patch = self.geom_settings['inlet_keywords_ordered']
-        self.outlet_patches = self.geom_settings['outlet_keywords_ordered']
+        self.geom_settings = self.config["geometry"]
+        self.mesh_settings = self.config["mesh"]
+        self.snappy_settings = self.mesh_settings["SNAPPY_SETTINGS"]
+
+        self.wall_patch = self.geom_settings["wall_keywords_ordered"]
+        self.inlet_patch = self.geom_settings["inlet_keywords_ordered"]
+        self.outlet_patches = self.geom_settings["outlet_keywords_ordered"]
         self.all_patches = [self.wall_patch, self.inlet_patch] + self.outlet_patches
-        
+
         self.tri_surface_path = os.path.join(self.case_dir, "constant", "triSurface")
 
         self.inlet_centroid = None
@@ -86,23 +89,23 @@ class GeometryAnalyzer:
 
         # Resolve public mesh API (goal, span_target, layers, mode) into SNAPPY_SETTINGS
         from .utils.mesh_constants import resolve_mesh_config
+
         mesh_overrides = resolve_mesh_config(self.mesh_settings)
         self._goal_resolved_keys = set()
         if mesh_overrides:
             for k, v in mesh_overrides.items():
-                if k not in self.snappy_settings.get('_user_provided_keys', []):
+                if k not in self.snappy_settings.get("_user_provided_keys", []):
                     self.snappy_settings[k] = v
                     self._goal_resolved_keys.add(k)
 
         # Mesh strategy: 'adaptive_span' or 'legacy_surface'
-        self.mesh_strategy = self.snappy_settings.get('mesh_strategy', 'legacy_surface')
+        self.mesh_strategy = self.snappy_settings.get("mesh_strategy", "legacy_surface")
 
         # Track whether surfaceRefinementLevels was set by user OR by goal/resolve
         # (goal presets set [2,2] intentionally — must not be overridden to [0,1])
-        user_keys = self.snappy_settings.get('_user_provided_keys', [])
+        user_keys = self.snappy_settings.get("_user_provided_keys", [])
         self._surface_levels_user_set = (
-            'surfaceRefinementLevels' in user_keys
-            or 'surfaceRefinementLevels' in self._goal_resolved_keys
+            "surfaceRefinementLevels" in user_keys or "surfaceRefinementLevels" in self._goal_resolved_keys
         )
 
         # Process user-friendly config options into SNAPPY_SETTINGS
@@ -120,52 +123,56 @@ class GeometryAnalyzer:
         This ensures the simplified config API works regardless of how the case is run.
         """
         # Set default surfaceRefinementLevels if not specified
-        if 'surfaceRefinementLevels' not in self.snappy_settings:
-            self.snappy_settings['surfaceRefinementLevels'] = DEFAULT_SURFACE_REFINEMENT_LEVELS
+        if "surfaceRefinementLevels" not in self.snappy_settings:
+            self.snappy_settings["surfaceRefinementLevels"] = DEFAULT_SURFACE_REFINEMENT_LEVELS
             self.log.info(f"Using default surfaceRefinementLevels: {DEFAULT_SURFACE_REFINEMENT_LEVELS}")
         else:
-            levels = self.snappy_settings['surfaceRefinementLevels']
+            levels = self.snappy_settings["surfaceRefinementLevels"]
             self.log.info(f"surfaceRefinementLevels: {levels}")
 
         # Adaptive span: reduce surface refinement to support role (snapping only)
         # unless user explicitly set their own levels.
         # EXCEPTION: when addLayers=True, [2,2] is required for layer coverage
         # (evidence: [0,1] gives 0% layer coverage — see base.py:69)
-        if self.mesh_strategy == 'adaptive_span' and not self._surface_levels_user_set:
-            add_layers = self.snappy_settings.get('addLayers', True)
+        if self.mesh_strategy == "adaptive_span" and not self._surface_levels_user_set:
+            add_layers = self.snappy_settings.get("addLayers", True)
             if add_layers:
-                self.snappy_settings['surfaceRefinementLevels'] = [2, 2]
-                self.log.info("adaptive_span + addLayers: surface refinement set to [2, 2] (required for layer coverage)")
+                self.snappy_settings["surfaceRefinementLevels"] = [2, 2]
+                self.log.info(
+                    "adaptive_span + addLayers: surface refinement set to [2, 2] (required for layer coverage)"
+                )
             else:
-                self.snappy_settings['surfaceRefinementLevels'] = [0, 1]
+                self.snappy_settings["surfaceRefinementLevels"] = [0, 1]
                 self.log.info("adaptive_span (no layers): surface refinement reduced to [0, 1] (support role)")
 
         # Process boundary_layers config (accept both snake_case and camelCase)
-        boundary_layers = self.mesh_settings.get('boundary_layers', {})
+        boundary_layers = self.mesh_settings.get("boundary_layers", {})
 
-        if 'enabled' in boundary_layers:
-            self.snappy_settings['addLayers'] = boundary_layers['enabled']
+        if "enabled" in boundary_layers:
+            self.snappy_settings["addLayers"] = boundary_layers["enabled"]
 
-        num_layers = boundary_layers.get('num_layers') or boundary_layers.get('nSurfaceLayers')
+        num_layers = boundary_layers.get("num_layers") or boundary_layers.get("nSurfaceLayers")
         if num_layers is not None:
-            self.snappy_settings['addLayer'] = num_layers
+            self.snappy_settings["addLayer"] = num_layers
 
-        expansion_ratio = boundary_layers.get('expansion_ratio') or boundary_layers.get('expansionRatio')
+        expansion_ratio = boundary_layers.get("expansion_ratio") or boundary_layers.get("expansionRatio")
         if expansion_ratio is not None:
-            self.snappy_settings['expansionRatio'] = expansion_ratio
+            self.snappy_settings["expansionRatio"] = expansion_ratio
 
-        final_layer_thickness = boundary_layers.get('final_layer_thickness') or boundary_layers.get('finalLayerThickness')
+        final_layer_thickness = boundary_layers.get("final_layer_thickness") or boundary_layers.get(
+            "finalLayerThickness"
+        )
         if final_layer_thickness is not None:
-            self.snappy_settings['finalLayerThickness'] = final_layer_thickness
+            self.snappy_settings["finalLayerThickness"] = final_layer_thickness
 
-        min_thickness = boundary_layers.get('min_thickness') or boundary_layers.get('minThickness')
+        min_thickness = boundary_layers.get("min_thickness") or boundary_layers.get("minThickness")
         if min_thickness is not None:
-            self.snappy_settings['minThickness'] = min_thickness
+            self.snappy_settings["minThickness"] = min_thickness
 
         # Handle relativeSizes option (default: true)
-        relative_sizes = boundary_layers.get('relativeSizes')
+        relative_sizes = boundary_layers.get("relativeSizes")
         if relative_sizes is not None:
-            self.snappy_settings['relativeSizes'] = relative_sizes
+            self.snappy_settings["relativeSizes"] = relative_sizes
 
         # Adapt nCellsBetweenLevels and layer thickness based on refinement level jump
         self._adapt_mesh_transitions()
@@ -184,7 +191,7 @@ class GeometryAnalyzer:
         - finalLayerThickness increases with max refinement to avoid layer-to-volume mismatch
         - Only applies if the user has NOT explicitly set these values
         """
-        levels = self.snappy_settings.get('surfaceRefinementLevels', [1, 2])
+        levels = self.snappy_settings.get("surfaceRefinementLevels", [1, 2])
         if not levels or len(levels) < 2:
             return
 
@@ -193,13 +200,13 @@ class GeometryAnalyzer:
 
         # --- nCellsBetweenLevels: scale with level jump ---
         # User explicitly set in mesh.SNAPPY_SETTINGS → respect it
-        user_ncbl = self.mesh_settings.get('SNAPPY_SETTINGS', {}).get('nCellsBetweenLevels')
+        user_ncbl = self.mesh_settings.get("SNAPPY_SETTINGS", {}).get("nCellsBetweenLevels")
         if user_ncbl is None:
             # Auto-adapt: base 3, add 2 per extra level of jump
             recommended = 3 + max(0, level_jump - 1) * 2
-            current = self.snappy_settings.get('nCellsBetweenLevels', 3)
+            current = self.snappy_settings.get("nCellsBetweenLevels", 3)
             if recommended > current:
-                self.snappy_settings['nCellsBetweenLevels'] = recommended
+                self.snappy_settings["nCellsBetweenLevels"] = recommended
                 self.log.info(
                     f"Auto-adapted nCellsBetweenLevels: {current} -> {recommended} "
                     f"(refinement jump {levels[0]}->{levels[1]}, volume ratio {8**level_jump}:1)"
@@ -213,23 +220,23 @@ class GeometryAnalyzer:
         # via any public API (boundary_layers.*, layers.*), expert API
         # (SNAPPY_SETTINGS.*), or a goal/profile preset (LAYER_PROFILES).
         user_flt_public = (
-            self.mesh_settings.get('boundary_layers', {}).get('final_layer_thickness')
-            or self.mesh_settings.get('boundary_layers', {}).get('finalLayerThickness')
-            or self.mesh_settings.get('layers', {}).get('final_layer_thickness')
+            self.mesh_settings.get("boundary_layers", {}).get("final_layer_thickness")
+            or self.mesh_settings.get("boundary_layers", {}).get("finalLayerThickness")
+            or self.mesh_settings.get("layers", {}).get("final_layer_thickness")
         )
-        user_snappy_keys = self.mesh_settings.get('SNAPPY_SETTINGS', {}).get('_user_provided_keys', [])
+        user_snappy_keys = self.mesh_settings.get("SNAPPY_SETTINGS", {}).get("_user_provided_keys", [])
         flt_user_or_preset_set = (
             user_flt_public is not None
-            or 'finalLayerThickness' in user_snappy_keys
-            or 'finalLayerThickness' in self._goal_resolved_keys
+            or "finalLayerThickness" in user_snappy_keys
+            or "finalLayerThickness" in self._goal_resolved_keys
         )
         if not flt_user_or_preset_set:
             # Auto-adapt: base 0.4, add 0.1 per refinement level above 1
             base_flt = 0.4
             recommended_flt = min(0.8, base_flt + max(0, max_level - 1) * 0.1)
-            current_flt = self.snappy_settings.get('finalLayerThickness', base_flt)
+            current_flt = self.snappy_settings.get("finalLayerThickness", base_flt)
             if recommended_flt > current_flt:
-                self.snappy_settings['finalLayerThickness'] = recommended_flt
+                self.snappy_settings["finalLayerThickness"] = recommended_flt
                 self.log.info(
                     f"Auto-adapted finalLayerThickness: {current_flt} -> {recommended_flt} "
                     f"(max refinement level {max_level})"
@@ -263,7 +270,9 @@ class GeometryAnalyzer:
         self.reference_radius_m = self._determine_reference_radius()
         if self.reference_radius_m is not None:
             # Display in mm for user convenience
-            self.log.info(f"Reference branch radius for meshing: {self.reference_radius_m*1000:.3f} mm ({self.reference_radius_m:.6f} m)")
+            self.log.info(
+                f"Reference branch radius for meshing: {self.reference_radius_m*1000:.3f} mm ({self.reference_radius_m:.6f} m)"
+            )
         else:
             self.log.warning("Could not determine reference radius from geometry; falling back to default cell sizing.")
 
@@ -292,12 +301,12 @@ class GeometryAnalyzer:
         if not radii:
             return None
 
-        strategy = self.geom_settings.get('reference_radius_strategy', 'max').lower()
-        if strategy == 'inlet':
+        strategy = self.geom_settings.get("reference_radius_strategy", "max").lower()
+        if strategy == "inlet":
             return self.inlet_radius
-        if strategy == 'mean':
+        if strategy == "mean":
             return float(np.mean(radii))
-        if strategy == 'min':
+        if strategy == "min":
             return min(radii)
         return max(radii)  # Default: use largest vessel diameter
 
@@ -321,11 +330,11 @@ class GeometryAnalyzer:
         all_verts = []
         for patch_name in self.all_patches:
             all_verts.append(self._extract_vertices_from_stl(f"{patch_name}.stl"))
-        
+
         if not all_verts:
-             self.log.error("No vertices extracted from any STL files.")
-             raise ValueError("No vertices could be extracted.")
-        
+            self.log.error("No vertices extracted from any STL files.")
+            raise ValueError("No vertices could be extracted.")
+
         return np.vstack(all_verts)
 
     def _extract_vertices_from_stl(self, stl_file_basename: str) -> NDArray[np.float64]:
@@ -382,7 +391,6 @@ class GeometryAnalyzer:
             return None
         return coerced
 
-
     def _cell_size_from_target_mm(self, mesh_resolution: dict) -> tuple:
         """
         Priority 1: Direct cell size specification in millimeters.
@@ -411,7 +419,7 @@ class GeometryAnalyzer:
             (cell_size_m, source_description) or (None, None)
             Note: User specifies in mm, returned in meters for internal use
         """
-        target_mm = mesh_resolution.get('target_cell_size_mm')
+        target_mm = mesh_resolution.get("target_cell_size_mm")
         validated = self._coerce_positive(target_mm, "mesh.mesh_resolution.target_cell_size_mm")
 
         if validated is not None:
@@ -443,7 +451,7 @@ class GeometryAnalyzer:
         Returns:
             (cell_size_m, source_description) or (None, None)
         """
-        cells_per_diam_cfg = mesh_resolution.get('cells_per_diameter')
+        cells_per_diam_cfg = mesh_resolution.get("cells_per_diameter")
         cells_val = self._coerce_positive(cells_per_diam_cfg, "mesh.mesh_resolution.cells_per_diameter")
 
         if cells_val is not None:
@@ -459,7 +467,10 @@ class GeometryAnalyzer:
                 D_ref_mm = D_ref_m * 1000  # For display
                 cell_size_m = D_ref_m / cells_val
                 cell_size_mm = cell_size_m * 1000  # For display
-                return cell_size_m, f"cells_per_diameter={cells_val:.0f} (D_ref={D_ref_mm:.2f}mm → {cell_size_mm:.3f}mm)"
+                return (
+                    cell_size_m,
+                    f"cells_per_diameter={cells_val:.0f} (D_ref={D_ref_mm:.2f}mm → {cell_size_mm:.3f}mm)",
+                )
             else:
                 self.log.error(
                     "cells_per_diameter requires valid reference geometry. "
@@ -495,15 +506,15 @@ class GeometryAnalyzer:
             (cell_size_m, source_description)
         """
         # Check if span refinement is enabled (v2.0 primary method)
-        span_refinement_enabled = self.snappy_settings.get('span_refinement_enabled', False)
-        cells_across_span = self.snappy_settings.get('cells_across_span', 0)
+        span_refinement_enabled = self.snappy_settings.get("span_refinement_enabled", False)
+        cells_across_span = self.snappy_settings.get("cells_across_span", 0)
 
         # Strategy-driven: adaptive_span auto-enables span when no explicit resolution given
-        if self.mesh_strategy == 'adaptive_span' and not span_refinement_enabled and cells_across_span <= 0:
+        if self.mesh_strategy == "adaptive_span" and not span_refinement_enabled and cells_across_span <= 0:
             span_refinement_enabled = True
-            cells_across_span = self.snappy_settings.get('default_cells_across_span', 12)
-            self.snappy_settings['span_refinement_enabled'] = True
-            self.snappy_settings['cells_across_span'] = cells_across_span
+            cells_across_span = self.snappy_settings.get("default_cells_across_span", 12)
+            self.snappy_settings["span_refinement_enabled"] = True
+            self.snappy_settings["cells_across_span"] = cells_across_span
             self.log.info(f"adaptive_span: auto-enabled span refinement with target={cells_across_span}")
 
         if self.reference_radius_m is not None and self.reference_radius_m > 0:
@@ -512,11 +523,11 @@ class GeometryAnalyzer:
 
             if span_refinement_enabled and cells_across_span > 0:
                 # Get refinement levels from config (surface is logged but NOT used for blockMesh calc)
-                surface_levels = self.snappy_settings.get('surfaceRefinementLevels', [1, 2])
+                surface_levels = self.snappy_settings.get("surfaceRefinementLevels", [1, 2])
                 surface_level = surface_levels[1] if len(surface_levels) > 1 else surface_levels[0]
 
                 # span_refinement_level: if not set, auto-calculate
-                span_level = self.snappy_settings.get('span_refinement_level', None)
+                span_level = self.snappy_settings.get("span_refinement_level", None)
 
                 # CORRECTED calculation:
                 # - insideSpan mode uses ONLY span_level for internal refinement
@@ -531,7 +542,7 @@ class GeometryAnalyzer:
                 if span_level is not None:
                     # User specified span_refinement_level - calculate blockMesh directly
                     # ONLY use span_level (NOT surface_level) for insideSpan calculation
-                    span_multiplier = 2 ** span_level
+                    span_multiplier = 2**span_level
                     blockmesh_cells_per_d = max(MIN_BLOCKMESH, int(np.ceil(cells_across_span / span_multiplier)))
                     achievable_cells = blockmesh_cells_per_d * span_multiplier
 
@@ -556,22 +567,21 @@ class GeometryAnalyzer:
                     from .utils.mesh_constants import plan_span_background
 
                     # Compute diameter ratio for multi-scale geometry awareness
-                    all_radii = [r for r in [self.reference_radius_m] + self.outlet_radii
-                                 if r and r > 0]
+                    all_radii = [r for r in [self.reference_radius_m] + self.outlet_radii if r and r > 0]
                     if len(all_radii) >= 2:
                         diameter_ratio = max(all_radii) / min(all_radii)
                     else:
                         diameter_ratio = 1.0
 
                     plan = plan_span_background(cells_across_span, diameter_ratio=diameter_ratio)
-                    blockmesh_cells_per_d = plan['background_cpd']
-                    span_level = plan['span_level']
-                    span_multiplier = 2 ** span_level
-                    achievable_cells = plan['theoretical_cells_across']
-                    achievable_min = plan.get('achievable_at_min_branch', 0)
+                    blockmesh_cells_per_d = plan["background_cpd"]
+                    span_level = plan["span_level"]
+                    span_multiplier = 2**span_level
+                    achievable_cells = plan["theoretical_cells_across"]
+                    achievable_min = plan.get("achievable_at_min_branch", 0)
 
-                    if plan['warning']:
-                        self.log.warning(plan['warning'])
+                    if plan["warning"]:
+                        self.log.warning(plan["warning"])
 
                     self.log.info(
                         f"SPAN REFINEMENT: Geometry-adaptive planner\n"
@@ -586,7 +596,10 @@ class GeometryAnalyzer:
                 cell_size_m = D_ref_m / blockmesh_cells_per_d
                 cell_size_mm = cell_size_m * 1000
 
-                return cell_size_m, f"SPAN_REFINEMENT: blockMesh={blockmesh_cells_per_d} cells/D, span_level={span_level}, target={cells_across_span}, achievable={achievable_cells}"
+                return (
+                    cell_size_m,
+                    f"SPAN_REFINEMENT: blockMesh={blockmesh_cells_per_d} cells/D, span_level={span_level}, target={cells_across_span}, achievable={achievable_cells}",
+                )
             else:
                 # Legacy warning for when span refinement is NOT used
                 cell_size_m = D_ref_m / DEFAULT_CELLS_PER_DIAMETER
@@ -610,7 +623,10 @@ class GeometryAnalyzer:
                 self.log.warning("  Option 3 (legacy - absolute control):")
                 self.log.warning("    mesh.mesh_resolution.target_cell_size_mm = 0.8")
                 self.log.warning("=" * 70)
-                return cell_size_m, f"FALLBACK: {DEFAULT_CELLS_PER_DIAMETER} cells/D (D={D_ref_mm:.2f}mm -> {cell_size_mm:.3f}mm)"
+                return (
+                    cell_size_m,
+                    f"FALLBACK: {DEFAULT_CELLS_PER_DIAMETER} cells/D (D={D_ref_mm:.2f}mm -> {cell_size_mm:.3f}mm)",
+                )
         else:
             # Last resort if geometry completely unavailable
             fallback_mm = 2.0
@@ -628,9 +644,9 @@ class GeometryAnalyzer:
         v2.0: Warns about deprecated legacy methods.
         Recommends cells_across_span as primary method.
         """
-        has_target_mm = mesh_resolution.get('target_cell_size_mm') is not None
-        has_cells_per_d = mesh_resolution.get('cells_per_diameter') is not None
-        has_span_refinement = self.snappy_settings.get('span_refinement_enabled', False)
+        has_target_mm = mesh_resolution.get("target_cell_size_mm") is not None
+        has_cells_per_d = mesh_resolution.get("cells_per_diameter") is not None
+        self.snappy_settings.get("span_refinement_enabled", False)
 
         # v2.0: Deprecation warning for legacy methods (show once only)
         if (has_target_mm or has_cells_per_d) and not self._deprecated_warning_shown:
@@ -646,8 +662,8 @@ class GeometryAnalyzer:
             self.log.warning('    "SNAPPY_SETTINGS": {')
             self.log.warning('      "span_refinement_enabled": true,')
             self.log.warning('      "cells_across_span": 20')
-            self.log.warning('    }')
-            self.log.warning('  }')
+            self.log.warning("    }")
+            self.log.warning("  }")
             self.log.warning("")
             self.log.warning("Advantages of cells_across_span:")
             self.log.warning("  - Guarantees minimum cells across diameter everywhere")
@@ -679,7 +695,7 @@ class GeometryAnalyzer:
         return [
             (1, "target_cell_size_mm", lambda: self._cell_size_from_target_mm(mesh_resolution)),
             (2, "cells_per_diameter", lambda: self._cell_size_from_cells_per_diameter(mesh_resolution)),
-            (3, "default_fallback", lambda: self._cell_size_from_default_fallback())
+            (3, "default_fallback", lambda: self._cell_size_from_default_fallback()),
         ]
 
     def _resolve_cell_size(self, mesh_resolution: dict) -> tuple:
@@ -704,8 +720,7 @@ class GeometryAnalyzer:
 
         # This should never happen (priority 3 fallback always returns a value)
         raise RuntimeError(
-            "Cell size resolution failed - default fallback did not return value. "
-            "This indicates a code bug."
+            "Cell size resolution failed - default fallback did not return value. " "This indicates a code bug."
         )
 
     def _calculate_blockmesh_cells(self, bounds: dict) -> dict:
@@ -737,14 +752,14 @@ class GeometryAnalyzer:
         Returns:
             dict: Cell counts {x: int, y: int, z: int}
         """
-        raw_mesh_resolution = self.mesh_settings.get('mesh_resolution', {})
+        raw_mesh_resolution = self.mesh_settings.get("mesh_resolution", {})
         mesh_resolution = raw_mesh_resolution if isinstance(raw_mesh_resolution, dict) else {}
 
         # Migration: support top-level cells_per_diameter (common in user configs)
-        if 'cells_per_diameter' not in mesh_resolution:
-            top_level_cpd = self.mesh_settings.get('cells_per_diameter')
+        if "cells_per_diameter" not in mesh_resolution:
+            top_level_cpd = self.mesh_settings.get("cells_per_diameter")
             if top_level_cpd is not None:
-                mesh_resolution['cells_per_diameter'] = top_level_cpd
+                mesh_resolution["cells_per_diameter"] = top_level_cpd
 
         # Validate configuration (warn if multiple parameters set)
         self._validate_resolution_config(mesh_resolution)
@@ -756,12 +771,11 @@ class GeometryAnalyzer:
         # Validate result
         if cell_size_m <= 0:
             raise ValueError(
-                f"Computed cell size must be positive, got {cell_size_mm}mm. "
-                f"Source: {source} (priority {priority})"
+                f"Computed cell size must be positive, got {cell_size_mm}mm. " f"Source: {source} (priority {priority})"
             )
 
         # Calculate cell counts from resolved cell size (both in meters)
-        ranges = bounds['max'] - bounds['min']
+        ranges = bounds["max"] - bounds["min"]
         ranges_mm = ranges * 1000  # For display
         bbox_volume_mm3 = ranges_mm[0] * ranges_mm[1] * ranges_mm[2]
 
@@ -775,9 +789,9 @@ class GeometryAnalyzer:
         # ======================================================================
         # MESH SPECIFICATION REPORT (Publication-ready)
         # ======================================================================
-        self.log.info("="*70)
+        self.log.info("=" * 70)
         self.log.info("MESH SPECIFICATION")
-        self.log.info("="*70)
+        self.log.info("=" * 70)
 
         # Resolution source and priority
         self.log.info(f"Method: {source}")
@@ -787,7 +801,7 @@ class GeometryAnalyzer:
         if self.reference_radius_m:
             D_ref_mm = 2.0 * self.reference_radius_m * 1000
             actual_cpd = D_ref_mm / cell_size_mm
-            ref_strategy = self.geom_settings.get('reference_radius_strategy', 'min')
+            ref_strategy = self.geom_settings.get("reference_radius_strategy", "min")
             self.log.info(f"Reference diameter: {D_ref_mm:.2f} mm ({ref_strategy} vessel)")
             self.log.info(f"Cell size: {cell_size_mm:.3f} mm = {actual_cpd:.1f} cells/D")
         else:
@@ -796,12 +810,12 @@ class GeometryAnalyzer:
 
         # BlockMesh size warning (if large)
         self.log.info("")
-        if size_check['warning_level'] != 'ok':
-            self.log.warning("="*70)
+        if size_check["warning_level"] != "ok":
+            self.log.warning("=" * 70)
             self.log.warning("BLOCKMESH SIZE WARNING")
-            self.log.warning("="*70)
-            self.log.warning(size_check['message'])
-            self.log.warning("="*70)
+            self.log.warning("=" * 70)
+            self.log.warning(size_check["message"])
+            self.log.warning("=" * 70)
             self.log.info("")
 
         # Domain and grid
@@ -818,7 +832,7 @@ class GeometryAnalyzer:
                 cells_min = min_branch_D_mm / cell_size_mm
                 cells_max = max_branch_D_mm / cell_size_mm
 
-                self.log.info(f"Branch resolution range:")
+                self.log.info("Branch resolution range:")
                 self.log.info(f"  Smallest: D={min_branch_D_mm:.2f}mm → {cells_min:.1f} cells")
                 self.log.info(f"  Largest:  D={max_branch_D_mm:.2f}mm → {cells_max:.1f} cells")
 
@@ -831,7 +845,7 @@ class GeometryAnalyzer:
                     )
 
         # Surface refinement level info
-        snappy_levels = self.snappy_settings.get('surfaceRefinementLevels', DEFAULT_SURFACE_REFINEMENT_LEVELS)
+        snappy_levels = self.snappy_settings.get("surfaceRefinementLevels", DEFAULT_SURFACE_REFINEMENT_LEVELS)
         surface_cell_size_mm = cell_size_mm / (2 ** snappy_levels[1])  # After max refinement
         self.log.info("")
         self.log.info(f"surfaceRefinementLevels: {snappy_levels}")
@@ -841,8 +855,8 @@ class GeometryAnalyzer:
         # Expected final mesh (geometry-aware estimation)
         max_ref_level = max(snappy_levels) if snappy_levels else 1
         fluid_fraction = self._estimate_fluid_fraction()
-        n_bl_layers = self.snappy_settings.get('addLayer', 2)
-        bl_enabled = self.snappy_settings.get('addLayers', True)
+        n_bl_layers = self.snappy_settings.get("addLayer", 2)
+        bl_enabled = self.snappy_settings.get("addLayers", True)
 
         # Interior cells: background cells inside geometry
         interior_cells = total_bg_cells * fluid_fraction
@@ -857,10 +871,9 @@ class GeometryAnalyzer:
         self.log.info(f"Fluid fraction of bounding box: ~{fluid_fraction:.0%}")
         self.log.info(f"Expected final mesh: ~{estimated_final/1e6:.1f}M cells")
         if self.reference_radius_m:
-            self._log_cpd_suggestions(cell_size_m, fluid_fraction, n_bl_layers,
-                                      bl_enabled, max_ref_level, ranges)
+            self._log_cpd_suggestions(cell_size_m, fluid_fraction, n_bl_layers, bl_enabled, max_ref_level, ranges)
 
-        self.log.info("="*70)
+        self.log.info("=" * 70)
 
         return {"x": num_cells[0], "y": num_cells[1], "z": num_cells[2]}
 
@@ -877,6 +890,7 @@ class GeometryAnalyzer:
         if os.path.exists(wall_stl):
             try:
                 import trimesh
+
                 mesh = trimesh.load(wall_stl)
                 if mesh.is_watertight:
                     # Combine wall + inlet/outlet caps for a closed volume
@@ -905,9 +919,15 @@ class GeometryAnalyzer:
         self.log.debug("Using empirical fluid fraction estimate (0.20)")
         return 0.20
 
-    def _log_cpd_suggestions(self, current_cell_size_m: float, fluid_fraction: float,
-                             n_bl_layers: int, bl_enabled: bool,
-                             max_ref_level: int, bbox_ranges_m: np.ndarray) -> None:
+    def _log_cpd_suggestions(
+        self,
+        current_cell_size_m: float,
+        fluid_fraction: float,
+        n_bl_layers: int,
+        bl_enabled: bool,
+        max_ref_level: int,
+        bbox_ranges_m: np.ndarray,
+    ) -> None:
         """Log a quick-reference table: cpd -> estimated cell count."""
         D_ref = 2.0 * self.reference_radius_m
         bbox_vol = bbox_ranges_m[0] * bbox_ranges_m[1] * bbox_ranges_m[2]
@@ -919,7 +939,7 @@ class GeometryAnalyzer:
         self.log.info(f"  {'cpd':>5}  {'cell size':>10}  {'est. cells':>12}")
         for cpd in [8, 10, 12, 15, 20, 25, 30]:
             h = D_ref / cpd
-            bg = bbox_vol / (h ** 3)
+            bg = bbox_vol / (h**3)
             est = int(bg * fluid_fraction * surface_mult * bl_mult)
             marker = " <-- current" if abs(h - current_cell_size_m) / max(h, 1e-9) < 0.05 else ""
             self.log.info(f"  {cpd:>5}  {h*1000:>8.2f} mm  {est/1e6:>10.1f}M{marker}")
@@ -928,38 +948,82 @@ class GeometryAnalyzer:
         """
         Calculates a point guaranteed to be inside the fluid domain.
 
-        Uses the edge-ring method (compute_inward_normal) which finds the
+        Prefers the edge-ring method (compute_inward_normal) which finds the
         inward direction from the first ring of wall faces adjacent to the
-        inlet boundary. Then offsets 10% of inlet radius along that direction.
-        Returns point in meters.
+        inlet boundary. Falls back to wall-centroid direction when STLs are
+        missing (partial pipelines / tests), and to nearest-outlet direction
+        when even wall.stl is unavailable. Always offsets 10% of inlet radius
+        along that direction. Returns point in meters.
         """
         if self.inlet_centroid is None or not self.outlet_centroids:
             raise ValueError("Inlet or outlet centroids have not been calculated.")
 
-        from .utils.patch_processing import compute_inward_normal
-
         tri_surface_dir = os.path.join(self.case_dir, "constant", "triSurface")
         wall_name = self.wall_patch if self.wall_patch else "wall"
-        inward = compute_inward_normal(tri_surface_dir, self.inlet_patch, wall_name, log=self.log)
+
+        direction = self._inward_direction_with_fallback(tri_surface_dir, wall_name)
 
         offset_distance = self.inlet_radius * 0.1
-        internal_point = self.inlet_centroid + (offset_distance * inward)
+        internal_point = self.inlet_centroid + (offset_distance * direction)
 
         self.log.info(f"Robust locationInMesh calculated: {internal_point} (m)")
         return internal_point
+
+    def _inward_direction_with_fallback(self, tri_surface_dir: str, wall_name: str) -> np.ndarray:
+        """Return an inward unit vector at the inlet, with progressive fallbacks."""
+        from .utils.patch_processing import compute_inward_normal
+
+        try:
+            return compute_inward_normal(tri_surface_dir, self.inlet_patch, wall_name, log=self.log)
+        except FileNotFoundError:
+            self.log.debug("Edge-ring inward normal: STL missing, using wall/outlet fallback")
+
+        wall_stl_path = os.path.join(tri_surface_dir, f"{wall_name}.stl")
+        if os.path.exists(wall_stl_path) and os.path.getsize(wall_stl_path) > 0:
+            from stl import mesh as stl_mesh
+
+            wall_mesh = stl_mesh.Mesh.from_file(wall_stl_path)
+            wall_centroid = np.array(
+                [
+                    np.mean(wall_mesh.vectors[:, :, 0]),
+                    np.mean(wall_mesh.vectors[:, :, 1]),
+                    np.mean(wall_mesh.vectors[:, :, 2]),
+                ]
+            )
+            direction = wall_centroid - self.inlet_centroid
+            n = np.linalg.norm(direction)
+            if n > 0:
+                return direction / n
+
+        distances = [np.linalg.norm(np.array(oc) - self.inlet_centroid) for oc in self.outlet_centroids]
+        nearest_outlet = np.array(self.outlet_centroids[int(np.argmin(distances))])
+        direction = nearest_outlet - self.inlet_centroid
+        n = np.linalg.norm(direction)
+        if n > 0:
+            return direction / n
+
+        # Degenerate fixture (e.g. tests with coincident inlet/outlet centroids):
+        # fall back to the inlet face normal so the offset point is still finite.
+        if self.inlet_normal is not None:
+            nn = np.linalg.norm(self.inlet_normal)
+            if nn > 0:
+                return np.asarray(self.inlet_normal) / nn
+        return np.array([0.0, 0.0, 1.0])
 
     def _write_file_from_template(self, template_name: str, output_path: str, context: dict):
         """Helper function to render a Jinja2 template and write the file."""
         template = self.jinja_env.get_template(template_name)
         content = template.render(context)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             f.write(content)
         self.log.info(f"Successfully wrote file: {os.path.basename(output_path)}")
 
     def _write_blockmesh_dict(self, bounds: dict, cells: dict):
         context = {"config": self.config, "bounds": bounds, "cells": cells}
-        self._write_file_from_template("blockMeshDict.tpl", os.path.join(self.case_dir, "system", "blockMeshDict"), context)
+        self._write_file_from_template(
+            "blockMeshDict.tpl", os.path.join(self.case_dir, "system", "blockMeshDict"), context
+        )
 
     def _write_snappyhexmesh_dict(self, internal_point: np.ndarray):
         """
@@ -976,9 +1040,11 @@ class GeometryAnalyzer:
             "patches": self.all_patches,
             "wall_patch": self.wall_patch,
             "internal_point": internal_point,
-            "span_refinement_level": span_refinement_level
+            "span_refinement_level": span_refinement_level,
         }
-        self._write_file_from_template("snappyHexMeshDict.tpl", os.path.join(self.case_dir, "system", "snappyHexMeshDict"), context)
+        self._write_file_from_template(
+            "snappyHexMeshDict.tpl", os.path.join(self.case_dir, "system", "snappyHexMeshDict"), context
+        )
 
     def _calculate_span_refinement_level(self) -> int:
         """
@@ -995,15 +1061,15 @@ class GeometryAnalyzer:
         Returns:
             int: Required refinement level (default 2 if span refinement not enabled)
         """
-        span_refinement_enabled = self.snappy_settings.get('span_refinement_enabled', False)
-        cells_across_span = self.snappy_settings.get('cells_across_span', 0)
+        span_refinement_enabled = self.snappy_settings.get("span_refinement_enabled", False)
+        cells_across_span = self.snappy_settings.get("cells_across_span", 0)
 
         if not span_refinement_enabled or cells_across_span <= 0:
             # Return default if span refinement not used
-            return self.snappy_settings.get('span_refinement_level', 2)
+            return self.snappy_settings.get("span_refinement_level", 2)
 
         # If user explicitly set span_refinement_level, use it
-        user_span_level = self.snappy_settings.get('span_refinement_level', None)
+        user_span_level = self.snappy_settings.get("span_refinement_level", None)
         if user_span_level is not None:
             self.log.info(f"Using user-specified span refinement level: {user_span_level}")
             return user_span_level
@@ -1016,13 +1082,15 @@ class GeometryAnalyzer:
             f"Auto-calculated span refinement level: {plan['span_level']}\n"
             f"  (blockMesh={plan['background_cpd']} cells/D × 2^{plan['span_level']} = {plan['theoretical_cells_across']} cells across span)"
         )
-        return plan['span_level']
+        return plan["span_level"]
 
     def _write_surfacefeatures_dict(self):
         context = {
             "patches": self.all_patches,
             "wall_patch": self.wall_patch,
             "snappy_settings": self.snappy_settings,
-            "config": self.config
+            "config": self.config,
         }
-        self._write_file_from_template("surfaceFeaturesDict.tpl", os.path.join(self.case_dir, "system", "surfaceFeaturesDict"), context)
+        self._write_file_from_template(
+            "surfaceFeaturesDict.tpl", os.path.join(self.case_dir, "system", "surfaceFeaturesDict"), context
+        )

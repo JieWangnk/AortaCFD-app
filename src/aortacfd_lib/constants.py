@@ -286,8 +286,7 @@ def calculate_map(systolic: float, diastolic: float) -> float:
 
 
 def calculate_kinematic_viscosity(
-    dynamic_viscosity: float = BLOOD_VISCOSITY_DEFAULT,
-    density: float = BLOOD_DENSITY_DEFAULT
+    dynamic_viscosity: float = BLOOD_VISCOSITY_DEFAULT, density: float = BLOOD_DENSITY_DEFAULT
 ) -> float:
     """Calculate kinematic viscosity from dynamic viscosity and density.
 
@@ -307,34 +306,64 @@ def calculate_kinematic_viscosity(
 
 __all__ = [
     # Unit conversions
-    'MMHG_TO_PA', 'PA_TO_MMHG', 'ML_TO_M3', 'M3_TO_ML', 'L_TO_M3',
-    'MM_TO_M', 'M_TO_MM', 'MIN_TO_S',
+    "MMHG_TO_PA",
+    "PA_TO_MMHG",
+    "ML_TO_M3",
+    "M3_TO_ML",
+    "L_TO_M3",
+    "MM_TO_M",
+    "M_TO_MM",
+    "MIN_TO_S",
     # Blood properties
-    'BLOOD_DENSITY_DEFAULT', 'BLOOD_DENSITY_MIN', 'BLOOD_DENSITY_MAX',
-    'BLOOD_VISCOSITY_DEFAULT', 'BLOOD_VISCOSITY_MIN', 'BLOOD_VISCOSITY_MAX',
-    'BLOOD_KINEMATIC_VISCOSITY_DEFAULT',
+    "BLOOD_DENSITY_DEFAULT",
+    "BLOOD_DENSITY_MIN",
+    "BLOOD_DENSITY_MAX",
+    "BLOOD_VISCOSITY_DEFAULT",
+    "BLOOD_VISCOSITY_MIN",
+    "BLOOD_VISCOSITY_MAX",
+    "BLOOD_KINEMATIC_VISCOSITY_DEFAULT",
     # Cardiovascular defaults
-    'SYSTOLIC_PRESSURE_DEFAULT', 'DIASTOLIC_PRESSURE_DEFAULT',
-    'VENOUS_PRESSURE_DEFAULT', 'CARDIAC_OUTPUT_DEFAULT',
-    'HEART_RATE_DEFAULT', 'CARDIAC_CYCLE_DEFAULT',
-    'PWV_DEFAULT', 'PWV_ELDERLY', 'AORTIC_DIAMETER_DEFAULT',
-    'AORTIC_VELOCITY_REFERENCE',
+    "SYSTOLIC_PRESSURE_DEFAULT",
+    "DIASTOLIC_PRESSURE_DEFAULT",
+    "VENOUS_PRESSURE_DEFAULT",
+    "CARDIAC_OUTPUT_DEFAULT",
+    "HEART_RATE_DEFAULT",
+    "CARDIAC_CYCLE_DEFAULT",
+    "PWV_DEFAULT",
+    "PWV_ELDERLY",
+    "AORTIC_DIAMETER_DEFAULT",
+    "AORTIC_VELOCITY_REFERENCE",
     # Turbulence
-    'C_MU', 'TURBULENCE_INTENSITY_DEFAULT', 'TURBULENCE_VISCOSITY_RATIO_DEFAULT',
-    'MIXING_LENGTH_FACTOR',
+    "C_MU",
+    "TURBULENCE_INTENSITY_DEFAULT",
+    "TURBULENCE_VISCOSITY_RATIO_DEFAULT",
+    "MIXING_LENGTH_FACTOR",
     # Mesh quality
-    'MIN_CELLS_PER_DIAMETER', 'DEFAULT_CELLS_PER_DIAMETER',
-    'RECOMMENDED_CELLS_PER_DIAMETER', 'PUBLICATION_CELLS_PER_DIAMETER',
-    'MESH_ORTHOGONALITY_MIN', 'MESH_ORTHOGONALITY_GOOD', 'MESH_ORTHOGONALITY_EXCELLENT',
-    'MESH_SKEWNESS_MAX', 'MESH_SKEWNESS_GOOD', 'MESH_SKEWNESS_EXCELLENT',
-    'MESH_ASPECT_RATIO_MAX',
+    "MIN_CELLS_PER_DIAMETER",
+    "DEFAULT_CELLS_PER_DIAMETER",
+    "RECOMMENDED_CELLS_PER_DIAMETER",
+    "PUBLICATION_CELLS_PER_DIAMETER",
+    "MESH_ORTHOGONALITY_MIN",
+    "MESH_ORTHOGONALITY_GOOD",
+    "MESH_ORTHOGONALITY_EXCELLENT",
+    "MESH_SKEWNESS_MAX",
+    "MESH_SKEWNESS_GOOD",
+    "MESH_SKEWNESS_EXCELLENT",
+    "MESH_ASPECT_RATIO_MAX",
     # Courant numbers
-    'MAX_COURANT_CONSERVATIVE', 'MAX_COURANT_STANDARD', 'MAX_COURANT_LES',
+    "MAX_COURANT_CONSERVATIVE",
+    "MAX_COURANT_STANDARD",
+    "MAX_COURANT_LES",
     # Windkessel
-    'TAU_RC_DEFAULT', 'TAU_RC_MIN', 'TAU_RC_MAX',
+    "TAU_RC_DEFAULT",
+    "TAU_RC_MIN",
+    "TAU_RC_MAX",
     # Murray's law
-    'MURRAY_LAW_EXPONENT',
+    "MURRAY_LAW_EXPONENT",
     # Functions
-    'mmhg_to_pa', 'pa_to_mmhg', 'cardiac_output_to_m3s',
-    'calculate_map', 'calculate_kinematic_viscosity',
+    "mmhg_to_pa",
+    "pa_to_mmhg",
+    "cardiac_output_to_m3s",
+    "calculate_map",
+    "calculate_kinematic_viscosity",
 ]

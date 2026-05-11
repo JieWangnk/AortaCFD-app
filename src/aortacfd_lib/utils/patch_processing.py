@@ -7,8 +7,7 @@ from scipy.spatial import ConvexHull
 from .logger import Logger
 
 
-def compute_inward_normal(tri_surface_dir: str, inlet_name: str, wall_name: str = "wall",
-                          log=None) -> np.ndarray:
+def compute_inward_normal(tri_surface_dir: str, inlet_name: str, wall_name: str = "wall", log=None) -> np.ndarray:
     """Compute the inward-pointing unit normal of an inlet patch.
 
     Uses a purely local geometric signal: the first ring of wall
@@ -37,6 +36,13 @@ def compute_inward_normal(tri_surface_dir: str, inlet_name: str, wall_name: str 
     inlet_path = os.path.join(tri_surface_dir, f"{inlet_name}.stl")
     wall_path = os.path.join(tri_surface_dir, f"{wall_name}.stl")
 
+    # Surface STLs must be staged before this is called; let callers fall
+    # back to legacy centroid heuristics if they are missing (tests, partial
+    # pipelines).
+    for p in (inlet_path, wall_path):
+        if not os.path.exists(p) or os.path.getsize(p) == 0:
+            raise FileNotFoundError(p)
+
     inlet_mesh = mesh.Mesh.from_file(inlet_path)
     wall_mesh = mesh.Mesh.from_file(wall_path)
 
@@ -45,8 +51,7 @@ def compute_inward_normal(tri_surface_dir: str, inlet_name: str, wall_name: str 
     inlet_centroid = np.mean(inlet_verts.reshape(-1, 3), axis=0)
 
     # Area-weighted average normal
-    cross = np.cross(inlet_verts[:, 1] - inlet_verts[:, 0],
-                     inlet_verts[:, 2] - inlet_verts[:, 0])
+    cross = np.cross(inlet_verts[:, 1] - inlet_verts[:, 0], inlet_verts[:, 2] - inlet_verts[:, 0])
     avg_normal = cross.sum(axis=0)
     avg_normal = avg_normal / np.linalg.norm(avg_normal)
 
@@ -84,14 +89,15 @@ def compute_inward_normal(tri_surface_dir: str, inlet_name: str, wall_name: str 
             ring_tri_indices.update(wall_edge_to_tri[edge])
 
     if log:
-        log.info(f"Inlet inward detection: {shared_edge_count} shared edges, "
-                 f"{len(ring_tri_indices)} adjacent wall triangles")
+        log.info(
+            f"Inlet inward detection: {shared_edge_count} shared edges, "
+            f"{len(ring_tri_indices)} adjacent wall triangles"
+        )
 
     if not ring_tri_indices:
         # Fallback: use wall centroid (less local but still inside tube)
         if log:
-            log.warning("No shared edges found between inlet and wall — "
-                        "falling back to wall centroid")
+            log.warning("No shared edges found between inlet and wall — " "falling back to wall centroid")
         wall_centroid = np.mean(wall_verts.reshape(-1, 3), axis=0)
         direction = wall_centroid - inlet_centroid
         direction = direction / np.linalg.norm(direction)
@@ -114,10 +120,10 @@ def compute_inward_normal(tri_surface_dir: str, inlet_name: str, wall_name: str 
         inward_normal = avg_normal
 
     if log:
-        log.info(f"Inlet inward normal: [{inward_normal[0]:.4f}, "
-                 f"{inward_normal[1]:.4f}, {inward_normal[2]:.4f}]")
+        log.info(f"Inlet inward normal: [{inward_normal[0]:.4f}, " f"{inward_normal[1]:.4f}, {inward_normal[2]:.4f}]")
 
     return inward_normal
+
 
 class PatchProcessing:
     """
@@ -125,107 +131,108 @@ class PatchProcessing:
     and can compute properties like bounding box, surface area, or an "equivalent
     inlet radius" for an arbitrarily oriented patch.
     """
+
     def __init__(self, tri_surface_dir: str, patch_name_to_load: str):
         """
         The constructor is now simple. It just needs the path to the
         directory containing all STLs and the name of the specific patch to load.
         """
-        self.tri_surface_dir = tri_surface_dir #
-        self.patch_name = patch_name_to_load #
-        self.log = Logger("patch_processing").get_logger() #
+        self.tri_surface_dir = tri_surface_dir  #
+        self.patch_name = patch_name_to_load  #
+        self.log = Logger("patch_processing").get_logger()  #
 
-        self.stl_path = os.path.join(self.tri_surface_dir, f"{self.patch_name}.stl") #
+        self.stl_path = os.path.join(self.tri_surface_dir, f"{self.patch_name}.stl")  #
 
-        if not os.path.exists(self.stl_path): #
-            self.log.error(f"STL file not found: {self.stl_path}") #
-            raise FileNotFoundError(f"STL file not found: {self.stl_path}") #
+        if not os.path.exists(self.stl_path):  #
+            self.log.error(f"STL file not found: {self.stl_path}")  #
+            raise FileNotFoundError(f"STL file not found: {self.stl_path}")  #
 
-        self.mesh_data = self.load_mesh(self.stl_path) #
-        self.all_points = self.extract_points() #
+        self.mesh_data = self.load_mesh(self.stl_path)  #
+        self.all_points = self.extract_points()  #
 
         # --- Robustness checks ---
-        num_triangles = len(self.mesh_data.vectors) #
-        if num_triangles < 10: #
+        num_triangles = len(self.mesh_data.vectors)  #
+        if num_triangles < 10:  #
             # CORRECTED: Use self.patch_name instead of the old self.STL variable
             self.log.warning(
-                f"STL patch '{self.patch_name}' contains very few triangles ({num_triangles}). " #
+                f"STL patch '{self.patch_name}' contains very few triangles ({num_triangles}). "  #
                 "Results may be unreliable or indicate a degenerate or incomplete patch."
             )
 
-    def load_mesh(self, path): #
+    def load_mesh(self, path):  #
         """Loads an STL file using numpy-stl."""
         try:
-            return mesh.Mesh.from_file(path) #
+            return mesh.Mesh.from_file(path)  #
         except Exception as e:
-            self.log.error(f"Error loading STL file {path}: {e}") #
-            raise RuntimeError(f"Error loading STL file {path}: {e}") #
+            self.log.error(f"Error loading STL file {path}: {e}")  #
+            raise RuntimeError(f"Error loading STL file {path}: {e}")  #
 
-    def extract_points(self): #
+    def extract_points(self):  #
         """
         Extracts all triangle vertices from the loaded mesh into
         a single Nx3 NumPy array.
         """
-        return np.concatenate([self.mesh_data.v0, self.mesh_data.v1, self.mesh_data.v2], axis=0) #
+        return np.concatenate([self.mesh_data.v0, self.mesh_data.v1, self.mesh_data.v2], axis=0)  #
 
-    def get_bounding_box(self): #
+    def get_bounding_box(self):  #
         """
         Returns the axis-aligned bounding box for the patch as (min_coords, max_coords).
         """
-        min_coords = self.all_points.min(axis=0) #
-        max_coords = self.all_points.max(axis=0) #
-        return min_coords, max_coords #
+        min_coords = self.all_points.min(axis=0)  #
+        max_coords = self.all_points.max(axis=0)  #
+        return min_coords, max_coords  #
 
-    def compute_average_normal(self): #
+    def compute_average_normal(self):  #
         """
         Computes the average normal by summing face normals for each triangle.
         """
-        if self.mesh_data.vectors is None or len(self.mesh_data.vectors) == 0: #
-            self.log.error("Mesh data contains no vectors (triangles).") #
-            raise ValueError("Mesh data contains no vectors (triangles).") #
+        if self.mesh_data.vectors is None or len(self.mesh_data.vectors) == 0:  #
+            self.log.error("Mesh data contains no vectors (triangles).")  #
+            raise ValueError("Mesh data contains no vectors (triangles).")  #
 
-        normal_sum = np.zeros(3) #
-        num_triangles = len(self.mesh_data.vectors) #
+        normal_sum = np.zeros(3)  #
+        num_triangles = len(self.mesh_data.vectors)  #
 
-        for i in range(num_triangles): #
-            p1, p2, p3 = self.mesh_data.vectors[i] #
-            v1 = p2 - p1 #
-            v2 = p3 - p1 #
-            face_normal = np.cross(v1, v2) #
-            norm_len = np.linalg.norm(face_normal) #
-            if norm_len > 1e-15: #
-                face_normal /= norm_len #
-            normal_sum += face_normal #
+        for i in range(num_triangles):  #
+            p1, p2, p3 = self.mesh_data.vectors[i]  #
+            v1 = p2 - p1  #
+            v2 = p3 - p1  #
+            face_normal = np.cross(v1, v2)  #
+            norm_len = np.linalg.norm(face_normal)  #
+            if norm_len > 1e-15:  #
+                face_normal /= norm_len  #
+            normal_sum += face_normal  #
 
-        avg_normal = normal_sum / num_triangles #
-        norm_avg = np.linalg.norm(avg_normal) #
-        if norm_avg < 1e-15: #
-            self.log.error("Average normal is near zero; check STL geometry.") #
-            raise ValueError("Average normal is near zero; check STL geometry.") #
-        return avg_normal / norm_avg #
+        avg_normal = normal_sum / num_triangles  #
+        norm_avg = np.linalg.norm(avg_normal)  #
+        if norm_avg < 1e-15:  #
+            self.log.error("Average normal is near zero; check STL geometry.")  #
+            raise ValueError("Average normal is near zero; check STL geometry.")  #
+        return avg_normal / norm_avg  #
 
-    def project_points_onto_plane(self, points_3d, normal_vec): #
+    def project_points_onto_plane(self, points_3d, normal_vec):  #
         """
         Projects an Nx3 array of points into a 2D plane orthonormal to 'normal_vec'.
         """
-        centroid = np.mean(points_3d, axis=0) #
-        translated_3d = points_3d - centroid #
+        centroid = np.mean(points_3d, axis=0)  #
+        translated_3d = points_3d - centroid  #
 
-        normal_vec = normal_vec / np.linalg.norm(normal_vec) #
-        ref_axis = np.array([1, 0, 0]) #
-        if abs(np.dot(normal_vec, ref_axis)) > 0.9: #
-            ref_axis = np.array([0, 1, 0]) #
+        normal_vec = normal_vec / np.linalg.norm(normal_vec)  #
+        ref_axis = np.array([1, 0, 0])  #
+        if abs(np.dot(normal_vec, ref_axis)) > 0.9:  #
+            ref_axis = np.array([0, 1, 0])  #
 
-        u = np.cross(normal_vec, ref_axis) #
-        u /= np.linalg.norm(u) #
-        v = np.cross(normal_vec, u) #
-        v /= np.linalg.norm(v) #
+        u = np.cross(normal_vec, ref_axis)  #
+        u /= np.linalg.norm(u)  #
+        v = np.cross(normal_vec, u)  #
+        v /= np.linalg.norm(v)  #
 
-        points_2d = np.zeros((len(translated_3d), 2)) #
-        for i in range(len(translated_3d)): #
-            points_2d[i, 0] = np.dot(translated_3d[i], u) #
-            points_2d[i, 1] = np.dot(translated_3d[i], v) #
+        points_2d = np.zeros((len(translated_3d), 2))  #
+        for i in range(len(translated_3d)):  #
+            points_2d[i, 0] = np.dot(translated_3d[i], u)  #
+            points_2d[i, 1] = np.dot(translated_3d[i], v)  #
 
-        return translated_3d, points_2d, centroid #
+        return translated_3d, points_2d, centroid  #
 
     def calculate_inlet_center_radius(self):
         """
@@ -292,5 +299,3 @@ class PatchProcessing:
         rotation_axis /= axis_norm
         rotation_angle = np.arccos(np.clip(np.dot(v1, v2), -1.0, 1.0))
         return rotation_axis, rotation_angle
-
-

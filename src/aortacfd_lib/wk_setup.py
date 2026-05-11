@@ -1,15 +1,19 @@
 import os
-import sys
 import math
 import numpy as np
 
 from .utils.patch_processing import PatchProcessing, compute_inward_normal
 from .utils.logger import Logger
 from .constants import (
-    MMHG_TO_PA, ML_TO_M3,
-    TAU_RC_DEFAULT, TAU_RC_MIN, TAU_RC_MAX,
-    MURRAY_LAW_EXPONENT, VENOUS_PRESSURE_DEFAULT,
+    MMHG_TO_PA,
+    ML_TO_M3,
+    TAU_RC_DEFAULT,
+    TAU_RC_MIN,
+    TAU_RC_MAX,
+    MURRAY_LAW_EXPONENT,
+    VENOUS_PRESSURE_DEFAULT,
 )
+
 
 class WkSetup:
     """
@@ -95,11 +99,13 @@ class WkSetup:
         self.cardiac_cycle = cardiac_cycle
         self.log = Logger("wk_setup").get_logger()
 
-        self.geom_settings = self.config['geometry']
+        self.geom_settings = self.config["geometry"]
         # Support both flattened and nested config structures
-        self.inlet_settings = self.config.get('boundary_conditions', {}).get('inlet') or self.config.get('inlet', {})
-        self.outlet_settings = self.config.get('boundary_conditions', {}).get('outlets') or self.config.get('outlets', {})
-        self.wk_model_settings = self.outlet_settings['windkessel_settings']
+        self.inlet_settings = self.config.get("boundary_conditions", {}).get("inlet") or self.config.get("inlet", {})
+        self.outlet_settings = self.config.get("boundary_conditions", {}).get("outlets") or self.config.get(
+            "outlets", {}
+        )
+        self.wk_model_settings = self.outlet_settings["windkessel_settings"]
 
     def execute(self):
         """Main method to compute Windkessel coefficients and store them in config."""
@@ -107,7 +113,7 @@ class WkSetup:
         self.log.info("Windkessel Boundary Condition Setup")
         self.log.info("=" * 80)
 
-        outlet_patches = self.geom_settings['outlet_keywords_ordered']
+        outlet_patches = self.geom_settings["outlet_keywords_ordered"]
 
         # Check for direct RCZ mode first
         if self._check_direct_rcz_mode(outlet_patches):
@@ -116,14 +122,14 @@ class WkSetup:
             return
 
         # Determine whether to use 2-element or 3-element Windkessel
-        inlet_type = self.inlet_settings.get('type', 'TIMEVARYING').upper()
-        outlet_type = self.outlet_settings.get('type', '3EWINDKESSEL').upper()
+        inlet_type = self.inlet_settings.get("type", "TIMEVARYING").upper()
+        outlet_type = self.outlet_settings.get("type", "3EWINDKESSEL").upper()
 
         # Auto-select 2-element for CONSTANT inlet if user hasn't explicitly chosen
-        auto_select = self.wk_model_settings.get('auto_select_model', True)
-        if outlet_type == '2EWINDKESSEL':
+        auto_select = self.wk_model_settings.get("auto_select_model", True)
+        if outlet_type == "2EWINDKESSEL":
             use_2element = True
-        elif inlet_type in ['CONSTANT', 'PARABOLIC'] and outlet_type == '3EWINDKESSEL' and auto_select:
+        elif inlet_type in ["CONSTANT", "PARABOLIC"] and outlet_type == "3EWINDKESSEL" and auto_select:
             use_2element = True
             self.log.warning(
                 "CONSTANT/PARABOLIC inlet detected: Auto-selecting 2-element Windkessel (Z=0). "
@@ -166,7 +172,7 @@ class WkSetup:
         MAP_Pa = MAP * MMHG_TO_PA  # Convert to Pa
         P_venous_Pa = P_venous * MMHG_TO_PA
 
-        self.log.info(f"Step 1: Pressure targets")
+        self.log.info("Step 1: Pressure targets")
         self.log.info(f"  Systolic pressure (SP): {SP} mmHg")
         self.log.info(f"  Diastolic pressure (DP): {DP} mmHg")
         self.log.info(f"  Pulse pressure (PP): {pulse_pressure} mmHg")
@@ -175,35 +181,28 @@ class WkSetup:
         self.log.info(f"  Driving pressure (MAP - P_v): {MAP - P_venous:.1f} mmHg")
 
         # Step 2: Flow distribution
-        flow_split_ratios = self.wk_model_settings.get('flow_split')
+        flow_split_ratios = self.wk_model_settings.get("flow_split")
 
         if flow_split_ratios is None:
             # Auto-calculate using Murray's law (default)
-            self.log.info(f"\nStep 2: Flow distribution (Murray's law: f_i = r³/Σr³)")
+            self.log.info("\nStep 2: Flow distribution (Murray's law: f_i = r³/Σr³)")
             flow_split_ratios = self._calculate_murray_flow_split(outlet_radii)
-            self.wk_model_settings['flow_split'] = flow_split_ratios
+            self.wk_model_settings["flow_split"] = flow_split_ratios
         elif isinstance(flow_split_ratios, dict):
             # User provided dictionary - could be:
             # 1. Complete ratios: {"outlet1": 0.2, "outlet2": 0.3, "outlet3": 0.5}
             # 2. Percentages with murray: {"outlet1": 20, "outlet4": 50, "_rest": "murray"}
             # 3. Mixed: {"outlet1": 20, "outlet4": 50} - remaining auto-distributed
-            self.log.info(f"\nStep 2: Flow distribution (Custom per-outlet specification)")
-            flow_split_ratios = self._parse_custom_flow_split(
-                flow_split_ratios,
-                outlet_patches,
-                outlet_radii
-            )
-            self.wk_model_settings['flow_split'] = flow_split_ratios
+            self.log.info("\nStep 2: Flow distribution (Custom per-outlet specification)")
+            flow_split_ratios = self._parse_custom_flow_split(flow_split_ratios, outlet_patches, outlet_radii)
+            self.wk_model_settings["flow_split"] = flow_split_ratios
         else:
             # Flow split is a percentage for branches (MATLAB method)
-            self.log.info(f"\nStep 2: Flow distribution (Branch percentage + area-based distribution - MATLAB method)")
+            self.log.info("\nStep 2: Flow distribution (Branch percentage + area-based distribution - MATLAB method)")
             flow_split_ratios = self._parse_flow_split_percentage(
-                flow_split_ratios,
-                outlet_patches,
-                'area',  # MATLAB uses area-based, not Murray's law
-                outlet_radii
+                flow_split_ratios, outlet_patches, "area", outlet_radii  # MATLAB uses area-based, not Murray's law
             )
-            self.wk_model_settings['flow_split'] = flow_split_ratios
+            self.wk_model_settings["flow_split"] = flow_split_ratios
 
         # Calculate outlet flows
         num_outlets = len(outlet_patches)
@@ -214,7 +213,7 @@ class WkSetup:
             self.log.info(f"  {name}: {flow_split_ratios[name]*100:.1f}% → mean Q = {mean_Q_outlets[i]*1e6:.2f} mL/s")
 
         # Step 3: Total (DC) resistance per outlet
-        self.log.info(f"\nStep 3: Total resistance R_total = (MAP - P_v) / Q_mean")
+        self.log.info("\nStep 3: Total resistance R_total = (MAP - P_v) / Q_mean")
         R_total = np.zeros(num_outlets)
 
         for i, outlet in enumerate(outlet_patches):
@@ -233,23 +232,23 @@ class WkSetup:
 
         if use_2element:
             # 2-ELEMENT WINDKESSEL: R = R_total, Z = 0
-            self.log.info(f"\nStep 4: 2-Element Model - R = R_total, Z = 0 (no characteristic impedance)")
+            self.log.info("\nStep 4: 2-Element Model - R = R_total, Z = 0 (no characteristic impedance)")
             for i, outlet in enumerate(outlet_patches):
                 R1[i] = 0.0  # No proximal impedance for 2-element
                 R2[i] = R_total[i]  # Full resistance
                 R_mmHg = R2[i] / (MMHG_TO_PA * 1e6)
                 self.log.info(f"  {outlet}: R = {R2[i]:.2e} Pa·s/m³ ({R_mmHg:.1f} mmHg·s/mL), Z = 0")
 
-            self.log.info(f"\nStep 5: Skipped (2-element model has no R1/R2 split)")
+            self.log.info("\nStep 5: Skipped (2-element model has no R1/R2 split)")
         else:
             # 3-ELEMENT WINDKESSEL: Calculate R1 from characteristic impedance
             # Step 4: Proximal resistance R1 (characteristic impedance)
-            self.log.info(f"\nStep 4: Proximal resistance R1 = ρ·c/A (characteristic impedance)")
+            self.log.info("\nStep 4: Proximal resistance R1 = ρ·c/A (characteristic impedance)")
 
             # Get density - support both 'blood_density' and 'rho' keys
-            rho = self.config['physics'].get('blood_density', self.config['physics'].get('rho', 1060))  # kg/m³
-            pwv_method = self.wk_model_settings.get('pwv_method', 'matlab')  # Default to MATLAB formula
-            pwv_value = self.wk_model_settings.get('pwv', None)  # m/s, if specified
+            rho = self.config["physics"].get("blood_density", self.config["physics"].get("rho", 1060))  # kg/m³
+            pwv_method = self.wk_model_settings.get("pwv_method", "matlab")  # Default to MATLAB formula
+            pwv_value = self.wk_model_settings.get("pwv", None)  # m/s, if specified
 
             # PWV Methods:
             #   'matlab': c = a / (2*sqrt(A/pi))^b  (default a=13.3, b=0.3)
@@ -260,8 +259,8 @@ class WkSetup:
             #   'physiological': Moens-Korteweg equation c = sqrt(E*h / (2*rho*R))
             #       Ref: Moens AI (1878), Korteweg DJ (1878).
             #       Requires wall_elastic_modulus (Pa) and wall_thickness (m).
-            pwv_a = self.wk_model_settings.get('pwv_a', 13.3)
-            pwv_b = self.wk_model_settings.get('pwv_b', 0.3)
+            pwv_a = self.wk_model_settings.get("pwv_a", 13.3)
+            pwv_b = self.wk_model_settings.get("pwv_b", 0.3)
 
             for i, outlet in enumerate(outlet_patches):
                 A_i = outlet_areas[outlet]
@@ -272,13 +271,13 @@ class WkSetup:
                     # User-specified PWV
                     c_i = pwv_value
                     method = "user-specified"
-                elif pwv_method == 'matlab':
+                elif pwv_method == "matlab":
                     # Olufsen (1999) empirical formula: c = a / (2*sqrt(A_mm²/π))^b
                     # Limitation: Empirical fit to structured tree data; may not generalize
                     # to pathological vessels (coarctation, aneurysm, calcification).
                     c_i = pwv_a / (2 * np.sqrt(A_mm2 / np.pi)) ** pwv_b
                     method = f"Olufsen formula: {pwv_a}/(2√(A/π))^{pwv_b}"
-                elif pwv_method == 'empirical':
+                elif pwv_method == "empirical":
                     # Diameter-based tiers (typical healthy adult aortic values)
                     # Limitation: Coarse 3-tier approximation; ignores vessel wall
                     # properties, patient age, and pathology (stiffening, stenosis).
@@ -290,13 +289,15 @@ class WkSetup:
                     else:
                         c_i = 7.0  # Smaller vessels (branches)
                     method = "empirical"
-                elif pwv_method == 'physiological':
+                elif pwv_method == "physiological":
                     # Moens-Korteweg equation: c = sqrt(E * h / (2 * rho * R))
                     # More physically grounded but requires vessel wall properties.
                     # Limitation: Assumes thin-walled elastic tube; does not account
                     # for viscoelasticity or non-uniform wall thickness.
-                    E_wall = self.wk_model_settings.get('wall_elastic_modulus', 500e3)  # Pa (default: 500 kPa, typical aorta)
-                    h_wall = self.wk_model_settings.get('wall_thickness', 0.002)  # m (default: 2mm)
+                    E_wall = self.wk_model_settings.get(
+                        "wall_elastic_modulus", 500e3
+                    )  # Pa (default: 500 kPa, typical aorta)
+                    h_wall = self.wk_model_settings.get("wall_thickness", 0.002)  # m (default: 2mm)
                     R_i_radius = outlet_radii[outlet]
                     c_i = np.sqrt(E_wall * h_wall / (2.0 * rho * R_i_radius))
                     method = f"Moens-Korteweg: E={E_wall/1e3:.0f}kPa, h={h_wall*1e3:.1f}mm"
@@ -310,10 +311,12 @@ class WkSetup:
                 R1[i] = rho * c_i / A_i
 
                 R1_mmHg = R1[i] / (MMHG_TO_PA * 1e6)
-                self.log.info(f"  {outlet}: A={A_mm2:.2f}mm², PWV = {c_i:.2f} m/s ({method}) → R1 = {R1[i]:.2e} Pa·s/m³ ({R1_mmHg:.1f} mmHg·s/mL)")
+                self.log.info(
+                    f"  {outlet}: A={A_mm2:.2f}mm², PWV = {c_i:.2f} m/s ({method}) → R1 = {R1[i]:.2e} Pa·s/m³ ({R1_mmHg:.1f} mmHg·s/mL)"
+                )
 
             # Step 5: Distal resistance R2
-            self.log.info(f"\nStep 5: Distal resistance R2 = R_total - R1")
+            self.log.info("\nStep 5: Distal resistance R2 = R_total - R1")
 
             for i, outlet in enumerate(outlet_patches):
                 R2[i] = R_total[i] - R1[i]
@@ -327,24 +330,24 @@ class WkSetup:
 
         # Step 6: Compliance C
         if use_2element:
-            self.log.info(f"\nStep 6: Compliance C = tau / R (2-element formula)")
+            self.log.info("\nStep 6: Compliance C = tau / R (2-element formula)")
         else:
-            self.log.info(f"\nStep 6: Compliance C = tau / R2 (3-element formula)")
+            self.log.info("\nStep 6: Compliance C = tau / R2 (3-element formula)")
 
         # RC time constant: controls diastolic pressure decay rate.
         # Physiological default from constants.py. Historical MATLAB default was 1.92s.
         # For pediatric patients, tau is typically shorter (0.5-1.0s) due to higher heart rate.
-        tau_systemic = self.wk_model_settings.get('tau', TAU_RC_DEFAULT)
+        tau_systemic = self.wk_model_settings.get("tau", TAU_RC_DEFAULT)
         if tau_systemic < TAU_RC_MIN or tau_systemic > TAU_RC_MAX:
             self.log.warning(
                 f"RC time constant tau={tau_systemic:.2f}s outside physiological range "
                 f"[{TAU_RC_MIN}, {TAU_RC_MAX}]s. Typical adult: 1.0-2.0s, pediatric: 0.5-1.0s."
             )
-        C_distribution = self.wk_model_settings.get('compliance_distribution', 'uniform')  # MATLAB uses uniform
+        C_distribution = self.wk_model_settings.get("compliance_distribution", "uniform")  # MATLAB uses uniform
 
         C = np.zeros(num_outlets)
 
-        if C_distribution == 'proportional':
+        if C_distribution == "proportional":
             # Distribute compliance proportional to flow split
             # C_i = f_i * C_total, where C_total = tau / R_parallel
             R2_parallel_inv = np.sum(1.0 / R2)
@@ -370,7 +373,7 @@ class WkSetup:
                 self.log.info(f"  {outlet}: C = {C[i]:.2e} m³/Pa ({C_mmHg:.2e} mL/mmHg), RC = {RC_i:.2f} s")
 
         # Store calculated WK coefficients
-        self.log.info(f"\n" + "=" * 80)
+        self.log.info("\n" + "=" * 80)
         model_name = "2-Element (R-C, Z=0)" if use_2element else "3-Element (R-C-Z)"
         self.log.info(f"SUMMARY: {model_name} Windkessel Parameters (OpenFOAM units: Pa·s/m³, m³/Pa)")
         self.log.info("=" * 80)
@@ -382,17 +385,19 @@ class WkSetup:
             q_init = mean_Q_outlets[i]  # m³/s
 
             outlet_parameters[name] = {
-                "R": float(R2[i]),      # For 2E: R_total; For 3E: R2 (distal resistance)
-                "C": float(C[i]),       # Compliance
-                "Z": float(R1[i]),      # For 2E: 0; For 3E: R1 (characteristic impedance)
-                "q_init": float(q_init) # Initial flow for WK state variables (prevents startup spike)
+                "R": float(R2[i]),  # For 2E: R_total; For 3E: R2 (distal resistance)
+                "C": float(C[i]),  # Compliance
+                "Z": float(R1[i]),  # For 2E: 0; For 3E: R1 (characteristic impedance)
+                "q_init": float(q_init),  # Initial flow for WK state variables (prevents startup spike)
             }
             if use_2element:
                 self.log.info(f"{name:15s}: R={R2[i]:12.2e}  C={C[i]:12.2e}  Z=0  q_init={q_init*1e6:.2f} mL/s")
             else:
-                self.log.info(f"{name:15s}: R(R2)={R2[i]:12.2e}  C={C[i]:12.2e}  Z(R1)={R1[i]:12.2e}  q_init={q_init*1e6:.2f} mL/s")
+                self.log.info(
+                    f"{name:15s}: R(R2)={R2[i]:12.2e}  C={C[i]:12.2e}  Z(R1)={R1[i]:12.2e}  q_init={q_init*1e6:.2f} mL/s"
+                )
 
-        self.wk_model_settings['outlet_parameters'] = outlet_parameters
+        self.wk_model_settings["outlet_parameters"] = outlet_parameters
         self.log.info("=" * 80)
         self.log.info("Windkessel calculation complete - coefficients stored in config")
         self.log.info("=" * 80)
@@ -402,7 +407,7 @@ class WkSetup:
         os.makedirs(reports_dir, exist_ok=True)
         plot_path = os.path.join(reports_dir, "flow_distribution.png")
 
-        if inlet_type in ['TIMEVARYING', 'WOMERSLEY']:
+        if inlet_type in ["TIMEVARYING", "WOMERSLEY"]:
             # Time-varying plot with flow waveforms, pie/bar charts, and WK table
             self.plot_flow_distribution(times, flow_inlet, flow_split_ratios, plot_path, outlet_parameters)
         else:
@@ -414,47 +419,48 @@ class WkSetup:
         tri_surface_dir = os.path.join(self.case_dir, "constant", "triSurface")
 
         # STL files in constant/triSurface/ are pre-scaled to meters during case setup.
-        inlet_patch_name = self.geom_settings['inlet_keywords_ordered']
+        inlet_patch_name = self.geom_settings["inlet_keywords_ordered"]
         area_inlet = PatchProcessing(tri_surface_dir, inlet_patch_name).calculate_surface_area()
         outlet_areas = {
-            name: PatchProcessing(tri_surface_dir, name).calculate_surface_area()
-            for name in outlet_patches
+            name: PatchProcessing(tri_surface_dir, name).calculate_surface_area() for name in outlet_patches
         }
         outlet_radii = {name: math.sqrt(area / math.pi) for name, area in outlet_areas.items()}
         return area_inlet, outlet_areas, outlet_radii
 
     def _compute_mean_inlet_flow(self, area_inlet: float):
         """Compute mean inlet flow in m^3/s from the configured inlet boundary condition."""
-        inlet_type = self.inlet_settings.get('type', 'TIMEVARYING').upper()
+        inlet_type = self.inlet_settings.get("type", "TIMEVARYING").upper()
 
-        if inlet_type in ['TIMEVARYING', 'WOMERSLEY']:
-            inlet_csv_path = os.path.join("cases_input", self.geom_settings['case_name'], self.inlet_settings['csv_file'])
-            times, flow_inlet = self._read_inlet_flow(inlet_csv_path, self.inlet_settings['data_type'], area_inlet)
+        if inlet_type in ["TIMEVARYING", "WOMERSLEY"]:
+            inlet_csv_path = os.path.join(
+                "cases_input", self.geom_settings["case_name"], self.inlet_settings["csv_file"]
+            )
+            times, flow_inlet = self._read_inlet_flow(inlet_csv_path, self.inlet_settings["data_type"], area_inlet)
             return float(np.mean(flow_inlet)), times, flow_inlet
 
-        if inlet_type == 'MRI':
+        if inlet_type == "MRI":
             mean_q_inlet = self._compute_mri_mean_inlet_flow(area_inlet)
             return mean_q_inlet, None, None
 
-        if inlet_type in ['CONSTANT', 'PARABOLIC']:
-            if 'flowrate' in self.inlet_settings and 'cardiac_output' not in self.inlet_settings:
-                self.inlet_settings['cardiac_output'] = self.inlet_settings['flowrate']
+        if inlet_type in ["CONSTANT", "PARABOLIC"]:
+            if "flowrate" in self.inlet_settings and "cardiac_output" not in self.inlet_settings:
+                self.inlet_settings["cardiac_output"] = self.inlet_settings["flowrate"]
 
-            if 'cardiac_output' in self.inlet_settings:
-                cardiac_output_lmin = self.inlet_settings['cardiac_output']
+            if "cardiac_output" in self.inlet_settings:
+                cardiac_output_lmin = self.inlet_settings["cardiac_output"]
                 mean_q_inlet = cardiac_output_lmin / 60.0 / 1000.0
                 mean_velocity = mean_q_inlet / area_inlet
                 self.log.info(
                     f"Constant inlet: cardiac_output = {cardiac_output_lmin:.2f} L/min → "
                     f"velocity = {mean_velocity:.3f} m/s, mean flow Q = {mean_q_inlet*1e6:.2f} mL/s"
                 )
-                if 'velocity' in self.inlet_settings:
+                if "velocity" in self.inlet_settings:
                     self.log.warning("Both 'velocity' and 'cardiac_output' specified. Using cardiac_output.")
                 return float(mean_q_inlet), None, None
 
-            if 'velocity' in self.inlet_settings:
-                velocity = self.inlet_settings['velocity']
-                mean_velocity = velocity / 2.0 if inlet_type == 'PARABOLIC' else velocity
+            if "velocity" in self.inlet_settings:
+                velocity = self.inlet_settings["velocity"]
+                mean_velocity = velocity / 2.0 if inlet_type == "PARABOLIC" else velocity
                 mean_q_inlet = mean_velocity * area_inlet
                 self.log.info(
                     f"Constant inlet: velocity = {velocity:.3f} m/s, mean flow Q = {mean_q_inlet*1e6:.2f} mL/s"
@@ -473,8 +479,9 @@ class WkSetup:
         mri_velocity_dir = self._resolve_mri_velocity_directory()
         flow_direction = self._compute_inlet_flow_direction()
         time_dirs = [
-            entry for entry in os.listdir(mri_velocity_dir)
-            if os.path.isdir(os.path.join(mri_velocity_dir, entry)) and entry.replace('.', '', 1).isdigit()
+            entry
+            for entry in os.listdir(mri_velocity_dir)
+            if os.path.isdir(os.path.join(mri_velocity_dir, entry)) and entry.replace(".", "", 1).isdigit()
         ]
 
         if not time_dirs:
@@ -482,7 +489,7 @@ class WkSetup:
 
         flow_samples = []
         for time_dir in sorted(time_dirs, key=float):
-            velocity_file = os.path.join(mri_velocity_dir, time_dir, 'U')
+            velocity_file = os.path.join(mri_velocity_dir, time_dir, "U")
             if not os.path.exists(velocity_file):
                 continue
 
@@ -503,32 +510,30 @@ class WkSetup:
             )
             mean_q_inlet = abs(mean_q_inlet)
 
-        self.log.info(
-            f"MRI inlet: mean flow Q = {mean_q_inlet*1e6:.2f} mL/s from {len(flow_samples)} time steps"
-        )
+        self.log.info(f"MRI inlet: mean flow Q = {mean_q_inlet*1e6:.2f} mL/s from {len(flow_samples)} time steps")
         return mean_q_inlet
 
     def _resolve_mri_velocity_directory(self) -> str:
         """Resolve the MRI velocity directory, preferring prepared boundaryData in the case directory."""
-        inlet_patch_name = self.geom_settings['inlet_keywords_ordered']
-        boundary_data_dir = os.path.join(self.case_dir, 'constant', 'boundaryData', inlet_patch_name)
+        inlet_patch_name = self.geom_settings["inlet_keywords_ordered"]
+        boundary_data_dir = os.path.join(self.case_dir, "constant", "boundaryData", inlet_patch_name)
         if os.path.isdir(boundary_data_dir):
             return boundary_data_dir
 
-        mri_source_dir = self.inlet_settings.get('file', self.inlet_settings.get('source_dir', ''))
+        mri_source_dir = self.inlet_settings.get("file", self.inlet_settings.get("source_dir", ""))
         if not mri_source_dir:
             raise ValueError("MRI inlet type requires 'file' or 'source_dir' to locate velocity data")
 
         if os.path.isabs(mri_source_dir) and os.path.isdir(mri_source_dir):
             return mri_source_dir
 
-        patient_case_dir = self.config.get('patient_case_directory', '')
+        patient_case_dir = self.config.get("patient_case_directory", "")
         if patient_case_dir:
             candidate = os.path.join(patient_case_dir, mri_source_dir)
             if os.path.isdir(candidate):
                 return candidate
 
-        candidate = os.path.join('cases_input', self.geom_settings['case_name'], mri_source_dir)
+        candidate = os.path.join("cases_input", self.geom_settings["case_name"], mri_source_dir)
         if os.path.isdir(candidate):
             return candidate
 
@@ -539,18 +544,18 @@ class WkSetup:
 
     def _compute_inlet_flow_direction(self) -> np.ndarray:
         """Compute the positive inlet flow direction based on orientation settings and outlet geometry."""
-        tri_surface_dir = os.path.join(self.case_dir, 'constant', 'triSurface')
-        inlet_name = self.geom_settings['inlet_keywords_ordered']
+        tri_surface_dir = os.path.join(self.case_dir, "constant", "triSurface")
+        inlet_name = self.geom_settings["inlet_keywords_ordered"]
         inlet_center, _, inlet_normal = PatchProcessing(tri_surface_dir, inlet_name).calculate_inlet_center_radius()
-        orientation = self.inlet_settings.get('orientation', 'auto').lower()
+        orientation = self.inlet_settings.get("orientation", "auto").lower()
 
-        if orientation == 'out':
+        if orientation == "out":
             return inlet_normal
-        if orientation == 'in':
+        if orientation == "in":
             return -inlet_normal
 
         outlet_centers = []
-        for outlet_name in self.geom_settings['outlet_keywords_ordered']:
+        for outlet_name in self.geom_settings["outlet_keywords_ordered"]:
             outlet_center, _, _ = PatchProcessing(tri_surface_dir, outlet_name).calculate_inlet_center_radius()
             outlet_centers.append(outlet_center)
 
@@ -559,7 +564,7 @@ class WkSetup:
             return inlet_normal
 
         # Use edge-ring method for robust inward direction
-        wall_name = self.geom_settings.get('wall_keywords_ordered', 'wall')
+        wall_name = self.geom_settings.get("wall_keywords_ordered", "wall")
         return compute_inward_normal(tri_surface_dir, inlet_name, wall_name, log=self.log)
 
     @staticmethod
@@ -579,18 +584,17 @@ class WkSetup:
 
         n_vectors = int(lines[count_index].strip())
         vectors = []
-        for line in lines[count_index + 2:count_index + 2 + n_vectors]:
-            values = line.strip().strip('()').split()
+        for line in lines[count_index + 2 : count_index + 2 + n_vectors]:
+            values = line.strip().strip("()").split()
             vectors.append([float(value) for value in values])
 
         return np.array(vectors)
 
     def _inject_q_init_for_direct_rcz(self, outlet_patches: list) -> None:
         """Populate missing q_init values for direct RCZ cases to stabilize WK startup."""
-        outlet_params = self.wk_model_settings.get('outlet_parameters', {})
+        outlet_params = self.wk_model_settings.get("outlet_parameters", {})
         missing_q_init = [
-            outlet for outlet in outlet_patches
-            if outlet in outlet_params and 'q_init' not in outlet_params[outlet]
+            outlet for outlet in outlet_patches if outlet in outlet_params and "q_init" not in outlet_params[outlet]
         ]
 
         if not missing_q_init:
@@ -617,12 +621,12 @@ class WkSetup:
         )
         for outlet in outlet_patches:
             params = outlet_params[outlet]
-            if 'q_init' in params:
+            if "q_init" in params:
                 self.log.info(f"  {outlet}: preserving configured q_init = {params['q_init']*1e6:.2f} mL/s")
                 continue
 
             q_init = float(mean_q_inlet * flow_split_ratios[outlet])
-            params['q_init'] = q_init
+            params["q_init"] = q_init
             self.log.info(f"  {outlet}: q_init = {q_init*1e6:.2f} mL/s")
 
     def _check_direct_rcz_mode(self, outlet_patches: list) -> bool:
@@ -648,7 +652,7 @@ class WkSetup:
         Returns:
             True if direct RCZ mode should be used, False otherwise
         """
-        outlet_params = self.wk_model_settings.get('outlet_parameters', {})
+        outlet_params = self.wk_model_settings.get("outlet_parameters", {})
 
         if not outlet_params:
             return False
@@ -664,7 +668,7 @@ class WkSetup:
                 return False
 
             # Check for required keys
-            for key in ['R', 'C', 'Z']:
+            for key in ["R", "C", "Z"]:
                 if key not in params:
                     self.log.debug(f"Direct RCZ mode: '{outlet}' missing '{key}'")
                     return False
@@ -745,8 +749,8 @@ class WkSetup:
         result = {}
 
         # Remove special keys
-        rest_mode = flow_split_config.pop('_rest', None)
-        distribution_method = flow_split_config.pop('_method', 'murray')  # 'murray' or 'area'
+        rest_mode = flow_split_config.pop("_rest", None)
+        distribution_method = flow_split_config.pop("_method", "murray")  # 'murray' or 'area'
 
         # Check if values look like ratios (all <= 1.0 and sum ≈ 1.0)
         numeric_values = [v for v in flow_split_config.values() if isinstance(v, (int, float))]
@@ -755,7 +759,7 @@ class WkSetup:
 
         if all_small and sum_approx_one and rest_mode is None:
             # Mode 1: Complete ratios
-            self.log.info(f"  Mode: Complete flow ratios (sum ≈ 1.0)")
+            self.log.info("  Mode: Complete flow ratios (sum ≈ 1.0)")
             for outlet in outlet_patches:
                 if outlet in flow_split_config:
                     result[outlet] = float(flow_split_config[outlet])
@@ -795,7 +799,7 @@ class WkSetup:
             result.update(fixed_outlets)
 
             if remaining_outlets:
-                if rest_mode == 'murray' or (rest_mode is None and distribution_method == 'murray'):
+                if rest_mode == "murray" or (rest_mode is None and distribution_method == "murray"):
                     # Distribute remaining using Murray's law
                     self.log.info(f"  Fixed outlets: {list(fixed_outlets.keys())} ({total_fixed_pct:.1f}%)")
                     self.log.info(f"  Remaining outlets: {remaining_outlets} ({remaining_pct:.1f}%) - Murray's law")
@@ -811,12 +815,12 @@ class WkSetup:
                         r_mm = outlet_radii[outlet] * 1000
                         self.log.info(f"    {outlet}: r={r_mm:.2f}mm → {result[outlet]*100:.1f}%")
 
-                elif rest_mode == 'area':
+                elif rest_mode == "area":
                     # Distribute remaining by area
                     self.log.info(f"  Fixed outlets: {list(fixed_outlets.keys())} ({total_fixed_pct:.1f}%)")
                     self.log.info(f"  Remaining outlets: {remaining_outlets} ({remaining_pct:.1f}%) - Area ratio")
 
-                    remaining_areas = {name: np.pi * outlet_radii[name]**2 for name in remaining_outlets}
+                    remaining_areas = {name: np.pi * outlet_radii[name] ** 2 for name in remaining_outlets}
                     total_area = sum(remaining_areas.values())
 
                     for outlet in remaining_outlets:
@@ -827,19 +831,19 @@ class WkSetup:
 
                 else:
                     # Equal distribution (fallback)
-                    self.log.info(f"  Remaining outlets equally distributed")
+                    self.log.info("  Remaining outlets equally distributed")
                     equal_share = (remaining_pct / 100.0) / len(remaining_outlets)
                     for outlet in remaining_outlets:
                         result[outlet] = equal_share
 
         # Log final distribution
-        self.log.info(f"  Final flow distribution:")
+        self.log.info("  Final flow distribution:")
         for outlet in outlet_patches:
             self.log.info(f"    {outlet}: {result[outlet]*100:.1f}%")
 
         return result
 
-    def _parse_flow_split_percentage(self, flow_split_value, outlet_patches, method='area', geometry_data=None):
+    def _parse_flow_split_percentage(self, flow_split_value, outlet_patches, method="area", geometry_data=None):
         """
         Simplified flow split: specify branches percentage, rest to main outlet.
 
@@ -894,12 +898,12 @@ class WkSetup:
         # MATLAB method: Distribute by AREA ratio
         branch_data = {name: geometry_data[name] for name in branch_outlets}
 
-        if method == 'area':
+        if method == "area":
             # Convert radii to areas: A = π r²
             branch_areas = {name: np.pi * r**2 for name, r in branch_data.items()}
             total_branch_area = sum(branch_areas.values())
 
-            self.log.info(f"  Branch distribution by AREA ratio (MATLAB method):")
+            self.log.info("  Branch distribution by AREA ratio (MATLAB method):")
             for name in branch_outlets:
                 # Fraction within branches group
                 branch_fraction = branch_areas[name] / total_branch_area
@@ -939,12 +943,12 @@ class WkSetup:
         normalized = data_type.lower().strip()
 
         # Handle common variations
-        if normalized in ['flowrate', 'flow_rate', 'flow', 'q']:
-            return 'flowrate'
-        elif normalized in ['velocity', 'vel', 'u', 'v']:
-            return 'velocity'
-        elif normalized in ['pressure', 'p', 'press']:
-            return 'pressure'
+        if normalized in ["flowrate", "flow_rate", "flow", "q"]:
+            return "flowrate"
+        elif normalized in ["velocity", "vel", "u", "v"]:
+            return "velocity"
+        elif normalized in ["pressure", "p", "press"]:
+            return "pressure"
         else:
             # Return as-is if not recognized (will trigger error downstream)
             return normalized
@@ -963,16 +967,14 @@ class WkSetup:
         comment_lines = 0
         header_line = 0
 
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             for line in f:
                 stripped = line.strip()
-                if not stripped or stripped.startswith('#'):
+                if not stripped or stripped.startswith("#"):
                     comment_lines += 1
                 else:
                     # First non-comment line - check if it's a header
-                    if ("time" in stripped.lower() or
-                        "flow" in stripped.lower() or
-                        "velocity" in stripped.lower()):
+                    if "time" in stripped.lower() or "flow" in stripped.lower() or "velocity" in stripped.lower():
                         header_line = 1
                     break
 
@@ -990,21 +992,18 @@ class WkSetup:
             # This matches the same logic used in inlet_mapping.py.
             max_abs_flow = np.max(np.abs(flow_inlet))
             if max_abs_flow > 1.0:
-                self.log.info(
-                    f"Flowrate CSV auto-detected as L/min (max={max_abs_flow:.2f}). "
-                    f"Converting to m³/s."
-                )
+                self.log.info(f"Flowrate CSV auto-detected as L/min (max={max_abs_flow:.2f}). " f"Converting to m³/s.")
                 flow_inlet = flow_inlet * 1e-3 / 60.0  # L/min -> m³/s
             else:
-                self.log.info(
-                    f"Flowrate CSV auto-detected as m³/s (max={max_abs_flow:.2e})"
-                )
+                self.log.info(f"Flowrate CSV auto-detected as m³/s (max={max_abs_flow:.2e})")
 
         elif data_type_norm == "velocity":
             times = Q_data[:, 0]
             flow_inlet = Q_data[:, 1] * inlet_area
         else:
-            self.log.error(f"Unknown data type: {data_type} (normalized: {data_type_norm}). Use 'flowrate' or 'velocity'.")
+            self.log.error(
+                f"Unknown data type: {data_type} (normalized: {data_type_norm}). Use 'flowrate' or 'velocity'."
+            )
             raise ValueError(f"Unknown data type: {data_type}. Use 'flowrate' or 'velocity'.")
 
         return times, flow_inlet
@@ -1049,34 +1048,45 @@ class WkSetup:
         gs = GridSpec(3, 2, figure=fig, height_ratios=[1.2, 1, 1.2], hspace=0.35, wspace=0.3)
 
         # Title
-        fig.suptitle('Windkessel Flow Distribution and Parameters\n(Time-Varying Analysis)',
-                     fontsize=16, fontweight='bold', y=0.98)
+        fig.suptitle(
+            "Windkessel Flow Distribution and Parameters\n(Time-Varying Analysis)",
+            fontsize=16,
+            fontweight="bold",
+            y=0.98,
+        )
 
         # === Subplot 1: Time-series flow waveforms (top, spans both columns) ===
         ax1 = fig.add_subplot(gs[0, :])
 
         # Plot inlet
-        ax1.plot(times * 1000, flow_inlet * 1e6, 'k-', linewidth=2.5, label='Inlet')
+        ax1.plot(times * 1000, flow_inlet * 1e6, "k-", linewidth=2.5, label="Inlet")
 
         # Plot outlets with distinct colors
         colors = plt.cm.Set2(np.linspace(0, 1, len(outlet_flows)))
         for (outlet, flow), color in zip(outlet_flows.items(), colors):
             fraction = flow_splits[outlet]
-            ax1.plot(times * 1000, flow * 1e6, '--', linewidth=1.8,
-                    label=f'{outlet} ({fraction*100:.1f}%)', color=color)
+            ax1.plot(
+                times * 1000, flow * 1e6, "--", linewidth=1.8, label=f"{outlet} ({fraction*100:.1f}%)", color=color
+            )
 
-        ax1.set_xlabel('Time (ms)', fontsize=11)
-        ax1.set_ylabel('Flow Rate (mL/s)', fontsize=11)
-        ax1.set_title(f'Flow Waveforms Over One Cardiac Cycle ({cardiac_cycle_ms:.0f} ms)',
-                     fontsize=12, fontweight='bold')
+        ax1.set_xlabel("Time (ms)", fontsize=11)
+        ax1.set_ylabel("Flow Rate (mL/s)", fontsize=11)
+        ax1.set_title(
+            f"Flow Waveforms Over One Cardiac Cycle ({cardiac_cycle_ms:.0f} ms)", fontsize=12, fontweight="bold"
+        )
         ax1.grid(True, alpha=0.3)
-        ax1.legend(loc='upper right', fontsize=9, ncol=2)
-        ax1.set_xlim([times[0]*1000, times[-1]*1000])
+        ax1.legend(loc="upper right", fontsize=9, ncol=2)
+        ax1.set_xlim([times[0] * 1000, times[-1] * 1000])
 
         # Add mean flow annotation
-        ax1.axhline(y=mean_inlet_mL_s, color='gray', linestyle=':', alpha=0.7)
-        ax1.text(times[-1]*1000*0.02, mean_inlet_mL_s*1.05, f'Mean: {mean_inlet_mL_s:.1f} mL/s',
-                fontsize=9, color='gray')
+        ax1.axhline(y=mean_inlet_mL_s, color="gray", linestyle=":", alpha=0.7)
+        ax1.text(
+            times[-1] * 1000 * 0.02,
+            mean_inlet_mL_s * 1.05,
+            f"Mean: {mean_inlet_mL_s:.1f} mL/s",
+            fontsize=9,
+            color="gray",
+        )
 
         # === Subplot 2: Pie chart (middle left) ===
         ax2 = fig.add_subplot(gs[1, 0])
@@ -1084,74 +1094,92 @@ class WkSetup:
         sizes = [flow_splits[o] * 100 for o in labels]
         pie_colors = plt.cm.Set3(np.linspace(0, 1, len(labels)))
 
-        wedges, texts, autotexts = ax2.pie(sizes, labels=labels, autopct='%1.1f%%',
-                                           colors=pie_colors, startangle=90,
-                                           textprops={'fontsize': 10})
-        ax2.set_title('Mean Flow Distribution (%)', fontsize=12, fontweight='bold')
+        wedges, texts, autotexts = ax2.pie(
+            sizes, labels=labels, autopct="%1.1f%%", colors=pie_colors, startangle=90, textprops={"fontsize": 10}
+        )
+        ax2.set_title("Mean Flow Distribution (%)", fontsize=12, fontweight="bold")
 
         # === Subplot 3: Bar chart (middle right) ===
         ax3 = fig.add_subplot(gs[1, 1])
         x_pos = np.arange(len(labels))
         flows = [mean_outlet_flows_mL_s[o] for o in labels]
 
-        bars = ax3.bar(x_pos, flows, color=pie_colors, edgecolor='black', linewidth=1.2)
+        bars = ax3.bar(x_pos, flows, color=pie_colors, edgecolor="black", linewidth=1.2)
 
         # Add value labels on bars
         for bar, flow in zip(bars, flows):
             height = bar.get_height()
-            ax3.annotate(f'{flow:.2f}\nmL/s',
-                        xy=(bar.get_x() + bar.get_width() / 2, height),
-                        xytext=(0, 3), textcoords="offset points",
-                        ha='center', va='bottom', fontsize=9)
+            ax3.annotate(
+                f"{flow:.2f}\nmL/s",
+                xy=(bar.get_x() + bar.get_width() / 2, height),
+                xytext=(0, 3),
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                fontsize=9,
+            )
 
         ax3.set_xticks(x_pos)
-        ax3.set_xticklabels(labels, rotation=45, ha='right')
-        ax3.set_ylabel('Mean Flow Rate (mL/s)', fontsize=11)
-        ax3.set_title('Mean Outlet Flow Rates', fontsize=12, fontweight='bold')
-        ax3.axhline(y=mean_inlet_mL_s, color='red', linestyle='--', linewidth=2,
-                   label=f'Inlet: {mean_inlet_mL_s:.2f} mL/s')
-        ax3.legend(loc='upper right')
-        ax3.grid(True, axis='y', alpha=0.3)
+        ax3.set_xticklabels(labels, rotation=45, ha="right")
+        ax3.set_ylabel("Mean Flow Rate (mL/s)", fontsize=11)
+        ax3.set_title("Mean Outlet Flow Rates", fontsize=12, fontweight="bold")
+        ax3.axhline(
+            y=mean_inlet_mL_s, color="red", linestyle="--", linewidth=2, label=f"Inlet: {mean_inlet_mL_s:.2f} mL/s"
+        )
+        ax3.legend(loc="upper right")
+        ax3.grid(True, axis="y", alpha=0.3)
 
         # === Subplot 4: Windkessel parameters table (bottom, spans both columns) ===
         ax4 = fig.add_subplot(gs[2, :])
-        ax4.axis('off')
+        ax4.axis("off")
 
         # Build table data (uses module-level MMHG_TO_PA and ML_TO_M3 constants)
         table_data = []
-        headers = ['Outlet', 'Mean Flow\n(mL/s)', 'Flow\n(%)',
-                   'R (Pa·s/m³)', 'C (m³/Pa)', 'Z (Pa·s/m³)',
-                   'R\n(mmHg·s/mL)', 'C\n(mL/mmHg)', 'τ=RC\n(s)']
+        headers = [
+            "Outlet",
+            "Mean Flow\n(mL/s)",
+            "Flow\n(%)",
+            "R (Pa·s/m³)",
+            "C (m³/Pa)",
+            "Z (Pa·s/m³)",
+            "R\n(mmHg·s/mL)",
+            "C\n(mL/mmHg)",
+            "τ=RC\n(s)",
+        ]
 
         for outlet in labels:
             params = outlet_parameters.get(outlet, {}) if outlet_parameters else {}
-            R = params.get('R', 0)
-            C = params.get('C', 0)
-            Z = params.get('Z', 0)
+            R = params.get("R", 0)
+            C = params.get("C", 0)
+            Z = params.get("Z", 0)
 
             # Clinical units conversion
             R_clinical = R / (MMHG_TO_PA / ML_TO_M3) if R else 0
             C_clinical = C * (MMHG_TO_PA / ML_TO_M3) if C else 0
             tau = R * C if R and C else 0
 
-            table_data.append([
-                outlet,
-                f'{mean_outlet_flows_mL_s[outlet]:.2f}',
-                f'{flow_splits[outlet]*100:.1f}',
-                f'{R:.2e}',
-                f'{C:.2e}',
-                f'{Z:.2e}',
-                f'{R_clinical:.3f}',
-                f'{C_clinical:.4f}',
-                f'{tau:.2f}'
-            ])
+            table_data.append(
+                [
+                    outlet,
+                    f"{mean_outlet_flows_mL_s[outlet]:.2f}",
+                    f"{flow_splits[outlet]*100:.1f}",
+                    f"{R:.2e}",
+                    f"{C:.2e}",
+                    f"{Z:.2e}",
+                    f"{R_clinical:.3f}",
+                    f"{C_clinical:.4f}",
+                    f"{tau:.2f}",
+                ]
+            )
 
         # Create table
-        table = ax4.table(cellText=table_data,
-                         colLabels=headers,
-                         cellLoc='center',
-                         loc='center',
-                         colColours=['lightblue'] * len(headers))
+        table = ax4.table(
+            cellText=table_data,
+            colLabels=headers,
+            cellLoc="center",
+            loc="center",
+            colColours=["lightblue"] * len(headers),
+        )
 
         table.auto_set_font_size(False)
         table.set_fontsize(9)
@@ -1160,19 +1188,27 @@ class WkSetup:
         # Style header row
         for j in range(len(headers)):
             table[(0, j)].set_fontsize(9)
-            table[(0, j)].set_text_props(weight='bold')
+            table[(0, j)].set_text_props(weight="bold")
 
-        ax4.set_title('Windkessel Parameters Summary', fontsize=12, fontweight='bold', pad=20)
+        ax4.set_title("Windkessel Parameters Summary", fontsize=12, fontweight="bold", pad=20)
 
         # Add summary text
         total_mean_flow = sum(flows)
-        summary_text = (f'Mean Inlet Flow: {mean_inlet_mL_s:.2f} mL/s ({mean_inlet_mL_s*60/1000:.2f} L/min)\n'
-                       f'Mean Outlet Flow: {total_mean_flow:.2f} mL/s (Mass conservation: {total_mean_flow/mean_inlet_mL_s*100:.1f}%)\n'
-                       f'Cardiac Cycle: {cardiac_cycle_ms:.0f} ms')
-        fig.text(0.5, 0.02, summary_text, ha='center', fontsize=10,
-                bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.8))
+        summary_text = (
+            f"Mean Inlet Flow: {mean_inlet_mL_s:.2f} mL/s ({mean_inlet_mL_s*60/1000:.2f} L/min)\n"
+            f"Mean Outlet Flow: {total_mean_flow:.2f} mL/s (Mass conservation: {total_mean_flow/mean_inlet_mL_s*100:.1f}%)\n"
+            f"Cardiac Cycle: {cardiac_cycle_ms:.0f} ms"
+        )
+        fig.text(
+            0.5,
+            0.02,
+            summary_text,
+            ha="center",
+            fontsize=10,
+            bbox=dict(boxstyle="round", facecolor="lightyellow", alpha=0.8),
+        )
 
-        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        plt.savefig(output_path, dpi=150, bbox_inches="tight")
         plt.close()
 
         self.log.info(f"Flow distribution plot (time-varying) saved to: {output_path}")
@@ -1194,22 +1230,24 @@ class WkSetup:
         """
         try:
             import matplotlib.pyplot as plt
-            from matplotlib.patches import FancyBboxPatch
         except ImportError:
             self.log.warning("matplotlib not available, skipping flow distribution plot")
             return
 
         # Calculate outlet flows in mL/s
-        outlet_flows_mL_s = {outlet: mean_Q_inlet * fraction * 1e6
-                            for outlet, fraction in flow_splits.items()}
+        outlet_flows_mL_s = {outlet: mean_Q_inlet * fraction * 1e6 for outlet, fraction in flow_splits.items()}
         inlet_flow_mL_s = mean_Q_inlet * 1e6
 
         # Create figure with subplots
         fig = plt.figure(figsize=(14, 10))
 
         # Title
-        fig.suptitle('Windkessel Flow Distribution and Parameters\n(Steady-State Analysis)',
-                     fontsize=16, fontweight='bold', y=0.98)
+        fig.suptitle(
+            "Windkessel Flow Distribution and Parameters\n(Steady-State Analysis)",
+            fontsize=16,
+            fontweight="bold",
+            y=0.98,
+        )
 
         # Subplot 1: Pie chart (top left)
         ax1 = fig.add_subplot(2, 2, 1)
@@ -1217,74 +1255,92 @@ class WkSetup:
         sizes = [flow_splits[o] * 100 for o in labels]
         colors = plt.cm.Set3(np.linspace(0, 1, len(labels)))
 
-        wedges, texts, autotexts = ax1.pie(sizes, labels=labels, autopct='%1.1f%%',
-                                           colors=colors, startangle=90,
-                                           textprops={'fontsize': 10})
-        ax1.set_title('Flow Distribution (%)', fontsize=12, fontweight='bold')
+        wedges, texts, autotexts = ax1.pie(
+            sizes, labels=labels, autopct="%1.1f%%", colors=colors, startangle=90, textprops={"fontsize": 10}
+        )
+        ax1.set_title("Flow Distribution (%)", fontsize=12, fontweight="bold")
 
         # Subplot 2: Bar chart (top right)
         ax2 = fig.add_subplot(2, 2, 2)
         x_pos = np.arange(len(labels))
         flows = [outlet_flows_mL_s[o] for o in labels]
 
-        bars = ax2.bar(x_pos, flows, color=colors, edgecolor='black', linewidth=1.2)
+        bars = ax2.bar(x_pos, flows, color=colors, edgecolor="black", linewidth=1.2)
 
         # Add value labels on bars
         for bar, flow, frac in zip(bars, flows, sizes):
             height = bar.get_height()
-            ax2.annotate(f'{flow:.2f}\nmL/s',
-                        xy=(bar.get_x() + bar.get_width() / 2, height),
-                        xytext=(0, 3), textcoords="offset points",
-                        ha='center', va='bottom', fontsize=9)
+            ax2.annotate(
+                f"{flow:.2f}\nmL/s",
+                xy=(bar.get_x() + bar.get_width() / 2, height),
+                xytext=(0, 3),
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                fontsize=9,
+            )
 
         ax2.set_xticks(x_pos)
-        ax2.set_xticklabels(labels, rotation=45, ha='right')
-        ax2.set_ylabel('Flow Rate (mL/s)', fontsize=11)
-        ax2.set_title('Outlet Flow Rates', fontsize=12, fontweight='bold')
-        ax2.axhline(y=inlet_flow_mL_s, color='red', linestyle='--', linewidth=2,
-                   label=f'Inlet: {inlet_flow_mL_s:.2f} mL/s')
-        ax2.legend(loc='upper right')
-        ax2.grid(True, axis='y', alpha=0.3)
+        ax2.set_xticklabels(labels, rotation=45, ha="right")
+        ax2.set_ylabel("Flow Rate (mL/s)", fontsize=11)
+        ax2.set_title("Outlet Flow Rates", fontsize=12, fontweight="bold")
+        ax2.axhline(
+            y=inlet_flow_mL_s, color="red", linestyle="--", linewidth=2, label=f"Inlet: {inlet_flow_mL_s:.2f} mL/s"
+        )
+        ax2.legend(loc="upper right")
+        ax2.grid(True, axis="y", alpha=0.3)
 
         # Subplot 3: Windkessel parameters table (bottom)
         ax3 = fig.add_subplot(2, 1, 2)
-        ax3.axis('off')
+        ax3.axis("off")
 
         # Build table data (uses module-level MMHG_TO_PA and ML_TO_M3 constants)
         table_data = []
-        headers = ['Outlet', 'Flow\n(mL/s)', 'Flow\n(%)',
-                   'R (Pa·s/m³)', 'C (m³/Pa)', 'Z (Pa·s/m³)',
-                   'R\n(mmHg·s/mL)', 'C\n(mL/mmHg)', 'τ=RC\n(s)']
+        headers = [
+            "Outlet",
+            "Flow\n(mL/s)",
+            "Flow\n(%)",
+            "R (Pa·s/m³)",
+            "C (m³/Pa)",
+            "Z (Pa·s/m³)",
+            "R\n(mmHg·s/mL)",
+            "C\n(mL/mmHg)",
+            "τ=RC\n(s)",
+        ]
 
         for outlet in labels:
             params = outlet_parameters.get(outlet, {})
-            R = params.get('R', 0)
-            C = params.get('C', 0)
-            Z = params.get('Z', 0)
+            R = params.get("R", 0)
+            C = params.get("C", 0)
+            Z = params.get("Z", 0)
 
             # Clinical units conversion
             R_clinical = R / (MMHG_TO_PA / ML_TO_M3) if R else 0
             C_clinical = C * (MMHG_TO_PA / ML_TO_M3) if C else 0
             tau = R * C if R and C else 0
 
-            table_data.append([
-                outlet,
-                f'{outlet_flows_mL_s[outlet]:.2f}',
-                f'{flow_splits[outlet]*100:.1f}',
-                f'{R:.2e}',
-                f'{C:.2e}',
-                f'{Z:.2e}',
-                f'{R_clinical:.3f}',
-                f'{C_clinical:.4f}',
-                f'{tau:.2f}'
-            ])
+            table_data.append(
+                [
+                    outlet,
+                    f"{outlet_flows_mL_s[outlet]:.2f}",
+                    f"{flow_splits[outlet]*100:.1f}",
+                    f"{R:.2e}",
+                    f"{C:.2e}",
+                    f"{Z:.2e}",
+                    f"{R_clinical:.3f}",
+                    f"{C_clinical:.4f}",
+                    f"{tau:.2f}",
+                ]
+            )
 
         # Create table
-        table = ax3.table(cellText=table_data,
-                         colLabels=headers,
-                         cellLoc='center',
-                         loc='center',
-                         colColours=['lightblue'] * len(headers))
+        table = ax3.table(
+            cellText=table_data,
+            colLabels=headers,
+            cellLoc="center",
+            loc="center",
+            colColours=["lightblue"] * len(headers),
+        )
 
         table.auto_set_font_size(False)
         table.set_fontsize(9)
@@ -1293,19 +1349,27 @@ class WkSetup:
         # Style header row
         for j in range(len(headers)):
             table[(0, j)].set_fontsize(9)
-            table[(0, j)].set_text_props(weight='bold')
+            table[(0, j)].set_text_props(weight="bold")
 
-        ax3.set_title('Windkessel Parameters Summary', fontsize=12, fontweight='bold', pad=20)
+        ax3.set_title("Windkessel Parameters Summary", fontsize=12, fontweight="bold", pad=20)
 
         # Add summary text
         total_flow = sum(flows)
-        summary_text = (f'Total Inlet Flow: {inlet_flow_mL_s:.2f} mL/s ({inlet_flow_mL_s*60/1000:.2f} L/min)\n'
-                       f'Total Outlet Flow: {total_flow:.2f} mL/s (Mass conservation: {total_flow/inlet_flow_mL_s*100:.1f}%)')
-        fig.text(0.5, 0.02, summary_text, ha='center', fontsize=10,
-                bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.8))
+        summary_text = (
+            f"Total Inlet Flow: {inlet_flow_mL_s:.2f} mL/s ({inlet_flow_mL_s*60/1000:.2f} L/min)\n"
+            f"Total Outlet Flow: {total_flow:.2f} mL/s (Mass conservation: {total_flow/inlet_flow_mL_s*100:.1f}%)"
+        )
+        fig.text(
+            0.5,
+            0.02,
+            summary_text,
+            ha="center",
+            fontsize=10,
+            bbox=dict(boxstyle="round", facecolor="lightyellow", alpha=0.8),
+        )
 
         plt.tight_layout(rect=[0, 0.05, 1, 0.95])
-        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        plt.savefig(output_path, dpi=150, bbox_inches="tight")
         plt.close()
 
         self.log.info(f"Flow distribution plot (steady-state) saved to: {output_path}")

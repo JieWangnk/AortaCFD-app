@@ -49,26 +49,22 @@ class TestCreateCaseStructureTask:
             case_dir = os.path.join(tmpdir, "output", "openfoam")
 
             config = {
-                'geometry': {
-                    'case_name': 'test_patient',
-                    'scale_factor': 0.001,
-                    'inlet_keywords_ordered': 'inlet'
-                },
-                'clean_run': False
+                "geometry": {"case_name": "test_patient", "scale_factor": 0.001, "inlet_keywords_ordered": "inlet"},
+                "clean_run": False,
             }
 
             # Import and create task
             from workflow.tasks.setup_tasks import CreateCaseStructureTask
 
             task = CreateCaseStructureTask(config)
-            context = {'case_directory': case_dir}
+            context = {"case_directory": case_dir}
 
             # Execute task - need to be in tmpdir for relative path
             original_cwd = os.getcwd()
             try:
                 os.chdir(tmpdir)
                 # Mock the geometry validator to pass
-                with patch('workflow.tasks.setup_tasks.GeometryValidator') as mock_validator:
+                with patch("workflow.tasks.setup_tasks.GeometryValidator") as mock_validator:
                     mock_result = Mock()
                     mock_result.is_valid = True
                     mock_result.warnings = []
@@ -94,22 +90,18 @@ class TestCreateCaseStructureTask:
 
             # Create a file to verify it gets deleted
             marker_file = os.path.join(case_dir, "marker.txt")
-            with open(marker_file, 'w') as f:
+            with open(marker_file, "w") as f:
                 f.write("test")
 
             config = {
-                'geometry': {
-                    'case_name': 'test_patient',
-                    'scale_factor': 0.001,
-                    'inlet_keywords_ordered': 'inlet'
-                },
-                'clean_run': True
+                "geometry": {"case_name": "test_patient", "scale_factor": 0.001, "inlet_keywords_ordered": "inlet"},
+                "clean_run": True,
             }
 
             from workflow.tasks.setup_tasks import CreateCaseStructureTask
 
             task = CreateCaseStructureTask(config)
-            context = {'case_directory': case_dir}
+            context = {"case_directory": case_dir}
 
             # Setup CAD folder
             cad_folder = os.path.join(tmpdir, "cases_input", "test_patient")
@@ -121,7 +113,7 @@ class TestCreateCaseStructureTask:
             original_cwd = os.getcwd()
             try:
                 os.chdir(tmpdir)
-                with patch('workflow.tasks.setup_tasks.GeometryValidator') as mock_validator:
+                with patch("workflow.tasks.setup_tasks.GeometryValidator") as mock_validator:
                     mock_result = Mock()
                     mock_result.is_valid = True
                     mock_result.warnings = []
@@ -143,25 +135,19 @@ class TestGenerateControlDictTask:
     def test_calculate_end_time_from_cycles(self):
         """Test endTime calculation from cardiac cycles."""
         config = {
-            'simulation_control': {
-                'number_of_cycles': 3,
-                'controlDict': {
-                    'application': 'foamRun',
-                    'writeInterval': 0.01
-                }
+            "simulation_control": {
+                "number_of_cycles": 3,
+                "controlDict": {"application": "foamRun", "writeInterval": 0.01},
             }
         }
 
         from workflow.tasks.setup_tasks import GenerateControlDictTask
 
         task = GenerateControlDictTask(config)
-        context = {
-            'case_directory': '/tmp/test',
-            'cardiac_cycle': 0.8  # 0.8s per cycle
-        }
+        context = {"case_directory": "/tmp/test", "cardiac_cycle": 0.8}  # 0.8s per cycle
 
         # Mock the SimulationSetup
-        with patch('workflow.tasks.setup_tasks.SimulationSetup') as mock_setup:
+        with patch("workflow.tasks.setup_tasks.SimulationSetup") as mock_setup:
             result = task.execute(context)
 
             # Check that write_controlDict was called
@@ -169,21 +155,17 @@ class TestGenerateControlDictTask:
 
             # Get the arguments passed to write_controlDict
             call_args = mock_setup.return_value.write_controlDict.call_args
-            final_control_dict = call_args.kwargs['final_control_dict']
+            final_control_dict = call_args.kwargs["final_control_dict"]
 
             # endTime should be 3 * 0.8 = 2.4
-            assert final_control_dict['endTime'] == pytest.approx(2.4, rel=1e-9)
+            assert final_control_dict["endTime"] == pytest.approx(2.4, rel=1e-9)
 
     def test_calculate_purge_write_direct(self):
         """Test purgeWrite with direct value."""
         config = {
-            'simulation_control': {
-                'number_of_cycles': 5,
-                'controlDict': {
-                    'application': 'foamRun',
-                    'writeInterval': 0.01,
-                    'purgeWrite': 100
-                }
+            "simulation_control": {
+                "number_of_cycles": 5,
+                "controlDict": {"application": "foamRun", "writeInterval": 0.01, "purgeWrite": 100},
             }
         }
 
@@ -191,8 +173,8 @@ class TestGenerateControlDictTask:
 
         task = GenerateControlDictTask(config)
 
-        sim_controls = config['simulation_control']
-        control_dict = config['simulation_control']['controlDict']
+        sim_controls = config["simulation_control"]
+        control_dict = config["simulation_control"]["controlDict"]
 
         purge_write = task._calculate_purge_write(sim_controls, control_dict, 0.8)
 
@@ -202,13 +184,10 @@ class TestGenerateControlDictTask:
     def test_calculate_purge_write_keep_last_cycles(self):
         """Test purgeWrite from keep_last_cycles."""
         config = {
-            'simulation_control': {
-                'keep_last_cycles': 2,
-                'number_of_cycles': 5,
-                'controlDict': {
-                    'application': 'foamRun',
-                    'writeInterval': 0.01
-                }
+            "simulation_control": {
+                "keep_last_cycles": 2,
+                "number_of_cycles": 5,
+                "controlDict": {"application": "foamRun", "writeInterval": 0.01},
             }
         }
 
@@ -216,8 +195,8 @@ class TestGenerateControlDictTask:
 
         task = GenerateControlDictTask(config)
 
-        sim_controls = config['simulation_control']
-        control_dict = config['simulation_control']['controlDict']
+        sim_controls = config["simulation_control"]
+        control_dict = config["simulation_control"]["controlDict"]
         cardiac_cycle = 0.8
 
         purge_write = task._calculate_purge_write(sim_controls, control_dict, cardiac_cycle)
@@ -229,21 +208,14 @@ class TestGenerateControlDictTask:
 
     def test_calculate_purge_write_no_cardiac_cycle(self):
         """Test purgeWrite when cardiac_cycle is not available."""
-        config = {
-            'simulation_control': {
-                'keep_last_cycles': 2,
-                'controlDict': {
-                    'writeInterval': 0.01
-                }
-            }
-        }
+        config = {"simulation_control": {"keep_last_cycles": 2, "controlDict": {"writeInterval": 0.01}}}
 
         from workflow.tasks.setup_tasks import GenerateControlDictTask
 
         task = GenerateControlDictTask(config)
 
-        sim_controls = config['simulation_control']
-        control_dict = config['simulation_control']['controlDict']
+        sim_controls = config["simulation_control"]
+        control_dict = config["simulation_control"]["controlDict"]
 
         # No cardiac_cycle
         purge_write = task._calculate_purge_write(sim_controls, control_dict, None)
@@ -281,12 +253,13 @@ class TestPrepareBoundaryDataTask:
             os.makedirs(case_dir)
 
             csv_file = os.path.join(case_dir, "inlet.csv")
-            with open(csv_file, 'w') as f:
+            with open(csv_file, "w") as f:
                 f.write("time,flowrate\n0,0.5\n")
 
             config = {}
 
             from workflow.tasks.setup_tasks import PrepareBoundaryDataTask
+
             task = PrepareBoundaryDataTask(config)
 
             found = task._find_inlet_csv("inlet.csv", case_dir)
@@ -303,12 +276,13 @@ class TestPrepareBoundaryDataTask:
             for i in range(20):
                 lines.append(f"{i * 0.05:.3f},{0.5:.3f}")
 
-            with open(csv_file, 'w') as f:
+            with open(csv_file, "w") as f:
                 f.write("\n".join(lines))
 
             config = {}
 
             from workflow.tasks.setup_tasks import PrepareBoundaryDataTask
+
             task = PrepareBoundaryDataTask(config)
 
             result = task._validate_inlet_csv(csv_file)
@@ -318,11 +292,12 @@ class TestPrepareBoundaryDataTask:
         """Test CSV validation with empty file."""
         with tempfile.TemporaryDirectory() as tmpdir:
             csv_file = os.path.join(tmpdir, "empty.csv")
-            open(csv_file, 'w').close()  # Create empty file
+            open(csv_file, "w").close()  # Create empty file
 
             config = {}
 
             from workflow.tasks.setup_tasks import PrepareBoundaryDataTask
+
             task = PrepareBoundaryDataTask(config)
 
             with pytest.raises(ValueError, match="empty"):
@@ -333,7 +308,7 @@ class TestPrepareBoundaryDataTask:
         with tempfile.TemporaryDirectory() as tmpdir:
             csv_file = os.path.join(tmpdir, "bad.csv")
 
-            with open(csv_file, 'w') as f:
+            with open(csv_file, "w") as f:
                 f.write("time,flowrate\n")
                 f.write("0.0,0.5\n")
                 f.write("0.1,0.6\n")
@@ -342,6 +317,7 @@ class TestPrepareBoundaryDataTask:
             config = {}
 
             from workflow.tasks.setup_tasks import PrepareBoundaryDataTask
+
             task = PrepareBoundaryDataTask(config)
 
             with pytest.raises(ValueError, match="monotonically increasing"):
@@ -358,20 +334,22 @@ class TestGenerateBCFilesTask:
             os.makedirs(os.path.join(case_dir, "0"))
 
             config = {
-                'boundary_conditions': {
-                    'inlet': {'type': 'CONSTANT', 'velocity': 0.5, 'profile': 'parabolic'},
-                    'outlets': {'type': 'ZEROGRADIENT'}
+                "boundary_conditions": {
+                    "inlet": {"type": "CONSTANT", "velocity": 0.5, "profile": "parabolic"},
+                    "outlets": {"type": "ZEROGRADIENT"},
                 }
             }
 
             from workflow.tasks.setup_tasks import GenerateBCFilesTask
 
             task = GenerateBCFilesTask(config)
-            context = {'case_directory': case_dir}
+            context = {"case_directory": case_dir}
 
             # Mock both validator and BC generator
-            with patch('workflow.tasks.setup_tasks.BoundaryConditionValidator') as mock_validator, \
-                 patch('workflow.tasks.setup_tasks.BoundaryConditionSetup') as mock_bc_setup:
+            with (
+                patch("workflow.tasks.setup_tasks.BoundaryConditionValidator") as mock_validator,
+                patch("workflow.tasks.setup_tasks.BoundaryConditionSetup") as mock_bc_setup,
+            ):
 
                 mock_result = Mock()
                 mock_result.is_valid = True
@@ -399,13 +377,13 @@ class TestGenerateBCFilesTask:
             from workflow.tasks.setup_tasks import GenerateBCFilesTask
 
             task = GenerateBCFilesTask(config)
-            context = {'case_directory': case_dir}
+            context = {"case_directory": case_dir}
 
-            with patch('workflow.tasks.setup_tasks.BoundaryConditionValidator') as mock_validator:
+            with patch("workflow.tasks.setup_tasks.BoundaryConditionValidator") as mock_validator:
                 mock_result = Mock()
                 mock_result.is_valid = False
                 mock_result.warnings = []
-                mock_result.errors = ['Missing inlet configuration']
+                mock_result.errors = ["Missing inlet configuration"]
                 mock_validator.return_value.validate_all.return_value = mock_result
 
                 result = task.execute(context)
@@ -427,12 +405,9 @@ class TestGenerateSimulationReportTask:
             from workflow.tasks.setup_tasks import GenerateSimulationReportTask
 
             task = GenerateSimulationReportTask(config)
-            context = {
-                'case_directory': case_dir,
-                'patient_name': 'test_patient'
-            }
+            context = {"case_directory": case_dir, "patient_name": "test_patient"}
 
-            with patch('workflow.tasks.setup_tasks.SimulationReportGenerator') as mock_gen:
+            with patch("workflow.tasks.setup_tasks.SimulationReportGenerator") as mock_gen:
                 mock_gen.return_value.generate_full_report.return_value = "report.md"
 
                 result = task.execute(context)
@@ -446,16 +421,12 @@ class TestGenerateWindkesselReportTask:
 
     def test_skips_non_windkessel(self):
         """Test that task skips when not using Windkessel BC."""
-        config = {
-            'boundary_conditions': {
-                'outlets': {'type': 'ZEROGRADIENT'}
-            }
-        }
+        config = {"boundary_conditions": {"outlets": {"type": "ZEROGRADIENT"}}}
 
         from workflow.tasks.setup_tasks import GenerateWindkesselReportTask
 
         task = GenerateWindkesselReportTask(config)
-        context = {'case_directory': '/tmp/test'}
+        context = {"case_directory": "/tmp/test"}
 
         result = task.execute(context)
 
@@ -469,19 +440,15 @@ class TestGenerateWindkesselReportTask:
             os.makedirs(case_dir)
             reports_dir = os.path.join(tmpdir, "reports")
 
-            config = {
-                'boundary_conditions': {
-                    'outlets': {'type': '3EWINDKESSEL'}
-                }
-            }
+            config = {"boundary_conditions": {"outlets": {"type": "3EWINDKESSEL"}}}
 
             from workflow.tasks.setup_tasks import GenerateWindkesselReportTask
 
             task = GenerateWindkesselReportTask(config)
-            context = {'case_directory': case_dir}
+            context = {"case_directory": case_dir}
 
             # WindkesselAnalyzer is imported inside the execute method
-            with patch('aortacfd_lib.windkessel_analyzer.WindkesselAnalyzer') as mock_analyzer:
+            with patch("aortacfd_lib.windkessel_analyzer.WindkesselAnalyzer") as mock_analyzer:
                 mock_analyzer.return_value.generate_report.return_value = "wk_report.pdf"
 
                 result = task.execute(context)
@@ -495,22 +462,22 @@ def _create_minimal_binary_stl(filepath: str):
     """Create a minimal valid binary STL file."""
     import struct
 
-    with open(filepath, 'wb') as f:
+    with open(filepath, "wb") as f:
         # Header (80 bytes)
-        f.write(b'\x00' * 80)
+        f.write(b"\x00" * 80)
         # Number of triangles
-        f.write(struct.pack('<I', 2))
+        f.write(struct.pack("<I", 2))
 
         # Two triangles (forming a simple surface)
         for _ in range(2):
             # Normal
-            f.write(struct.pack('<fff', 0.0, 0.0, 1.0))
+            f.write(struct.pack("<fff", 0.0, 0.0, 1.0))
             # Three vertices
-            f.write(struct.pack('<fff', 0.0, 0.0, 0.0))
-            f.write(struct.pack('<fff', 1.0, 0.0, 0.0))
-            f.write(struct.pack('<fff', 0.0, 1.0, 0.0))
+            f.write(struct.pack("<fff", 0.0, 0.0, 0.0))
+            f.write(struct.pack("<fff", 1.0, 0.0, 0.0))
+            f.write(struct.pack("<fff", 0.0, 1.0, 0.0))
             # Attribute byte count
-            f.write(struct.pack('<H', 0))
+            f.write(struct.pack("<H", 0))
 
 
 class TestCopyAndScaleStl:
@@ -521,7 +488,7 @@ class TestCopyAndScaleStl:
         """Create a CreateCaseStructureTask instance for testing."""
         from workflow.tasks.setup_tasks import CreateCaseStructureTask
 
-        mock_config = {'geometry': {'scale_factor': 0.001}}
+        mock_config = {"geometry": {"scale_factor": 0.001}}
         task = CreateCaseStructureTask(config=mock_config)
         return task
 
@@ -529,22 +496,33 @@ class TestCopyAndScaleStl:
     def temp_stl_file(self, tmp_path):
         """Create a temporary STL file for testing using numpy-stl."""
         import numpy as np
+
         try:
             from stl import mesh as np_stl_mesh
         except ImportError:
             pytest.skip("numpy-stl not installed")
 
         # Define vertices of a cube (in mm scale, 10x10x10 mm)
-        vertices = np.array([
-            [0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0],
-            [0, 0, 10], [10, 0, 10], [10, 10, 10], [0, 10, 10]
-        ])
+        vertices = np.array(
+            [[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0], [0, 0, 10], [10, 0, 10], [10, 10, 10], [0, 10, 10]]
+        )
 
-        faces = np.array([
-            [0, 3, 1], [1, 3, 2], [0, 4, 7], [0, 7, 3],
-            [4, 5, 6], [4, 6, 7], [5, 1, 2], [5, 2, 6],
-            [2, 3, 6], [3, 7, 6], [0, 1, 5], [0, 5, 4]
-        ])
+        faces = np.array(
+            [
+                [0, 3, 1],
+                [1, 3, 2],
+                [0, 4, 7],
+                [0, 7, 3],
+                [4, 5, 6],
+                [4, 6, 7],
+                [5, 1, 2],
+                [5, 2, 6],
+                [2, 3, 6],
+                [3, 7, 6],
+                [0, 1, 5],
+                [0, 5, 4],
+            ]
+        )
 
         cube = np_stl_mesh.Mesh(np.zeros(faces.shape[0], dtype=np_stl_mesh.Mesh.dtype))
         for i, f in enumerate(faces):
@@ -601,6 +579,7 @@ class TestValidateInletCsvExtended:
     def task(self):
         """Create a PrepareBoundaryDataTask instance for testing."""
         from workflow.tasks.setup_tasks import PrepareBoundaryDataTask
+
         task = PrepareBoundaryDataTask(config={})
         return task
 
@@ -668,10 +647,8 @@ class TestFindInletCsvExtended:
     def task(self):
         """Create a PrepareBoundaryDataTask instance for testing."""
         from workflow.tasks.setup_tasks import PrepareBoundaryDataTask
-        task = PrepareBoundaryDataTask(config={
-            'geometry': {'cad_folder': None},
-            '_config_file_path': None
-        })
+
+        task = PrepareBoundaryDataTask(config={"geometry": {"cad_folder": None}, "_config_file_path": None})
         return task
 
     def test_find_csv_in_parent_directory(self, task, tmp_path):
@@ -692,7 +669,7 @@ class TestFindInletCsvExtended:
         csv_path = config_dir / "inlet.csv"
         csv_path.write_text("0.0,50.0\n0.1,100.0\n")
 
-        task.config['_config_file_path'] = str(config_dir / "config.json")
+        task.config["_config_file_path"] = str(config_dir / "config.json")
 
         result = task._find_inlet_csv("inlet.csv", case_dir=None)
         assert result == str(csv_path)
@@ -704,7 +681,7 @@ class TestFindInletCsvExtended:
         csv_path = cad_dir / "inlet.csv"
         csv_path.write_text("0.0,50.0\n0.1,100.0\n")
 
-        task.config['geometry'] = {'cad_folder': str(cad_dir)}
+        task.config["geometry"] = {"cad_folder": str(cad_dir)}
 
         result = task._find_inlet_csv("inlet.csv", case_dir=None)
         assert result == str(csv_path)
@@ -722,6 +699,7 @@ class TestCleanupTempObjFiles:
     def task(self):
         """Create a PrepareBoundaryDataTask instance for testing."""
         from workflow.tasks.setup_tasks import PrepareBoundaryDataTask
+
         task = PrepareBoundaryDataTask(config={})
         return task
 
@@ -755,16 +733,15 @@ class TestCalculateConstantFlowrateExtended:
     def task(self):
         """Create a PrepareBoundaryDataTask instance for testing."""
         from workflow.tasks.setup_tasks import PrepareBoundaryDataTask
-        task = PrepareBoundaryDataTask(config={
-            'geometry': {'inlet_keywords_ordered': 'inlet'}
-        })
+
+        task = PrepareBoundaryDataTask(config={"geometry": {"inlet_keywords_ordered": "inlet"}})
         return task
 
     def test_flowrate_in_lmin(self, task, tmp_path):
         """Test flow rate conversion from L/min to m³/s."""
-        inlet_config = {'flowrate': 6.0}
+        inlet_config = {"flowrate": 6.0}
 
-        with patch('aortacfd_lib.utils.patch_processing.PatchProcessing') as mock:
+        with patch("aortacfd_lib.utils.patch_processing.PatchProcessing") as mock:
             mock_instance = MagicMock()
             mock_instance.calculate_surface_area.return_value = 0.0001
             mock.return_value = mock_instance
@@ -777,9 +754,9 @@ class TestCalculateConstantFlowrateExtended:
 
     def test_cardiac_output_in_lmin(self, task, tmp_path):
         """Test cardiac output conversion from L/min to m³/s."""
-        inlet_config = {'cardiac_output': 5.0}
+        inlet_config = {"cardiac_output": 5.0}
 
-        with patch('aortacfd_lib.utils.patch_processing.PatchProcessing') as mock:
+        with patch("aortacfd_lib.utils.patch_processing.PatchProcessing") as mock:
             mock_instance = MagicMock()
             mock_instance.calculate_surface_area.return_value = 0.0001
             mock.return_value = mock_instance
@@ -791,10 +768,10 @@ class TestCalculateConstantFlowrateExtended:
 
     def test_velocity_with_area(self, task, tmp_path):
         """Test velocity * area calculation."""
-        inlet_config = {'velocity': 0.5}
+        inlet_config = {"velocity": 0.5}
         inlet_area = 0.0002
 
-        with patch('aortacfd_lib.utils.patch_processing.PatchProcessing') as mock:
+        with patch("aortacfd_lib.utils.patch_processing.PatchProcessing") as mock:
             mock_instance = MagicMock()
             mock_instance.calculate_surface_area.return_value = inlet_area
             mock.return_value = mock_instance
@@ -808,7 +785,7 @@ class TestCalculateConstantFlowrateExtended:
         """Test that missing flowrate/velocity/cardiac_output raises ValueError."""
         inlet_config = {}
 
-        with patch('aortacfd_lib.utils.patch_processing.PatchProcessing') as mock:
+        with patch("aortacfd_lib.utils.patch_processing.PatchProcessing") as mock:
             mock_instance = MagicMock()
             mock_instance.calculate_surface_area.return_value = 0.0001
             mock.return_value = mock_instance
@@ -826,15 +803,14 @@ class TestCalculatePurgeWriteExtended:
     def task(self):
         """Create a GenerateControlDictTask instance for testing."""
         from workflow.tasks.setup_tasks import GenerateControlDictTask
-        task = GenerateControlDictTask(config={
-            'simulation_control': {'controlDict': {}}
-        })
+
+        task = GenerateControlDictTask(config={"simulation_control": {"controlDict": {}}})
         return task
 
     def test_keep_last_cycles_different_intervals(self, task):
         """Test purgeWrite calculation with different write intervals."""
-        sim_controls = {'keep_last_cycles': 3}
-        control_dict = {'writeInterval': 0.005, 'purgeWrite': 0}
+        sim_controls = {"keep_last_cycles": 3}
+        control_dict = {"writeInterval": 0.005, "purgeWrite": 0}
         cardiac_cycle = 1.0
 
         result = task._calculate_purge_write(sim_controls, control_dict, cardiac_cycle)
@@ -846,24 +822,24 @@ class TestCalculatePurgeWriteExtended:
 
     def test_zero_cardiac_cycle_returns_none(self, task):
         """Test that zero cardiac_cycle returns None."""
-        sim_controls = {'keep_last_cycles': 2}
-        control_dict = {'writeInterval': 0.01, 'purgeWrite': 0}
+        sim_controls = {"keep_last_cycles": 2}
+        control_dict = {"writeInterval": 0.01, "purgeWrite": 0}
 
         result = task._calculate_purge_write(sim_controls, control_dict, 0.0)
         assert result is None
 
     def test_invalid_write_interval_returns_none(self, task):
         """Test that zero/negative writeInterval returns None."""
-        sim_controls = {'keep_last_cycles': 2}
-        control_dict = {'writeInterval': 0, 'purgeWrite': 0}
+        sim_controls = {"keep_last_cycles": 2}
+        control_dict = {"writeInterval": 0, "purgeWrite": 0}
 
         result = task._calculate_purge_write(sim_controls, control_dict, 0.8)
         assert result is None
 
     def test_write_interval_from_sim_controls(self, task):
         """Test that writeInterval is also read from sim_controls."""
-        sim_controls = {'keep_last_cycles': 2, 'writeInterval': 0.02}
-        control_dict = {'purgeWrite': 0}  # No writeInterval in controlDict
+        sim_controls = {"keep_last_cycles": 2, "writeInterval": 0.02}
+        control_dict = {"purgeWrite": 0}  # No writeInterval in controlDict
         cardiac_cycle = 0.8
 
         result = task._calculate_purge_write(sim_controls, control_dict, cardiac_cycle)
@@ -881,29 +857,25 @@ class TestPrepareBoundaryDataTaskExtended:
         """Test that world patch mode returns early with default cardiac cycle."""
         from workflow.tasks.setup_tasks import PrepareBoundaryDataTask
 
-        task = PrepareBoundaryDataTask(config={
-            'geometry': {'inlet_keywords_ordered': 'inlet'}
-        })
-        context = {'case_directory': str(tmp_path)}
+        task = PrepareBoundaryDataTask(config={"geometry": {"inlet_keywords_ordered": "inlet"}})
+        context = {"case_directory": str(tmp_path)}
 
-        with patch('workflow.tasks.setup_tasks.detect_world_patch_mode') as mock_detect:
+        with patch("workflow.tasks.setup_tasks.detect_world_patch_mode") as mock_detect:
             mock_detect.return_value = True
 
             result = task.execute(context)
 
             assert result is True
-            assert context['cardiac_cycle'] == 1.0
+            assert context["cardiac_cycle"] == 1.0
 
     def test_missing_mesh_returns_false(self, tmp_path):
         """Test that missing mesh returns False."""
         from workflow.tasks.setup_tasks import PrepareBoundaryDataTask
 
-        task = PrepareBoundaryDataTask(config={
-            'geometry': {'inlet_keywords_ordered': 'inlet'}
-        })
-        context = {'case_directory': str(tmp_path)}
+        task = PrepareBoundaryDataTask(config={"geometry": {"inlet_keywords_ordered": "inlet"}})
+        context = {"case_directory": str(tmp_path)}
 
-        with patch('workflow.tasks.setup_tasks.detect_world_patch_mode') as mock_detect:
+        with patch("workflow.tasks.setup_tasks.detect_world_patch_mode") as mock_detect:
             mock_detect.return_value = False
 
             result = task.execute(context)
@@ -919,57 +891,42 @@ class TestGenerateControlDictTaskExtended:
         from workflow.tasks.setup_tasks import GenerateControlDictTask
 
         config = {
-            'simulation_control': {
-                'end_time': 'auto',
-                'number_of_cycles': 4,
-                'controlDict': {'writeInterval': 0.01}
-            }
+            "simulation_control": {"end_time": "auto", "number_of_cycles": 4, "controlDict": {"writeInterval": 0.01}}
         }
 
         task = GenerateControlDictTask(config)
-        context = {
-            'case_directory': str(tmp_path),
-            'cardiac_cycle': 0.9
-        }
+        context = {"case_directory": str(tmp_path), "cardiac_cycle": 0.9}
 
-        with patch('workflow.tasks.setup_tasks.SimulationSetup') as mock_setup:
+        with patch("workflow.tasks.setup_tasks.SimulationSetup") as mock_setup:
             result = task.execute(context)
 
             assert result is True
 
             call_args = mock_setup.return_value.write_controlDict.call_args
-            final_control_dict = call_args.kwargs['final_control_dict']
+            final_control_dict = call_args.kwargs["final_control_dict"]
 
             # endTime = 0.9 * 4 = 3.6
-            assert final_control_dict['endTime'] == pytest.approx(3.6)
+            assert final_control_dict["endTime"] == pytest.approx(3.6)
 
     def test_execute_without_cardiac_cycle(self, tmp_path):
         """Test execute when cardiac_cycle is not yet determined."""
         from workflow.tasks.setup_tasks import GenerateControlDictTask
 
-        config = {
-            'simulation_control': {
-                'number_of_cycles': 3,
-                'controlDict': {'writeInterval': 0.01}
-            }
-        }
+        config = {"simulation_control": {"number_of_cycles": 3, "controlDict": {"writeInterval": 0.01}}}
 
         task = GenerateControlDictTask(config)
-        context = {
-            'case_directory': str(tmp_path),
-            'cardiac_cycle': None  # Not yet determined
-        }
+        context = {"case_directory": str(tmp_path), "cardiac_cycle": None}  # Not yet determined
 
-        with patch('workflow.tasks.setup_tasks.SimulationSetup') as mock_setup:
+        with patch("workflow.tasks.setup_tasks.SimulationSetup") as mock_setup:
             result = task.execute(context)
 
             assert result is True
 
             call_args = mock_setup.return_value.write_controlDict.call_args
-            final_control_dict = call_args.kwargs['final_control_dict']
+            final_control_dict = call_args.kwargs["final_control_dict"]
 
             # Should use temporary value: 1.0 * 3 = 3.0
-            assert final_control_dict['endTime'] == pytest.approx(3.0)
+            assert final_control_dict["endTime"] == pytest.approx(3.0)
 
 
 class TestGenerateMeshFilesTask:
@@ -981,9 +938,9 @@ class TestGenerateMeshFilesTask:
 
         config = {}
         task = GenerateMeshFilesTask(config)
-        context = {'case_directory': str(tmp_path)}
+        context = {"case_directory": str(tmp_path)}
 
-        with patch('workflow.tasks.setup_tasks.GeometryAnalyzer') as mock_analyzer:
+        with patch("workflow.tasks.setup_tasks.GeometryAnalyzer") as mock_analyzer:
             result = task.execute(context)
 
             assert result is True
@@ -1000,9 +957,9 @@ class TestGeneratePhysicalPropertiesTask:
 
         config = {}
         task = GeneratePhysicalPropertiesTask(config)
-        context = {'case_directory': str(tmp_path)}
+        context = {"case_directory": str(tmp_path)}
 
-        with patch('workflow.tasks.setup_tasks.PhysicalPropertiesWriter') as mock_writer:
+        with patch("workflow.tasks.setup_tasks.PhysicalPropertiesWriter") as mock_writer:
             result = task.execute(context)
 
             assert result is True
@@ -1020,9 +977,9 @@ class TestGenerateNumericalSchemesTask:
 
         config = {}
         task = GenerateNumericalSchemesTask(config)
-        context = {'case_directory': str(tmp_path)}
+        context = {"case_directory": str(tmp_path)}
 
-        with patch('workflow.tasks.setup_tasks.FvSchemesWriter') as mock_writer:
+        with patch("workflow.tasks.setup_tasks.FvSchemesWriter") as mock_writer:
             result = task.execute(context)
 
             assert result is True
@@ -1038,9 +995,9 @@ class TestGenerateSolverSettingsTask:
 
         config = {}
         task = GenerateSolverSettingsTask(config)
-        context = {'case_directory': str(tmp_path)}
+        context = {"case_directory": str(tmp_path)}
 
-        with patch('workflow.tasks.setup_tasks.FvSolutionWriter') as mock_writer:
+        with patch("workflow.tasks.setup_tasks.FvSolutionWriter") as mock_writer:
             result = task.execute(context)
 
             assert result is True
@@ -1056,14 +1013,14 @@ class TestGenerateDecomposeParDictTask:
 
         config = {}
         task = GenerateDecomposeParDictTask(config)
-        context = {'case_directory': str(tmp_path)}
+        context = {"case_directory": str(tmp_path)}
 
-        with patch('workflow.tasks.setup_tasks.SolnType') as mock_writer:
+        with patch("workflow.tasks.setup_tasks.SolnType") as mock_writer:
             result = task.execute(context)
 
             assert result is True
             mock_writer.return_value.write_decomposeParDict.assert_called_once()
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

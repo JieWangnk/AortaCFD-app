@@ -34,13 +34,13 @@ Date: November 2025
 
 import os
 import shutil
-import subprocess
 import numpy as np
 from typing import Tuple, List, Optional
 from enum import Enum
 
 try:
     from scipy.spatial import cKDTree
+
     HAS_SCIPY = True
 except ImportError:
     HAS_SCIPY = False
@@ -51,10 +51,11 @@ from .utils.patch_processing import PatchProcessing
 
 class ShapeFunction(Enum):
     """Available shape function types."""
-    POWER_LAW = "power_law"           # f(d) = (d/d_max)^n
-    POISEUILLE = "poiseuille"         # f(d) = 1 - (1 - d/d_max)^2
-    HYBRID_JET = "hybrid_jet"         # Flat core + wall decay
-    BLUNTED_PARABOLIC = "blunted"     # Flat core + parabolic wall
+
+    POWER_LAW = "power_law"  # f(d) = (d/d_max)^n
+    POISEUILLE = "poiseuille"  # f(d) = 1 - (1 - d/d_max)^2
+    HYBRID_JET = "hybrid_jet"  # Flat core + wall decay
+    BLUNTED_PARABOLIC = "blunted"  # Flat core + parabolic wall
 
 
 class DistanceWallInletProfile:
@@ -98,24 +99,24 @@ class DistanceWallInletProfile:
 
         # Extract settings
         # Support both config structures: boundary_conditions.inlet or inlet
-        self.inlet_settings = config.get('boundary_conditions', {}).get('inlet') or config.get('inlet', {})
-        self.geom_settings = config.get('geometry', {})
-        self.phys_settings = config.get('physics', {})
+        self.inlet_settings = config.get("boundary_conditions", {}).get("inlet") or config.get("inlet", {})
+        self.geom_settings = config.get("geometry", {})
+        self.phys_settings = config.get("physics", {})
 
         # Inlet identification
-        self.inlet_name = self.geom_settings.get('inlet_keywords_ordered', 'inlet')
-        self.inlet_data_file = self.inlet_settings.get('csv_file', 'flow.csv')
-        self.data_type = self.inlet_settings.get('data_type', 'flowrate').lower().strip()
+        self.inlet_name = self.geom_settings.get("inlet_keywords_ordered", "inlet")
+        self.inlet_data_file = self.inlet_settings.get("csv_file", "flow.csv")
+        self.data_type = self.inlet_settings.get("data_type", "flowrate").lower().strip()
 
         # Shape function settings
         # Default to power_law so that 'exponent' parameter is actually used
-        shape_str = self.inlet_settings.get('shape_function', 'power_law').lower()
+        shape_str = self.inlet_settings.get("shape_function", "power_law").lower()
         self.shape_function = self._parse_shape_function(shape_str)
-        self.exponent = float(self.inlet_settings.get('exponent', 2.0))
-        self.core_fraction = float(self.inlet_settings.get('core_fraction', 0.3))
+        self.exponent = float(self.inlet_settings.get("exponent", 2.0))
+        self.core_fraction = float(self.inlet_settings.get("core_fraction", 0.3))
 
         # Orientation
-        self.orientation = self.inlet_settings.get('orientation', 'auto').lower().strip()
+        self.orientation = self.inlet_settings.get("orientation", "auto").lower().strip()
 
         # Geometry data (computed during run)
         self.inlet_normal = None
@@ -131,15 +132,15 @@ class DistanceWallInletProfile:
     def _parse_shape_function(self, shape_str: str) -> ShapeFunction:
         """Parse shape function string to enum."""
         mapping = {
-            'power_law': ShapeFunction.POWER_LAW,
-            'power': ShapeFunction.POWER_LAW,
-            'linear': ShapeFunction.POWER_LAW,
-            'poiseuille': ShapeFunction.POISEUILLE,
-            'parabolic': ShapeFunction.POISEUILLE,
-            'hybrid': ShapeFunction.HYBRID_JET,
-            'hybrid_jet': ShapeFunction.HYBRID_JET,
-            'blunted': ShapeFunction.BLUNTED_PARABOLIC,
-            'blunted_parabolic': ShapeFunction.BLUNTED_PARABOLIC,
+            "power_law": ShapeFunction.POWER_LAW,
+            "power": ShapeFunction.POWER_LAW,
+            "linear": ShapeFunction.POWER_LAW,
+            "poiseuille": ShapeFunction.POISEUILLE,
+            "parabolic": ShapeFunction.POISEUILLE,
+            "hybrid": ShapeFunction.HYBRID_JET,
+            "hybrid_jet": ShapeFunction.HYBRID_JET,
+            "blunted": ShapeFunction.BLUNTED_PARABOLIC,
+            "blunted_parabolic": ShapeFunction.BLUNTED_PARABOLIC,
         }
         return mapping.get(shape_str, ShapeFunction.POISEUILLE)
 
@@ -161,10 +162,7 @@ class DistanceWallInletProfile:
         self._load_inlet_geometry()
 
         # Step 2: Read mesh points from boundaryData
-        points_file = os.path.join(
-            self.case_directory, "constant", "boundaryData",
-            self.inlet_name, "points"
-        )
+        points_file = os.path.join(self.case_directory, "constant", "boundaryData", self.inlet_name, "points")
         if not os.path.isfile(points_file):
             raise FileNotFoundError(f"Points file not found: {points_file}")
 
@@ -180,10 +178,7 @@ class DistanceWallInletProfile:
         self.face_areas = np.full(n_points, self.area / n_points)
 
         # Step 4: Read CSV flow data
-        csv_path = os.path.join(
-            self.case_directory, "constant", "boundaryData",
-            self.inlet_name, self.inlet_data_file
-        )
+        csv_path = os.path.join(self.case_directory, "constant", "boundaryData", self.inlet_name, self.inlet_data_file)
         if not os.path.isfile(csv_path):
             raise FileNotFoundError(f"Inlet CSV not found: {csv_path}")
 
@@ -191,9 +186,7 @@ class DistanceWallInletProfile:
         self.log.info(f"Read {len(times)} timesteps, cardiac cycle: {self.cardiac_cycle:.4f}s")
 
         # Step 5: Clean old time directories
-        parent_dir = os.path.join(
-            self.case_directory, "constant", "boundaryData", self.inlet_name
-        )
+        parent_dir = os.path.join(self.case_directory, "constant", "boundaryData", self.inlet_name)
         self._clean_time_directories(parent_dir)
 
         # Step 6: Generate velocity for each timestep
@@ -232,10 +225,7 @@ class DistanceWallInletProfile:
         self._load_inlet_geometry()
 
         # Step 2: Read mesh points from boundaryData
-        points_file = os.path.join(
-            self.case_directory, "constant", "boundaryData",
-            self.inlet_name, "points"
-        )
+        points_file = os.path.join(self.case_directory, "constant", "boundaryData", self.inlet_name, "points")
         if not os.path.isfile(points_file):
             raise FileNotFoundError(f"Points file not found: {points_file}")
 
@@ -251,13 +241,11 @@ class DistanceWallInletProfile:
         self.face_areas = np.full(n_points, self.area / n_points)
 
         # Step 4: Clean old time directories
-        parent_dir = os.path.join(
-            self.case_directory, "constant", "boundaryData", self.inlet_name
-        )
+        parent_dir = os.path.join(self.case_directory, "constant", "boundaryData", self.inlet_name)
         self._clean_time_directories(parent_dir)
 
         # Step 5: Generate single timestep at t=0
-        self.log.info(f"Generating constant wall-distance profile...")
+        self.log.info("Generating constant wall-distance profile...")
         self.log.info(f"  Target flow rate: {flow_rate_m3s:.6e} m³/s ({abs(flow_rate_m3s)*60*1000:.2f} L/min)")
 
         # Generate velocity data for t=0
@@ -268,18 +256,12 @@ class DistanceWallInletProfile:
         self.log.info("=" * 60)
 
     def _generate_constant_data(
-        self,
-        parent_dir: str,
-        flow_rate_m3s: float,
-        n_points: int,
-        distances: np.ndarray
+        self, parent_dir: str, flow_rate_m3s: float, n_points: int, distances: np.ndarray
     ) -> None:
         """Generate velocity data for constant inlet (single timestep at t=0)."""
         # Determine normal direction
         normal = self.inlet_normal.copy()
-        if self.orientation == 'in' or (
-            self.orientation == 'auto' and self._should_flip_normal()
-        ):
+        if self.orientation == "in" or (self.orientation == "auto" and self._should_flip_normal()):
             normal = -normal
             self.log.info("Using inward-pointing normal")
 
@@ -360,10 +342,7 @@ class DistanceWallInletProfile:
             else:
                 # Fallback to vectorized numpy (still faster than pure loop)
                 self.log.warning("scipy not available, using vectorized fallback (slower)")
-                distances = np.array([
-                    np.min(np.linalg.norm(wall_points - pt, axis=1))
-                    for pt in points
-                ])
+                distances = np.array([np.min(np.linalg.norm(wall_points - pt, axis=1)) for pt in points])
         else:
             # Fallback: radial distance from centre
             self.log.info("Using radial distance approximation")
@@ -387,10 +366,7 @@ class DistanceWallInletProfile:
             import trimesh
             from collections import Counter
 
-            inlet_stl = os.path.join(
-                self.case_directory, "constant", "triSurface",
-                f"{self.inlet_name}.stl"
-            )
+            inlet_stl = os.path.join(self.case_directory, "constant", "triSurface", f"{self.inlet_name}.stl")
             if not os.path.isfile(inlet_stl):
                 return None
 
@@ -416,7 +392,9 @@ class DistanceWallInletProfile:
                     boundary_vertex_indices.add(e[1])
 
                 boundary_vertices = mesh.vertices[list(boundary_vertex_indices)]
-                self.log.debug(f"Found {len(boundary_vertices)} boundary vertices from {len(boundary_edges)} boundary edges")
+                self.log.debug(
+                    f"Found {len(boundary_vertices)} boundary vertices from {len(boundary_edges)} boundary edges"
+                )
                 return boundary_vertices
             else:
                 # Fallback: use peripheral vertices (mesh may be closed/watertight)
@@ -457,12 +435,12 @@ class DistanceWallInletProfile:
 
         if self.shape_function == ShapeFunction.POWER_LAW:
             # f(d) = (d/d_max)^n
-            return d_norm ** self.exponent
+            return d_norm**self.exponent
 
         elif self.shape_function == ShapeFunction.POISEUILLE:
             # f(d) = 1 - (1 - d/d_max)^2 = 1 - r_norm^2
             r_norm = 1.0 - d_norm
-            return max(0, 1.0 - r_norm ** 2)
+            return max(0, 1.0 - r_norm**2)
 
         elif self.shape_function == ShapeFunction.HYBRID_JET:
             # Flat core (f=1) for d > core_fraction * d_max
@@ -480,18 +458,14 @@ class DistanceWallInletProfile:
                 return 1.0
             else:
                 local_r = 1.0 - (d / core_dist)
-                return max(0, 1.0 - local_r ** 2)
+                return max(0, 1.0 - local_r**2)
 
         else:
             # Default Poiseuille
             r_norm = 1.0 - d_norm
-            return max(0, 1.0 - r_norm ** 2)
+            return max(0, 1.0 - r_norm**2)
 
-    def _calculate_scaling_factor(
-        self,
-        distances: np.ndarray,
-        target_flow_rate: float
-    ) -> float:
+    def _calculate_scaling_factor(self, distances: np.ndarray, target_flow_rate: float) -> float:
         """
         Calculate U_0 to match target flow rate.
 
@@ -520,19 +494,12 @@ class DistanceWallInletProfile:
         return abs(target_flow_rate) / integrated
 
     def _generate_time_data(
-        self,
-        parent_dir: str,
-        times: np.ndarray,
-        values: np.ndarray,
-        n_points: int,
-        distances: np.ndarray
+        self, parent_dir: str, times: np.ndarray, values: np.ndarray, n_points: int, distances: np.ndarray
     ) -> None:
         """Generate velocity data for each timestep (optimized vectorized version)."""
         # Determine normal direction
         normal = self.inlet_normal.copy()
-        if self.orientation == 'in' or (
-            self.orientation == 'auto' and self._should_flip_normal()
-        ):
+        if self.orientation == "in" or (self.orientation == "auto" and self._should_flip_normal()):
             normal = -normal
             self.log.info("Using inward-pointing normal")
 
@@ -547,7 +514,7 @@ class DistanceWallInletProfile:
             shape_factors = np.ones(n_points)
 
         # Convert all flow rates at once (vectorized)
-        if self.data_type == 'velocity':
+        if self.data_type == "velocity":
             flow_rates = values * self.area
         else:
             # Check if values are in L/min (magnitude > 1) or m³/s
@@ -590,11 +557,11 @@ class DistanceWallInletProfile:
         d_norm = np.minimum(distances / self.d_max, 1.0)
 
         if self.shape_function == ShapeFunction.POWER_LAW:
-            return d_norm ** self.exponent
+            return d_norm**self.exponent
 
         elif self.shape_function == ShapeFunction.POISEUILLE:
             r_norm = 1.0 - d_norm
-            return np.maximum(0, 1.0 - r_norm ** 2)
+            return np.maximum(0, 1.0 - r_norm**2)
 
         elif self.shape_function == ShapeFunction.HYBRID_JET:
             core_dist = self.core_fraction * self.d_max
@@ -608,13 +575,13 @@ class DistanceWallInletProfile:
             result = np.ones(len(distances))
             near_wall = distances < core_dist
             local_r = 1.0 - (distances[near_wall] / core_dist)
-            result[near_wall] = np.maximum(0, 1.0 - local_r ** 2)
+            result[near_wall] = np.maximum(0, 1.0 - local_r**2)
             return result
 
         else:
             # Default Poiseuille
             r_norm = 1.0 - d_norm
-            return np.maximum(0, 1.0 - r_norm ** 2)
+            return np.maximum(0, 1.0 - r_norm**2)
 
     def _write_velocity_file_fast(self, file_path: str, velocities: np.ndarray) -> None:
         """Fast write velocity in OpenFOAM boundaryData format using numpy."""
@@ -623,22 +590,60 @@ class DistanceWallInletProfile:
         lines = [f"{n}", "("]
         lines.extend(f"({v[0]:.6e} {v[1]:.6e} {v[2]:.6e})" for v in velocities)
         lines.append(")")
-        with open(file_path, 'w') as f:
-            f.write('\n'.join(lines) + '\n')
+        with open(file_path, "w") as f:
+            f.write("\n".join(lines) + "\n")
 
     def _should_flip_normal(self) -> bool:
         """Determine if normal needs flipping using inlet–wall edge-ring method.
 
+        Falls back to the outlet-direction heuristic when STL surfaces are
+        missing (partial pipelines / tests).
+
         NOTE: STL files are PRE-SCALED to meters, no scale_factor needed.
         """
+        tri_surface_dir = os.path.join(self.case_directory, "constant", "triSurface")
+        inlet_name = self.config.get("geometry", {}).get("inlet_keywords_ordered", "inlet")
+        wall_name = self.config.get("geometry", {}).get("wall_keywords_ordered", "wall")
+
         try:
             from .utils.patch_processing import compute_inward_normal
-            tri_surface_dir = os.path.join(self.case_directory, "constant", "triSurface")
-            inlet_name = self.config.get('geometry', {}).get('inlet_keywords_ordered', 'inlet')
-            wall_name = self.config.get('geometry', {}).get('wall_keywords_ordered', 'wall')
+
             inward = compute_inward_normal(tri_surface_dir, inlet_name, wall_name)
             return np.dot(self.inlet_normal, inward) < 0
+        except FileNotFoundError:
+            return self._should_flip_normal_via_outlets(tri_surface_dir)
+        except Exception:
+            return False
 
+    def _should_flip_normal_via_outlets(self, tri_surface_dir: str) -> bool:
+        """Legacy flip detection: compare inlet normal to outlet bearing."""
+        try:
+            if not os.path.isdir(tri_surface_dir):
+                return False
+            stl_files = [f for f in os.listdir(tri_surface_dir) if f.endswith(".stl")]
+            outlet_files = [f for f in stl_files if "outlet" in f.lower()]
+            if not outlet_files:
+                return False
+
+            outlet_centers = []
+            for outlet_file in outlet_files:
+                outlet_name = outlet_file.replace(".stl", "")
+                try:
+                    proc = PatchProcessing(tri_surface_dir, outlet_name)
+                    center, _, _ = proc.calculate_inlet_center_radius()
+                    outlet_centers.append(center)
+                except Exception:
+                    continue
+            if not outlet_centers:
+                return False
+
+            avg_outlet = np.mean(outlet_centers, axis=0)
+            flow_dir = avg_outlet - self.center
+            n = np.linalg.norm(flow_dir)
+            if n == 0:
+                return False
+            flow_dir = flow_dir / n
+            return np.dot(self.inlet_normal, flow_dir) < 0
         except Exception:
             return False
 
@@ -649,10 +654,10 @@ class DistanceWallInletProfile:
         comment_lines = 0
         header_line = 0
 
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             for line in f:
                 stripped = line.strip()
-                if not stripped or stripped.startswith('#'):
+                if not stripped or stripped.startswith("#"):
                     comment_lines += 1
                 else:
                     # First non-comment line - check if it's a header
@@ -663,7 +668,7 @@ class DistanceWallInletProfile:
         # Total lines to skip = comment lines + header (if present)
         skiprows = comment_lines + header_line
 
-        data = np.genfromtxt(file_path, delimiter=',', skip_header=skiprows)
+        data = np.genfromtxt(file_path, delimiter=",", skip_header=skiprows)
 
         if data.ndim < 2 or data.shape[1] < 2:
             raise ValueError("CSV must have at least 2 columns (time, value)")
@@ -678,15 +683,15 @@ class DistanceWallInletProfile:
         """Read OpenFOAM points file."""
         import re
 
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             lines = [line.strip() for line in f if line.strip()]
 
         n_points = int(lines[0])
         points = []
-        start_idx = 2 if lines[1] == '(' else 1
+        start_idx = 2 if lines[1] == "(" else 1
 
         for i in range(n_points):
-            line = re.sub(r'[()]', '', lines[i + start_idx])
+            line = re.sub(r"[()]", "", lines[i + start_idx])
             xyz = [float(p) for p in line.split()]
             points.append(xyz)
 
@@ -696,7 +701,7 @@ class DistanceWallInletProfile:
         """Remove old time directories."""
         for item in os.listdir(parent_dir):
             item_path = os.path.join(parent_dir, item)
-            if item.replace('.', '', 1).replace('-', '', 1).isdigit():
+            if item.replace(".", "", 1).replace("-", "", 1).isdigit():
                 if os.path.islink(item_path):
                     os.unlink(item_path)
                 elif os.path.isdir(item_path):
@@ -704,7 +709,7 @@ class DistanceWallInletProfile:
 
     def _write_velocity_file(self, file_path: str, velocities: List[np.ndarray]) -> None:
         """Write velocity in OpenFOAM boundaryData format."""
-        with open(file_path, 'w') as f:
+        with open(file_path, "w") as f:
             f.write(f"{len(velocities)}\n(\n")
             for v in velocities:
                 f.write(f"({v[0]:.6e} {v[1]:.6e} {v[2]:.6e})\n")

@@ -8,4 +8,4 @@ from .core import PatientCaseRunner
 from .steps import WorkflowSteps
 from .cli import main
 
-__all__ = ['PatientCaseRunner', 'WorkflowSteps', 'main']
+__all__ = ["PatientCaseRunner", "WorkflowSteps", "main"]

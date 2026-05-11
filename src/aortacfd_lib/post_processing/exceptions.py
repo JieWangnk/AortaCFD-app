@@ -56,12 +56,7 @@ class MissingFieldError(PostProcessingError):
           Hint: Ensure fieldAverage is enabled in controlDict
     """
 
-    def __init__(
-        self,
-        field_name: str,
-        required_for: Optional[str] = None,
-        hint: Optional[str] = None
-    ) -> None:
+    def __init__(self, field_name: str, required_for: Optional[str] = None, hint: Optional[str] = None) -> None:
         """
         Initialize MissingFieldError.
 
@@ -125,12 +120,7 @@ class ConfigurationError(PostProcessingError):
         ... )
     """
 
-    def __init__(
-        self,
-        message: str,
-        value: Optional[str] = None,
-        valid_options: Optional[str] = None
-    ) -> None:
+    def __init__(self, message: str, value: Optional[str] = None, valid_options: Optional[str] = None) -> None:
         """
         Initialize ConfigurationError.
 
@@ -216,12 +206,7 @@ class HemodynamicsError(PostProcessingError):
         ... )
     """
 
-    def __init__(
-        self,
-        message: str,
-        metric: Optional[str] = None,
-        reason: Optional[str] = None
-    ) -> None:
+    def __init__(self, message: str, metric: Optional[str] = None, reason: Optional[str] = None) -> None:
         """
         Initialize HemodynamicsError.
 

@@ -21,15 +21,21 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.aortacfd_lib.distance_wall_inlet_profile import (
     DistanceWallInletProfile,
     ShapeFunction,
-    create_distance_wall_profile
+    create_distance_wall_profile,
 )
 
 # Define distance-wall profile names for testing
 # These are the profile names recognized as distance-to-wall based profiles
 DISTANCE_WALL_PROFILES = {
-    'distance_wall', 'distance_to_wall', 'wall_distance',
-    'power_law', 'poiseuille_distance', 'hybrid_jet',
-    'blunted', 'blunted_parabolic', 'irregular'
+    "distance_wall",
+    "distance_to_wall",
+    "wall_distance",
+    "power_law",
+    "poiseuille_distance",
+    "hybrid_jet",
+    "blunted",
+    "blunted_parabolic",
+    "irregular",
 }
 
 
@@ -39,21 +45,15 @@ class TestShapeFunctions(unittest.TestCase):
     def setUp(self):
         """Create a minimal config for testing."""
         self.config = {
-            'inlet': {
-                'csv_file': 'flow.csv',
-                'data_type': 'flowrate',
-                'profile': 'distance_wall',
-                'shape_function': 'poiseuille',
-                'exponent': 2.0
+            "inlet": {
+                "csv_file": "flow.csv",
+                "data_type": "flowrate",
+                "profile": "distance_wall",
+                "shape_function": "poiseuille",
+                "exponent": 2.0,
             },
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'scale_factor': 0.001
-            },
-            'physics': {
-                'nu': 3.7736e-6,
-                'transport_properties': {'rho': 1060}
-            }
+            "geometry": {"inlet_keywords_ordered": "inlet", "scale_factor": 0.001},
+            "physics": {"nu": 3.7736e-6, "transport_properties": {"rho": 1060}},
         }
         # Create temporary directory structure
         self.temp_dir = tempfile.mkdtemp()
@@ -73,7 +73,7 @@ class TestShapeFunctions(unittest.TestCase):
     def test_poiseuille_shape_factor(self):
         """Test Poiseuille shape factor: S = 1 - r²."""
         # Create a mock generator with known d_max
-        self.config['inlet']['shape_function'] = 'poiseuille'
+        self.config["inlet"]["shape_function"] = "poiseuille"
 
         # Mock the generator with minimal initialization
         class MockGenerator:
@@ -90,21 +90,21 @@ class TestShapeFunctions(unittest.TestCase):
         d_center = 0.01
         d_norm = d_center / gen.d_max
         r_norm = 1.0 - d_norm  # = 0 at center
-        S_center = max(0, 1.0 - r_norm ** 2)
+        S_center = max(0, 1.0 - r_norm**2)
         self.assertAlmostEqual(S_center, 1.0, places=5)
 
         # At wall (d = 0): S should be 0
         d_wall = 0.0
         d_norm = d_wall / gen.d_max
         r_norm = 1.0 - d_norm  # = 1 at wall
-        S_wall = max(0, 1.0 - r_norm ** 2)
+        S_wall = max(0, 1.0 - r_norm**2)
         self.assertAlmostEqual(S_wall, 0.0, places=5)
 
         # At midpoint (d = d_max/2): S should be ~0.75
         d_mid = 0.005
         d_norm = d_mid / gen.d_max
         r_norm = 1.0 - d_norm  # = 0.5
-        S_mid = max(0, 1.0 - r_norm ** 2)
+        S_mid = max(0, 1.0 - r_norm**2)
         self.assertAlmostEqual(S_mid, 0.75, places=5)
 
     def test_power_law_shape_factor(self):
@@ -142,7 +142,7 @@ class TestShapeFunctions(unittest.TestCase):
         # Near wall (d < core_dist): decay
         d_near_wall = 0.001  # 1mm < 3mm
         local_d_norm = d_near_wall / core_dist
-        S_near = local_d_norm ** exponent
+        S_near = local_d_norm**exponent
         self.assertLess(S_near, 1.0)
         self.assertGreater(S_near, 0.0)
 
@@ -164,7 +164,7 @@ class TestFlowRateCorrection(unittest.TestCase):
         for d in distances:
             d_norm = d / d_max
             r_norm = 1.0 - d_norm
-            S = max(0, 1.0 - r_norm ** 2)
+            S = max(0, 1.0 - r_norm**2)
             shape_factors.append(S)
         shape_factors = np.array(shape_factors)
 
@@ -173,7 +173,7 @@ class TestFlowRateCorrection(unittest.TestCase):
         # For Poiseuille: <S> = 0.5 (average of parabolic profile)
 
         # Uniform face areas (simplified)
-        area = np.pi * d_max ** 2
+        area = np.pi * d_max**2
         avg_face_area = area / n_points
 
         # Integrated shape factor
@@ -196,9 +196,15 @@ class TestConfigParsing(unittest.TestCase):
         # Use module-level constant instead of importing from inlet_mapping
         # Check all distance-wall profiles are recognized
         expected_profiles = [
-            'distance_wall', 'distance_to_wall', 'wall_distance',
-            'power_law', 'poiseuille_distance', 'hybrid_jet',
-            'blunted', 'blunted_parabolic', 'irregular'
+            "distance_wall",
+            "distance_to_wall",
+            "wall_distance",
+            "power_law",
+            "poiseuille_distance",
+            "hybrid_jet",
+            "blunted",
+            "blunted_parabolic",
+            "irregular",
         ]
 
         for profile in expected_profiles:
@@ -207,24 +213,24 @@ class TestConfigParsing(unittest.TestCase):
     def test_profile_to_shape_mapping(self):
         """Test profile name to shape function mapping."""
         mapping = {
-            'distance_wall': 'poiseuille',
-            'power_law': 'power_law',
-            'hybrid_jet': 'hybrid_jet',
-            'blunted': 'blunted_parabolic',
+            "distance_wall": "poiseuille",
+            "power_law": "power_law",
+            "hybrid_jet": "hybrid_jet",
+            "blunted": "blunted_parabolic",
         }
 
         for profile, expected_shape in mapping.items():
             # Verify mapping logic
             profile_to_shape = {
-                'distance_wall': 'poiseuille',
-                'distance_to_wall': 'poiseuille',
-                'wall_distance': 'poiseuille',
-                'power_law': 'power_law',
-                'poiseuille_distance': 'poiseuille',
-                'hybrid_jet': 'hybrid_jet',
-                'blunted': 'blunted_parabolic',
-                'blunted_parabolic': 'blunted_parabolic',
-                'irregular': 'poiseuille',
+                "distance_wall": "poiseuille",
+                "distance_to_wall": "poiseuille",
+                "wall_distance": "poiseuille",
+                "power_law": "power_law",
+                "poiseuille_distance": "poiseuille",
+                "hybrid_jet": "hybrid_jet",
+                "blunted": "blunted_parabolic",
+                "blunted_parabolic": "blunted_parabolic",
+                "irregular": "poiseuille",
             }
             self.assertEqual(profile_to_shape.get(profile), expected_shape)
 
@@ -257,7 +263,7 @@ class TestVelocityOutput(unittest.TestCase):
         # Poiseuille profile
         d_norm = d_wall / d_max
         r_norm = 1.0 - d_norm
-        S = max(0, 1.0 - r_norm ** 2)
+        S = max(0, 1.0 - r_norm**2)
 
         self.assertAlmostEqual(S, 0.0)
 
@@ -285,7 +291,7 @@ class TestOpenFOAMFormat(unittest.TestCase):
         ]
 
         # Create temporary file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             temp_path = f.name
             f.write(f"{len(velocities)}\n(\n")
             for v in velocities:
@@ -293,7 +299,7 @@ class TestOpenFOAMFormat(unittest.TestCase):
             f.write(")\n")
 
         # Read and verify
-        with open(temp_path, 'r') as f:
+        with open(temp_path, "r") as f:
             lines = f.readlines()
 
         self.assertEqual(lines[0].strip(), "3")
@@ -314,20 +320,17 @@ class TestIntegrationWithInletMapping(unittest.TestCase):
 
         # Create config with distance-wall profile
         config = {
-            'inlet': {
-                'csv_file': 'flow.csv',
-                'data_type': 'flowrate',
-                'profile': 'distance_wall',
+            "inlet": {
+                "csv_file": "flow.csv",
+                "data_type": "flowrate",
+                "profile": "distance_wall",
             },
-            'geometry': {
-                'inlet_keywords_ordered': 'inlet',
-                'scale_factor': 0.001
-            },
-            'physics': {'nu': 3.7736e-6}
+            "geometry": {"inlet_keywords_ordered": "inlet", "scale_factor": 0.001},
+            "physics": {"nu": 3.7736e-6},
         }
 
         # Test profile detection logic
-        profile = config['inlet']['profile'].lower().strip()
+        profile = config["inlet"]["profile"].lower().strip()
         use_distance_wall = profile in DISTANCE_WALL_PROFILES
 
         self.assertTrue(use_distance_wall)
@@ -335,12 +338,12 @@ class TestIntegrationWithInletMapping(unittest.TestCase):
     def test_standard_profile_not_delegated(self):
         """Test that standard profiles are not delegated."""
         # Use module-level constant instead of importing from inlet_mapping
-        standard_profiles = ['plug', 'parabolic', 'womersley']
+        standard_profiles = ["plug", "parabolic", "womersley"]
 
         for profile in standard_profiles:
             use_distance_wall = profile in DISTANCE_WALL_PROFILES
             self.assertFalse(use_distance_wall)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

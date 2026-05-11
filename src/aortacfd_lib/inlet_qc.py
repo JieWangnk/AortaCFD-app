@@ -10,7 +10,6 @@ Based on clinical best practices for cardiovascular CFD simulations.
 import numpy as np
 from pathlib import Path
 from typing import Dict, Tuple, Optional, List
-import csv
 from dataclasses import dataclass, asdict
 import json
 
@@ -81,11 +80,13 @@ class InletAudit:
 
     def save_json(self, filepath: Path):
         """Save audit to JSON file."""
+
         def _default(obj):
             if isinstance(obj, np.generic):
                 return obj.item()
             raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
-        with open(filepath, 'w') as f:
+
+        with open(filepath, "w") as f:
             json.dump(self.to_dict(), f, indent=2, default=_default)
 
     def get_summary_report(self) -> str:
@@ -109,7 +110,8 @@ class InletAudit:
             "",
             "WAVEFORM STATISTICS:",
             f"  Number of points: {self.n_points}",
-            f"  Detected period: {self.detected_period_s:.3f} s" + (f" ({60/self.detected_period_s:.1f} bpm)" if self.detected_period_s > 0 else " (N/A)"),
+            f"  Detected period: {self.detected_period_s:.3f} s"
+            + (f" ({60/self.detected_period_s:.1f} bpm)" if self.detected_period_s > 0 else " (N/A)"),
         ]
 
         if self.mean_flow_m3s is not None:
@@ -117,63 +119,65 @@ class InletAudit:
         if self.mean_velocity_ms is not None:
             lines.append(f"  Mean velocity: {self.mean_velocity_ms:.3f} m/s")
 
-        lines.extend([
-            f"  Peak systolic: {self.peak_systolic:.3f} {self.data_type}",
-            f"  Backflow fraction: {self.backflow_fraction*100:.1f}%",
-            ""
-        ])
+        lines.extend(
+            [
+                f"  Peak systolic: {self.peak_systolic:.3f} {self.data_type}",
+                f"  Backflow fraction: {self.backflow_fraction*100:.1f}%",
+                "",
+            ]
+        )
 
         if self.womersley_alpha is not None:
-            lines.extend([
-                "WOMERSLEY ANALYSIS:",
-                f"  Kinematic viscosity (ν): {self.nu_m2s:.2e} m²/s",
-                f"  Womersley number (α): {self.womersley_alpha:.2f}",
-                f"  Recommended profile: {self.womersley_recommendation}",
-                ""
-            ])
+            lines.extend(
+                [
+                    "WOMERSLEY ANALYSIS:",
+                    f"  Kinematic viscosity (ν): {self.nu_m2s:.2e} m²/s",
+                    f"  Womersley number (α): {self.womersley_alpha:.2f}",
+                    f"  Recommended profile: {self.womersley_recommendation}",
+                    "",
+                ]
+            )
 
         if self.auto_orientation_detected:
-            lines.extend([
-                "ORIENTATION:",
-                f"  Method: automatic detection",
-                f"  Dot product (n·d): {self.dot_product_normal_flow:.3f}",
-                f"  Normal flipped: {'Yes' if self.orientation_flipped else 'No'}",
-                ""
-            ])
+            lines.extend(
+                [
+                    "ORIENTATION:",
+                    "  Method: automatic detection",
+                    f"  Dot product (n·d): {self.dot_product_normal_flow:.3f}",
+                    f"  Normal flipped: {'Yes' if self.orientation_flipped else 'No'}",
+                    "",
+                ]
+            )
         else:
             lines.append(f"ORIENTATION: manual ({self.orientation})\n")
 
         if self.scaling_applied:
-            lines.extend([
-                "SCALING:",
-                f"  Target CO: {self.target_CO_Lmin:.2f} L/min",
-                f"  Original mean flow: {self.original_mean_flow_m3s*60*1e3:.2f} L/min",
-                f"  Scale factor: {self.scale_factor:.4f}",
-                ""
-            ])
+            lines.extend(
+                [
+                    "SCALING:",
+                    f"  Target CO: {self.target_CO_Lmin:.2f} L/min",
+                    f"  Original mean flow: {self.original_mean_flow_m3s*60*1e3:.2f} L/min",
+                    f"  Scale factor: {self.scale_factor:.4f}",
+                    "",
+                ]
+            )
 
         if self.filter_method:
-            lines.extend([
-                "FILTERING/RESAMPLING:",
-                f"  Method: {self.filter_method}",
-                f"  Target Δt: {self.target_dt_s:.4f} s",
-                f"  Output timesteps: {self.n_output_timesteps}",
-                ""
-            ])
+            lines.extend(
+                [
+                    "FILTERING/RESAMPLING:",
+                    f"  Method: {self.filter_method}",
+                    f"  Target Δt: {self.target_dt_s:.4f} s",
+                    f"  Output timesteps: {self.n_output_timesteps}",
+                    "",
+                ]
+            )
 
         if self.warnings:
-            lines.extend([
-                "WARNINGS:",
-                *[f"  ⚠ {w}" for w in self.warnings],
-                ""
-            ])
+            lines.extend(["WARNINGS:", *[f"  ⚠ {w}" for w in self.warnings], ""])
 
         if self.errors:
-            lines.extend([
-                "ERRORS:",
-                *[f"  ✗ {e}" for e in self.errors],
-                ""
-            ])
+            lines.extend(["ERRORS:", *[f"  ✗ {e}" for e in self.errors], ""])
 
         lines.append("=" * 80)
         return "\n".join(lines)
@@ -205,17 +209,12 @@ class InletQC:
         self.log = Logger("InletQC").get_logger()
 
         # Extract relevant config sections
-        self.inlet_config = config.get('inlet', config.get('boundary_conditions', {}).get('inlet', {}))
-        self.physics = config.get('physics', {})
+        self.inlet_config = config.get("inlet", config.get("boundary_conditions", {}).get("inlet", {}))
+        self.physics = config.get("physics", {})
 
         self.audit = None
 
-    def calculate_womersley_number(
-        self,
-        radius_m: float,
-        period_s: float,
-        nu_m2s: float
-    ) -> float:
+    def calculate_womersley_number(self, radius_m: float, period_s: float, nu_m2s: float) -> float:
         """
         Calculate Womersley number (α).
 
@@ -264,16 +263,16 @@ class InletQC:
             Tuple of (area_m2, radius_eq_m, centroid)
         """
         # Read points file
-        with open(points_file, 'r') as f:
+        with open(points_file, "r") as f:
             lines = [l.strip() for l in f if l.strip()]
 
         n_points = int(lines[0])
 
         # Parse points
         points = []
-        start_idx = 2 if lines[1] == '(' else 1
+        start_idx = 2 if lines[1] == "(" else 1
         for i in range(n_points):
-            line = lines[i + start_idx].replace('(', '').replace(')', '')
+            line = lines[i + start_idx].replace("(", "").replace(")", "")
             coords = [float(x) for x in line.split()]
             points.append(coords)
 
@@ -302,11 +301,7 @@ class InletQC:
 
         return area, radius_eq, centroid
 
-    def analyze_csv_waveform(
-        self,
-        csv_path: Path,
-        data_type: str
-    ) -> Dict:
+    def analyze_csv_waveform(self, csv_path: Path, data_type: str) -> Dict:
         """
         Analyze CSV waveform and extract statistics.
 
@@ -322,10 +317,10 @@ class InletQC:
         comment_lines = 0
         header_line = 0
 
-        with open(csv_path, 'r') as f:
+        with open(csv_path, "r") as f:
             for line in f:
                 stripped = line.strip()
-                if not stripped or stripped.startswith('#'):
+                if not stripped or stripped.startswith("#"):
                     comment_lines += 1
                 else:
                     # First non-comment line - check if it's a header
@@ -336,10 +331,10 @@ class InletQC:
         # Total lines to skip = comment lines + header (if present)
         skiprows = comment_lines + header_line
 
-        data = np.genfromtxt(csv_path, delimiter=',', skip_header=skiprows)
+        data = np.genfromtxt(csv_path, delimiter=",", skip_header=skiprows)
 
         if data.ndim < 2 or data.shape[1] < 2:
-            raise ValueError(f"CSV must have at least 2 columns")
+            raise ValueError("CSV must have at least 2 columns")
 
         times = data[:, 0]
         values = data[:, 1]
@@ -361,20 +356,16 @@ class InletQC:
         backflow_fraction = np.sum(negative_mask) / len(values) if len(values) > 0 else 0.0
 
         return {
-            'n_points': len(times),
-            'period_s': period,
-            'mean_value': mean_val,
-            'peak_value': peak_val,
-            'backflow_fraction': backflow_fraction,
-            'times': times,
-            'values': values
+            "n_points": len(times),
+            "period_s": period,
+            "mean_value": mean_val,
+            "peak_value": peak_val,
+            "backflow_fraction": backflow_fraction,
+            "times": times,
+            "values": values,
         }
 
-    def compute_area_weighted_normal(
-        self,
-        points_file: Path,
-        stl_file: Optional[Path] = None
-    ) -> np.ndarray:
+    def compute_area_weighted_normal(self, points_file: Path, stl_file: Optional[Path] = None) -> np.ndarray:
         """
         Compute area-weighted surface normal from inlet patch.
 
@@ -386,14 +377,14 @@ class InletQC:
             Unit normal vector (area-weighted)
         """
         # Read points
-        with open(points_file, 'r') as f:
+        with open(points_file, "r") as f:
             lines = [l.strip() for l in f if l.strip()]
 
         n_points = int(lines[0])
         points = []
-        start_idx = 2 if lines[1] == '(' else 1
+        start_idx = 2 if lines[1] == "(" else 1
         for i in range(n_points):
-            line = lines[i + start_idx].replace('(', '').replace(')', '')
+            line = lines[i + start_idx].replace("(", "").replace(")", "")
             coords = [float(x) for x in line.split()]
             points.append(coords)
 
@@ -420,7 +411,7 @@ class InletQC:
         inlet_area: float,
         inlet_radius: float,
         inlet_center: np.ndarray,
-        inlet_normal: np.ndarray
+        inlet_normal: np.ndarray,
     ) -> InletAudit:
         """
         Run complete QC analysis and generate audit trail.
@@ -442,18 +433,18 @@ class InletQC:
             inlet_radius_eq_m=inlet_radius,
             inlet_center=inlet_center.tolist() if isinstance(inlet_center, np.ndarray) else inlet_center,
             inlet_normal=inlet_normal.tolist() if isinstance(inlet_normal, np.ndarray) else inlet_normal,
-            csv_file=self.inlet_config.get('csv_file', 'N/A'),
-            data_type=self.inlet_config.get('data_type', 'N/A'),
+            csv_file=self.inlet_config.get("csv_file", "N/A"),
+            data_type=self.inlet_config.get("data_type", "N/A"),
             n_points=0,
             detected_period_s=0.0,
-            inlet_type=self.inlet_config.get('type', 'UNKNOWN'),
-            profile=self.inlet_config.get('profile', 'UNKNOWN'),
-            orientation=self.inlet_config.get('orientation', 'auto')
+            inlet_type=self.inlet_config.get("type", "UNKNOWN"),
+            profile=self.inlet_config.get("profile", "UNKNOWN"),
+            orientation=self.inlet_config.get("orientation", "auto"),
         )
 
         # Analyze CSV if time-varying
-        if audit.inlet_type in ['TIMEVARYING', 'WOMERSLEY']:
-            csv_file = self.inlet_config.get('csv_file')
+        if audit.inlet_type in ["TIMEVARYING", "WOMERSLEY"]:
+            csv_file = self.inlet_config.get("csv_file")
             if csv_file:
                 csv_path = self.case_dir / "constant" / "boundaryData" / inlet_patch_name / csv_file
                 if not csv_path.exists():
@@ -462,20 +453,21 @@ class InletQC:
                 if csv_path.exists():
                     try:
                         stats = self.analyze_csv_waveform(csv_path, audit.data_type)
-                        audit.n_points = stats['n_points']
-                        audit.detected_period_s = stats['period_s']
-                        audit.peak_systolic = stats['peak_value']
-                        audit.backflow_fraction = stats['backflow_fraction']
+                        audit.n_points = stats["n_points"]
+                        audit.detected_period_s = stats["period_s"]
+                        audit.peak_systolic = stats["peak_value"]
+                        audit.backflow_fraction = stats["backflow_fraction"]
 
-                        if audit.data_type == 'flowrate':
-                            audit.mean_flow_m3s = stats['mean_value']
-                            audit.mean_velocity_ms = stats['mean_value'] / inlet_area
+                        if audit.data_type == "flowrate":
+                            audit.mean_flow_m3s = stats["mean_value"]
+                            audit.mean_velocity_ms = stats["mean_value"] / inlet_area
                         else:
-                            audit.mean_velocity_ms = stats['mean_value']
-                            audit.mean_flow_m3s = stats['mean_value'] * inlet_area
+                            audit.mean_velocity_ms = stats["mean_value"]
+                            audit.mean_flow_m3s = stats["mean_value"] * inlet_area
 
-                        self.log.info(f"  CSV analysis: {audit.n_points} points, "
-                                     f"period={audit.detected_period_s:.3f}s")
+                        self.log.info(
+                            f"  CSV analysis: {audit.n_points} points, " f"period={audit.detected_period_s:.3f}s"
+                        )
                     except Exception as e:
                         audit.errors.append(f"CSV analysis failed: {e}")
                         self.log.error(f"CSV analysis error: {e}")
@@ -483,16 +475,14 @@ class InletQC:
                     audit.warnings.append(f"CSV file not found: {csv_path}")
 
         # Womersley analysis
-        nu = self.physics.get('nu')
+        nu = self.physics.get("nu")
         if nu is None:
-            transport = self.physics.get('transport_properties', {})
-            nu = transport.get('nu')
+            transport = self.physics.get("transport_properties", {})
+            nu = transport.get("nu")
         if nu and audit.detected_period_s > 0:
             try:
                 audit.nu_m2s = nu
-                audit.womersley_alpha = self.calculate_womersley_number(
-                    inlet_radius, audit.detected_period_s, nu
-                )
+                audit.womersley_alpha = self.calculate_womersley_number(inlet_radius, audit.detected_period_s, nu)
                 audit.womersley_recommendation = self.recommend_profile(audit.womersley_alpha)
 
                 self.log.info(f"  Womersley number α = {audit.womersley_alpha:.2f}")
@@ -508,23 +498,25 @@ class InletQC:
                 audit.warnings.append(f"Womersley calculation failed: {e}")
 
         # Check for cardiac output scaling
-        scaling = self.inlet_config.get('scaling', {})
-        if isinstance(scaling, dict) and scaling.get('target_CO'):
-            target_CO_Lmin = scaling['target_CO']
+        scaling = self.inlet_config.get("scaling", {})
+        if isinstance(scaling, dict) and scaling.get("target_CO"):
+            target_CO_Lmin = scaling["target_CO"]
             if audit.mean_flow_m3s:
                 audit.target_CO_Lmin = target_CO_Lmin
                 audit.original_mean_flow_m3s = audit.mean_flow_m3s
                 audit.scale_factor = (target_CO_Lmin / 60.0 / 1000.0) / audit.mean_flow_m3s
                 audit.scaling_applied = True
 
-                self.log.info(f"  CO scaling: {audit.original_mean_flow_m3s*60*1e3:.2f} → "
-                             f"{target_CO_Lmin:.2f} L/min (factor={audit.scale_factor:.4f})")
+                self.log.info(
+                    f"  CO scaling: {audit.original_mean_flow_m3s*60*1e3:.2f} → "
+                    f"{target_CO_Lmin:.2f} L/min (factor={audit.scale_factor:.4f})"
+                )
 
         # Check filtering
-        filter_cfg = self.inlet_config.get('filter', {})
-        if isinstance(filter_cfg, dict) and filter_cfg.get('method'):
-            audit.filter_method = filter_cfg['method']
-            audit.target_dt_s = filter_cfg.get('target_dt', 0.005)
+        filter_cfg = self.inlet_config.get("filter", {})
+        if isinstance(filter_cfg, dict) and filter_cfg.get("method"):
+            audit.filter_method = filter_cfg["method"]
+            audit.target_dt_s = filter_cfg.get("target_dt", 0.005)
 
         self.audit = audit
 

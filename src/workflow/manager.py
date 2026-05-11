@@ -8,7 +8,7 @@ import os
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Type
 
 try:
     from .base_task import logger, AortaCFDError, Task, ExecutionContext
@@ -76,21 +76,17 @@ class WorkflowManager:
 
         # Set patient name for report generation
         if not self.context.patient_name:
-            self.context.patient_name = self.config.get('case_info', {}).get(
-                'patient_id', geom_cfg.get('case_name', 'unknown')
+            self.context.patient_name = self.config.get("case_info", {}).get(
+                "patient_id", geom_cfg.get("case_name", "unknown")
             )
 
         # Set cardiac cycle if available
-        cardiac_cycle = self.config.get('cardiac_cycle')
+        cardiac_cycle = self.config.get("cardiac_cycle")
         if cardiac_cycle and not self.context.cardiac_cycle:
             self.context.cardiac_cycle = cardiac_cycle
 
     def _handle_workflow_failure(
-        self,
-        command: str,
-        failed_task: str,
-        completed_tasks: List[str],
-        error: Optional[Exception] = None
+        self, command: str, failed_task: str, completed_tasks: List[str], error: Optional[Exception] = None
     ) -> None:
         """
         Handle workflow failure by writing a failure marker and logging details.
@@ -128,7 +124,7 @@ class WorkflowManager:
 
         failure_file = case_path / ".workflow_failed"
         try:
-            with open(failure_file, 'w') as f:
+            with open(failure_file, "w") as f:
                 json.dump(failure_info, f, indent=2)
             logger.info(f"Failure marker written to: {failure_file}")
         except Exception as e:
@@ -183,7 +179,7 @@ class WorkflowManager:
         failure_file = Path(case_dir) / ".workflow_failed"
         if failure_file.exists():
             try:
-                with open(failure_file, 'r') as f:
+                with open(failure_file, "r") as f:
                     return json.load(f)
             except Exception:
                 return {"error": "Could not read failure marker"}
@@ -208,9 +204,9 @@ class WorkflowManager:
             "execute_solver": execution_tasks.ExecuteSolverTask,
             "execute_reconstruct": execution_tasks.ExecuteReconstructionTask,
             "execute_post": execution_tasks.ExecutePostProcessingTask,
-            "execute_hemodynamics": execution_tasks.ExecuteHemodynamicsTask
+            "execute_hemodynamics": execution_tasks.ExecuteHemodynamicsTask,
         }
-        
+
     def run_workflow(self, command: str) -> None:
         """
         Look up the recipe for a command and run the tasks.
@@ -231,7 +227,7 @@ class WorkflowManager:
         Raises:
             AortaCFDError: If command is unknown or a task fails.
         """
-        
+
         recipes = {
             # COMMAND 1: Generates all non-mesh-dependent dictionary files.
             "setup:dict": [
@@ -242,36 +238,29 @@ class WorkflowManager:
                 "generate_solver_settings",
                 "generate_decompose_par_dict",
                 "generate_control_dict",  # Writes preliminary controlDict
-                "generate_simulation_report"  # Save config manifest for reproducibility
+                "generate_simulation_report",  # Save config manifest for reproducibility
             ],
-
             # COMMAND 2: Generates BC files and data AFTER a mesh exists.
             # This is the command you will use to update BCs.
             "setup:bc": [
-                "prepare_boundary_data",    # Runs writeMeshObj, InletMapping, etc.
-                "generate_bc_files",        # Writes the final 0/ files
-                "update_control_dict"       # Overwrites controlDict with final endTime
+                "prepare_boundary_data",  # Runs writeMeshObj, InletMapping, etc.
+                "generate_bc_files",  # Writes the final 0/ files
+                "update_control_dict",  # Overwrites controlDict with final endTime
             ],
-
             # COMMAND 3: Executes the meshing utilities.
             "run:mesh": ["execute_meshing"],
-
             # COMMAND 4: Executes the solver.
             "run:solver": ["execute_solver"],
-
             # COMMAND 5: Executes post-processing (ParaView visualization).
             "run:post": ["execute_post"],
             "execute_post": ["execute_post"],  # Alias
-
             # COMMAND 6: Executes hemodynamics analysis (WSS, TAWSS, OSI, RRT, pressure drop).
             # Can be run after simulation or as standalone post-processing.
             "run:hemodynamics": ["execute_hemodynamics"],
             "execute_hemodynamics": ["execute_hemodynamics"],  # Alias
-
             # COMMAND 7: Executes reconstruction.
             "run:reconstruct": ["execute_reconstruct"],
             "execute_reconstruct": ["execute_reconstruct"],  # Alias
-
             # COMMAND 7: A user-friendly alias to set up a case completely.
             "createCase": [
                 "create_case_structure",
@@ -285,9 +274,8 @@ class WorkflowManager:
                 "prepare_boundary_data",
                 "generate_bc_files",
                 "update_control_dict",
-                "generate_simulation_report"   # Report after final controlDict + boundary data
+                "generate_simulation_report",  # Report after final controlDict + boundary data
             ],
-
             # COMMAND 9: The full end-to-end run.
             "runAll": [
                 "create_case_structure",
@@ -303,19 +291,15 @@ class WorkflowManager:
                 "update_control_dict",
                 "generate_simulation_report",  # Report after final controlDict + boundary data
                 "execute_solver",
-                "execute_hemodynamics",        # Compute WSS, TAWSS, OSI, RRT, pressure drop
-                "execute_post",                # ParaView visualization
-                "generate_windkessel_report"   # Generate WK analysis after simulation
+                "execute_hemodynamics",  # Compute WSS, TAWSS, OSI, RRT, pressure drop
+                "execute_post",  # ParaView visualization
+                "generate_windkessel_report",  # Generate WK analysis after simulation
             ],
-
             # COMMAND 9: Regenerate numerical schemes with mesh-adaptive adjustments.
             # Use AFTER meshing to apply mesh-quality-aware settings based on checkMesh results.
-            "setup:regenerate-numerics": [
-                "generate_numerical_schemes",
-                "generate_solver_settings"
-            ]
+            "setup:regenerate-numerics": ["generate_numerical_schemes", "generate_solver_settings"],
         }
-        
+
         task_sequence = recipes.get(command)
         if not task_sequence:
             raise AortaCFDError(f"Unknown command '{command}'")
@@ -332,8 +316,7 @@ class WorkflowManager:
             for task_name in task_sequence:
                 task_class = self.available_tasks.get(task_name)
                 if not task_class:
-                    self._handle_workflow_failure(command, task_name, completed_tasks,
-                                                   Exception(f"Task not registered"))
+                    self._handle_workflow_failure(command, task_name, completed_tasks, Exception("Task not registered"))
                     raise AortaCFDError(f"Task '{task_name}' is not registered in the manager.")
 
                 task_instance = task_class(self.config)

@@ -24,12 +24,13 @@ import logging
 import numpy as np
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 
 from .constants import PA_TO_MMHG, BLOOD_DENSITY_DEFAULT
 
 try:
     import matplotlib.pyplot as plt
+
     HAS_MATPLOTLIB = True
 except ImportError:
     HAS_MATPLOTLIB = False
@@ -117,26 +118,26 @@ class HemodynamicsPostProcessor:
         self.log = logging.getLogger(self.__class__.__name__)
 
         # Determine inlet type
-        inlet_config = config.get('inlet', {}) or config.get('boundary_conditions', {}).get('inlet', {})
-        self.inlet_type = inlet_config.get('type', 'CONSTANT').upper()
-        self.is_pulsatile = self.inlet_type in ['TIMEVARYING', 'WOMERSLEY']
+        inlet_config = config.get("inlet", {}) or config.get("boundary_conditions", {}).get("inlet", {})
+        self.inlet_type = inlet_config.get("type", "CONSTANT").upper()
+        self.is_pulsatile = self.inlet_type in ["TIMEVARYING", "WOMERSLEY"]
 
         # Get cardiac cycle
-        self.cardiac_cycle = config.get('cardiac_cycle', 0.8)
+        self.cardiac_cycle = config.get("cardiac_cycle", 0.8)
 
         # Get geometry info
-        geom = config.get('geometry', {})
-        self.inlet_patch = geom.get('inlet_keywords_ordered', 'inlet')
-        outlet_patches = geom.get('outlet_keywords_ordered', ['outlet'])
+        geom = config.get("geometry", {})
+        self.inlet_patch = geom.get("inlet_keywords_ordered", "inlet")
+        outlet_patches = geom.get("outlet_keywords_ordered", ["outlet"])
         if isinstance(outlet_patches, str):
             outlet_patches = [outlet_patches]
         self.outlet_patches = outlet_patches
-        self.wall_patch = geom.get('wall_keywords_ordered', 'wall')
+        self.wall_patch = geom.get("wall_keywords_ordered", "wall")
 
         # hemodynamics settings
-        hemo_config = config.get('hemodynamics', {})
-        tawss_settings = hemo_config.get('tawss_settings', {})
-        self.skip_cycles = tawss_settings.get('skip_cycles', 2)
+        hemo_config = config.get("hemodynamics", {})
+        tawss_settings = hemo_config.get("tawss_settings", {})
+        self.skip_cycles = tawss_settings.get("skip_cycles", 2)
 
     def run_wss_postprocess(self) -> bool:
         """
@@ -157,12 +158,8 @@ class HemodynamicsPostProcessor:
             # The solver is needed to provide turbulence model context
             # Use shlex.quote to prevent shell injection from case_dir paths
             cmd = f"cd {shlex.quote(str(self.case_dir))} && foamPostProcess -solver incompressibleFluid -func wallShearStress"
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=300  # 5 minute timeout
+            result = subprocess.run(  # nosec B602 - case_dir is shlex.quoted; only internal trusted paths
+                cmd, shell=True, capture_output=True, text=True, timeout=300  # 5 minute timeout
             )
 
             if result.returncode != 0:
@@ -191,11 +188,11 @@ class HemodynamicsPostProcessor:
 
         # Try to find flowrate.csv in boundaryData
         flowrate_file = None
-        boundary_data_dir = self.case_dir / 'constant' / 'boundaryData'
+        boundary_data_dir = self.case_dir / "constant" / "boundaryData"
         if boundary_data_dir.exists():
             for inlet_dir in boundary_data_dir.iterdir():
-                if 'inlet' in inlet_dir.name.lower():
-                    candidate = inlet_dir / 'flowrate.csv'
+                if "inlet" in inlet_dir.name.lower():
+                    candidate = inlet_dir / "flowrate.csv"
                     if candidate.exists():
                         flowrate_file = candidate
                         break
@@ -207,9 +204,10 @@ class HemodynamicsPostProcessor:
         try:
             # Read flowrate CSV (format: time, flowrate)
             import csv
+
             times = []
             flowrates = []
-            with open(flowrate_file, 'r') as f:
+            with open(flowrate_file, "r") as f:
                 reader = csv.reader(f)
                 for row in reader:
                     if len(row) >= 2:
@@ -246,9 +244,7 @@ class HemodynamicsPostProcessor:
             HemodynamicsResults with computed metrics
         """
         results = HemodynamicsResults(
-            inlet_type=self.inlet_type,
-            is_pulsatile=self.is_pulsatile,
-            cardiac_cycle=self.cardiac_cycle
+            inlet_type=self.inlet_type, is_pulsatile=self.is_pulsatile, cardiac_cycle=self.cardiac_cycle
         )
 
         # Detect peak systole from inlet flowrate
@@ -259,7 +255,9 @@ class HemodynamicsPostProcessor:
 
         # Check if WSS data exists
         if not self._check_wss_exists():
-            self.log.warning("WSS data not found. Run 'foamPostProcess -solver incompressibleFluid -func wallShearStress' first.")
+            self.log.warning(
+                "WSS data not found. Run 'foamPostProcess -solver incompressibleFluid -func wallShearStress' first."
+            )
             return results
 
         # Compute steady WSS metrics
@@ -275,17 +273,14 @@ class HemodynamicsPostProcessor:
                     "Enable hemodynamics.runtime_functions.fieldAverage in config."
                 )
         else:
-            self.log.info(
-                f"Inlet type is {self.inlet_type} (steady). "
-                "OSI=0, RRT undefined. Only WSS computed."
-            )
+            self.log.info(f"Inlet type is {self.inlet_type} (steady). " "OSI=0, RRT undefined. Only WSS computed.")
 
         return results
 
     def _check_wss_exists(self) -> bool:
         """Check if wallShearStress field exists in any time directory."""
         for time_dir in self._get_time_directories():
-            wss_file = time_dir / 'wallShearStress'
+            wss_file = time_dir / "wallShearStress"
             if wss_file.exists():
                 return True
         return False
@@ -293,7 +288,7 @@ class HemodynamicsPostProcessor:
     def _check_fieldaverage_exists(self) -> bool:
         """Check if fieldAverage output exists."""
         for time_dir in self._get_time_directories():
-            mean_file = time_dir / 'wallShearStressMean'
+            mean_file = time_dir / "wallShearStressMean"
             if mean_file.exists():
                 return True
         return False
@@ -327,7 +322,7 @@ class HemodynamicsPostProcessor:
         if not latest:
             return
 
-        wss_file = latest / 'wallShearStress'
+        wss_file = latest / "wallShearStress"
         if not wss_file.exists():
             return
 
@@ -342,7 +337,9 @@ class HemodynamicsPostProcessor:
                 # Percentile-based descriptors (robust to mesh topology artifacts)
                 results.wss_p99 = float(np.percentile(wss_mag, 99))
                 results.wss_p95 = float(np.percentile(wss_mag, 95))
-                self.log.info(f"WSS: max={results.wss_max:.4f}, p99={results.wss_p99:.4f}, mean={results.wss_mean:.4f} Pa")
+                self.log.info(
+                    f"WSS: max={results.wss_max:.4f}, p99={results.wss_p99:.4f}, mean={results.wss_mean:.4f} Pa"
+                )
         except Exception as e:
             self.log.error(f"Failed to compute WSS: {e}")
 
@@ -367,7 +364,7 @@ class HemodynamicsPostProcessor:
 
         # Get TAWSS from wallShearStressMean
         latest = valid_dirs[-1]
-        mean_file = latest / 'wallShearStressMean'
+        mean_file = latest / "wallShearStressMean"
 
         if not mean_file.exists():
             self.log.warning(f"wallShearStressMean not found at {latest}")
@@ -401,7 +398,7 @@ class HemodynamicsPostProcessor:
             # Compute WSS magnitude at each saved time step and average
             wss_mags = []
             for d in valid_dirs:
-                wss_file = d / 'wallShearStress'
+                wss_file = d / "wallShearStress"
                 if wss_file.exists():
                     wss_vec = self._read_vector_field(wss_file)
                     if wss_vec is not None:
@@ -463,10 +460,9 @@ class HemodynamicsPostProcessor:
                 # Per-cycle TAWSS convergence check
                 if len(wss_mags) > 1 and self.cardiac_cycle > 0:
                     cycle_groups = {}
-                    wss_dir_indices = []
                     idx = 0
                     for d in valid_dirs:
-                        wss_file = d / 'wallShearStress'
+                        wss_file = d / "wallShearStress"
                         if wss_file.exists():
                             t = float(d.name)
                             cycle_idx = int((t - skip_time) / self.cardiac_cycle)
@@ -492,8 +488,12 @@ class HemodynamicsPostProcessor:
                                 "Results may not be fully converged. Consider running more cycles."
                             )
 
-            self.log.info(f"TAWSS: max={results.tawss_max:.4f}, p99={results.tawss_p99:.4f}, mean={results.tawss_mean:.4f} Pa")
-            self.log.info(f"OSI: max={results.osi_max:.4f}, mean={results.osi_mean:.4f}, mean_masked={results.osi_mean_masked:.4f}")
+            self.log.info(
+                f"TAWSS: max={results.tawss_max:.4f}, p99={results.tawss_p99:.4f}, mean={results.tawss_mean:.4f} Pa"
+            )
+            self.log.info(
+                f"OSI: max={results.osi_max:.4f}, mean={results.osi_mean:.4f}, mean_masked={results.osi_mean_masked:.4f}"
+            )
             self.log.info(f"RRT: max={results.rrt_max:.4f}, mean={results.rrt_mean:.4f} Pa⁻¹")
 
             # Save fields for ParaView visualization
@@ -502,10 +502,10 @@ class HemodynamicsPostProcessor:
         except Exception as e:
             self.log.error(f"Failed to compute TAWSS/OSI/RRT: {e}")
             import traceback
+
             traceback.print_exc()
 
-    def _save_hemodynamic_fields(self, time_dir: Path, tawss: np.ndarray,
-                                  osi: np.ndarray, rrt: np.ndarray) -> None:
+    def _save_hemodynamic_fields(self, time_dir: Path, tawss: np.ndarray, osi: np.ndarray, rrt: np.ndarray) -> None:
         """
         Save TAWSS, OSI, and RRT as OpenFOAM scalar boundary fields for ParaView visualization.
 
@@ -514,7 +514,7 @@ class HemodynamicsPostProcessor:
         """
         try:
             # Get wall patch name from geometry config
-            wall_keywords = self.config.get('geometry', {}).get('wall_keywords_ordered', 'wall')
+            wall_keywords = self.config.get("geometry", {}).get("wall_keywords_ordered", "wall")
             if isinstance(wall_keywords, list):
                 wall_patch = wall_keywords[0]
             else:
@@ -523,7 +523,7 @@ class HemodynamicsPostProcessor:
             # Find actual wall patch name in the case
             wall_patch_name = None
             for patch_name in self._get_boundary_patches():
-                if wall_patch.lower() in patch_name.lower() or 'wall' in patch_name.lower():
+                if wall_patch.lower() in patch_name.lower() or "wall" in patch_name.lower():
                     wall_patch_name = patch_name
                     break
 
@@ -532,16 +532,10 @@ class HemodynamicsPostProcessor:
                 return
 
             # Save each field
-            fields_to_save = [
-                ('TAWSS', tawss, 'Pa'),
-                ('OSI', osi, ''),
-                ('RRT', rrt, '1/Pa')
-            ]
+            fields_to_save = [("TAWSS", tawss, "Pa"), ("OSI", osi, ""), ("RRT", rrt, "1/Pa")]
 
             for field_name, field_data, unit in fields_to_save:
-                self._write_scalar_boundary_field(
-                    time_dir, field_name, field_data, wall_patch_name, unit
-                )
+                self._write_scalar_boundary_field(time_dir, field_name, field_data, wall_patch_name, unit)
 
             self.log.info(f"Saved TAWSS, OSI, RRT fields to {time_dir}")
 
@@ -550,28 +544,30 @@ class HemodynamicsPostProcessor:
 
     def _get_boundary_patches(self) -> list:
         """Get list of boundary patch names from the case."""
-        boundary_file = self.case_dir / 'constant' / 'polyMesh' / 'boundary'
+        boundary_file = self.case_dir / "constant" / "polyMesh" / "boundary"
         patches = []
         if boundary_file.exists():
-            with open(boundary_file, 'r') as f:
+            with open(boundary_file, "r") as f:
                 content = f.read()
                 # Simple regex to find patch names
                 import re
-                matches = re.findall(r'^\s*(\w+)\s*\n\s*\{', content, re.MULTILINE)
-                patches = [m for m in matches if m not in ['FoamFile', 'boundary']]
+
+                matches = re.findall(r"^\s*(\w+)\s*\n\s*\{", content, re.MULTILINE)
+                patches = [m for m in matches if m not in ["FoamFile", "boundary"]]
         return patches
 
-    def _write_scalar_boundary_field(self, time_dir: Path, field_name: str,
-                                      data: np.ndarray, wall_patch: str, unit: str) -> None:
+    def _write_scalar_boundary_field(
+        self, time_dir: Path, field_name: str, data: np.ndarray, wall_patch: str, unit: str
+    ) -> None:
         """Write a scalar field as OpenFOAM boundary field format."""
         output_file = time_dir / field_name
 
         n_faces = len(data)
 
         # Format data as OpenFOAM list
-        data_str = '\n'.join(f'{v:.8g}' for v in data)
+        data_str = "\n".join(f"{v:.8g}" for v in data)
 
-        content = f'''FoamFile
+        content = f"""FoamFile
 {{
     version     2.0;
     format      ascii;
@@ -605,9 +601,9 @@ boundaryField
 }}
 
 // ************************************************************************* //
-'''
+"""
 
-        with open(output_file, 'w') as f:
+        with open(output_file, "w") as f:
             f.write(content)
 
     def _compute_pressure_drop(self, results: HemodynamicsResults) -> None:
@@ -616,7 +612,7 @@ boundaryField
 
         Reads data from postProcessing/*/surfaceFieldValue.dat files.
         """
-        postproc_dir = self.case_dir / 'postProcessing'
+        postproc_dir = self.case_dir / "postProcessing"
         if not postproc_dir.exists():
             self.log.warning("postProcessing directory not found")
             return
@@ -653,14 +649,14 @@ boundaryField
 
     def _read_surface_field_value(self, func_name: str) -> Optional[Tuple[np.ndarray, np.ndarray]]:
         """Read surfaceFieldValue.dat from postProcessing."""
-        postproc_dir = self.case_dir / 'postProcessing' / func_name
+        postproc_dir = self.case_dir / "postProcessing" / func_name
         if not postproc_dir.exists():
             return None
 
         # Find the data file (could be in '0/' or another time subdirectory)
         data_file = None
         for subdir in postproc_dir.iterdir():
-            candidate = subdir / 'surfaceFieldValue.dat'
+            candidate = subdir / "surfaceFieldValue.dat"
             if candidate.exists():
                 data_file = candidate
                 break
@@ -672,10 +668,10 @@ boundaryField
             # Parse the OpenFOAM data file
             times = []
             values = []
-            with open(data_file, 'r') as f:
+            with open(data_file, "r") as f:
                 for line in f:
                     line = line.strip()
-                    if line.startswith('#') or not line:
+                    if line.startswith("#") or not line:
                         continue
                     parts = line.split()
                     if len(parts) >= 2:
@@ -699,20 +695,21 @@ boundaryField
 
         try:
             # Read file in binary mode to handle both formats
-            with open(filepath, 'rb') as f:
+            with open(filepath, "rb") as f:
                 raw_content = f.read()
 
             # Check if binary format
-            is_binary = b'format      binary' in raw_content[:500]
+            is_binary = b"format      binary" in raw_content[:500]
 
             if is_binary:
                 return self._read_binary_vector_field(filepath, raw_content)
             else:
-                return self._read_ascii_vector_field(filepath, raw_content.decode('utf-8', errors='ignore'))
+                return self._read_ascii_vector_field(filepath, raw_content.decode("utf-8", errors="ignore"))
 
         except Exception as e:
             self.log.warning(f"Failed to read vector field {filepath}: {e}")
             import traceback
+
             traceback.print_exc()
             return None
 
@@ -720,7 +717,7 @@ boundaryField
         """Read ASCII format OpenFOAM vector field."""
         # Find the data section between parentheses
         # Format: N\n(\n(x y z)\n(x y z)\n...\n)
-        match = re.search(r'(\d+)\s*\(\s*\(([\s\S]*?)\)\s*\)', content)
+        match = re.search(r"(\d+)\s*\(\s*\(([\s\S]*?)\)\s*\)", content)
         if not match:
             return None
 
@@ -729,8 +726,8 @@ boundaryField
 
         # Parse vector data
         vectors = []
-        for line in data_str.split(')'):
-            line = line.strip().lstrip('(')
+        for line in data_str.split(")"):
+            line = line.strip().lstrip("(")
             if line:
                 parts = line.split()
                 if len(parts) >= 3:
@@ -750,13 +747,13 @@ boundaryField
         """
         import struct
 
-        content_str = raw_content.decode('utf-8', errors='replace')
+        content_str = raw_content.decode("utf-8", errors="replace")
 
         # Find wall patch in boundaryField - look for 'wall' keyword
         # The pattern matches: patchName { type calculated; value nonuniform List<vector> N (...binary data...)
         # Patterns: wall_aorta, wallAorta, aortaWall, aorta_wall, wall, etc.
         wall_patches = []
-        for patch_match in re.finditer(r'(\w*wall\w*)\s*\{', content_str, re.IGNORECASE):
+        for patch_match in re.finditer(r"(\w*wall\w*)\s*\{", content_str, re.IGNORECASE):
             wall_patches.append(patch_match.group(1))
 
         if not wall_patches:
@@ -767,7 +764,7 @@ boundaryField
         # Pattern: wall_name\n    {\n        type ...; value nonuniform List<vector> N
         for wall_patch in wall_patches:
             # Find this patch in boundaryField
-            pattern = rf'{re.escape(wall_patch)}\s*\{{\s*type\s+\w+;\s*value\s+nonuniform\s+List<vector>\s*\n\s*(\d+)'
+            pattern = rf"{re.escape(wall_patch)}\s*\{{\s*type\s+\w+;\s*value\s+nonuniform\s+List<vector>\s*\n\s*(\d+)"
             match = re.search(pattern, content_str)
 
             if match:
@@ -775,10 +772,10 @@ boundaryField
                 self.log.info(f"Reading {n_elements} vectors from wall patch '{wall_patch}'")
 
                 # Find the position of the count in binary content
-                count_pos = raw_content.find(f'\n{n_elements}\n'.encode())
+                count_pos = raw_content.find(f"\n{n_elements}\n".encode())
                 if count_pos == -1:
                     # Try alternative format
-                    count_str = f'{n_elements}'
+                    f"{n_elements}"
                     count_pos = content_str.find(match.group(1))
 
                 if count_pos == -1:
@@ -787,7 +784,7 @@ boundaryField
                 # Binary data starts after "N\n("
                 # Find the opening parenthesis after the count
                 search_start = count_pos + len(str(n_elements))
-                paren_pos = raw_content.find(b'(', search_start)
+                paren_pos = raw_content.find(b"(", search_start)
 
                 if paren_pos == -1:
                     continue
@@ -797,14 +794,16 @@ boundaryField
                 bytes_needed = n_elements * 3 * 8  # 3 doubles per vector, 8 bytes per double
 
                 if data_start + bytes_needed > len(raw_content):
-                    self.log.warning(f"Not enough binary data: need {bytes_needed}, have {len(raw_content) - data_start}")
+                    self.log.warning(
+                        f"Not enough binary data: need {bytes_needed}, have {len(raw_content) - data_start}"
+                    )
                     continue
 
-                binary_data = raw_content[data_start:data_start + bytes_needed]
+                binary_data = raw_content[data_start : data_start + bytes_needed]
 
                 try:
                     # Unpack as little-endian doubles
-                    values = struct.unpack(f'<{n_elements * 3}d', binary_data)
+                    values = struct.unpack(f"<{n_elements * 3}d", binary_data)
                     vectors = np.array(values).reshape(-1, 3)
                     return vectors
                 except struct.error as e:
@@ -828,9 +827,9 @@ boundaryField
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
-        report_file = output_path / 'hemodynamics_report.txt'
+        report_file = output_path / "hemodynamics_report.txt"
 
-        with open(report_file, 'w') as f:
+        with open(report_file, "w") as f:
             f.write("=" * 70 + "\n")
             f.write("HEMODYNAMICS ANALYSIS REPORT\n")
             f.write("=" * 70 + "\n\n")
@@ -946,12 +945,12 @@ boundaryField
         p_inlet_mmhg = np.array(results.pressure_inlet_series) * PA_TO_MMHG * BLOOD_DENSITY_DEFAULT
 
         # Top plot: Absolute pressures
-        ax1.plot(times, p_inlet_mmhg, 'b-', linewidth=2, label='Inlet', zorder=10)
+        ax1.plot(times, p_inlet_mmhg, "b-", linewidth=2, label="Inlet", zorder=10)
 
         # Use distinct colors and line styles for outlets to show overlapping lines
-        colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00']  # Colorblind-friendly
-        linestyles = ['-', '--', '-.', ':', (0, (3, 1, 1, 1))]
-        markers = ['o', 's', '^', 'D', 'v']
+        colors = ["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00"]  # Colorblind-friendly
+        linestyles = ["-", "--", "-.", ":", (0, (3, 1, 1, 1))]
+        markers = ["o", "s", "^", "D", "v"]
 
         for i, outlet in enumerate(self.outlet_patches):
             if outlet in results.pressure_outlet_series:
@@ -962,13 +961,22 @@ boundaryField
                 marker = markers[i % len(markers)]
                 # Plot with markers at sparse intervals to show distinct lines
                 marker_every = max(1, len(times) // 20)
-                ax1.plot(times, p_out, color=color, linestyle=ls, linewidth=1.5,
-                        marker=marker, markevery=marker_every, markersize=4,
-                        label=outlet, alpha=0.8)
+                ax1.plot(
+                    times,
+                    p_out,
+                    color=color,
+                    linestyle=ls,
+                    linewidth=1.5,
+                    marker=marker,
+                    markevery=marker_every,
+                    markersize=4,
+                    label=outlet,
+                    alpha=0.8,
+                )
 
-        ax1.set_ylabel('Pressure (mmHg)')
-        ax1.set_title('Patch-Averaged Pressure Over Time')
-        ax1.legend(loc='upper right', fontsize=9, ncol=2)
+        ax1.set_ylabel("Pressure (mmHg)")
+        ax1.set_title("Patch-Averaged Pressure Over Time")
+        ax1.legend(loc="upper right", fontsize=9, ncol=2)
         ax1.grid(True, alpha=0.3)
 
         # Bottom plot: Pressure drops
@@ -980,22 +988,30 @@ boundaryField
                 ls = linestyles[i % len(linestyles)]
                 marker = markers[i % len(markers)]
                 marker_every = max(1, len(times) // 20)
-                ax2.plot(times, dp, color=color, linestyle=ls, linewidth=1.5,
-                        marker=marker, markevery=marker_every, markersize=4,
-                        label=f'Inlet → {outlet}', alpha=0.8)
+                ax2.plot(
+                    times,
+                    dp,
+                    color=color,
+                    linestyle=ls,
+                    linewidth=1.5,
+                    marker=marker,
+                    markevery=marker_every,
+                    markersize=4,
+                    label=f"Inlet → {outlet}",
+                    alpha=0.8,
+                )
 
-        ax2.axhline(y=20, color='red', linestyle='--', linewidth=2, alpha=0.7,
-                   label='Clinical threshold (20 mmHg)')
-        ax2.set_xlabel('Time (s)')
-        ax2.set_ylabel('Pressure Drop (mmHg)')
-        ax2.set_title('Pressure Drop: Inlet to Each Outlet')
-        ax2.legend(loc='upper right', fontsize=9, ncol=2)
+        ax2.axhline(y=20, color="red", linestyle="--", linewidth=2, alpha=0.7, label="Clinical threshold (20 mmHg)")
+        ax2.set_xlabel("Time (s)")
+        ax2.set_ylabel("Pressure Drop (mmHg)")
+        ax2.set_title("Pressure Drop: Inlet to Each Outlet")
+        ax2.legend(loc="upper right", fontsize=9, ncol=2)
         ax2.grid(True, alpha=0.3)
 
         plt.tight_layout()
 
-        plot_path = output_dir / 'pressure_drop_timeseries.png'
-        plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+        plot_path = output_dir / "pressure_drop_timeseries.png"
+        plt.savefig(plot_path, dpi=150, bbox_inches="tight")
         plt.close()
 
         self.log.info(f"Pressure plot saved to: {plot_path}")
@@ -1016,11 +1032,11 @@ boundaryField
             Tuple of (json_path, csv_path)
         """
         output_path = Path(output_dir)
-        results_dir = output_path / 'results'
+        results_dir = output_path / "results"
         results_dir.mkdir(parents=True, exist_ok=True)
 
         # Build QoI dictionary with definitions
-        patient_id = self.config.get('case_info', {}).get('patient_id', '')
+        patient_id = self.config.get("case_info", {}).get("patient_id", "")
         qoi_data = {
             "_metadata": {
                 "description": "Hemodynamic Quantities of Interest for CFD verification",
@@ -1033,7 +1049,9 @@ boundaryField
             },
             "qoi": {
                 "pressure_drop_mean_mmhg": {
-                    "value": float(np.mean(list(results.pressure_drop_mmhg.values()))) if results.pressure_drop_mmhg else 0.0,
+                    "value": (
+                        float(np.mean(list(results.pressure_drop_mmhg.values()))) if results.pressure_drop_mmhg else 0.0
+                    ),
                     "unit": "mmHg",
                     "definition": "Cycle-averaged pressure drop (inlet to outlets mean)",
                 },
@@ -1077,20 +1095,20 @@ boundaryField
         }
 
         # Write JSON
-        json_path = results_dir / 'qoi_summary.json'
-        with open(json_path, 'w') as f:
+        json_path = results_dir / "qoi_summary.json"
+        with open(json_path, "w") as f:
             json.dump(qoi_data, f, indent=2)
 
         # Write CSV (flat format for easy import to spreadsheets/scripts)
-        csv_path = results_dir / 'qoi_summary.csv'
-        with open(csv_path, 'w', newline='') as f:
+        csv_path = results_dir / "qoi_summary.csv"
+        with open(csv_path, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['metric', 'value', 'unit', 'definition'])
-            for key, data in qoi_data['qoi'].items():
-                writer.writerow([key, data['value'], data['unit'], data['definition']])
+            writer.writerow(["metric", "value", "unit", "definition"])
+            for key, data in qoi_data["qoi"].items():
+                writer.writerow([key, data["value"], data["unit"], data["definition"]])
             # Add per-outlet pressure drops
             for outlet, dp in results.pressure_drop_mmhg.items():
-                writer.writerow([f'pressure_drop_{outlet}_mmhg', dp, 'mmHg', f'Pressure drop to {outlet}'])
+                writer.writerow([f"pressure_drop_{outlet}_mmhg", dp, "mmHg", f"Pressure drop to {outlet}"])
 
         self.log.info(f"QoI exported to: {json_path}, {csv_path}")
         return str(json_path), str(csv_path)
@@ -1130,7 +1148,6 @@ def run_hemodynamics_analysis(case_dir: str, config: Dict[str, Any], output_dir:
 if __name__ == "__main__":
     """Command-line interface for hemodynamics post-processing."""
     import argparse
-    import json
 
     parser = argparse.ArgumentParser(description="AortaCFD Hemodynamics Post-Processor")
     parser.add_argument("case_dir", help="Path to OpenFOAM case directory")
@@ -1141,7 +1158,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Set up logging
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     # Load config
     config = {}

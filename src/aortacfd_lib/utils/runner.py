@@ -5,47 +5,33 @@ from .logger import Logger
 
 logger = Logger("runner").get_logger()
 
+
 class CommandExecutionError(Exception):
     """Custom exception for failed command execution."""
-    pass
 
 
 class Runner:
     """Utility class for running external commands."""
-    
+
     def __init__(self):
         """Initialize the Runner."""
-        pass
-    
-    def run_command(
-        self,
-        command,
-        timeout=None,
-        cwd=None,
-        env=None,
-        capture_output=True
-    ):
+
+    def run_command(self, command, timeout=None, cwd=None, env=None, capture_output=True):
         """
         Run a command and return the result.
-        
+
         Args:
             command: List of command arguments
             timeout: Timeout in seconds
             cwd: Working directory
             env: Environment variables
             capture_output: Whether to capture stdout/stderr
-            
+
         Returns:
             CompletedProcess result
         """
-        return subprocess.run(
-            command,
-            timeout=timeout,
-            cwd=cwd,
-            env=env,
-            capture_output=capture_output,
-            text=True
-        )
+        return subprocess.run(command, timeout=timeout, cwd=cwd, env=env, capture_output=capture_output, text=True)
+
 
 def run_command(config: dict, command: list, case_directory: str, log_filename: str):
     """
@@ -66,12 +52,12 @@ def run_command(config: dict, command: list, case_directory: str, log_filename: 
     os.makedirs(logs_dir, exist_ok=True)
 
     # Convert the command list to a single string (e.g., "blockMesh -dict ...")
-    command_str = ' '.join(command)
-    
+    command_str = " ".join(command)
+
     # This is the key: we create a single shell command that first sources the
     # environment and then runs the desired OpenFOAM command.
     full_shell_command = f"source {of_env_path} && {command_str}"
-    
+
     log_path = os.path.join(logs_dir, log_filename)
     logger.info(f"Executing command in shell: {command_str}")
 
@@ -84,7 +70,7 @@ def run_command(config: dict, command: list, case_directory: str, log_filename: 
                 stderr=subprocess.STDOUT,
                 check=True,
                 text=True,
-                cwd=case_directory
+                cwd=case_directory,
             )
     except subprocess.CalledProcessError:
         logger.error(f"Command failed. See full log at: {log_path}")

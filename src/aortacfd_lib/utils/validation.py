@@ -11,10 +11,9 @@ All validators follow the pattern:
 2. Return (is_valid: bool, errors: list[str], warnings: list[str])
 """
 
-import os
 import struct
 from pathlib import Path
-from typing import Tuple, List, Dict, Optional
+from typing import List, Dict, Optional
 import logging
 from .logger import Logger
 
@@ -24,8 +23,13 @@ logger = logging.getLogger(__name__)
 class ValidationResult:
     """Container for validation results."""
 
-    def __init__(self, is_valid: bool = True, errors: Optional[List[str]] = None,
-                 warnings: Optional[List[str]] = None, cell_count: int = 0):
+    def __init__(
+        self,
+        is_valid: bool = True,
+        errors: Optional[List[str]] = None,
+        warnings: Optional[List[str]] = None,
+        cell_count: int = 0,
+    ):
         self.is_valid = is_valid
         self.errors = errors or []
         self.warnings = warnings or []
@@ -65,9 +69,9 @@ class GeometryValidator:
     """
 
     # Minimum surface areas (in m²) for different patch types
-    MIN_AREA_INLET = 1e-6      # 1 mm²
-    MIN_AREA_OUTLET = 1e-7     # 0.1 mm²
-    MIN_AREA_WALL = 1e-5       # 10 mm²
+    MIN_AREA_INLET = 1e-6  # 1 mm²
+    MIN_AREA_OUTLET = 1e-7  # 0.1 mm²
+    MIN_AREA_WALL = 1e-5  # 10 mm²
 
     def __init__(self, case_directory: str, scale_factor: float = 1.0):
         """
@@ -146,9 +150,9 @@ class GeometryValidator:
 
         # Detect ASCII vs Binary format
         try:
-            with open(stl_file, 'rb') as f:
+            with open(stl_file, "rb") as f:
                 header = f.read(6)
-                is_ascii = header.startswith(b'solid ')
+                is_ascii = header.startswith(b"solid ")
 
             if is_ascii:
                 return self._validate_ascii_stl(stl_file)
@@ -164,28 +168,30 @@ class GeometryValidator:
         result = ValidationResult()
 
         try:
-            with open(stl_file, 'r') as f:
+            with open(stl_file, "r") as f:
                 content = f.read()
 
             # Check for required keywords
-            if 'solid' not in content:
+            if "solid" not in content:
                 result.add_error(f"Missing 'solid' keyword in ASCII STL: {stl_file.name}")
 
-            if 'endsolid' not in content:
+            if "endsolid" not in content:
                 result.add_error(f"Missing 'endsolid' keyword in ASCII STL: {stl_file.name}")
 
             # Count facets
-            facet_count = content.count('facet normal')
+            facet_count = content.count("facet normal")
             if facet_count == 0:
                 result.add_error(f"No facets found in ASCII STL: {stl_file.name}")
             elif facet_count < 10:
                 result.add_warning(f"Very few facets ({facet_count}) in {stl_file.name}")
 
             # Check endfacet count matches
-            endfacet_count = content.count('endfacet')
+            endfacet_count = content.count("endfacet")
             if facet_count != endfacet_count:
-                result.add_error(f"Mismatched facet/endfacet count in {stl_file.name}: "
-                               f"{facet_count} facets vs {endfacet_count} endfacets")
+                result.add_error(
+                    f"Mismatched facet/endfacet count in {stl_file.name}: "
+                    f"{facet_count} facets vs {endfacet_count} endfacets"
+                )
 
         except UnicodeDecodeError:
             result.add_error(f"File appears to be binary, not ASCII: {stl_file.name}")
@@ -199,9 +205,9 @@ class GeometryValidator:
         result = ValidationResult()
 
         try:
-            with open(stl_file, 'rb') as f:
+            with open(stl_file, "rb") as f:
                 # Read header (80 bytes)
-                header = f.read(80)
+                f.read(80)
 
                 # Read number of triangles (4 bytes, unsigned int)
                 num_triangles_bytes = f.read(4)
@@ -209,7 +215,7 @@ class GeometryValidator:
                     result.add_error(f"Corrupted STL header in {stl_file.name}")
                     return result
 
-                num_triangles = struct.unpack('<I', num_triangles_bytes)[0]
+                num_triangles = struct.unpack("<I", num_triangles_bytes)[0]
 
                 if num_triangles == 0:
                     result.add_error(f"Zero triangles in binary STL: {stl_file.name}")
@@ -224,8 +230,10 @@ class GeometryValidator:
                 actual_size = stl_file.stat().st_size
 
                 if actual_size != expected_size:
-                    result.add_error(f"File size mismatch in {stl_file.name}: "
-                                   f"expected {expected_size} bytes, got {actual_size} bytes")
+                    result.add_error(
+                        f"File size mismatch in {stl_file.name}: "
+                        f"expected {expected_size} bytes, got {actual_size} bytes"
+                    )
 
         except Exception as e:
             result.add_error(f"Error validating binary STL {stl_file.name}: {str(e)}")
@@ -248,9 +256,9 @@ class GeometryValidator:
         patch_names = [f.stem for f in stl_files]
 
         # Check for required patches
-        has_inlet = any('inlet' in name.lower() for name in patch_names)
-        has_outlet = any('outlet' in name.lower() for name in patch_names)
-        has_wall = any('wall' in name.lower() or 'aorta' in name.lower() for name in patch_names)
+        has_inlet = any("inlet" in name.lower() for name in patch_names)
+        has_outlet = any("outlet" in name.lower() for name in patch_names)
+        has_wall = any("wall" in name.lower() or "aorta" in name.lower() for name in patch_names)
 
         if not has_inlet:
             result.add_error("No inlet patch found. Expected file like 'inlet.stl'")
@@ -287,18 +295,19 @@ class GeometryValidator:
 
             # Determine minimum area based on patch type
             patch_type_lower = patch_type.lower()
-            if 'inlet' in patch_type_lower:
+            if "inlet" in patch_type_lower:
                 min_area = self.MIN_AREA_INLET
-            elif 'outlet' in patch_type_lower:
+            elif "outlet" in patch_type_lower:
                 min_area = self.MIN_AREA_OUTLET
-            elif 'wall' in patch_type_lower:
+            elif "wall" in patch_type_lower:
                 min_area = self.MIN_AREA_WALL
             else:
                 min_area = self.MIN_AREA_OUTLET  # Default to outlet minimum
 
             if area < min_area:
-                result.add_warning(f"Surface area of {stl_file.name} ({area:.2e} m²) "
-                                 f"is below minimum ({min_area:.2e} m²)")
+                result.add_warning(
+                    f"Surface area of {stl_file.name} ({area:.2e} m²) " f"is below minimum ({min_area:.2e} m²)"
+                )
 
             # Log area for reference
             self.logger.debug(f"Surface area of {stl_file.name}: {area:.6e} m²")
@@ -322,11 +331,11 @@ class GeometryValidator:
 
         # Try binary format first
         try:
-            with open(stl_file, 'rb') as f:
+            with open(stl_file, "rb") as f:
                 header = f.read(6)
                 f.seek(0)
 
-                if header.startswith(b'solid '):
+                if header.startswith(b"solid "):
                     # ASCII format
                     total_area = self._calculate_ascii_stl_area(f)
                 else:
@@ -338,7 +347,7 @@ class GeometryValidator:
             return 0.0
 
         # Apply scale factor (area scales as length²)
-        return total_area * (self.scale_factor ** 2)
+        return total_area * (self.scale_factor**2)
 
     def _calculate_binary_stl_area(self, file_handle) -> float:
         """Calculate area from binary STL file."""
@@ -346,7 +355,7 @@ class GeometryValidator:
         file_handle.seek(80)
 
         # Read number of triangles
-        num_triangles = struct.unpack('<I', file_handle.read(4))[0]
+        num_triangles = struct.unpack("<I", file_handle.read(4))[0]
 
         total_area = 0.0
         for _ in range(num_triangles):
@@ -354,9 +363,9 @@ class GeometryValidator:
             file_handle.read(12)
 
             # Read 3 vertices (9 floats)
-            v1 = struct.unpack('<fff', file_handle.read(12))
-            v2 = struct.unpack('<fff', file_handle.read(12))
-            v3 = struct.unpack('<fff', file_handle.read(12))
+            v1 = struct.unpack("<fff", file_handle.read(12))
+            v2 = struct.unpack("<fff", file_handle.read(12))
+            v3 = struct.unpack("<fff", file_handle.read(12))
 
             # Skip attribute byte count
             file_handle.read(2)
@@ -369,10 +378,10 @@ class GeometryValidator:
             cross = [
                 edge1[1] * edge2[2] - edge1[2] * edge2[1],
                 edge1[2] * edge2[0] - edge1[0] * edge2[2],
-                edge1[0] * edge2[1] - edge1[1] * edge2[0]
+                edge1[0] * edge2[1] - edge1[1] * edge2[0],
             ]
 
-            area = 0.5 * (cross[0]**2 + cross[1]**2 + cross[2]**2)**0.5
+            area = 0.5 * (cross[0] ** 2 + cross[1] ** 2 + cross[2] ** 2) ** 0.5
             total_area += area
 
         return total_area
@@ -380,20 +389,20 @@ class GeometryValidator:
     def _calculate_ascii_stl_area(self, file_handle) -> float:
         """Calculate area from ASCII STL file."""
         file_handle.seek(0)
-        content = file_handle.read().decode('utf-8', errors='ignore')
+        content = file_handle.read().decode("utf-8", errors="ignore")
 
         total_area = 0.0
-        lines = content.split('\n')
+        lines = content.split("\n")
         i = 0
 
         while i < len(lines):
             line = lines[i].strip()
 
-            if line.startswith('facet normal'):
+            if line.startswith("facet normal"):
                 # Read next lines for vertices
                 vertices = []
                 for j in range(i + 1, min(i + 6, len(lines))):
-                    if 'vertex' in lines[j]:
+                    if "vertex" in lines[j]:
                         parts = lines[j].strip().split()
                         if len(parts) == 4:  # 'vertex x y z'
                             vertices.append([float(parts[1]), float(parts[2]), float(parts[3])])
@@ -407,10 +416,10 @@ class GeometryValidator:
                     cross = [
                         edge1[1] * edge2[2] - edge1[2] * edge2[1],
                         edge1[2] * edge2[0] - edge1[0] * edge2[2],
-                        edge1[0] * edge2[1] - edge1[1] * edge2[0]
+                        edge1[0] * edge2[1] - edge1[1] * edge2[0],
                     ]
 
-                    area = 0.5 * (cross[0]**2 + cross[1]**2 + cross[2]**2)**0.5
+                    area = 0.5 * (cross[0] ** 2 + cross[1] ** 2 + cross[2] ** 2) ** 0.5
                     total_area += area
 
                 i += 7  # Skip to next facet
@@ -473,11 +482,11 @@ class MeshQualityChecker:
 
     # Quality thresholds (OpenFOAM recommended values)
     ORTHOGONALITY_WARNING = 70  # Degrees
-    ORTHOGONALITY_ERROR = 75    # Degrees
-    SKEWNESS_WARNING = 4        # Dimensionless
-    SKEWNESS_ERROR = 8          # Dimensionless
+    ORTHOGONALITY_ERROR = 75  # Degrees
+    SKEWNESS_WARNING = 4  # Dimensionless
+    SKEWNESS_ERROR = 8  # Dimensionless
     ASPECT_RATIO_WARNING = 100  # Dimensionless
-    ASPECT_RATIO_ERROR = 1000   # Dimensionless
+    ASPECT_RATIO_ERROR = 1000  # Dimensionless
 
     def __init__(self, case_directory: str):
         """
@@ -511,14 +520,14 @@ class MeshQualityChecker:
             return result
 
         try:
-            with open(log_file, 'r') as f:
+            with open(log_file, "r") as f:
                 content = f.read()
 
             # Parse mesh quality metrics
             metrics = self._parse_checkmesh_output(content)
 
             # Store cell count in result
-            result.cell_count = int(metrics.get('num_cells', 0))
+            result.cell_count = int(metrics.get("num_cells", 0))
 
             # Check orthogonality
             ortho_result = self.check_orthogonality(metrics)
@@ -565,34 +574,34 @@ class MeshQualityChecker:
         metrics = {}
 
         # Parse max non-orthogonality
-        ortho_match = re.search(r'Max non-orthogonality = ([\d.]+)', content)
+        ortho_match = re.search(r"Max non-orthogonality = ([\d.]+)", content)
         if ortho_match:
-            metrics['max_non_orthogonality'] = float(ortho_match.group(1))
+            metrics["max_non_orthogonality"] = float(ortho_match.group(1))
 
         # Parse max skewness
-        skew_match = re.search(r'Max skewness = ([\d.]+)', content)
+        skew_match = re.search(r"Max skewness = ([\d.]+)", content)
         if skew_match:
-            metrics['max_skewness'] = float(skew_match.group(1))
+            metrics["max_skewness"] = float(skew_match.group(1))
 
         # Parse max aspect ratio
-        aspect_match = re.search(r'Max aspect ratio = ([\d.]+)', content)
+        aspect_match = re.search(r"Max aspect ratio = ([\d.]+)", content)
         if aspect_match:
-            metrics['max_aspect_ratio'] = float(aspect_match.group(1))
+            metrics["max_aspect_ratio"] = float(aspect_match.group(1))
 
         # Parse number of cells
-        cells_match = re.search(r'cells:\s+(\d+)', content)
+        cells_match = re.search(r"cells:\s+(\d+)", content)
         if cells_match:
-            metrics['num_cells'] = int(cells_match.group(1))
+            metrics["num_cells"] = int(cells_match.group(1))
 
         # Parse number of faces
-        faces_match = re.search(r'faces:\s+(\d+)', content)
+        faces_match = re.search(r"faces:\s+(\d+)", content)
         if faces_match:
-            metrics['num_faces'] = int(faces_match.group(1))
+            metrics["num_faces"] = int(faces_match.group(1))
 
         # Parse number of points
-        points_match = re.search(r'points:\s+(\d+)', content)
+        points_match = re.search(r"points:\s+(\d+)", content)
         if points_match:
-            metrics['num_points'] = int(points_match.group(1))
+            metrics["num_points"] = int(points_match.group(1))
 
         return metrics
 
@@ -608,11 +617,11 @@ class MeshQualityChecker:
         """
         result = ValidationResult()
 
-        if 'max_non_orthogonality' not in metrics:
+        if "max_non_orthogonality" not in metrics:
             result.add_warning("Non-orthogonality metric not found in checkMesh output")
             return result
 
-        max_ortho = metrics['max_non_orthogonality']
+        max_ortho = metrics["max_non_orthogonality"]
 
         if max_ortho > self.ORTHOGONALITY_ERROR:
             result.add_error(
@@ -641,11 +650,11 @@ class MeshQualityChecker:
         """
         result = ValidationResult()
 
-        if 'max_skewness' not in metrics:
+        if "max_skewness" not in metrics:
             result.add_warning("Skewness metric not found in checkMesh output")
             return result
 
-        max_skew = metrics['max_skewness']
+        max_skew = metrics["max_skewness"]
 
         if max_skew > self.SKEWNESS_ERROR:
             result.add_error(
@@ -674,11 +683,11 @@ class MeshQualityChecker:
         """
         result = ValidationResult()
 
-        if 'max_aspect_ratio' not in metrics:
+        if "max_aspect_ratio" not in metrics:
             result.add_warning("Aspect ratio metric not found in checkMesh output")
             return result
 
-        max_aspect = metrics['max_aspect_ratio']
+        max_aspect = metrics["max_aspect_ratio"]
 
         if max_aspect > self.ASPECT_RATIO_ERROR:
             result.add_error(
@@ -717,14 +726,15 @@ class MeshQualityChecker:
             return result
 
         try:
-            with open(log_file, 'r') as f:
+            with open(log_file, "r") as f:
                 content = f.read()
 
             # Check for boundary layer info in log
             if "layer" in content.lower():
                 # Look for layer thickness info
                 import re
-                layer_match = re.search(r'layer.*thickness', content, re.IGNORECASE)
+
+                layer_match = re.search(r"layer.*thickness", content, re.IGNORECASE)
                 if layer_match:
                     self.logger.info("Boundary layers detected in mesh")
                 else:
@@ -750,13 +760,13 @@ class BoundaryConditionValidator:
     """
 
     # Valid inlet types
-    VALID_INLET_TYPES = ['TIMEVARYING', 'CONSTANT', 'WOMERSLEY', 'MRI']
+    VALID_INLET_TYPES = ["TIMEVARYING", "CONSTANT", "WOMERSLEY", "MRI"]
 
     # Valid outlet types
-    VALID_OUTLET_TYPES = ['ZEROGRADIENT', 'FIXEDVALUE', '2EWINDKESSEL', '3EWINDKESSEL', 'RCRLUMPED']
+    VALID_OUTLET_TYPES = ["ZEROGRADIENT", "FIXEDVALUE", "2EWINDKESSEL", "3EWINDKESSEL", "RCRLUMPED"]
 
     # Valid data types for inlet (normalized to lowercase)
-    VALID_DATA_TYPES = ['velocity', 'flowrate', 'pressure']
+    VALID_DATA_TYPES = ["velocity", "flowrate", "pressure"]
 
     @staticmethod
     def normalize_data_type(data_type):
@@ -772,31 +782,31 @@ class BoundaryConditionValidator:
         normalized = str(data_type).lower().strip()
 
         # Handle common variations
-        if normalized in ['flowrate', 'flow_rate', 'flow', 'q']:
-            return 'flowrate'
-        elif normalized in ['velocity', 'vel', 'u', 'v']:
-            return 'velocity'
-        elif normalized in ['pressure', 'p', 'press']:
-            return 'pressure'
+        if normalized in ["flowrate", "flow_rate", "flow", "q"]:
+            return "flowrate"
+        elif normalized in ["velocity", "vel", "u", "v"]:
+            return "velocity"
+        elif normalized in ["pressure", "p", "press"]:
+            return "pressure"
         else:
             # Return as-is if not recognized
             return normalized
 
     # Valid profiles
-    VALID_PROFILES = ['plug', 'parabolic', 'womersley', 'wall_distance', 'elliptical']
+    VALID_PROFILES = ["plug", "parabolic", "womersley", "wall_distance", "elliptical"]
 
     # Type-profile compatibility rules (strict enforcement)
     TYPE_PROFILE_RULES = {
-        'TIMEVARYING': ['plug', 'parabolic', 'womersley', 'wall_distance', 'elliptical'],
-        'CONSTANT': ['plug', 'parabolic', 'wall_distance', 'elliptical'],
-        'WOMERSLEY': ['womersley']                          # Must use womersley profile
+        "TIMEVARYING": ["plug", "parabolic", "womersley", "wall_distance", "elliptical"],
+        "CONSTANT": ["plug", "parabolic", "wall_distance", "elliptical"],
+        "WOMERSLEY": ["womersley"],  # Must use womersley profile
     }
 
     # Required parameters per type
     REQUIRED_PARAMS = {
-        'TIMEVARYING': ['csv_file', 'data_type', 'profile'],
-        'CONSTANT': ['profile'],  # velocity OR flowrate OR cardiac_output (checked separately)
-        'WOMERSLEY': ['csv_file', 'data_type', 'profile']
+        "TIMEVARYING": ["csv_file", "data_type", "profile"],
+        "CONSTANT": ["profile"],  # velocity OR flowrate OR cardiac_output (checked separately)
+        "WOMERSLEY": ["csv_file", "data_type", "profile"],
     }
 
     # Minimum requirements
@@ -805,16 +815,16 @@ class BoundaryConditionValidator:
     MAX_CARDIAC_CYCLE_TIME = 2.0  # Maximum cycle time (s) - slow heart rate ~30 bpm
 
     # Womersley number thresholds for profile recommendations
-    WOMERSLEY_ALPHA_LOW = 1.0   # Below this: parabolic acceptable
+    WOMERSLEY_ALPHA_LOW = 1.0  # Below this: parabolic acceptable
     WOMERSLEY_ALPHA_MID = 10.0  # Above this: near-plug (typical proximal aorta)
 
     # Windkessel parameter ranges (physiological)
     WINDKESSEL_RANGES = {
-        'systolic_pressure': (80, 200),    # mmHg
-        'diastolic_pressure': (40, 120),   # mmHg
-        'C_compliance': (1e-10, 1e-7),     # m³/Pa
-        'R_proximal': (1e5, 1e9),          # Pa·s/m³
-        'R_distal': (1e6, 1e10)            # Pa·s/m³
+        "systolic_pressure": (80, 200),  # mmHg
+        "diastolic_pressure": (40, 120),  # mmHg
+        "C_compliance": (1e-10, 1e-7),  # m³/Pa
+        "R_proximal": (1e5, 1e9),  # Pa·s/m³
+        "R_distal": (1e6, 1e10),  # Pa·s/m³
     }
 
     def __init__(self, config: dict, case_directory: str = None):
@@ -842,18 +852,20 @@ class BoundaryConditionValidator:
 
         # Support both nested and flattened config structures
         # After ConfigBuilder merge, BCs may be at root level
-        if 'boundary_conditions' in self.config:
-            bc_config = self.config['boundary_conditions']
-        elif 'inlet' in self.config or 'outlets' in self.config:
+        if "boundary_conditions" in self.config:
+            bc_config = self.config["boundary_conditions"]
+        elif "inlet" in self.config or "outlets" in self.config:
             # Flattened structure - BCs at root level
             bc_config = self.config
         else:
-            result.add_error("No boundary condition configuration found (expected 'boundary_conditions' or 'inlet'/'outlets' at root)")
+            result.add_error(
+                "No boundary condition configuration found (expected 'boundary_conditions' or 'inlet'/'outlets' at root)"
+            )
             return result
 
         # Validate inlet configuration
-        if 'inlet' in bc_config:
-            inlet_result = self.validate_inlet_configuration(bc_config['inlet'])
+        if "inlet" in bc_config:
+            inlet_result = self.validate_inlet_configuration(bc_config["inlet"])
             result.errors.extend(inlet_result.errors)
             result.warnings.extend(inlet_result.warnings)
             if not inlet_result.is_valid:
@@ -862,8 +874,8 @@ class BoundaryConditionValidator:
             result.add_error("No inlet boundary condition specified")
 
         # Validate outlet configuration
-        if 'outlets' in bc_config:
-            outlet_result = self.validate_outlet_configuration(bc_config['outlets'])
+        if "outlets" in bc_config:
+            outlet_result = self.validate_outlet_configuration(bc_config["outlets"])
             result.errors.extend(outlet_result.errors)
             result.warnings.extend(outlet_result.warnings)
             if not outlet_result.is_valid:
@@ -872,8 +884,8 @@ class BoundaryConditionValidator:
             result.add_error("No outlet boundary condition specified")
 
         # Validate consistency between inlet and outlets
-        if 'inlet' in bc_config and 'outlets' in bc_config:
-            consistency_result = self.validate_bc_consistency(bc_config['inlet'], bc_config['outlets'])
+        if "inlet" in bc_config and "outlets" in bc_config:
+            consistency_result = self.validate_bc_consistency(bc_config["inlet"], bc_config["outlets"])
             result.errors.extend(consistency_result.errors)
             result.warnings.extend(consistency_result.warnings)
             if not consistency_result.is_valid:
@@ -894,15 +906,13 @@ class BoundaryConditionValidator:
         result = ValidationResult()
 
         # Check inlet type
-        inlet_type = inlet_config.get('type', '').upper()
+        inlet_type = inlet_config.get("type", "").upper()
         if not inlet_type:
             result.add_error("Inlet type not specified")
             return result
 
         if inlet_type not in self.VALID_INLET_TYPES:
-            result.add_error(
-                f"Invalid inlet type '{inlet_type}'. Valid types: {', '.join(self.VALID_INLET_TYPES)}"
-            )
+            result.add_error(f"Invalid inlet type '{inlet_type}'. Valid types: {', '.join(self.VALID_INLET_TYPES)}")
             return result
 
         # Check required parameters for this type
@@ -912,12 +922,10 @@ class BoundaryConditionValidator:
                 result.add_error(f"Inlet type '{inlet_type}' requires parameter '{param}'")
 
         # Validate profile compatibility with type
-        profile = inlet_config.get('profile', '').lower()
+        profile = inlet_config.get("profile", "").lower()
         if profile:
             if profile not in self.VALID_PROFILES:
-                result.add_error(
-                    f"Invalid profile '{profile}'. Valid profiles: {', '.join(self.VALID_PROFILES)}"
-                )
+                result.add_error(f"Invalid profile '{profile}'. Valid profiles: {', '.join(self.VALID_PROFILES)}")
             else:
                 # Strict type-profile compatibility check
                 allowed_profiles = self.TYPE_PROFILE_RULES.get(inlet_type, [])
@@ -928,8 +936,8 @@ class BoundaryConditionValidator:
                     )
 
         # Validate data_type (normalize to handle flowRate, flow_rate, etc.)
-        data_type_raw = inlet_config.get('data_type', '')
-        data_type = self.normalize_data_type(data_type_raw) if data_type_raw else ''
+        data_type_raw = inlet_config.get("data_type", "")
+        data_type = self.normalize_data_type(data_type_raw) if data_type_raw else ""
         if data_type and data_type not in self.VALID_DATA_TYPES:
             result.add_error(
                 f"Invalid data_type '{data_type_raw}' (normalized: '{data_type}'). "
@@ -937,8 +945,8 @@ class BoundaryConditionValidator:
             )
 
         # Type-specific validation
-        if inlet_type in ['TIMEVARYING', 'WOMERSLEY']:
-            csv_file = inlet_config.get('csv_file')
+        if inlet_type in ["TIMEVARYING", "WOMERSLEY"]:
+            csv_file = inlet_config.get("csv_file")
             if csv_file:
                 csv_result = self.validate_flow_data_csv(csv_file)
                 result.errors.extend(csv_result.errors)
@@ -946,15 +954,15 @@ class BoundaryConditionValidator:
                 if not csv_result.is_valid:
                     result.is_valid = False
 
-        if inlet_type == 'CONSTANT':
+        if inlet_type == "CONSTANT":
             # Check for either velocity, flowrate, or cardiac_output parameter
-            has_velocity = 'velocity' in inlet_config
-            has_flowrate = 'flowrate' in inlet_config
-            has_cardiac_output = 'cardiac_output' in inlet_config
+            has_velocity = "velocity" in inlet_config
+            has_flowrate = "flowrate" in inlet_config
+            has_cardiac_output = "cardiac_output" in inlet_config
 
             # Allow flowrate as alias for cardiac_output
             if has_flowrate and not has_cardiac_output:
-                inlet_config['cardiac_output'] = inlet_config['flowrate']
+                inlet_config["cardiac_output"] = inlet_config["flowrate"]
                 has_cardiac_output = True
 
             if not has_velocity and not has_cardiac_output:
@@ -965,7 +973,7 @@ class BoundaryConditionValidator:
                 result.add_warning(
                     "Both 'velocity' and 'cardiac_output' specified. Using 'cardiac_output' and ignoring 'velocity'."
                 )
-                cardiac_output = inlet_config['cardiac_output']
+                cardiac_output = inlet_config["cardiac_output"]
                 if not isinstance(cardiac_output, (int, float)) or cardiac_output <= 0:
                     result.add_error(f"Cardiac output must be a positive number, got: {cardiac_output}")
                 elif cardiac_output < 2.0 or cardiac_output > 30.0:
@@ -974,11 +982,11 @@ class BoundaryConditionValidator:
                         "Typical resting: 4.5-5.5 L/min, exercise: 10-25 L/min."
                     )
             elif has_velocity:
-                velocity = inlet_config['velocity']
+                velocity = inlet_config["velocity"]
                 if not isinstance(velocity, (int, float)) or velocity <= 0:
                     result.add_error(f"Velocity must be a positive number, got: {velocity}")
             elif has_cardiac_output:
-                cardiac_output = inlet_config['cardiac_output']
+                cardiac_output = inlet_config["cardiac_output"]
                 if not isinstance(cardiac_output, (int, float)) or cardiac_output <= 0:
                     result.add_error(f"Cardiac output must be a positive number, got: {cardiac_output}")
                 elif cardiac_output < 2.0 or cardiac_output > 30.0:
@@ -988,18 +996,16 @@ class BoundaryConditionValidator:
                     )
 
         # Check for physics.nu if womersley profile is used
-        if profile == 'womersley' or inlet_type == 'WOMERSLEY':
-            physics = self.config.get('physics', {})
-            if 'nu' not in physics:
-                result.add_error(
-                    "Womersley profile requires 'physics.nu' (kinematic viscosity) in configuration"
-                )
-            elif physics['nu'] <= 0:
+        if profile == "womersley" or inlet_type == "WOMERSLEY":
+            physics = self.config.get("physics", {})
+            if "nu" not in physics:
+                result.add_error("Womersley profile requires 'physics.nu' (kinematic viscosity) in configuration")
+            elif physics["nu"] <= 0:
                 result.add_error(f"physics.nu must be positive, got: {physics['nu']}")
 
         # Validate optional period parameter
-        if 'period' in inlet_config:
-            period = inlet_config['period']
+        if "period" in inlet_config:
+            period = inlet_config["period"]
             if not isinstance(period, (int, float)) or period <= 0:
                 result.add_error(f"Period must be a positive number, got: {period}")
             elif period < self.MIN_CARDIAC_CYCLE_TIME or period > self.MAX_CARDIAC_CYCLE_TIME:
@@ -1023,19 +1029,17 @@ class BoundaryConditionValidator:
         result = ValidationResult()
 
         # Check outlet type
-        outlet_type = outlet_config.get('type', '').upper()
+        outlet_type = outlet_config.get("type", "").upper()
         if not outlet_type:
             result.add_error("Outlet type not specified")
             return result
 
         if outlet_type not in self.VALID_OUTLET_TYPES:
-            result.add_error(
-                f"Invalid outlet type '{outlet_type}'. Valid types: {', '.join(self.VALID_OUTLET_TYPES)}"
-            )
+            result.add_error(f"Invalid outlet type '{outlet_type}'. Valid types: {', '.join(self.VALID_OUTLET_TYPES)}")
             return result
 
         # For Windkessel, validate parameters
-        if '3EWINDKESSEL' in outlet_type or 'WINDKESSEL' in outlet_type:
+        if "3EWINDKESSEL" in outlet_type or "WINDKESSEL" in outlet_type:
             wk_result = self.validate_windkessel_parameters(outlet_config)
             result.errors.extend(wk_result.errors)
             result.warnings.extend(wk_result.warnings)
@@ -1064,14 +1068,14 @@ class BoundaryConditionValidator:
             # If not found, try constant/boundaryData/inlet/
             if not csv_path.exists():
                 # Get inlet patch name from config
-                inlet_patch = self.config.get('geometry', {}).get('inlet_keywords_ordered', 'inlet')
+                inlet_patch = self.config.get("geometry", {}).get("inlet_keywords_ordered", "inlet")
                 csv_path_boundary = self.case_directory / "constant" / "boundaryData" / inlet_patch / csv_file
                 if csv_path_boundary.exists():
                     csv_path = csv_path_boundary
 
             # If not found, try the config file's directory (cases_input/<case>/)
             if not csv_path.exists():
-                config_path = self.config.get('_config_file_path')
+                config_path = self.config.get("_config_file_path")
                 if config_path:
                     csv_config_dir = Path(config_path).parent / csv_file
                     if csv_config_dir.exists():
@@ -1088,32 +1092,28 @@ class BoundaryConditionValidator:
             import pandas as pd
 
             # Read CSV file, skipping comment lines
-            df = pd.read_csv(csv_path, comment='#')
+            df = pd.read_csv(csv_path, comment="#")
 
             # Normalize column names to lowercase for case-insensitive matching
             # Create mapping: original_name -> lowercase_name
             column_name_map = {col: col.lower().strip() for col in df.columns}
-            lowercase_columns = list(column_name_map.values())
+            list(column_name_map.values())
 
             # Check required 'time' column (case-insensitive)
             time_column = None
             for orig_col, lower_col in column_name_map.items():
-                if lower_col == 'time':
+                if lower_col == "time":
                     time_column = orig_col
                     break
 
             if time_column is None:
-                result.add_error(
-                    f"CSV file missing required 'time' column. "
-                    f"Found columns: {list(df.columns)}"
-                )
+                result.add_error(f"CSV file missing required 'time' column. " f"Found columns: {list(df.columns)}")
                 return result
 
             # Check for at least one data column (velocity, flowrate, or pressure)
             # Normalize column names to handle flowRate, flow_rate, Time, TIME, etc.
             normalized_columns = {col: self.normalize_data_type(col) for col in df.columns}
-            data_columns = [col for col, norm in normalized_columns.items()
-                          if norm and norm in self.VALID_DATA_TYPES]
+            data_columns = [col for col, norm in normalized_columns.items() if norm and norm in self.VALID_DATA_TYPES]
             if not data_columns:
                 result.add_error(
                     f"CSV file missing data column. Expected one of: {', '.join(self.VALID_DATA_TYPES)} "
@@ -1123,9 +1123,7 @@ class BoundaryConditionValidator:
 
             # Validate minimum number of points
             if len(df) < self.MIN_TIME_POINTS:
-                result.add_error(
-                    f"Insufficient data points in CSV: {len(df)} (minimum: {self.MIN_TIME_POINTS})"
-                )
+                result.add_error(f"Insufficient data points in CSV: {len(df)} (minimum: {self.MIN_TIME_POINTS})")
 
             # Validate time column (use discovered column name for case-insensitivity)
             time_result = self._validate_time_column(df[time_column])
@@ -1158,9 +1156,7 @@ class BoundaryConditionValidator:
 
         # Check time starts at or near zero
         if time_series.iloc[0] > 0.1:
-            result.add_warning(
-                f"Time series starts at {time_series.iloc[0]:.3f}s (expected to start near 0)"
-            )
+            result.add_warning(f"Time series starts at {time_series.iloc[0]:.3f}s (expected to start near 0)")
 
         # Check time is monotonically increasing
         if not time_series.is_monotonic_increasing:
@@ -1204,28 +1200,25 @@ class BoundaryConditionValidator:
             result.add_error(f"{column_name} column contains NaN values")
 
         import numpy as np
+
         if np.isinf(data_series).any():
             result.add_error(f"{column_name} column contains infinite values")
 
         # Check for negative values (only for velocity/flowrate)
-        if column_name.lower() in ['velocity', 'flowrate']:
+        if column_name.lower() in ["velocity", "flowrate"]:
             if (data_series < 0).any():
-                result.add_warning(
-                    f"{column_name} contains negative values. Ensure this is intentional (backflow)."
-                )
+                result.add_warning(f"{column_name} contains negative values. Ensure this is intentional (backflow).")
 
         # Check for unrealistic values
-        if column_name.lower() == 'velocity':
+        if column_name.lower() == "velocity":
             max_val = data_series.max()
             if max_val > 5.0:  # >5 m/s is unusual in aorta
                 result.add_warning(
-                    f"Peak velocity ({max_val:.2f} m/s) is unusually high. "
-                    f"Expected range: 0.5-2.5 m/s for aorta"
+                    f"Peak velocity ({max_val:.2f} m/s) is unusually high. " f"Expected range: 0.5-2.5 m/s for aorta"
                 )
             elif max_val < 0.1:  # <0.1 m/s is very low
                 result.add_warning(
-                    f"Peak velocity ({max_val:.2f} m/s) is unusually low. "
-                    f"Check units (should be m/s, not mm/s)"
+                    f"Peak velocity ({max_val:.2f} m/s) is unusually low. " f"Check units (should be m/s, not mm/s)"
                 )
 
         # Check data starts and ends at similar values (for cyclic flow)
@@ -1253,7 +1246,7 @@ class BoundaryConditionValidator:
         Returns:
             True if outlet_parameters contains at least one outlet with R, C, Z values
         """
-        outlet_params = wk_settings.get('outlet_parameters', {})
+        outlet_params = wk_settings.get("outlet_parameters", {})
 
         if not outlet_params:
             return False
@@ -1264,11 +1257,11 @@ class BoundaryConditionValidator:
                 continue
 
             # Check for required keys R, C, Z
-            has_all_keys = all(key in params for key in ['R', 'C', 'Z'])
+            has_all_keys = all(key in params for key in ["R", "C", "Z"])
             if has_all_keys:
                 # Verify values are numeric
                 try:
-                    for key in ['R', 'C', 'Z']:
+                    for key in ["R", "C", "Z"]:
                         float(params[key])
                     return True  # At least one outlet has valid R, C, Z
                 except (TypeError, ValueError):
@@ -1293,28 +1286,26 @@ class BoundaryConditionValidator:
         result = ValidationResult()
 
         # Check for windkessel_settings
-        if 'windkessel_settings' not in outlet_config:
+        if "windkessel_settings" not in outlet_config:
             result.add_error("3-element Windkessel requires 'windkessel_settings' section")
             return result
 
-        wk_settings = outlet_config['windkessel_settings']
+        wk_settings = outlet_config["windkessel_settings"]
 
         # Check if direct RCZ mode is being used (user provided R, C, Z for all outlets)
         # In direct RCZ mode, systolic/diastolic pressure are not required
         direct_rcz_mode = self._check_direct_rcz_mode(wk_settings)
 
         # Check methodology (optional - defaults are used if not specified)
-        methodology = wk_settings.get('methodology', '').lower()
-        valid_methodologies = ['murray_law_automatic', 'manual', 'literature_based']
+        methodology = wk_settings.get("methodology", "").lower()
+        valid_methodologies = ["murray_law_automatic", "manual", "literature_based"]
 
         if methodology and methodology not in valid_methodologies:
-            result.add_warning(
-                f"Unknown methodology '{methodology}'. Expected: {', '.join(valid_methodologies)}"
-            )
+            result.add_warning(f"Unknown methodology '{methodology}'. Expected: {', '.join(valid_methodologies)}")
 
         # Validate pressure values (required unless in direct RCZ mode)
-        systolic_p = wk_settings.get('systolic_pressure')
-        diastolic_p = wk_settings.get('diastolic_pressure')
+        systolic_p = wk_settings.get("systolic_pressure")
+        diastolic_p = wk_settings.get("diastolic_pressure")
 
         if not direct_rcz_mode:
             # Pressure is required for automatic WK calculation
@@ -1323,7 +1314,7 @@ class BoundaryConditionValidator:
             elif not isinstance(systolic_p, (int, float)):
                 result.add_error(f"Invalid systolic_pressure: {systolic_p} (must be numeric)")
             else:
-                min_p, max_p = self.WINDKESSEL_RANGES['systolic_pressure']
+                min_p, max_p = self.WINDKESSEL_RANGES["systolic_pressure"]
                 if not (min_p <= systolic_p <= max_p):
                     result.add_warning(
                         f"Systolic pressure ({systolic_p} mmHg) outside typical range: {min_p}-{max_p} mmHg"
@@ -1334,7 +1325,7 @@ class BoundaryConditionValidator:
             elif not isinstance(diastolic_p, (int, float)):
                 result.add_error(f"Invalid diastolic_pressure: {diastolic_p} (must be numeric)")
             else:
-                min_p, max_p = self.WINDKESSEL_RANGES['diastolic_pressure']
+                min_p, max_p = self.WINDKESSEL_RANGES["diastolic_pressure"]
                 if not (min_p <= diastolic_p <= max_p):
                     result.add_warning(
                         f"Diastolic pressure ({diastolic_p} mmHg) outside typical range: {min_p}-{max_p} mmHg"
@@ -1343,15 +1334,11 @@ class BoundaryConditionValidator:
             # Check pressure relationship
             if systolic_p and diastolic_p:
                 if systolic_p <= diastolic_p:
-                    result.add_error(
-                        f"Systolic pressure ({systolic_p}) must be greater than diastolic ({diastolic_p})"
-                    )
+                    result.add_error(f"Systolic pressure ({systolic_p}) must be greater than diastolic ({diastolic_p})")
 
                 pulse_pressure = systolic_p - diastolic_p
                 if pulse_pressure < 20:
-                    result.add_warning(
-                        f"Pulse pressure ({pulse_pressure} mmHg) is very low. Typical range: 30-50 mmHg"
-                    )
+                    result.add_warning(f"Pulse pressure ({pulse_pressure} mmHg) is very low. Typical range: 30-50 mmHg")
                 elif pulse_pressure > 80:
                     result.add_warning(
                         f"Pulse pressure ({pulse_pressure} mmHg) is very high. Typical range: 30-50 mmHg"
@@ -1366,14 +1353,13 @@ class BoundaryConditionValidator:
                         )
 
         # Validate initial_pressure_method if specified
-        init_method = wk_settings.get('initial_pressure_method', 'diastolic').lower()
+        init_method = wk_settings.get("initial_pressure_method", "diastolic").lower()
         # Note: 'windkessel' is deprecated but still accepted (will fallback to diastolic with warning)
-        valid_methods = ['diastolic', 'systolic', 'map', 'mean', 'arithmetic', 'windkessel', 'zero']
-        deprecated_methods = ['windkessel']
+        valid_methods = ["diastolic", "systolic", "map", "mean", "arithmetic", "windkessel", "zero"]
+        deprecated_methods = ["windkessel"]
         if init_method not in valid_methods:
             result.add_error(
-                f"Invalid initial_pressure_method '{init_method}'. "
-                f"Valid options: {', '.join(valid_methods)}"
+                f"Invalid initial_pressure_method '{init_method}'. " f"Valid options: {', '.join(valid_methods)}"
             )
         elif init_method in deprecated_methods:
             result.add_warning(
@@ -1383,8 +1369,8 @@ class BoundaryConditionValidator:
             )
 
         # For manual methodology, validate C, R_proximal, R_distal
-        if methodology == 'manual':
-            for param in ['C_compliance', 'R_proximal', 'R_distal']:
+        if methodology == "manual":
+            for param in ["C_compliance", "R_proximal", "R_distal"]:
                 value = wk_settings.get(param)
                 if value is None:
                     result.add_error(f"Manual Windkessel requires '{param}' parameter")
@@ -1395,9 +1381,7 @@ class BoundaryConditionValidator:
                 elif param in self.WINDKESSEL_RANGES:
                     min_val, max_val = self.WINDKESSEL_RANGES[param]
                     if not (min_val <= value <= max_val):
-                        result.add_warning(
-                            f"{param} ({value:.2e}) outside typical range: {min_val:.2e}-{max_val:.2e}"
-                        )
+                        result.add_warning(f"{param} ({value:.2e}) outside typical range: {min_val:.2e}-{max_val:.2e}")
 
         return result
 
@@ -1415,21 +1399,21 @@ class BoundaryConditionValidator:
         result = ValidationResult()
 
         # Check for time-varying inlet with Windkessel outlets
-        inlet_type = inlet_config.get('type', '').upper()
-        outlet_type = outlet_config.get('type', '').upper()
+        inlet_type = inlet_config.get("type", "").upper()
+        outlet_type = outlet_config.get("type", "").upper()
 
-        if inlet_type == 'TIMEVARYING' and 'WINDKESSEL' in outlet_type:
+        if inlet_type == "TIMEVARYING" and "WINDKESSEL" in outlet_type:
             # This is the most common and recommended combination
             self.logger.debug("Time-varying inlet with Windkessel outlets - recommended configuration")
-        elif inlet_type == 'CONSTANT' and outlet_type == 'ZEROGRADIENT':
+        elif inlet_type == "CONSTANT" and outlet_type == "ZEROGRADIENT":
             result.add_warning(
                 "Constant inlet with zero-gradient outlets may lead to stability issues. "
                 "Consider using pressure outlets or Windkessel."
             )
-        elif inlet_type == 'CONSTANT' and outlet_type == '2EWINDKESSEL':
+        elif inlet_type == "CONSTANT" and outlet_type == "2EWINDKESSEL":
             # 2-element Windkessel (R-C, Z=0) is appropriate for CONSTANT inlet
             self.logger.debug("Constant inlet with 2-element Windkessel (R-C) - appropriate configuration")
-        elif inlet_type == 'CONSTANT' and outlet_type == '3EWINDKESSEL':
+        elif inlet_type == "CONSTANT" and outlet_type == "3EWINDKESSEL":
             result.add_warning(
                 "Constant inlet with 3-Element Windkessel outlets: at steady state (DC), "
                 "the capacitor C is open-circuit and the model collapses to pure resistance R_total = R1 + R2. "

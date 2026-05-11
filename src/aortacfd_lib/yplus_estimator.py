@@ -32,12 +32,7 @@ class YPlusEstimator:
         Δy = y+_target × ν / u_τ
     """
 
-    def __init__(
-        self,
-        density: float,
-        viscosity: float,
-        flow_regime: Literal['auto', 'laminar', 'turbulent'] = 'auto'
-    ):
+    def __init__(self, density: float, viscosity: float, flow_regime: Literal["auto", "laminar", "turbulent"] = "auto"):
         """
         Initialize the Y+ estimator.
 
@@ -49,7 +44,7 @@ class YPlusEstimator:
         self.rho = density
         self.mu = viscosity
         self.nu = viscosity / density  # Kinematic viscosity
-        self.flow_regime = flow_regime.lower() if flow_regime else 'auto'  # Case-insensitive
+        self.flow_regime = flow_regime.lower() if flow_regime else "auto"  # Case-insensitive
 
     def estimate_first_layer_thickness(
         self,
@@ -57,7 +52,7 @@ class YPlusEstimator:
         mean_velocity: float,
         characteristic_length: float,
         n_layers: int = 5,
-        expansion_ratio: float = 1.2
+        expansion_ratio: float = 1.2,
     ) -> Dict[str, float]:
         """
         Estimate the first layer thickness to achieve target y+.
@@ -83,13 +78,13 @@ class YPlusEstimator:
         Re = self.rho * mean_velocity * characteristic_length / self.mu
 
         # Determine flow regime
-        if self.flow_regime == 'auto':
+        if self.flow_regime == "auto":
             if Re < 2300:
-                regime = 'laminar'
+                regime = "laminar"
             elif Re > 4000:
-                regime = 'turbulent'
+                regime = "turbulent"
             else:
-                regime = 'transitional'
+                regime = "transitional"
                 logger.warning(
                     f"Flow is transitional (Re={Re:.0f}). "
                     f"Results may be less accurate. Consider explicit regime specification."
@@ -98,15 +93,15 @@ class YPlusEstimator:
             regime = self.flow_regime
 
         # Calculate friction factor using empirical correlations
-        if regime == 'laminar':
+        if regime == "laminar":
             f = 64.0 / Re
         else:  # turbulent or transitional
             # Blasius correlation for smooth pipes (valid for Re < 100,000)
             if Re < 100000:
-                f = 0.316 / (Re ** 0.25)
+                f = 0.316 / (Re**0.25)
             else:
                 # Prandtl-Karman correlation for higher Re
-                f = 0.0032 + 0.221 / (Re ** 0.237)
+                f = 0.0032 + 0.221 / (Re**0.237)
 
         # Calculate friction velocity
         u_tau = mean_velocity * math.sqrt(f / 8.0)
@@ -126,13 +121,13 @@ class YPlusEstimator:
         estimated_yplus = delta_y1 * u_tau / self.nu
 
         return {
-            'firstLayerThickness': delta_y1,  # CORRECT: innermost layer (wall-adjacent) for y+ control
-            'estimated_yplus': estimated_yplus,
-            'reynolds_number': Re,
-            'friction_velocity': u_tau,
-            'total_layer_thickness': total_bl_thickness,
-            'flow_regime': regime,
-            'friction_factor': f
+            "firstLayerThickness": delta_y1,  # CORRECT: innermost layer (wall-adjacent) for y+ control
+            "estimated_yplus": estimated_yplus,
+            "reynolds_number": Re,
+            "friction_velocity": u_tau,
+            "total_layer_thickness": total_bl_thickness,
+            "flow_regime": regime,
+            "friction_factor": f,
         }
 
     def validate_settings(
@@ -141,7 +136,7 @@ class YPlusEstimator:
         total_layer_thickness: float,
         characteristic_length: float,
         solver_type: str,
-        reynolds_number: float
+        reynolds_number: float,
     ) -> Dict[str, list]:
         """
         Validate boundary layer settings and provide warnings if needed.
@@ -169,13 +164,13 @@ class YPlusEstimator:
             )
 
         # Check solver type vs Reynolds number
-        if solver_type.lower() == 'laminar' and reynolds_number > 4000:
+        if solver_type.lower() == "laminar" and reynolds_number > 4000:
             warnings.append(
                 f"Using laminar solver with Re={reynolds_number:.0f} (turbulent regime). "
                 f"Consider using RANS or LES solver."
             )
 
-        if solver_type.upper() in ['RANS', 'LES'] and reynolds_number < 2300:
+        if solver_type.upper() in ["RANS", "LES"] and reynolds_number < 2300:
             warnings.append(
                 f"Using {solver_type} solver with Re={reynolds_number:.0f} (laminar regime). "
                 f"Consider using laminar solver."
@@ -195,10 +190,7 @@ class YPlusEstimator:
                 f"May not resolve near-wall gradients adequately."
             )
 
-        return {
-            'warnings': warnings,
-            'recommendations': recommendations
-        }
+        return {"warnings": warnings, "recommendations": recommendations}
 
     def print_report(
         self,
@@ -206,8 +198,8 @@ class YPlusEstimator:
         target_yplus: float,
         n_layers: int = 5,
         expansion_ratio: float = 1.2,
-        solver_type: str = 'RANS',
-        characteristic_length: Optional[float] = None
+        solver_type: str = "RANS",
+        characteristic_length: Optional[float] = None,
     ) -> None:
         """
         Print a formatted report of the y+ estimation results.
@@ -220,50 +212,56 @@ class YPlusEstimator:
             solver_type: Solver type for validation
             characteristic_length: For validation warnings
         """
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("Y+ ESTIMATOR RESULTS")
-        print("="*60)
+        print("=" * 60)
         print(f"Target y+:                  {target_yplus:.2f}")
-        print(f"Estimated mean velocity:    {results['reynolds_number']*self.nu/characteristic_length:.3f} m/s" if characteristic_length else "")
+        print(
+            f"Estimated mean velocity:    {results['reynolds_number']*self.nu/characteristic_length:.3f} m/s"
+            if characteristic_length
+            else ""
+        )
         print(f"Reynolds number:            {results['reynolds_number']:.0f} ({results['flow_regime'].capitalize()})")
         print(f"Friction factor (f):        {results['friction_factor']:.6f}")
         print(f"Friction velocity (u_τ):    {results['friction_velocity']:.4f} m/s")
-        print("-"*60)
+        print("-" * 60)
         print("RECOMMENDED MESH SETTINGS:")
-        print("-"*60)
-        print(f"  firstLayerThickness:      {results['firstLayerThickness']:.6f}  ({results['firstLayerThickness']*1000:.4f} mm)")
+        print("-" * 60)
+        print(
+            f"  firstLayerThickness:      {results['firstLayerThickness']:.6f}  ({results['firstLayerThickness']*1000:.4f} mm)"
+        )
         print(f"  nSurfaceLayers:           {n_layers}")
         print(f"  expansionRatio:           {expansion_ratio}")
         print(f"  Total BL thickness:       {results['total_layer_thickness']*1000:.4f} mm")
         print(f"  Estimated y+:             {results['estimated_yplus']:.2f}")
-        print("-"*60)
+        print("-" * 60)
 
         # Validation
         if characteristic_length:
             validation = self.validate_settings(
-                results['firstLayerThickness'],
-                results['total_layer_thickness'],
+                results["firstLayerThickness"],
+                results["total_layer_thickness"],
                 characteristic_length,
                 solver_type,
-                results['reynolds_number']
+                results["reynolds_number"],
             )
 
-            if validation['warnings']:
+            if validation["warnings"]:
                 print("⚠️  WARNINGS:")
-                for warning in validation['warnings']:
+                for warning in validation["warnings"]:
                     print(f"  - {warning}")
             else:
                 print("✓ Settings appear reasonable for", solver_type)
 
-            if validation['recommendations']:
+            if validation["recommendations"]:
                 print("\n💡 RECOMMENDATIONS:")
-                for rec in validation['recommendations']:
+                for rec in validation["recommendations"]:
                     print(f"  - {rec}")
 
-        print("="*60)
+        print("=" * 60)
         print("Note: These estimates use pipe flow correlations.")
         print("Verify actual y+ using post-processing after simulation.")
-        print("="*60 + "\n")
+        print("=" * 60 + "\n")
 
 
 def estimate_from_config(config: dict, target_yplus: float) -> Dict[str, float]:
@@ -278,43 +276,39 @@ def estimate_from_config(config: dict, target_yplus: float) -> Dict[str, float]:
         Estimation results dictionary
     """
     # Extract fluid properties from physics.transport_properties (same as OpenFOAM uses)
-    transport_props = config.get('physics', {}).get('transport_properties', {})
-    density = transport_props.get('rho', 1060.0)
-    nu = transport_props.get('nu', 3.7736e-6)
+    transport_props = config.get("physics", {}).get("transport_properties", {})
+    density = transport_props.get("rho", 1060.0)
+    nu = transport_props.get("nu", 3.7736e-6)
     viscosity = nu * density  # Dynamic viscosity = kinematic viscosity * density
 
     # Determine solver type
-    solver_type = config.get('simulation_settings', {}).get('solver_type', 'laminar')
+    config.get("simulation_settings", {}).get("solver_type", "laminar")
 
     # Create estimator
-    estimator = YPlusEstimator(
-        density=density,
-        viscosity=viscosity,
-        flow_regime='auto'
-    )
+    estimator = YPlusEstimator(density=density, viscosity=viscosity, flow_regime="auto")
 
     # For now, use typical aortic values if not specified
     # TODO: Extract from actual geometry/inlet conditions
-    mean_velocity = config.get('estimation_params', {}).get('characteristic_velocity', 0.5)
-    char_length = config.get('estimation_params', {}).get('characteristic_length', 0.025)
+    mean_velocity = config.get("estimation_params", {}).get("characteristic_velocity", 0.5)
+    char_length = config.get("estimation_params", {}).get("characteristic_length", 0.025)
 
     # Get layer settings
-    mesh_config = config.get('mesh', {}).get('SNAPPY_SETTINGS', {})
-    n_layers = mesh_config.get('addLayer', 2)
-    expansion_ratio = mesh_config.get('expansionRatio', 1.2)
+    mesh_config = config.get("mesh", {}).get("SNAPPY_SETTINGS", {})
+    n_layers = mesh_config.get("addLayer", 2)
+    expansion_ratio = mesh_config.get("expansionRatio", 1.2)
 
     results = estimator.estimate_first_layer_thickness(
         target_yplus=target_yplus,
         mean_velocity=mean_velocity,
         characteristic_length=char_length,
         n_layers=n_layers,
-        expansion_ratio=expansion_ratio
+        expansion_ratio=expansion_ratio,
     )
 
     return results
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     """
     CLI utility for manual y+ calculations.
 
@@ -324,39 +318,38 @@ if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser(
-        description='Estimate first layer thickness for target y+ value',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        description="Estimate first layer thickness for target y+ value",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    parser.add_argument('--target-yplus', type=float, required=True,
-                        help='Target y+ value (e.g., 1.0 for RANS, 30 for wall functions)')
-    parser.add_argument('--velocity', type=float, required=True,
-                        help='Characteristic velocity in m/s (e.g., mean inlet velocity)')
-    parser.add_argument('--diameter', type=float, required=True,
-                        help='Characteristic length in m (e.g., hydraulic diameter)')
-    parser.add_argument('--density', type=float, default=1060.0,
-                        help='Fluid density in kg/m³')
-    parser.add_argument('--viscosity', type=float, default=0.004,
-                        help='Dynamic viscosity in Pa·s')
-    parser.add_argument('--n-layers', type=int, default=5,
-                        help='Number of boundary layers')
-    parser.add_argument('--expansion-ratio', type=float, default=1.2,
-                        help='Layer expansion ratio')
-    parser.add_argument('--solver-type', type=str, default='RANS',
-                        choices=['laminar', 'RANS', 'LES'],
-                        help='Solver type for validation')
-    parser.add_argument('--regime', type=str, default='auto',
-                        choices=['auto', 'laminar', 'turbulent'],
-                        help='Flow regime (auto-detect by default)')
+    parser.add_argument(
+        "--target-yplus", type=float, required=True, help="Target y+ value (e.g., 1.0 for RANS, 30 for wall functions)"
+    )
+    parser.add_argument(
+        "--velocity", type=float, required=True, help="Characteristic velocity in m/s (e.g., mean inlet velocity)"
+    )
+    parser.add_argument(
+        "--diameter", type=float, required=True, help="Characteristic length in m (e.g., hydraulic diameter)"
+    )
+    parser.add_argument("--density", type=float, default=1060.0, help="Fluid density in kg/m³")
+    parser.add_argument("--viscosity", type=float, default=0.004, help="Dynamic viscosity in Pa·s")
+    parser.add_argument("--n-layers", type=int, default=5, help="Number of boundary layers")
+    parser.add_argument("--expansion-ratio", type=float, default=1.2, help="Layer expansion ratio")
+    parser.add_argument(
+        "--solver-type", type=str, default="RANS", choices=["laminar", "RANS", "LES"], help="Solver type for validation"
+    )
+    parser.add_argument(
+        "--regime",
+        type=str,
+        default="auto",
+        choices=["auto", "laminar", "turbulent"],
+        help="Flow regime (auto-detect by default)",
+    )
 
     args = parser.parse_args()
 
     # Create estimator
-    estimator = YPlusEstimator(
-        density=args.density,
-        viscosity=args.viscosity,
-        flow_regime=args.regime
-    )
+    estimator = YPlusEstimator(density=args.density, viscosity=args.viscosity, flow_regime=args.regime)
 
     # Estimate
     results = estimator.estimate_first_layer_thickness(
@@ -364,7 +357,7 @@ if __name__ == '__main__':
         mean_velocity=args.velocity,
         characteristic_length=args.diameter,
         n_layers=args.n_layers,
-        expansion_ratio=args.expansion_ratio
+        expansion_ratio=args.expansion_ratio,
     )
 
     # Print report
@@ -374,5 +367,5 @@ if __name__ == '__main__':
         n_layers=args.n_layers,
         expansion_ratio=args.expansion_ratio,
         solver_type=args.solver_type,
-        characteristic_length=args.diameter
+        characteristic_length=args.diameter,
     )

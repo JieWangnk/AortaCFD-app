@@ -10,13 +10,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Union
 
 from .config import PostProcessingConfig, load_config
-from .dependencies import (
-    check_dependencies,
-    has_paraview,
-    has_ffmpeg,
-    has_matplotlib,
-    has_openfoam
-)
+from .dependencies import check_dependencies, has_paraview, has_ffmpeg, has_openfoam
 
 # Import hemodynamics processor
 from ..hemodynamics_postprocessor import (
@@ -55,7 +49,7 @@ class PostProcessor:
         self,
         case_dir: Union[str, Path],
         config: Optional[Union[PostProcessingConfig, Dict[str, Any]]] = None,
-        verbosity: int = 1
+        verbosity: int = 1,
     ):
         """
         Initialize PostProcessor.
@@ -71,7 +65,7 @@ class PostProcessor:
         if isinstance(config, PostProcessingConfig):
             self.config = config
         elif isinstance(config, dict):
-            config['case_dir'] = str(self.case_dir)
+            config["case_dir"] = str(self.case_dir)
             self.config = PostProcessingConfig.from_dict(config)
         else:
             self.config = PostProcessingConfig()
@@ -99,11 +93,7 @@ class PostProcessor:
         self.logger.info(f"PostProcessor initialized for: {self.case_dir}")
 
     @classmethod
-    def from_config(
-        cls,
-        config_path: Union[str, Path],
-        case_dir: Optional[str] = None
-    ) -> 'PostProcessor':
+    def from_config(cls, config_path: Union[str, Path], case_dir: Optional[str] = None) -> "PostProcessor":
         """
         Create PostProcessor from configuration file.
 
@@ -115,23 +105,13 @@ class PostProcessor:
             PostProcessor instance
         """
         config = load_config(config_path, case_dir)
-        return cls(
-            case_dir=case_dir or config.case_dir or ".",
-            config=config
-        )
+        return cls(case_dir=case_dir or config.case_dir or ".", config=config)
 
     def _setup_logging(self) -> None:
         """Configure logging based on verbosity."""
-        level = {
-            0: logging.WARNING,
-            1: logging.INFO,
-            2: logging.DEBUG
-        }.get(self.config.verbosity, logging.INFO)
+        level = {0: logging.WARNING, 1: logging.INFO, 2: logging.DEBUG}.get(self.config.verbosity, logging.INFO)
 
-        logging.basicConfig(
-            level=level,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
+        logging.basicConfig(level=level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
     def _get_output_dir(self) -> Path:
         """Get output directory path."""
@@ -142,7 +122,7 @@ class PostProcessor:
 
         # Check if case_dir is inside a run directory structure
         # e.g., output/patient/run_xxx/openfoam -> output to run_xxx level
-        if self.case_dir.name == 'openfoam':
+        if self.case_dir.name == "openfoam":
             return self.case_dir.parent / output_path
         else:
             return self.case_dir / output_path
@@ -164,19 +144,19 @@ class PostProcessor:
         if self.config.output.hemodynamics_report:
             self.logger.info("Running hemodynamics analysis...")
             try:
-                results['hemodynamics'] = self.run_hemodynamics()
+                results["hemodynamics"] = self.run_hemodynamics()
             except Exception as e:
                 self.logger.error(f"Hemodynamics analysis failed: {e}")
-                results['hemodynamics'] = None
+                results["hemodynamics"] = None
 
         # 2. Run visualization (if ParaView available)
         if self.config.output.screenshots and has_paraview():
             self.logger.info("Running visualization...")
             try:
-                results['visualization'] = self.run_visualization()
+                results["visualization"] = self.run_visualization()
             except Exception as e:
                 self.logger.error(f"Visualization failed: {e}")
-                results['visualization'] = None
+                results["visualization"] = None
         elif not has_paraview():
             self.logger.warning("ParaView not available - skipping visualization")
 
@@ -184,10 +164,10 @@ class PostProcessor:
         if self.config.output.animations and has_ffmpeg() and has_paraview():
             self.logger.info("Creating animations...")
             try:
-                results['animations'] = self.run_animations()
+                results["animations"] = self.run_animations()
             except Exception as e:
                 self.logger.error(f"Animation creation failed: {e}")
-                results['animations'] = None
+                results["animations"] = None
         elif not has_ffmpeg():
             self.logger.warning("ffmpeg not available - skipping animations")
 
@@ -206,14 +186,10 @@ class PostProcessor:
         """
         # Create config dict for hemodynamics processor
         config_dict = {
-            'inlet': self.config.inlet,
-            'geometry': self.config.geometry,
-            'cardiac_cycle': self.config.cardiac_cycle,
-            'hemodynamics': {
-                'tawss_settings': {
-                    'skip_cycles': self.config.hemodynamics.skip_cycles
-                }
-            }
+            "inlet": self.config.inlet,
+            "geometry": self.config.geometry,
+            "cardiac_cycle": self.config.cardiac_cycle,
+            "hemodynamics": {"tawss_settings": {"skip_cycles": self.config.hemodynamics.skip_cycles}},
         }
 
         processor = HemodynamicsPostProcessor(str(self.case_dir), config_dict)
@@ -225,8 +201,7 @@ class PostProcessor:
                 processor.run_wss_postprocess()
             else:
                 self.logger.warning(
-                    "OpenFOAM not available - cannot run WSS post-processing. "
-                    "Source OpenFOAM environment and retry."
+                    "OpenFOAM not available - cannot run WSS post-processing. " "Source OpenFOAM environment and retry."
                 )
 
         # Compute all metrics
@@ -267,23 +242,23 @@ class PostProcessor:
         # Create visualizer
         visualizer = OpenFOAMParaView(
             casePath=str(self.case_dir),
-            caseType='auto' if self.config.visualization.auto_detect_case_type else 'Reconstructed',
+            caseType="auto" if self.config.visualization.auto_detect_case_type else "Reconstructed",
             timeSteps=self.config.visualization.time_steps,
             fields=self.config.visualization.fields,
-            rescaleSettings=rescale_settings if rescale_settings else None
+            rescaleSettings=rescale_settings if rescale_settings else None,
         )
 
         # Override image directory to our output directory
-        visualizer.imageDir = str(self.output_dir / 'images')
+        visualizer.imageDir = str(self.output_dir / "images")
         os.makedirs(visualizer.imageDir, exist_ok=True)
 
         # Generate screenshots
         visualizer.generate_screenshots()
 
         return {
-            'image_dir': visualizer.imageDir,
-            'fields': self.config.visualization.fields,
-            'time_steps': visualizer.timeSteps
+            "image_dir": visualizer.imageDir,
+            "fields": self.config.visualization.fields,
+            "time_steps": visualizer.timeSteps,
         }
 
     def run_animations(self, fps: Optional[int] = None) -> Dict[str, Any]:
@@ -308,19 +283,14 @@ class PostProcessor:
 
         # Create visualizer just for animation
         visualizer = OpenFOAMParaView(
-            casePath=str(self.case_dir),
-            timeSteps=None,
-            fields=self.config.visualization.fields
+            casePath=str(self.case_dir), timeSteps=None, fields=self.config.visualization.fields
         )
-        visualizer.imageDir = str(self.output_dir / 'images')
+        visualizer.imageDir = str(self.output_dir / "images")
 
         # Create animations
         visualizer.anima(fps=fps)
 
-        return {
-            'fps': fps,
-            'output_dir': visualizer.imageDir
-        }
+        return {"fps": fps, "output_dir": visualizer.imageDir}
 
     def check_status(self) -> Dict[str, Any]:
         """
@@ -330,19 +300,19 @@ class PostProcessor:
             Dictionary with status information
         """
         status = {
-            'case_dir': str(self.case_dir),
-            'case_exists': self.case_dir.exists(),
-            'foam_file_exists': False,
-            'time_directories': [],
-            'wss_available': False,
-            'fieldaverage_available': False,
-            'postprocessing_available': False,
-            'dependencies': {}
+            "case_dir": str(self.case_dir),
+            "case_exists": self.case_dir.exists(),
+            "foam_file_exists": False,
+            "time_directories": [],
+            "wss_available": False,
+            "fieldaverage_available": False,
+            "postprocessing_available": False,
+            "dependencies": {},
         }
 
         # Check for .foam file
-        foam_files = list(self.case_dir.glob('*.foam'))
-        status['foam_file_exists'] = len(foam_files) > 0
+        foam_files = list(self.case_dir.glob("*.foam"))
+        status["foam_file_exists"] = len(foam_files) > 0
 
         # Check time directories
         time_dirs = []
@@ -353,29 +323,29 @@ class PostProcessor:
                     time_dirs.append(time_val)
                 except ValueError:
                     pass
-        status['time_directories'] = sorted(time_dirs)
+        status["time_directories"] = sorted(time_dirs)
 
         # Check for WSS data
-        for t in status['time_directories']:
-            wss_file = self.case_dir / str(t) / 'wallShearStress'
+        for t in status["time_directories"]:
+            wss_file = self.case_dir / str(t) / "wallShearStress"
             if wss_file.exists():
-                status['wss_available'] = True
+                status["wss_available"] = True
                 break
 
         # Check for fieldAverage data
-        for t in status['time_directories']:
-            mean_file = self.case_dir / str(t) / 'wallShearStressMean'
+        for t in status["time_directories"]:
+            mean_file = self.case_dir / str(t) / "wallShearStressMean"
             if mean_file.exists():
-                status['fieldaverage_available'] = True
+                status["fieldaverage_available"] = True
                 break
 
         # Check for postProcessing directory
-        postproc_dir = self.case_dir / 'postProcessing'
-        status['postprocessing_available'] = postproc_dir.exists()
+        postproc_dir = self.case_dir / "postProcessing"
+        status["postprocessing_available"] = postproc_dir.exists()
 
         # Dependency status
         for name, dep in self.dep_report.dependencies.items():
-            status['dependencies'][name] = dep.available
+            status["dependencies"][name] = dep.available
 
         return status
 
@@ -392,16 +362,16 @@ class PostProcessor:
         print(f"  .foam file: {'Yes' if status['foam_file_exists'] else 'No'}")
 
         print(f"\nTime Directories: {len(status['time_directories'])}")
-        if status['time_directories']:
+        if status["time_directories"]:
             print(f"  Range: {status['time_directories'][0]:.6f} - {status['time_directories'][-1]:.6f}")
 
-        print(f"\nData Availability:")
+        print("\nData Availability:")
         print(f"  WSS fields: {'Yes' if status['wss_available'] else 'No'}")
         print(f"  fieldAverage (TAWSS/OSI): {'Yes' if status['fieldaverage_available'] else 'No'}")
         print(f"  postProcessing data: {'Yes' if status['postprocessing_available'] else 'No'}")
 
-        print(f"\nDependencies:")
-        for name, available in status['dependencies'].items():
+        print("\nDependencies:")
+        for name, available in status["dependencies"].items():
             status_str = "[OK]" if available else "[MISSING]"
             print(f"  {status_str:10} {name}")
 

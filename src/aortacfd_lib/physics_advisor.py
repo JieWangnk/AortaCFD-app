@@ -21,12 +21,10 @@ References:
 
 import logging
 import math
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from .constants import (
     AORTIC_DIAMETER_DEFAULT,
-    BLOOD_KINEMATIC_VISCOSITY_DEFAULT,
-    CARDIAC_OUTPUT_DEFAULT,
     L_TO_M3,
     MIN_TO_S,
 )
@@ -49,7 +47,7 @@ RE_TRANSITIONAL_UPPER = 5000
 # =============================================================================
 
 # RANS requires reasonable mesh quality to avoid k production blowup
-RANS_MAX_NON_ORTHO = 65.0       # degrees
+RANS_MAX_NON_ORTHO = 65.0  # degrees
 RANS_MAX_SKEWNESS = 4.0
 RANS_MAX_ASPECT_RATIO = 500.0
 
@@ -75,8 +73,7 @@ class PhysicsAdvice:
 
     def __repr__(self):
         return (
-            f"PhysicsAdvice(model={self.recommended_model}, "
-            f"Re={self.estimated_re}, warnings={len(self.warnings)})"
+            f"PhysicsAdvice(model={self.recommended_model}, " f"Re={self.estimated_re}, warnings={len(self.warnings)})"
         )
 
 
@@ -99,10 +96,7 @@ def estimate_reynolds_number(
         Estimated Reynolds number, or None if insufficient data.
     """
     physics = config.get("physics", {})
-    inlet_settings = (
-        config.get("boundary_conditions", {}).get("inlet")
-        or config.get("inlet", {})
-    )
+    inlet_settings = config.get("boundary_conditions", {}).get("inlet") or config.get("inlet", {})
 
     # Get kinematic viscosity
     transport = physics.get("transport_properties", {})
@@ -185,7 +179,7 @@ def check_mesh_turbulence_compatibility(
     if isinstance(ref_levels, list) and len(ref_levels) >= 2:
         level_jump = abs(ref_levels[-1] - ref_levels[0])
         if level_jump > MAX_SAFE_REFINEMENT_JUMP:
-            volume_ratio = 8 ** level_jump
+            volume_ratio = 8**level_jump
             warnings.append(
                 f"surfaceRefinementLevels {ref_levels} creates {volume_ratio}:1 volume "
                 f"jumps at refinement boundaries. "
@@ -341,9 +335,7 @@ def recommend_physics_model(
         )
 
     # Check mesh compatibility with selected model
-    mesh_warnings = check_mesh_turbulence_compatibility(
-        config, selected_model, mesh_metrics
-    )
+    mesh_warnings = check_mesh_turbulence_compatibility(config, selected_model, mesh_metrics)
     advice.warnings.extend(mesh_warnings)
     if mesh_warnings:
         advice.mesh_compatible = False

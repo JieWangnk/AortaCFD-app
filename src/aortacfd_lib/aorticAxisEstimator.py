@@ -1,13 +1,14 @@
 import os
 import numpy as np
 from sklearn.decomposition import PCA
-from stl import mesh as np_stl_mesh # Using an alias for clarity
-from .utils.logger import Logger # Will be passed in
-from .utils.patch_processing import PatchProcessing # Will be passed in
+from stl import mesh as np_stl_mesh  # Using an alias for clarity
+
+# Logger and PatchProcessing are injected via the constructor; no direct import needed.
+
 
 class AorticAxisEstimatorError(Exception):
     """Custom exception for AorticAxisEstimator errors."""
-    pass
+
 
 class AorticAxisEstimator:
     """
@@ -15,15 +16,18 @@ class AorticAxisEstimator:
     Principal Component Analysis (PCA) of the aortic wall with a vector
     derived from inlet and outlet centroids.
     """
-    def __init__(self,
-                 wall_stl_full_path: str,
-                 inlet_patch_keyword: str,
-                 outlet_patch_keywords: list,
-                 tri_surface_dir: str,
-                 all_stl_filenames_in_trisurface: list,
-                 patch_processing_class_ref: type,
-                 scale_factor: float,
-                 logger_instance):
+
+    def __init__(
+        self,
+        wall_stl_full_path: str,
+        inlet_patch_keyword: str,
+        outlet_patch_keywords: list,
+        tri_surface_dir: str,
+        all_stl_filenames_in_trisurface: list,
+        patch_processing_class_ref: type,
+        scale_factor: float,
+        logger_instance,
+    ):
         """
         Initializes the AorticAxisEstimator.
 
@@ -91,15 +95,13 @@ class AorticAxisEstimator:
                 # log_file can be defaulted by PatchProcessing or passed if needed
             )
             # calculate_inlet_center_radius returns (centroid, radius, normal)
-            centroid, _, _ = patch_processor.calculate_inlet_center_radius(
-                scale_factor=self.scale_factor
-            )
-            if centroid is None: # Should be handled by PatchProcessing raising an error
+            centroid, _, _ = patch_processor.calculate_inlet_center_radius(scale_factor=self.scale_factor)
+            if centroid is None:  # Should be handled by PatchProcessing raising an error
                 self.logger.warning(f"PatchProcessing returned None centroid for {patch_keyword}.")
                 return None
             self.logger.info(f"Centroid for '{patch_keyword}': {centroid}")
             return centroid
-        except FileNotFoundError as e: # If PatchProcessing can't find the STL by keyword
+        except FileNotFoundError as e:  # If PatchProcessing can't find the STL by keyword
             self.logger.error(f"STL file for patch keyword '{patch_keyword}' not found by PatchProcessing: {e}")
             return None
         except Exception as e:
@@ -114,7 +116,9 @@ class AorticAxisEstimator:
             # Get inlet centroid
             self.inlet_centroid_val = self._get_patch_centroid_by_keyword(self.inlet_patch_keyword)
             if self.inlet_centroid_val is None:
-                raise AorticAxisEstimatorError(f"Failed to get inlet centroid for keyword '{self.inlet_patch_keyword}'.")
+                raise AorticAxisEstimatorError(
+                    f"Failed to get inlet centroid for keyword '{self.inlet_patch_keyword}'."
+                )
 
             # Get outlet centroids and calculate average
             outlet_centroids = []
@@ -134,13 +138,13 @@ class AorticAxisEstimator:
             pca = PCA(n_components=1)
             pca.fit(self.wall_points_scaled)
             self.raw_pca_axis = pca.components_[0]
-            self.raw_pca_axis = self.raw_pca_axis / np.linalg.norm(self.raw_pca_axis) # Ensure unit vector
+            self.raw_pca_axis = self.raw_pca_axis / np.linalg.norm(self.raw_pca_axis)  # Ensure unit vector
             self.logger.info(f"Raw PCA primary axis: {self.raw_pca_axis}")
 
             # Calculate Inlet-Outlet axis
             inlet_outlet_vector = self.avg_outlet_centroid_val - self.inlet_centroid_val
             norm_io_vector = np.linalg.norm(inlet_outlet_vector)
-            if norm_io_vector < 1e-9: # Threshold for zero vector
+            if norm_io_vector < 1e-9:  # Threshold for zero vector
                 raise AorticAxisEstimatorError("Inlet and average outlet centroids are coincident or too close.")
             self.inlet_outlet_axis_aligned = inlet_outlet_vector / norm_io_vector
             self.logger.info(f"Inlet-Outlet aligned axis: {self.inlet_outlet_axis_aligned}")
@@ -153,12 +157,12 @@ class AorticAxisEstimator:
                 self.final_combined_axis = self.raw_pca_axis
                 self.logger.info(f"PCA axis already aligned. Final combined axis: {self.final_combined_axis}")
 
-        except AorticAxisEstimatorError as e: # Catch custom errors from this class
+        except AorticAxisEstimatorError as e:  # Catch custom errors from this class
             self.logger.error(f"Error during AorticAxisEstimator processing: {e}")
-            self.final_combined_axis = None # Ensure it's None on failure
+            self.final_combined_axis = None  # Ensure it's None on failure
         except Exception as e:
             self.logger.error(f"Unexpected error during AorticAxisEstimator processing: {e}")
-            self.final_combined_axis = None # Ensure it's None on failure
+            self.final_combined_axis = None  # Ensure it's None on failure
 
     def get_combined_axis(self):
         """

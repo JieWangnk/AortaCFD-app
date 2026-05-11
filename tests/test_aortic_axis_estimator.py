@@ -40,7 +40,7 @@ class TestAorticAxisEstimatorError:
 class TestAorticAxisEstimatorInit:
     """Test AorticAxisEstimator initialization."""
 
-    @patch('aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process')
+    @patch("aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process")
     def test_initialization_sets_attributes(self, mock_process):
         """Test that initialization sets all attributes correctly."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator
@@ -56,7 +56,7 @@ class TestAorticAxisEstimatorInit:
             all_stl_filenames_in_trisurface=["wall.stl", "inlet.stl", "outlet1.stl"],
             patch_processing_class_ref=mock_patch_class,
             scale_factor=1e-3,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         assert estimator.wall_stl_full_path == "/path/to/wall.stl"
@@ -67,7 +67,7 @@ class TestAorticAxisEstimatorInit:
         assert estimator.logger is mock_logger
         mock_process.assert_called_once()
 
-    @patch('aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process')
+    @patch("aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process")
     def test_initialization_sets_none_values(self, mock_process):
         """Test that initialization sets computed values to None initially."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator
@@ -82,23 +82,23 @@ class TestAorticAxisEstimatorInit:
             all_stl_filenames_in_trisurface=[],
             patch_processing_class_ref=MagicMock(),
             scale_factor=1.0,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         # These should be set to None before _process runs
         # (though _process is mocked, we can check the attributes exist)
-        assert hasattr(estimator, 'wall_points_scaled')
-        assert hasattr(estimator, 'raw_pca_axis')
-        assert hasattr(estimator, 'inlet_centroid_val')
-        assert hasattr(estimator, 'avg_outlet_centroid_val')
-        assert hasattr(estimator, 'inlet_outlet_axis_aligned')
-        assert hasattr(estimator, 'final_combined_axis')
+        assert hasattr(estimator, "wall_points_scaled")
+        assert hasattr(estimator, "raw_pca_axis")
+        assert hasattr(estimator, "inlet_centroid_val")
+        assert hasattr(estimator, "avg_outlet_centroid_val")
+        assert hasattr(estimator, "inlet_outlet_axis_aligned")
+        assert hasattr(estimator, "final_combined_axis")
 
 
 class TestLoadAndScaleWallPoints:
     """Test _load_and_scale_wall_points method."""
 
-    @patch('aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process')
+    @patch("aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process")
     def test_file_not_found_raises_error(self, mock_process):
         """Test that missing wall STL file raises AorticAxisEstimatorError."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator, AorticAxisEstimatorError
@@ -113,15 +113,15 @@ class TestLoadAndScaleWallPoints:
             all_stl_filenames_in_trisurface=[],
             patch_processing_class_ref=MagicMock(),
             scale_factor=1.0,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         with pytest.raises(AorticAxisEstimatorError, match="Failed to load/scale wall STL"):
             estimator._load_and_scale_wall_points()
 
-    @patch('aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process')
-    @patch('aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh')
-    @patch('os.path.exists', return_value=True)
+    @patch("aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process")
+    @patch("aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh")
+    @patch("os.path.exists", return_value=True)
     def test_insufficient_points_raises_error(self, mock_exists, mock_mesh_class, mock_process):
         """Test that STL with insufficient points raises error."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator, AorticAxisEstimatorError
@@ -141,15 +141,15 @@ class TestLoadAndScaleWallPoints:
             all_stl_filenames_in_trisurface=[],
             patch_processing_class_ref=MagicMock(),
             scale_factor=1.0,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         with pytest.raises(AorticAxisEstimatorError, match="insufficient unique points"):
             estimator._load_and_scale_wall_points()
 
-    @patch('aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process')
-    @patch('aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh')
-    @patch('os.path.exists', return_value=True)
+    @patch("aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process")
+    @patch("aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh")
+    @patch("os.path.exists", return_value=True)
     def test_successful_load_and_scale(self, mock_exists, mock_mesh_class, mock_process):
         """Test successful loading and scaling of wall points."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator
@@ -157,10 +157,7 @@ class TestLoadAndScaleWallPoints:
         # Mock mesh with valid points
         mock_mesh = MagicMock()
         # Create a mesh with 4 unique vertices (a tetrahedron)
-        mock_mesh.vectors = np.array([
-            [[0, 0, 0], [1000, 0, 0], [0, 1000, 0]],
-            [[0, 0, 0], [1000, 0, 0], [0, 0, 1000]]
-        ])
+        mock_mesh.vectors = np.array([[[0, 0, 0], [1000, 0, 0], [0, 1000, 0]], [[0, 0, 0], [1000, 0, 0], [0, 0, 1000]]])
         mock_mesh_class.from_file.return_value = mock_mesh
 
         mock_logger = MagicMock()
@@ -174,7 +171,7 @@ class TestLoadAndScaleWallPoints:
             all_stl_filenames_in_trisurface=[],
             patch_processing_class_ref=MagicMock(),
             scale_factor=scale_factor,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         estimator._load_and_scale_wall_points()
@@ -187,7 +184,7 @@ class TestLoadAndScaleWallPoints:
 class TestGetPatchCentroidByKeyword:
     """Test _get_patch_centroid_by_keyword method."""
 
-    @patch('aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process')
+    @patch("aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process")
     def test_successful_centroid_calculation(self, mock_process):
         """Test successful centroid calculation via PatchProcessing."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator
@@ -208,19 +205,15 @@ class TestGetPatchCentroidByKeyword:
             all_stl_filenames_in_trisurface=["inlet.stl"],
             patch_processing_class_ref=mock_patch_class,
             scale_factor=1e-3,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         result = estimator._get_patch_centroid_by_keyword("inlet")
 
         np.testing.assert_array_equal(result, expected_centroid)
-        mock_patch_class.assert_called_with(
-            DIRECTORY="/path/triSurface",
-            STL_FILES=["inlet.stl"],
-            PATH_NAME="inlet"
-        )
+        mock_patch_class.assert_called_with(DIRECTORY="/path/triSurface", STL_FILES=["inlet.stl"], PATH_NAME="inlet")
 
-    @patch('aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process')
+    @patch("aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process")
     def test_file_not_found_returns_none(self, mock_process):
         """Test that FileNotFoundError from PatchProcessing returns None."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator
@@ -236,7 +229,7 @@ class TestGetPatchCentroidByKeyword:
             all_stl_filenames_in_trisurface=[],
             patch_processing_class_ref=mock_patch_class,
             scale_factor=1.0,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         result = estimator._get_patch_centroid_by_keyword("missing_patch")
@@ -244,7 +237,7 @@ class TestGetPatchCentroidByKeyword:
         assert result is None
         mock_logger.error.assert_called()
 
-    @patch('aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process')
+    @patch("aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process")
     def test_none_centroid_returns_none(self, mock_process):
         """Test that None centroid from PatchProcessing returns None."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator
@@ -262,7 +255,7 @@ class TestGetPatchCentroidByKeyword:
             all_stl_filenames_in_trisurface=[],
             patch_processing_class_ref=mock_patch_class,
             scale_factor=1.0,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         result = estimator._get_patch_centroid_by_keyword("inlet")
@@ -270,7 +263,7 @@ class TestGetPatchCentroidByKeyword:
         assert result is None
         mock_logger.warning.assert_called()
 
-    @patch('aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process')
+    @patch("aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process")
     def test_generic_exception_returns_none(self, mock_process):
         """Test that generic exception from PatchProcessing returns None."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator
@@ -286,7 +279,7 @@ class TestGetPatchCentroidByKeyword:
             all_stl_filenames_in_trisurface=[],
             patch_processing_class_ref=mock_patch_class,
             scale_factor=1.0,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         result = estimator._get_patch_centroid_by_keyword("inlet")
@@ -298,8 +291,8 @@ class TestGetPatchCentroidByKeyword:
 class TestProcessMethod:
     """Test _process method which orchestrates axis calculation."""
 
-    @patch('aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh')
-    @patch('os.path.exists', return_value=True)
+    @patch("aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh")
+    @patch("os.path.exists", return_value=True)
     def test_successful_process_pca_aligned(self, mock_exists, mock_mesh_class):
         """Test successful processing when PCA axis is already aligned."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator
@@ -307,11 +300,13 @@ class TestProcessMethod:
         # Create mock mesh with points extending along X axis
         mock_mesh = MagicMock()
         # Points forming an elongated shape along X (PCA will find X as principal)
-        mock_mesh.vectors = np.array([
-            [[0, 0, 0], [10, 0, 0], [5, 1, 0]],
-            [[10, 0, 0], [20, 0, 0], [15, 1, 0]],
-            [[20, 0, 0], [30, 0, 0], [25, 1, 0]],
-        ])
+        mock_mesh.vectors = np.array(
+            [
+                [[0, 0, 0], [10, 0, 0], [5, 1, 0]],
+                [[10, 0, 0], [20, 0, 0], [15, 1, 0]],
+                [[20, 0, 0], [30, 0, 0], [25, 1, 0]],
+            ]
+        )
         mock_mesh_class.from_file.return_value = mock_mesh
 
         mock_logger = MagicMock()
@@ -338,26 +333,28 @@ class TestProcessMethod:
             all_stl_filenames_in_trisurface=["wall.stl", "inlet.stl", "outlet.stl"],
             patch_processing_class_ref=mock_patch_class,
             scale_factor=1.0,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         # Process was called in __init__, check results
         assert estimator.final_combined_axis is not None
         assert np.linalg.norm(estimator.final_combined_axis) == pytest.approx(1.0, rel=1e-6)
 
-    @patch('aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh')
-    @patch('os.path.exists', return_value=True)
+    @patch("aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh")
+    @patch("os.path.exists", return_value=True)
     def test_successful_process_pca_flipped(self, mock_exists, mock_mesh_class):
         """Test successful processing when PCA axis needs to be flipped."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator
 
         # Create mock mesh
         mock_mesh = MagicMock()
-        mock_mesh.vectors = np.array([
-            [[0, 0, 0], [10, 0, 0], [5, 1, 0]],
-            [[10, 0, 0], [20, 0, 0], [15, 1, 0]],
-            [[20, 0, 0], [30, 0, 0], [25, 1, 0]],
-        ])
+        mock_mesh.vectors = np.array(
+            [
+                [[0, 0, 0], [10, 0, 0], [5, 1, 0]],
+                [[10, 0, 0], [20, 0, 0], [15, 1, 0]],
+                [[20, 0, 0], [30, 0, 0], [25, 1, 0]],
+            ]
+        )
         mock_mesh_class.from_file.return_value = mock_mesh
 
         mock_logger = MagicMock()
@@ -384,23 +381,25 @@ class TestProcessMethod:
             all_stl_filenames_in_trisurface=["wall.stl", "inlet.stl", "outlet.stl"],
             patch_processing_class_ref=mock_patch_class,
             scale_factor=1.0,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         assert estimator.final_combined_axis is not None
         # The axis should have been flipped to align with inlet->outlet direction
 
-    @patch('aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh')
-    @patch('os.path.exists', return_value=True)
+    @patch("aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh")
+    @patch("os.path.exists", return_value=True)
     def test_process_inlet_centroid_failure(self, mock_exists, mock_mesh_class):
         """Test process handles inlet centroid failure."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator
 
         mock_mesh = MagicMock()
-        mock_mesh.vectors = np.array([
-            [[0, 0, 0], [10, 0, 0], [5, 1, 0]],
-            [[10, 0, 0], [20, 0, 0], [15, 1, 0]],
-        ])
+        mock_mesh.vectors = np.array(
+            [
+                [[0, 0, 0], [10, 0, 0], [5, 1, 0]],
+                [[10, 0, 0], [20, 0, 0], [15, 1, 0]],
+            ]
+        )
         mock_mesh_class.from_file.return_value = mock_mesh
 
         mock_logger = MagicMock()
@@ -416,23 +415,25 @@ class TestProcessMethod:
             all_stl_filenames_in_trisurface=[],
             patch_processing_class_ref=mock_patch_class,
             scale_factor=1.0,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         # Should set final_combined_axis to None on failure
         assert estimator.final_combined_axis is None
 
-    @patch('aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh')
-    @patch('os.path.exists', return_value=True)
+    @patch("aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh")
+    @patch("os.path.exists", return_value=True)
     def test_process_no_outlet_centroids(self, mock_exists, mock_mesh_class):
         """Test process handles case when no outlet centroids available."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator
 
         mock_mesh = MagicMock()
-        mock_mesh.vectors = np.array([
-            [[0, 0, 0], [10, 0, 0], [5, 1, 0]],
-            [[10, 0, 0], [20, 0, 0], [15, 1, 0]],
-        ])
+        mock_mesh.vectors = np.array(
+            [
+                [[0, 0, 0], [10, 0, 0], [5, 1, 0]],
+                [[10, 0, 0], [20, 0, 0], [15, 1, 0]],
+            ]
+        )
         mock_mesh_class.from_file.return_value = mock_mesh
 
         mock_logger = MagicMock()
@@ -443,7 +444,11 @@ class TestProcessMethod:
         def mock_patch_init(DIRECTORY, STL_FILES, PATH_NAME):
             mock_instance = MagicMock()
             if "inlet" in PATH_NAME.lower():
-                mock_instance.calculate_inlet_center_radius.return_value = (np.array([0, 0, 0]), 0.01, np.array([1, 0, 0]))
+                mock_instance.calculate_inlet_center_radius.return_value = (
+                    np.array([0, 0, 0]),
+                    0.01,
+                    np.array([1, 0, 0]),
+                )
             else:
                 # Outlets fail
                 raise FileNotFoundError("outlet not found")
@@ -459,23 +464,25 @@ class TestProcessMethod:
             all_stl_filenames_in_trisurface=[],
             patch_processing_class_ref=mock_patch_class,
             scale_factor=1.0,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         # Should fail because no outlets
         assert estimator.final_combined_axis is None
 
-    @patch('aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh')
-    @patch('os.path.exists', return_value=True)
+    @patch("aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh")
+    @patch("os.path.exists", return_value=True)
     def test_process_coincident_centroids(self, mock_exists, mock_mesh_class):
         """Test process handles coincident inlet/outlet centroids."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator
 
         mock_mesh = MagicMock()
-        mock_mesh.vectors = np.array([
-            [[0, 0, 0], [10, 0, 0], [5, 1, 0]],
-            [[10, 0, 0], [20, 0, 0], [15, 1, 0]],
-        ])
+        mock_mesh.vectors = np.array(
+            [
+                [[0, 0, 0], [10, 0, 0], [5, 1, 0]],
+                [[10, 0, 0], [20, 0, 0], [15, 1, 0]],
+            ]
+        )
         mock_mesh_class.from_file.return_value = mock_mesh
 
         mock_logger = MagicMock()
@@ -498,24 +505,26 @@ class TestProcessMethod:
             all_stl_filenames_in_trisurface=[],
             patch_processing_class_ref=mock_patch_class,
             scale_factor=1.0,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         # Should fail because centroids are coincident
         assert estimator.final_combined_axis is None
 
-    @patch('aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh')
-    @patch('os.path.exists', return_value=True)
+    @patch("aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh")
+    @patch("os.path.exists", return_value=True)
     def test_process_multiple_outlets_averaged(self, mock_exists, mock_mesh_class):
         """Test that multiple outlet centroids are averaged correctly."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator
 
         mock_mesh = MagicMock()
-        mock_mesh.vectors = np.array([
-            [[0, 0, 0], [10, 0, 0], [5, 1, 0]],
-            [[10, 0, 0], [20, 0, 0], [15, 1, 0]],
-            [[20, 0, 0], [30, 0, 0], [25, 1, 0]],
-        ])
+        mock_mesh.vectors = np.array(
+            [
+                [[0, 0, 0], [10, 0, 0], [5, 1, 0]],
+                [[10, 0, 0], [20, 0, 0], [15, 1, 0]],
+                [[20, 0, 0], [30, 0, 0], [25, 1, 0]],
+            ]
+        )
         mock_mesh_class.from_file.return_value = mock_mesh
 
         mock_logger = MagicMock()
@@ -544,24 +553,26 @@ class TestProcessMethod:
             all_stl_filenames_in_trisurface=["wall.stl", "inlet.stl", "outlet1.stl", "outlet2.stl"],
             patch_processing_class_ref=mock_patch_class,
             scale_factor=1.0,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         # Average of outlet1 and outlet2 should be [30, 0, 0]
         expected_avg = np.array([30, 0, 0])
         np.testing.assert_array_almost_equal(estimator.avg_outlet_centroid_val, expected_avg)
 
-    @patch('aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh')
-    @patch('os.path.exists', return_value=True)
+    @patch("aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh")
+    @patch("os.path.exists", return_value=True)
     def test_process_partial_outlet_success(self, mock_exists, mock_mesh_class):
         """Test process continues when some outlets fail but others succeed."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator
 
         mock_mesh = MagicMock()
-        mock_mesh.vectors = np.array([
-            [[0, 0, 0], [10, 0, 0], [5, 1, 0]],
-            [[10, 0, 0], [20, 0, 0], [15, 1, 0]],
-        ])
+        mock_mesh.vectors = np.array(
+            [
+                [[0, 0, 0], [10, 0, 0], [5, 1, 0]],
+                [[10, 0, 0], [20, 0, 0], [15, 1, 0]],
+            ]
+        )
         mock_mesh_class.from_file.return_value = mock_mesh
 
         mock_logger = MagicMock()
@@ -590,7 +601,7 @@ class TestProcessMethod:
             all_stl_filenames_in_trisurface=[],
             patch_processing_class_ref=mock_patch_class,
             scale_factor=1.0,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         # Should succeed with just outlet1
@@ -601,7 +612,7 @@ class TestProcessMethod:
 class TestGetCombinedAxis:
     """Test get_combined_axis method."""
 
-    @patch('aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process')
+    @patch("aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process")
     def test_returns_none_when_not_calculated(self, mock_process):
         """Test returns None when axis was not calculated."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator
@@ -616,7 +627,7 @@ class TestGetCombinedAxis:
             all_stl_filenames_in_trisurface=[],
             patch_processing_class_ref=MagicMock(),
             scale_factor=1.0,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         # final_combined_axis should be None since _process was mocked
@@ -625,7 +636,7 @@ class TestGetCombinedAxis:
         assert result is None
         mock_logger.warning.assert_called()
 
-    @patch('aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process')
+    @patch("aortacfd_lib.aorticAxisEstimator.AorticAxisEstimator._process")
     def test_returns_axis_when_calculated(self, mock_process):
         """Test returns axis when successfully calculated."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator
@@ -640,7 +651,7 @@ class TestGetCombinedAxis:
             all_stl_filenames_in_trisurface=[],
             patch_processing_class_ref=MagicMock(),
             scale_factor=1.0,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         # Manually set the axis
@@ -655,8 +666,8 @@ class TestGetCombinedAxis:
 class TestIntegration:
     """Integration tests for full axis estimation workflow."""
 
-    @patch('aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh')
-    @patch('os.path.exists', return_value=True)
+    @patch("aortacfd_lib.aorticAxisEstimator.np_stl_mesh.Mesh")
+    @patch("os.path.exists", return_value=True)
     def test_full_workflow_z_axis_elongated(self, mock_exists, mock_mesh_class):
         """Test full workflow with Z-axis elongated geometry."""
         from aortacfd_lib.aorticAxisEstimator import AorticAxisEstimator
@@ -674,7 +685,7 @@ class TestIntegration:
         # Convert to triangles format (3 vertices per triangle)
         vectors = []
         for i in range(len(z_points) - 2):
-            vectors.append([z_points[i], z_points[i+1], z_points[i+2]])
+            vectors.append([z_points[i], z_points[i + 1], z_points[i + 2]])
         mock_mesh.vectors = np.array(vectors[:50])  # Use subset
         mock_mesh_class.from_file.return_value = mock_mesh
 
@@ -702,7 +713,7 @@ class TestIntegration:
             all_stl_filenames_in_trisurface=["wall.stl", "inlet.stl", "outlet.stl"],
             patch_processing_class_ref=mock_patch_class,
             scale_factor=1.0,
-            logger_instance=mock_logger
+            logger_instance=mock_logger,
         )
 
         axis = estimator.get_combined_axis()
@@ -713,5 +724,5 @@ class TestIntegration:
         assert np.linalg.norm(axis) == pytest.approx(1.0, rel=1e-6)
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

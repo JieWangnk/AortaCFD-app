@@ -27,12 +27,7 @@ class TestWorkflowManagerInitialization:
         """Test basic manager initialization."""
         from workflow.manager import WorkflowManager
 
-        config = {
-            'geometry': {
-                'case_name': 'test_case',
-                'inlet_keywords_ordered': 'inlet'
-            }
-        }
+        config = {"geometry": {"case_name": "test_case", "inlet_keywords_ordered": "inlet"}}
 
         manager = WorkflowManager(config)
 
@@ -44,12 +39,7 @@ class TestWorkflowManagerInitialization:
         """Test that context is properly initialized."""
         from workflow.manager import WorkflowManager
 
-        config = {
-            'geometry': {
-                'case_name': 'test_case',
-                'inlet_keywords_ordered': 'inlet'
-            }
-        }
+        config = {"geometry": {"case_name": "test_case", "inlet_keywords_ordered": "inlet"}}
 
         manager = WorkflowManager(config)
 
@@ -60,11 +50,7 @@ class TestWorkflowManagerInitialization:
         """Test that all tasks are discovered."""
         from workflow.manager import WorkflowManager
 
-        config = {
-            'geometry': {
-                'case_name': 'test_case'
-            }
-        }
+        config = {"geometry": {"case_name": "test_case"}}
 
         manager = WorkflowManager(config)
 
@@ -72,7 +58,7 @@ class TestWorkflowManagerInitialization:
         task_names = list(manager.available_tasks.keys())
 
         # Check for expected task categories
-        assert any('mesh' in name for name in task_names) or any('setup' in name for name in task_names)
+        assert any("mesh" in name for name in task_names) or any("setup" in name for name in task_names)
 
 
 class TestWorkflowManagerAPI:
@@ -82,26 +68,18 @@ class TestWorkflowManagerAPI:
         """Test that run_workflow method exists."""
         from workflow.manager import WorkflowManager
 
-        config = {
-            'geometry': {
-                'case_name': 'test_case'
-            }
-        }
+        config = {"geometry": {"case_name": "test_case"}}
 
         manager = WorkflowManager(config)
 
         # run_workflow is the main execution method
-        assert hasattr(manager, 'run_workflow')
+        assert hasattr(manager, "run_workflow")
 
     def test_available_tasks_populated(self):
         """Test that available_tasks is populated."""
         from workflow.manager import WorkflowManager
 
-        config = {
-            'geometry': {
-                'case_name': 'test_case'
-            }
-        }
+        config = {"geometry": {"case_name": "test_case"}}
 
         manager = WorkflowManager(config)
 
@@ -113,11 +91,7 @@ class TestWorkflowManagerAPI:
         """Test that context is an ExecutionContext."""
         from workflow.manager import WorkflowManager
 
-        config = {
-            'geometry': {
-                'case_name': 'test_case'
-            }
-        }
+        config = {"geometry": {"case_name": "test_case"}}
 
         manager = WorkflowManager(config)
 
@@ -132,11 +106,7 @@ class TestWorkflowManagerStepParsing:
         """Test parsing simple step names."""
         from workflow.manager import WorkflowManager
 
-        config = {
-            'geometry': {
-                'case_name': 'test_case'
-            }
-        }
+        config = {"geometry": {"case_name": "test_case"}}
 
         manager = WorkflowManager(config)
 
@@ -148,11 +118,7 @@ class TestWorkflowManagerStepParsing:
         """Test parsing step names with stage prefix."""
         from workflow.manager import WorkflowManager
 
-        config = {
-            'geometry': {
-                'case_name': 'test_case'
-            }
-        }
+        config = {"geometry": {"case_name": "test_case"}}
 
         manager = WorkflowManager(config)
 
@@ -168,30 +134,27 @@ class TestWorkflowManagerIntegration:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config = {
-                'geometry': {
-                    'case_name': 'test_case',
-                    'inlet_keywords_ordered': 'inlet',
-                    'outlet_keywords_ordered': ['outlet1'],
-                    'wall_keywords_ordered': 'wall'
+                "geometry": {
+                    "case_name": "test_case",
+                    "inlet_keywords_ordered": "inlet",
+                    "outlet_keywords_ordered": ["outlet1"],
+                    "wall_keywords_ordered": "wall",
                 },
-                'boundary_conditions': {
-                    'inlet': {'type': 'CONSTANT', 'velocity': 0.5, 'profile': 'parabolic'},
-                    'outlets': {'type': 'ZEROGRADIENT'}
+                "boundary_conditions": {
+                    "inlet": {"type": "CONSTANT", "velocity": 0.5, "profile": "parabolic"},
+                    "outlets": {"type": "ZEROGRADIENT"},
                 },
-                'simulation_control': {
-                    'controlDict': {
-                        'application': 'foamRun',
-                        'writeInterval': 0.01
-                    },
-                    'number_of_cycles': 1
-                }
+                "simulation_control": {
+                    "controlDict": {"application": "foamRun", "writeInterval": 0.01},
+                    "number_of_cycles": 1,
+                },
             }
 
             manager = WorkflowManager(config)
 
             # Override case directory
-            manager.context['case_directory'] = os.path.join(tmpdir, 'openfoam')
-            os.makedirs(manager.context['case_directory'])
+            manager.context["case_directory"] = os.path.join(tmpdir, "openfoam")
+            os.makedirs(manager.context["case_directory"])
 
             # This tests the manager can be instantiated with a realistic config
 
@@ -203,77 +166,68 @@ class TestExecutionContextDictAccess:
         """Test dict-style item getting."""
         context = ExecutionContext(case_directory="/test")
 
-        assert context['case_directory'] == "/test"
+        assert context["case_directory"] == "/test"
 
         # Returns None for nonexistent keys (not KeyError)
-        result = context['nonexistent']
+        result = context["nonexistent"]
         assert result is None
 
     def test_dict_setitem(self):
         """Test dict-style item setting."""
         context = ExecutionContext(case_directory="/test")
 
-        context['new_key'] = 'new_value'
+        context["new_key"] = "new_value"
 
         # Should be stored in custom_data
-        assert context['new_key'] == 'new_value'
+        assert context["new_key"] == "new_value"
 
     def test_dict_setitem_known_attrs(self):
         """Test dict-style setting of known attributes."""
         context = ExecutionContext(case_directory="/test")
 
-        context['case_directory'] = "/new/path"
+        context["case_directory"] = "/new/path"
         assert context.case_directory == "/new/path"
 
-        context['cardiac_cycle'] = 0.85
+        context["cardiac_cycle"] = 0.85
         assert context.cardiac_cycle == 0.85
 
     def test_dict_contains(self):
         """Test 'in' operator."""
         context = ExecutionContext(case_directory="/test")
 
-        assert 'case_directory' in context
-        assert 'nonexistent' not in context
+        assert "case_directory" in context
+        assert "nonexistent" not in context
 
     def test_custom_data_access(self):
         """Test custom_data storage."""
         context = ExecutionContext(case_directory="/test")
 
-        context['custom_key'] = 'custom_value'
+        context["custom_key"] = "custom_value"
 
-        assert context.custom_data.get('custom_key') == 'custom_value'
+        assert context.custom_data.get("custom_key") == "custom_value"
 
     def test_to_dict(self):
         """Test to_dict conversion."""
-        context = ExecutionContext(
-            case_directory="/test",
-            patient_name="PAT001",
-            cardiac_cycle=0.85
-        )
-        context['extra_data'] = 'extra'
+        context = ExecutionContext(case_directory="/test", patient_name="PAT001", cardiac_cycle=0.85)
+        context["extra_data"] = "extra"
 
         result = context.to_dict()
 
-        assert result['case_directory'] == "/test"
-        assert result['patient_name'] == "PAT001"
-        assert result['cardiac_cycle'] == 0.85
-        assert result['extra_data'] == 'extra'
+        assert result["case_directory"] == "/test"
+        assert result["patient_name"] == "PAT001"
+        assert result["cardiac_cycle"] == 0.85
+        assert result["extra_data"] == "extra"
 
     def test_from_dict(self):
         """Test from_dict class method."""
-        data = {
-            'case_directory': '/test',
-            'patient_name': 'PAT001',
-            'cardiac_cycle': 0.85,
-            'extra_key': 'extra_value'
-        }
+        data = {"case_directory": "/test", "patient_name": "PAT001", "cardiac_cycle": 0.85, "extra_key": "extra_value"}
 
         context = ExecutionContext.from_dict(data)
 
-        assert context.case_directory == '/test'
-        assert context.patient_name == 'PAT001'
+        assert context.case_directory == "/test"
+        assert context.patient_name == "PAT001"
         assert context.cardiac_cycle == 0.85
-        assert context.custom_data.get('extra_key') == 'extra_value'
+        assert context.custom_data.get("extra_key") == "extra_value"
 
     def test_case_path_property(self):
         """Test case_path property."""
@@ -296,12 +250,7 @@ class TestWorkflowManagerOutput:
         from workflow.manager import WorkflowManager
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            config = {
-                'geometry': {
-                    'case_name': 'test_case'
-                },
-                'output_base_directory': tmpdir
-            }
+            config = {"geometry": {"case_name": "test_case"}, "output_base_directory": tmpdir}
 
             manager = WorkflowManager(config)
 
@@ -312,11 +261,7 @@ class TestWorkflowManagerOutput:
         """Test that patient name is in context."""
         from workflow.manager import WorkflowManager
 
-        config = {
-            'geometry': {
-                'case_name': 'PAT001'
-            }
-        }
+        config = {"geometry": {"case_name": "PAT001"}}
 
         manager = WorkflowManager(config)
 
@@ -353,8 +298,8 @@ class TestExecutionContextFlags:
 
         result = context.to_dict()
 
-        assert 'mesh_generated' in result
-        assert result['mesh_generated'] is True
+        assert "mesh_generated" in result
+        assert result["mesh_generated"] is True
 
 
 class TestWorkflowManagerFailureHandling:
@@ -365,11 +310,7 @@ class TestWorkflowManagerFailureHandling:
         from workflow.manager import WorkflowManager
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            config = {
-                'geometry': {
-                    'case_name': 'test_case'
-                }
-            }
+            config = {"geometry": {"case_name": "test_case"}}
 
             manager = WorkflowManager(config)
             manager.context.case_directory = tmpdir
@@ -380,7 +321,7 @@ class TestWorkflowManagerFailureHandling:
                 command="runAll",
                 failed_task="execute_solver",
                 completed_tasks=["create_case_structure", "generate_mesh_files"],
-                error=Exception("Solver crashed")
+                error=Exception("Solver crashed"),
             )
 
             # Check failure marker was created
@@ -389,85 +330,62 @@ class TestWorkflowManagerFailureHandling:
 
             # Verify contents
             import json
+
             with open(failure_file) as f:
                 failure_info = json.load(f)
 
-            assert failure_info['command'] == 'runAll'
-            assert failure_info['failed_task'] == 'execute_solver'
-            assert 'create_case_structure' in failure_info['completed_tasks']
-            assert 'Solver crashed' in failure_info['error_message']
+            assert failure_info["command"] == "runAll"
+            assert failure_info["failed_task"] == "execute_solver"
+            assert "create_case_structure" in failure_info["completed_tasks"]
+            assert "Solver crashed" in failure_info["error_message"]
 
     def test_handle_workflow_failure_no_case_directory(self):
         """Test failure handling when case directory is not set."""
         from workflow.manager import WorkflowManager
 
-        config = {
-            'geometry': {
-                'case_name': 'test_case'
-            }
-        }
+        config = {"geometry": {"case_name": "test_case"}}
 
         manager = WorkflowManager(config)
         manager.context.case_directory = ""
 
         # Should not raise, just log warning
-        manager._handle_workflow_failure(
-            command="runAll",
-            failed_task="execute_solver",
-            completed_tasks=[],
-            error=None
-        )
+        manager._handle_workflow_failure(command="runAll", failed_task="execute_solver", completed_tasks=[], error=None)
 
     def test_handle_workflow_failure_directory_not_exists(self):
         """Test failure handling when case directory doesn't exist."""
         from workflow.manager import WorkflowManager
 
-        config = {
-            'geometry': {
-                'case_name': 'test_case'
-            }
-        }
+        config = {"geometry": {"case_name": "test_case"}}
 
         manager = WorkflowManager(config)
         manager.context.case_directory = "/nonexistent/path/that/does/not/exist"
 
         # Should not raise, just log warning
-        manager._handle_workflow_failure(
-            command="runAll",
-            failed_task="execute_solver",
-            completed_tasks=[],
-            error=None
-        )
+        manager._handle_workflow_failure(command="runAll", failed_task="execute_solver", completed_tasks=[], error=None)
 
     def test_handle_workflow_failure_without_error(self):
         """Test failure handling when task returns False (no exception)."""
         from workflow.manager import WorkflowManager
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            config = {
-                'geometry': {
-                    'case_name': 'test_case'
-                }
-            }
+            config = {"geometry": {"case_name": "test_case"}}
 
             manager = WorkflowManager(config)
             manager.context.case_directory = tmpdir
 
             manager._handle_workflow_failure(
-                command="runAll",
-                failed_task="execute_meshing",
-                completed_tasks=["create_case_structure"],
-                error=None
+                command="runAll", failed_task="execute_meshing", completed_tasks=["create_case_structure"], error=None
             )
 
             failure_file = Path(tmpdir) / ".workflow_failed"
             assert failure_file.exists()
 
             import json
+
             with open(failure_file) as f:
                 failure_info = json.load(f)
 
-            assert failure_info['error_message'] == 'Task returned False'
+            assert failure_info["error_message"] == "Task returned False"
 
 
 class TestClearFailureMarker:
@@ -478,11 +396,7 @@ class TestClearFailureMarker:
         from workflow.manager import WorkflowManager
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            config = {
-                'geometry': {
-                    'case_name': 'test_case'
-                }
-            }
+            config = {"geometry": {"case_name": "test_case"}}
 
             manager = WorkflowManager(config)
             manager.context.case_directory = tmpdir
@@ -503,11 +417,7 @@ class TestClearFailureMarker:
         from workflow.manager import WorkflowManager
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            config = {
-                'geometry': {
-                    'case_name': 'test_case'
-                }
-            }
+            config = {"geometry": {"case_name": "test_case"}}
 
             manager = WorkflowManager(config)
             manager.context.case_directory = tmpdir
@@ -521,11 +431,7 @@ class TestClearFailureMarker:
         """Test clearing when case directory not set."""
         from workflow.manager import WorkflowManager
 
-        config = {
-            'geometry': {
-                'case_name': 'test_case'
-            }
-        }
+        config = {"geometry": {"case_name": "test_case"}}
 
         manager = WorkflowManager(config)
         manager.context.case_directory = ""
@@ -543,43 +449,32 @@ class TestGetPreviousFailure:
         from workflow.manager import WorkflowManager
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            config = {
-                'geometry': {
-                    'case_name': 'test_case'
-                }
-            }
+            config = {"geometry": {"case_name": "test_case"}}
 
             manager = WorkflowManager(config)
             manager.context.case_directory = tmpdir
 
             # Create a failure marker
             import json
+
             failure_file = Path(tmpdir) / ".workflow_failed"
-            failure_data = {
-                'command': 'runAll',
-                'failed_task': 'execute_solver',
-                'error_message': 'Test error'
-            }
-            with open(failure_file, 'w') as f:
+            failure_data = {"command": "runAll", "failed_task": "execute_solver", "error_message": "Test error"}
+            with open(failure_file, "w") as f:
                 json.dump(failure_data, f)
 
             # Get the failure info
             result = manager.get_previous_failure()
 
             assert result is not None
-            assert result['command'] == 'runAll'
-            assert result['failed_task'] == 'execute_solver'
+            assert result["command"] == "runAll"
+            assert result["failed_task"] == "execute_solver"
 
     def test_get_no_failure(self):
         """Test when no failure marker exists."""
         from workflow.manager import WorkflowManager
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            config = {
-                'geometry': {
-                    'case_name': 'test_case'
-                }
-            }
+            config = {"geometry": {"case_name": "test_case"}}
 
             manager = WorkflowManager(config)
             manager.context.case_directory = tmpdir
@@ -592,11 +487,7 @@ class TestGetPreviousFailure:
         """Test when case directory not set."""
         from workflow.manager import WorkflowManager
 
-        config = {
-            'geometry': {
-                'case_name': 'test_case'
-            }
-        }
+        config = {"geometry": {"case_name": "test_case"}}
 
         manager = WorkflowManager(config)
         manager.context.case_directory = ""
@@ -610,23 +501,19 @@ class TestGetPreviousFailure:
         from workflow.manager import WorkflowManager
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            config = {
-                'geometry': {
-                    'case_name': 'test_case'
-                }
-            }
+            config = {"geometry": {"case_name": "test_case"}}
 
             manager = WorkflowManager(config)
             manager.context.case_directory = tmpdir
 
             # Create a corrupt failure marker
             failure_file = Path(tmpdir) / ".workflow_failed"
-            failure_file.write_text('not valid json {{{')
+            failure_file.write_text("not valid json {{{")
 
             result = manager.get_previous_failure()
 
             assert result is not None
-            assert 'error' in result
+            assert "error" in result
 
 
 class TestRunWorkflowErrorHandling:
@@ -637,11 +524,7 @@ class TestRunWorkflowErrorHandling:
         from workflow.manager import WorkflowManager
         from workflow.base_task import AortaCFDError
 
-        config = {
-            'geometry': {
-                'case_name': 'test_case'
-            }
-        }
+        config = {"geometry": {"case_name": "test_case"}}
 
         manager = WorkflowManager(config)
 
@@ -656,17 +539,13 @@ class TestRunWorkflowErrorHandling:
         from workflow.base_task import AortaCFDError
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            config = {
-                'geometry': {
-                    'case_name': 'test_case'
-                }
-            }
+            config = {"geometry": {"case_name": "test_case"}}
 
             manager = WorkflowManager(config)
             manager.context.case_directory = tmpdir
 
             # Remove a task from the registry
-            del manager.available_tasks['create_case_structure']
+            del manager.available_tasks["create_case_structure"]
 
             with pytest.raises(AortaCFDError) as exc_info:
                 manager.run_workflow("setup:dict")
@@ -679,11 +558,7 @@ class TestRunWorkflowErrorHandling:
         from workflow.base_task import AortaCFDError, Task, ExecutionContext
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            config = {
-                'geometry': {
-                    'case_name': 'test_case'
-                }
-            }
+            config = {"geometry": {"case_name": "test_case"}}
 
             manager = WorkflowManager(config)
             manager.context.case_directory = tmpdir
@@ -694,7 +569,7 @@ class TestRunWorkflowErrorHandling:
                     raise RuntimeError("Task exploded")
 
             # Replace the first task with our failing task
-            manager.available_tasks['create_case_structure'] = FailingTask
+            manager.available_tasks["create_case_structure"] = FailingTask
 
             with pytest.raises(AortaCFDError) as exc_info:
                 manager.run_workflow("setup:dict")
@@ -707,11 +582,7 @@ class TestRunWorkflowErrorHandling:
         from workflow.base_task import AortaCFDError, Task, ExecutionContext
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            config = {
-                'geometry': {
-                    'case_name': 'test_case'
-                }
-            }
+            config = {"geometry": {"case_name": "test_case"}}
 
             manager = WorkflowManager(config)
             manager.context.case_directory = tmpdir
@@ -722,7 +593,7 @@ class TestRunWorkflowErrorHandling:
                     return False
 
             # Replace the first task with our failing task
-            manager.available_tasks['create_case_structure'] = FailingTask
+            manager.available_tasks["create_case_structure"] = FailingTask
 
             with pytest.raises(AortaCFDError) as exc_info:
                 manager.run_workflow("setup:dict")
@@ -748,13 +619,7 @@ class TestWorkflowManagerContextInitialization:
         """Test cardiac cycle is set from config."""
         from workflow.manager import WorkflowManager
 
-        config = {
-            'geometry': {
-                'case_name': 'test_case',
-                'refinement_level': 'coarse'
-            },
-            'cardiac_cycle': 0.85
-        }
+        config = {"geometry": {"case_name": "test_case", "refinement_level": "coarse"}, "cardiac_cycle": 0.85}
 
         manager = WorkflowManager(config)
 
@@ -764,19 +629,12 @@ class TestWorkflowManagerContextInitialization:
         """Test patient name is set from case_info."""
         from workflow.manager import WorkflowManager
 
-        config = {
-            'geometry': {
-                'case_name': 'test_case'
-            },
-            'case_info': {
-                'patient_id': 'PAT999'
-            }
-        }
+        config = {"geometry": {"case_name": "test_case"}, "case_info": {"patient_id": "PAT999"}}
 
         manager = WorkflowManager(config)
 
-        assert manager.context.patient_name == 'PAT999'
+        assert manager.context.patient_name == "PAT999"
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

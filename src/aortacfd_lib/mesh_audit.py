@@ -10,10 +10,9 @@ measurements on benchmark geometries.
 """
 
 import math
-import os
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, Optional, Any
 
 import numpy as np
 
@@ -142,16 +141,12 @@ def _extract_cell_counts(case_dir: str) -> dict:
             counts["final_cells"] = int(m.group(1))
 
     if "blockmesh_cells" in counts and "final_cells" in counts:
-        counts["retained_fraction"] = round(
-            counts["final_cells"] / counts["blockmesh_cells"], 3
-        )
+        counts["retained_fraction"] = round(counts["final_cells"] / counts["blockmesh_cells"], 3)
 
     return counts
 
 
-def estimate_patch_resolution(
-    case_dir: str, patch_name: str, patch_diameter_m: float
-) -> Optional[dict]:
+def estimate_patch_resolution(case_dir: str, patch_name: str, patch_diameter_m: float) -> Optional[dict]:
     """
     Estimate achieved cells across lumen at a boundary patch.
 
@@ -259,14 +254,18 @@ def _determine_verdict(report: dict) -> tuple:
 
         if max_skew > THRESHOLDS["pass"]["max_internal_skewness"]:
             verdict = "warn"
-            warnings.append(f"maxSkewness={max_skew:.2f} above pass threshold ({THRESHOLDS['pass']['max_internal_skewness']})")
+            warnings.append(
+                f"maxSkewness={max_skew:.2f} above pass threshold ({THRESHOLDS['pass']['max_internal_skewness']})"
+            )
 
     # Preferred
     if verdict == "pass":
         if max_ortho > THRESHOLDS["preferred"]["max_non_ortho"]:
             warnings.append(f"maxNonOrtho={max_ortho:.1f} above preferred ({THRESHOLDS['preferred']['max_non_ortho']})")
         if max_skew > THRESHOLDS["preferred"]["max_internal_skewness"]:
-            warnings.append(f"maxSkewness={max_skew:.2f} above preferred ({THRESHOLDS['preferred']['max_internal_skewness']})")
+            warnings.append(
+                f"maxSkewness={max_skew:.2f} above preferred ({THRESHOLDS['preferred']['max_internal_skewness']})"
+            )
 
     # Resolution check
     requested = report.get("requested_cells_across_span")
@@ -366,11 +365,7 @@ def _read_openfoam_boundary(filepath: Path) -> dict:
     patches = {}
     # Find patch blocks: patchName { type ...; nFaces N; startFace N; }
     pattern = re.compile(
-        r"(\w+)\s*\{[^}]*?"
-        r"type\s+(\w+)\s*;"
-        r"[^}]*?nFaces\s+(\d+)\s*;"
-        r"[^}]*?startFace\s+(\d+)\s*;"
-        r"[^}]*?\}",
+        r"(\w+)\s*\{[^}]*?" r"type\s+(\w+)\s*;" r"[^}]*?nFaces\s+(\d+)\s*;" r"[^}]*?startFace\s+(\d+)\s*;" r"[^}]*?\}",
         re.DOTALL,
     )
 

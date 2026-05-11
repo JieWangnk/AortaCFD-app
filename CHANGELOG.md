@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-05-11
+
+Pre-release hygiene pass: dead code, lint, security, CI gate alignment, and
+a robustness fix for the inlet-normal detection introduced in `v1.1.0`.
+No behavioural changes for production cases.
+
+### Added
+- `psutil` declared as a runtime dependency in `pyproject.toml`. It was
+  already imported in `performance_optimizer` and `utils/security`, but
+  only pulled in transitively — making it explicit prevents a silent
+  break if the transitive ever drops.
+- Documentation of `OPENFOAM_ENV_PATH` / `foamDotFile` in `README.md`
+  (HPC override path; the env var was added in `v1.1.0` but undocumented).
+- `rrt_p95` and `rrt_p99` percentile QoIs listed in `README.md` (already
+  emitted by the post-processor but not yet documented).
+
+### Changed
+- `compute_inward_normal` now raises a clear `FileNotFoundError` when the
+  inlet or wall STL is missing or empty, and the callers
+  (`GeometryAnalyzer._get_internal_point_for_snappy` and
+  `DistanceWallInletProfile._should_flip_normal`) fall back to the
+  legacy wall-centroid / outlet-bearing heuristic. Production runs still
+  use the new edge-ring method introduced in `v1.1.0`; tests and partial
+  pipelines no longer crash on missing STLs.
+- `release.yml` workflow now enforces a coverage gate (≥ 60 %), a flake8
+  F-code lint gate, and a Bandit HIGH/HIGH security gate before
+  publishing a tag.
+- `tests.yml` coverage threshold aligned to `60` (matches
+  `pyproject.toml`).
+- `pr-checks.yml` no longer references non-existent
+  `test_patient1_e2e.py` / `test_multi_patient_e2e.py` and now honours
+  the same `not slow and not e2e` marker selection as the main test job.
+- `precise` numerics profile documentation corrected to reflect the
+  actual rendered scheme (`cellLimited Gauss linear 1` — full limiting).
+  No code change; only the docstring and inline `_comment` were
+  inaccurate.
+
+### Fixed
+- 125 flake8 F-code violations cleared (unused imports, unused
+  variables, empty f-strings). No behavioural change.
+- 9 Bandit HIGH/HIGH findings suppressed with `# nosec` and a
+  per-occurrence justification (Jinja2 renders OpenFOAM dictionaries
+  not HTML; the two `shell=True` calls use `shlex.quote`-ed internal
+  paths only).
+- `boundary_condition_setup` no longer reads `turbulence_viscosity_ratio`
+  from physics settings, since the value was never actually applied to
+  the omega initialisation formula.
+- README/CLI examples and `docs/REGENERATE_NUMERICS_USAGE.md` cleaned up
+  of two broken internal links.
+
+### Removed
+- 30 one-off mesh-study configs and helper scripts under
+  `scripts/hpc/mesh_study/` (paper artefacts; the methodology is
+  preserved in the v1.0.0 / v1.1.0 trees).
+
 ## [1.1.0] - 2026-04-19
 
 First post-submission bug-fix and cleanup release. Fully additive over

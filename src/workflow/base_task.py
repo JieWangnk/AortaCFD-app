@@ -12,7 +12,7 @@ This module provides:
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, ClassVar, Dict, List, Optional, Set, Type
+from typing import Any, ClassVar, Dict, List, Optional
 
 # Use absolute imports for consistency
 from aortacfd_lib.utils.logger import Logger
@@ -30,24 +30,23 @@ logger = Logger(log_file_path).get_logger()
 # EXCEPTIONS
 # =============================================================================
 
+
 class AortaCFDError(Exception):
     """Base exception for all workflow-related errors."""
-    pass
 
 
 class TaskDependencyError(AortaCFDError):
     """Raised when task dependencies are not satisfied."""
-    pass
 
 
 class TaskExecutionError(AortaCFDError):
     """Raised when task execution fails."""
-    pass
 
 
 # =============================================================================
 # EXECUTION CONTEXT
 # =============================================================================
+
 
 @dataclass
 class ExecutionContext:
@@ -112,8 +111,13 @@ class ExecutionContext:
     def from_dict(cls, data: Dict[str, Any]) -> "ExecutionContext":
         """Create ExecutionContext from a dictionary."""
         known_keys = {
-            "case_directory", "patient_name", "cardiac_cycle",
-            "mesh_generated", "bc_generated", "solver_completed", "post_processed"
+            "case_directory",
+            "patient_name",
+            "cardiac_cycle",
+            "mesh_generated",
+            "bc_generated",
+            "solver_completed",
+            "post_processed",
         }
         known_data = {k: v for k, v in data.items() if k in known_keys}
         custom_data = {k: v for k, v in data.items() if k not in known_keys}
@@ -125,15 +129,20 @@ class ExecutionContext:
 
     def __getitem__(self, key: str) -> Any:
         """Allow dict-like access: context['case_directory']."""
-        if hasattr(self, key) and not key.startswith('_'):
+        if hasattr(self, key) and not key.startswith("_"):
             return getattr(self, key)
         return self.custom_data.get(key)
 
     def __setitem__(self, key: str, value: Any) -> None:
         """Allow dict-like assignment: context['cardiac_cycle'] = 0.85."""
         known_attrs = {
-            "case_directory", "patient_name", "cardiac_cycle",
-            "mesh_generated", "bc_generated", "solver_completed", "post_processed"
+            "case_directory",
+            "patient_name",
+            "cardiac_cycle",
+            "mesh_generated",
+            "bc_generated",
+            "solver_completed",
+            "post_processed",
         }
         if key in known_attrs:
             setattr(self, key, value)
@@ -142,7 +151,7 @@ class ExecutionContext:
 
     def __contains__(self, key: str) -> bool:
         """Allow 'in' operator: 'case_directory' in context."""
-        if hasattr(self, key) and not key.startswith('_'):
+        if hasattr(self, key) and not key.startswith("_"):
             value = getattr(self, key)
             # For string attributes, check if non-empty
             if isinstance(value, str):
@@ -153,7 +162,7 @@ class ExecutionContext:
 
     def get(self, key: str, default: Any = None) -> Any:
         """Allow dict-like get: context.get('key', default)."""
-        if hasattr(self, key) and not key.startswith('_'):
+        if hasattr(self, key) and not key.startswith("_"):
             value = getattr(self, key)
             # Return default for empty strings/zero values if that's the intent
             if value == "" or value == 0.0:
@@ -165,6 +174,7 @@ class ExecutionContext:
 # =============================================================================
 # TASK METADATA
 # =============================================================================
+
 
 @dataclass
 class TaskMetadata:
@@ -194,6 +204,7 @@ class TaskMetadata:
 # =============================================================================
 # TASK BASE CLASS
 # =============================================================================
+
 
 class Task(ABC):
     """
@@ -255,8 +266,7 @@ class Task(ABC):
         """
         if self.metadata.requires_mesh and not context.mesh_generated:
             raise TaskDependencyError(
-                f"Task '{self.metadata.name}' requires mesh, but mesh not generated. "
-                f"Run mesh generation first."
+                f"Task '{self.metadata.name}' requires mesh, but mesh not generated. " f"Run mesh generation first."
             )
 
         if self.metadata.requires_bc and not context.bc_generated:
@@ -282,7 +292,6 @@ class Task(ABC):
         Raises:
             TaskExecutionError: If execution fails
         """
-        pass
 
     def run(self, context: ExecutionContext) -> bool:
         """
@@ -307,6 +316,7 @@ class Task(ABC):
 # =============================================================================
 # BACKWARD COMPATIBILITY
 # =============================================================================
+
 
 def context_to_dict(context: ExecutionContext) -> Dict[str, Any]:
     """Convert ExecutionContext to dict for legacy code."""

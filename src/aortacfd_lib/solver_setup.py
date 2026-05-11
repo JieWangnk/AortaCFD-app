@@ -6,6 +6,7 @@ from .utils.logger import Logger
 from .utils.ofVersionAdapter import OFVersionAdapter
 from .template_context import prepare_fv_solution_context
 
+
 class FvSolutionWriter:
     """
     Generates the fvSolution file using a unified config object and a
@@ -14,15 +15,18 @@ class FvSolutionWriter:
     Includes mesh-adaptive system that automatically adjusts solver settings
     based on checkMesh quality metrics.
     """
+
     def __init__(self, config: dict, case_directory: str):
         """The constructor now takes the unified config object."""
         self.config = config
         self.case_dir = case_directory
         self.log = Logger("solver_setup").get_logger()
 
-        template_path = os.path.join(os.path.dirname(__file__), '..', 'templates')
-        self.jinja_env = Environment(loader=FileSystemLoader(template_path))
-        self.version_adapter = OFVersionAdapter(self.config['openfoam_version'])
+        template_path = os.path.join(os.path.dirname(__file__), "..", "templates")
+        self.jinja_env = Environment(  # nosec B701 - renders OpenFOAM dictionaries, not HTML
+            loader=FileSystemLoader(template_path)
+        )
+        self.version_adapter = OFVersionAdapter(self.config["openfoam_version"])
 
     def write_fvSolution_file(self):
         """
@@ -34,25 +38,26 @@ class FvSolutionWriter:
         """
         # Get fvSolution from config (deep copy to avoid modifying original)
         import copy
-        fvSolution = copy.deepcopy(self.config['fvSolution'])
+
+        fvSolution = copy.deepcopy(self.config["fvSolution"])
 
         # Apply mesh-adaptive adjustments if enabled
-        mesh_adaptive_enabled = self.config.get('numerics', {}).get('mesh_adaptive', True)
+        mesh_adaptive_enabled = self.config.get("numerics", {}).get("mesh_adaptive", True)
 
         if mesh_adaptive_enabled:
             fvSolution, quality_report = self._apply_mesh_adaptive_solver(fvSolution)
 
             # Print quality report if mesh was analyzed
-            if quality_report and quality_report.get('tier'):
+            if quality_report and quality_report.get("tier"):
                 self._print_quality_report(quality_report)
 
         # Compute pRefPoint from mesh bounding box if not already set
-        if 'PIMPLE' not in fvSolution:
-            fvSolution['PIMPLE'] = {}
-        if 'pRefPoint' not in fvSolution['PIMPLE']:
+        if "PIMPLE" not in fvSolution:
+            fvSolution["PIMPLE"] = {}
+        if "pRefPoint" not in fvSolution["PIMPLE"]:
             pref = self._compute_pRefPoint_from_mesh()
             if pref:
-                fvSolution['PIMPLE']['pRefPoint'] = pref
+                fvSolution["PIMPLE"]["pRefPoint"] = pref
                 self.log.info(f"Auto-computed pRefPoint from mesh: {pref}")
 
         # This single method replaces all the previous private _get... methods.
@@ -67,19 +72,19 @@ class FvSolutionWriter:
         context = {
             "header": self.version_adapter.get_foam_file_header("dictionary", "fvSolution"),
             # Pre-computed business logic values
-            "profile": preprocessed['profile'],
-            "pimple_defaults": preprocessed['pimple'],
-            "relaxation_defaults": preprocessed['relaxation'],
-            "tolerance_defaults": preprocessed['tolerances'],
+            "profile": preprocessed["profile"],
+            "pimple_defaults": preprocessed["pimple"],
+            "relaxation_defaults": preprocessed["relaxation"],
+            "tolerance_defaults": preprocessed["tolerances"],
             # Raw data (still needed for user overrides and mesh-adaptive adjustments)
             "fvSolution": fvSolution,
-            "template_vars": self.config.get('template_vars', {}),
-            "openfoam_version": self.config.get('openfoam_version', '8'),
-            "openfoam_major_version": self.config.get('openfoam_major_version', 8)
+            "template_vars": self.config.get("template_vars", {}),
+            "openfoam_version": self.config.get("openfoam_version", "8"),
+            "openfoam_major_version": self.config.get("openfoam_major_version", 8),
         }
 
         output_path = os.path.join(self.case_dir, "system", "fvSolution")
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             f.write(template.render(context))
         self.log.info(f"Successfully wrote fvSolution file to {output_path}")
 
@@ -107,7 +112,7 @@ class FvSolutionWriter:
             adapter.analyze_checkmesh_log(str(checkmesh_log))
 
             # Get profile name (case-insensitive)
-            profile_name = self.config.get('numerics', {}).get('profile', 'standard').lower()
+            profile_name = self.config.get("numerics", {}).get("profile", "standard").lower()
 
             # Adjust fvSolution
             adjusted_fvsolution = adapter.adjust_fvsolution_for_mesh(base_fvsolution, profile_name)
@@ -119,22 +124,26 @@ class FvSolutionWriter:
             if adjusted_fvsolution != base_fvsolution:
                 tier = adapter.mesh_quality_tier
                 self.log.info(f"🔧 Mesh-Adaptive System: Detected {tier} quality mesh")
-                self.log.info(f"   Adjusted fvSolution for mesh quality")
+                self.log.info("   Adjusted fvSolution for mesh quality")
 
                 # Log specific changes
-                pimple_base = base_fvsolution.get('PIMPLE', {})
-                pimple_adj = adjusted_fvsolution.get('PIMPLE', {})
+                pimple_base = base_fvsolution.get("PIMPLE", {})
+                pimple_adj = adjusted_fvsolution.get("PIMPLE", {})
 
-                if pimple_base.get('nOuterCorrectors') != pimple_adj.get('nOuterCorrectors'):
-                    self.log.info(f"   nOuterCorrectors: {pimple_base.get('nOuterCorrectors')} → {pimple_adj.get('nOuterCorrectors')}")
+                if pimple_base.get("nOuterCorrectors") != pimple_adj.get("nOuterCorrectors"):
+                    self.log.info(
+                        f"   nOuterCorrectors: {pimple_base.get('nOuterCorrectors')} → {pimple_adj.get('nOuterCorrectors')}"
+                    )
 
-                if pimple_base.get('nNonOrthogonalCorrectors') != pimple_adj.get('nNonOrthogonalCorrectors'):
-                    self.log.info(f"   nNonOrthogonalCorrectors: {pimple_base.get('nNonOrthogonalCorrectors')} → {pimple_adj.get('nNonOrthogonalCorrectors')}")
+                if pimple_base.get("nNonOrthogonalCorrectors") != pimple_adj.get("nNonOrthogonalCorrectors"):
+                    self.log.info(
+                        f"   nNonOrthogonalCorrectors: {pimple_base.get('nNonOrthogonalCorrectors')} → {pimple_adj.get('nNonOrthogonalCorrectors')}"
+                    )
 
-                relax_base = base_fvsolution.get('relaxationFactors', {}).get('fields', {})
-                relax_adj = adjusted_fvsolution.get('relaxationFactors', {}).get('fields', {})
+                relax_base = base_fvsolution.get("relaxationFactors", {}).get("fields", {})
+                relax_adj = adjusted_fvsolution.get("relaxationFactors", {}).get("fields", {})
 
-                if relax_base.get('p') != relax_adj.get('p'):
+                if relax_base.get("p") != relax_adj.get("p"):
                     self.log.info(f"   p relaxation: {relax_base.get('p')} → {relax_adj.get('p')}")
 
             return adjusted_fvsolution, quality_report
@@ -148,19 +157,19 @@ class FvSolutionWriter:
 
     def _print_quality_report(self, quality_report: dict):
         """Print mesh quality report to log with explicit warnings for poor meshes."""
-        tier = quality_report.get('tier', 'UNKNOWN')
-        metrics = quality_report.get('metrics', {})
-        recommendations = quality_report.get('recommendations', [])
+        tier = quality_report.get("tier", "UNKNOWN")
+        metrics = quality_report.get("metrics", {})
+        recommendations = quality_report.get("recommendations", [])
 
-        self.log.info("="*70)
+        self.log.info("=" * 70)
         self.log.info(f"MESH QUALITY REPORT - {tier}")
-        self.log.info("="*70)
+        self.log.info("=" * 70)
 
         # Print metrics
         if metrics:
-            skew = metrics.get('max_skewness')
-            ortho = metrics.get('max_non_orthogonality')
-            aspect = metrics.get('max_aspect_ratio')
+            skew = metrics.get("max_skewness")
+            ortho = metrics.get("max_non_orthogonality")
+            aspect = metrics.get("max_aspect_ratio")
 
             if skew:
                 self.log.info(f"  Max Skewness: {skew:.2f}")
@@ -170,10 +179,10 @@ class FvSolutionWriter:
                 self.log.info(f"  Max Aspect Ratio: {aspect:.1f}")
 
         # EXPLICIT WARNINGS for POOR/CRITICAL meshes
-        if tier in ['POOR', 'CRITICAL']:
+        if tier in ["POOR", "CRITICAL"]:
             self.log.warning("")
             self.log.warning("⚠️  MESH QUALITY WARNING ⚠️")
-            self.log.warning("="*70)
+            self.log.warning("=" * 70)
             self.log.warning("The mesh-adaptive system has stabilized your solver settings,")
             self.log.warning("but this introduces NUMERICAL DIFFUSION and degrades accuracy.")
             self.log.warning("")
@@ -194,7 +203,7 @@ class FvSolutionWriter:
             self.log.warning("")
             self.log.warning("The adaptive system is a SAFETY NET, not a solution.")
             self.log.warning("Use it for initial testing, then IMPROVE THE MESH.")
-            self.log.warning("="*70)
+            self.log.warning("=" * 70)
             self.log.warning("")
 
         # Print recommendations
@@ -203,7 +212,7 @@ class FvSolutionWriter:
             for rec in recommendations:
                 self.log.info(f"  {rec}")
 
-        self.log.info("="*70)
+        self.log.info("=" * 70)
 
     def _compute_pRefPoint_from_mesh(self) -> tuple:
         """
@@ -219,16 +228,18 @@ class FvSolutionWriter:
         snappy_dict = Path(self.case_dir) / "system" / "snappyHexMeshDict"
         if snappy_dict.exists():
             try:
-                with open(snappy_dict, 'r') as f:
+                with open(snappy_dict, "r") as f:
                     content = f.read()
 
                 # Parse locationInMesh (x y z)
-                loc_pattern = r'locationInMesh\s*\(\s*([-\d.e+]+)\s+([-\d.e+]+)\s+([-\d.e+]+)\s*\)'
+                loc_pattern = r"locationInMesh\s*\(\s*([-\d.e+]+)\s+([-\d.e+]+)\s+([-\d.e+]+)\s*\)"
                 match = re.search(loc_pattern, content)
 
                 if match:
                     x, y, z = float(match.group(1)), float(match.group(2)), float(match.group(3))
-                    self.log.info(f"Using locationInMesh from snappyHexMeshDict as pRefPoint: ({x:.5f}, {y:.5f}, {z:.5f})")
+                    self.log.info(
+                        f"Using locationInMesh from snappyHexMeshDict as pRefPoint: ({x:.5f}, {y:.5f}, {z:.5f})"
+                    )
                     return (x, y, z)
             except Exception as e:
                 self.log.debug(f"Could not parse snappyHexMeshDict: {e}")
@@ -237,11 +248,11 @@ class FvSolutionWriter:
         checkmesh_log = Path(self.case_dir) / "logs" / "log.checkMesh"
         if checkmesh_log.exists():
             try:
-                with open(checkmesh_log, 'r') as f:
+                with open(checkmesh_log, "r") as f:
                     content = f.read()
 
                 # Parse bounding box: "Overall domain bounding box (x1 y1 z1) (x2 y2 z2)"
-                bbox_pattern = r'Overall domain bounding box \(([-\d.e+]+)\s+([-\d.e+]+)\s+([-\d.e+]+)\)\s+\(([-\d.e+]+)\s+([-\d.e+]+)\s+([-\d.e+]+)\)'
+                bbox_pattern = r"Overall domain bounding box \(([-\d.e+]+)\s+([-\d.e+]+)\s+([-\d.e+]+)\)\s+\(([-\d.e+]+)\s+([-\d.e+]+)\s+([-\d.e+]+)\)"
                 match = re.search(bbox_pattern, content)
 
                 if match:
@@ -253,7 +264,9 @@ class FvSolutionWriter:
                     center_y = (y1 + y2) / 2
                     center_z = (z1 + z2) / 2
 
-                    self.log.warning(f"Using bounding box center as pRefPoint: ({center_x:.5f}, {center_y:.5f}, {center_z:.5f}) - may be outside geometry!")
+                    self.log.warning(
+                        f"Using bounding box center as pRefPoint: ({center_x:.5f}, {center_y:.5f}, {center_z:.5f}) - may be outside geometry!"
+                    )
                     return (center_x, center_y, center_z)
             except Exception as e:
                 self.log.warning(f"Error parsing checkMesh log: {e}")
