@@ -68,7 +68,27 @@ MATRIX: list[dict[str, Any]] = [
         "purpose": "Pre-mapped inlet (VOL04 inlet/) runs end-to-end; alias MRI warns",
         "overrides": None,
     },
-    # Extend below for R5–R7 (zeroGradient outlet, robust/precise profiles, etc.)
+    {
+        "name": "R5_zeroGradient_outlet",
+        "patient": "BPM120",
+        "purpose": "zeroGradient outlet (non-Windkessel) renders and solver converges",
+        "overrides": {"boundary_conditions": {"outlets": {"type": "zeroGradient"}}},
+    },
+    {
+        "name": "R6_robust_profile",
+        "patient": "BPM120",
+        "purpose": "robust 1st-order numerics profile converges (high-stability fallback)",
+        "overrides": {"numerics": {"profile": "robust"}},
+    },
+    # A.1 is the benchmark-validation run: full default config, full 1.5s sim,
+    # matched against benchmarks/expected_values.json by tests/benchmarks/.
+    {
+        "name": "A1_BPM120_benchmark",
+        "patient": "BPM120",
+        "purpose": "Full benchmark — 1.5s on ~1.9M cells, validates Wang et al. Table 3",
+        "overrides": None,
+        "end_time": 1.5,  # default endTime; matrix smoke-test override skipped
+    },
 ]
 
 
@@ -118,13 +138,16 @@ def _absolutise_inlet_paths(config: dict, patient_dir: Path) -> None:
                     inlet[path_key] = str(resolved)
 
 
-def run_variant(variant: dict, repo_root: Path, results_dir: Path, end_time: float) -> dict:
+def run_variant(variant: dict, repo_root: Path, results_dir: Path, default_end_time: float) -> dict:
     name = variant["name"]
     patient = variant["patient"]
     overrides = variant.get("overrides")
     purpose = variant.get("purpose", "")
+    # Per-variant end_time wins over the CLI default. Used for A.1 to run
+    # the full 1.5s benchmark sim while the rest of the matrix stays short.
+    end_time = float(variant.get("end_time", default_end_time))
 
-    print(f"\n{'=' * 78}\n=== {name} — {purpose}\n{'=' * 78}", flush=True)
+    print(f"\n{'=' * 78}\n=== {name} — {purpose}\n=== end_time={end_time}s\n{'=' * 78}", flush=True)
 
     patient_dir = repo_root / "cases_input" / patient
     default_config_path = patient_dir / "config.json"

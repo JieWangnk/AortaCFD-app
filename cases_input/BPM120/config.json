@@ -40,7 +40,9 @@
     "SNAPPY_SETTINGS": {
       "parallel": true,
       "nProcessors": 8,
-      "surfaceRefinementLevels": [1, 2]
+      "default_cells_across_span": 16,
+      "surfaceRefinementLevels": [1, 2],
+      "_comment": "default_cells_across_span=16 reproduces the ~1.9M-cell paper mesh (Wang et al. Table 3). For quick smoke tests use --quick or config_tutorial_coarse.json."
     }
   },
 
