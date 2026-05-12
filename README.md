@@ -423,6 +423,26 @@ For pulsatile simulations, backflow stabilisation prevents divergence during dia
 
 `betaN = 0` preserves Windkessel pressure-flow coupling. Only increase for severe instabilities.
 
+### zeroGradient outlets with pressure anchor
+
+When using `zeroGradient` outlets (e.g. for sensitivity studies that don't need a Windkessel response), the pressure field has no built-in reference and will diverge under a pulsatile inlet during the systolic surge. v1.2.0 catches this at config-build time and exposes `pressure_anchor` to pin one outlet to a fixed pressure:
+
+```json
+{
+  "outlets": {
+    "type": "zeroGradient",
+    "pressure_anchor": {
+      "outlet": "outlet1",       // or "auto" → first outlet patch
+      "pressure_mmHg": 80        // default diastolic pressure
+    }
+  }
+}
+```
+
+The named outlet is rendered as `fixedValue` at the kinematic-converted pressure; the other outlets stay `zeroGradient`. The solver now has the reference it needs.
+
+Steady inlets (`CONSTANT`, `PARABOLIC`) do **not** require a `pressure_anchor` — the pressure field finds its own equilibrium and the validator allows the unanchored config.
+
 ---
 
 ## Hemodynamic Metrics

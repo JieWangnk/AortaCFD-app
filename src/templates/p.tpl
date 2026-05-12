@@ -44,10 +44,17 @@ boundaryField
     // WARNING: No outlet patches defined! Simulation will likely fail.
     // Check that outlet_patches is set in the template context.
     {% endif %}
+    {% set pressure_anchor_resolved = outlet_settings.get('pressure_anchor_resolved') %}
     {% for outlet in outlet_patches|default([]) %}
     {{ outlet }}
     {
-        {% if outlet_type == "3EWINDKESSEL" or outlet_type == "2EWINDKESSEL" %}
+        {% if pressure_anchor_resolved and pressure_anchor_resolved.outlet == outlet %}
+        // Pressure anchor outlet — pins the otherwise-floating pressure field
+        // for zeroGradient outlets with pulsatile inlet (otherwise FPE during systole).
+        type            fixedValue;
+        value           uniform {{ pressure_anchor_resolved.p_kinematic|round(6) }};  // {{ pressure_anchor_resolved.p_mmHg }} mmHg
+
+        {% elif outlet_type == "3EWINDKESSEL" or outlet_type == "2EWINDKESSEL" %}
             {# ========== Option 1: Windkessel (Physiological) ========== #}
             {# 3-Element: R-C-Z model for pulsatile flow #}
             {# 2-Element: R-C model (Z=0) for steady/CONSTANT flow #}
@@ -124,14 +131,12 @@ boundaryField
             {% endif %}
 
         {% else %}
-            {# ========== Fallback: zeroGradient (Debug only) ========== #}
-            {% if loop.last %}
-        // Last outlet (abdominal) gets fixed pressure for mass conservation
-        type            fixedValue;
-        value           uniform 0;
-            {% else %}
+            {# ========== Fallback: zeroGradient outlets ========== #}
+            {# With outlets.pressure_anchor set, the anchored outlet is handled #}
+            {# in the early branch above; the rest fall through to zeroGradient. #}
+            {# Without an anchor, the validator in builder.py blocks pulsatile-  #}
+            {# inlet configs and steady inlets find their own pressure equilibrium.#}
         type            zeroGradient;
-            {% endif %}
         {% endif %}
     }
     {% endfor %}

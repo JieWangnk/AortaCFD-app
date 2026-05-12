@@ -484,3 +484,146 @@ class TestD10_FlowSplitEdgeCases:
         assert abs(sum(split.values()) - 1.0) < 1e-6
         assert abs(split["o1"] - 0.4) < 1e-6
         assert abs(split["o2"] - 0.6) < 1e-6
+
+
+# =============================================================================
+# D.11 — Pressure anchor for zeroGradient outlets with pulsatile inlet
+# =============================================================================
+
+
+class TestD11_PressureAnchor:
+    """zeroGradient outlets need a pressure reference somewhere. v1.2.0 rejects
+    unanchored pulsatile configs at build time and exposes ``pressure_anchor``
+    to pin one outlet to a fixed pressure."""
+
+    def test_unanchored_pulsatile_rejected(self):
+        from config.builder import ConfigBuilder
+
+        bad = {
+            "boundary_conditions": {
+                "inlet": {"type": "TIMEVARYING"},
+                "outlets": {"type": "zeroGradient"},
+            }
+        }
+        with pytest.raises(ValueError, match="pressure_anchor"):
+            ConfigBuilder()._validate_outlet_pressure_reference(bad)
+
+    def test_steady_inlet_allows_unanchored(self):
+        """CONSTANT/PARABOLIC inlet → pressure field self-anchors; no validator error."""
+        from config.builder import ConfigBuilder
+
+        for inlet_type in ("CONSTANT", "PARABOLIC"):
+            cfg = {
+                "boundary_conditions": {
+                    "inlet": {"type": inlet_type},
+                    "outlets": {"type": "zeroGradient"},
+                }
+            }
+            ConfigBuilder()._validate_outlet_pressure_reference(cfg)  # no raise
+
+    def test_explicit_anchor_allows_pulsatile(self):
+        from config.builder import ConfigBuilder
+
+        cfg = {
+            "boundary_conditions": {
+                "inlet": {"type": "TIMEVARYING"},
+                "outlets": {
+                    "type": "zeroGradient",
+                    "pressure_anchor": {"outlet": "outlet1", "pressure_mmHg": 80},
+                },
+            }
+        }
+        ConfigBuilder()._validate_outlet_pressure_reference(cfg)  # no raise
+
+    def test_anchor_renders_fixedValue_on_named_outlet(self, tmp_case_dir):
+        """The anchored outlet must render as fixedValue at the kinematic-converted
+        pressure; the other outlets stay zeroGradient."""
+        from aortacfd_lib.boundary_condition_setup import BoundaryConditionSetup
+
+        config = _base_config(
+            boundary_conditions={
+                "inlet": {"type": "CONSTANT", "velocity": 0.5, "profile": "plug"},
+                "outlets": {
+                    "type": "zeroGradient",
+                    "pressure_anchor": {"outlet": "outlet1", "pressure_mmHg": 80},
+                },
+            }
+        )
+
+        with (
+            patch(
+                "aortacfd_lib.utils.patch_processing.PatchProcessing",
+                return_value=_patch_processor_mock(),
+            ),
+            patch("aortacfd_lib.boundary_condition_setup.detect_world_patch_mode", return_value=False),
+        ):
+            bcs = BoundaryConditionSetup(config, str(tmp_case_dir))
+            bcs.write_all_bc_files()
+
+        p_text = (tmp_case_dir / "0" / "p").read_text()
+
+        # The anchor outlet (outlet1) is rendered as fixedValue at ~10.06 m²/s²
+        # (80 mmHg × 133.322 Pa/mmHg ÷ 1060 kg/m³ ≈ 10.06)
+        anchor_block = p_text.split("outlet1")[1].split("outlet2")[0]
+        assert "fixedValue" in anchor_block, "anchored outlet1 should be fixedValue"
+        assert (
+            "10.06" in anchor_block
+        ), f"anchored outlet1 should show ~10.06 m²/s² (80mmHg kinematic); got: {anchor_block[:200]}"
+
+        # outlet2 remains zeroGradient
+        rest_block = p_text.split("outlet2")[1].split("wall")[0]
+        assert "zeroGradient" in rest_block, "non-anchored outlet2 should be zeroGradient"
+        assert "fixedValue" not in rest_block, "non-anchored outlet2 should NOT be fixedValue"
+
+    def test_anchor_auto_resolves_to_first_outlet(self, tmp_case_dir):
+        """outlet: 'auto' uses the first outlet patch."""
+        from aortacfd_lib.boundary_condition_setup import BoundaryConditionSetup
+
+        config = _base_config(
+            boundary_conditions={
+                "inlet": {"type": "CONSTANT", "velocity": 0.5, "profile": "plug"},
+                "outlets": {
+                    "type": "zeroGradient",
+                    "pressure_anchor": {"outlet": "auto"},  # no pressure_mmHg → default 80
+                },
+            }
+        )
+
+        with (
+            patch(
+                "aortacfd_lib.utils.patch_processing.PatchProcessing",
+                return_value=_patch_processor_mock(),
+            ),
+            patch("aortacfd_lib.boundary_condition_setup.detect_world_patch_mode", return_value=False),
+        ):
+            bcs = BoundaryConditionSetup(config, str(tmp_case_dir))
+            bcs.write_all_bc_files()
+
+        resolved = bcs.outlet_settings.get("pressure_anchor_resolved", {})
+        assert resolved.get("outlet") == "outlet1", "auto should resolve to first outlet"
+        assert resolved.get("p_mmHg") == 80.0, "default pressure should be 80 mmHg"
+
+    def test_anchor_unknown_outlet_raises(self, tmp_case_dir):
+        """Typing the wrong outlet name should fail loudly, not silently no-op."""
+        from aortacfd_lib.boundary_condition_setup import BoundaryConditionSetup
+
+        config = _base_config(
+            boundary_conditions={
+                "inlet": {"type": "CONSTANT", "velocity": 0.5},
+                "outlets": {
+                    "type": "zeroGradient",
+                    "pressure_anchor": {"outlet": "nonexistent_outlet"},
+                },
+            }
+        )
+
+        with (
+            patch(
+                "aortacfd_lib.utils.patch_processing.PatchProcessing",
+                return_value=_patch_processor_mock(),
+            ),
+            patch("aortacfd_lib.boundary_condition_setup.detect_world_patch_mode", return_value=False),
+        ):
+            bcs = BoundaryConditionSetup(config, str(tmp_case_dir))
+            with pytest.raises(ValueError, match="not one of the configured outlets"):
+                bcs.write_all_bc_files()

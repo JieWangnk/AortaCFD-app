@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (v1.2.0 epic D continued — pressure anchor for zeroGradient outlets)
+- **`outlets.pressure_anchor`** config field pins one outlet to a fixed
+  pressure while the rest stay `zeroGradient`. Cardiovascular CFD needs
+  the pressure field anchored somewhere — Windkessel/fixedPressure
+  outlets provide that intrinsically, but `zeroGradient` does not, and
+  with a pulsatile inlet the unanchored pressure field drifts during
+  systole and the solver diverges with FPE (verified empirically in
+  R5 of the config matrix). Shape:
+  ```json
+  "outlets": {
+    "type": "zeroGradient",
+    "pressure_anchor": {"outlet": "outlet1", "pressure_mmHg": 80}
+  }
+  ```
+  `outlet: "auto"` resolves to the first outlet patch; `pressure_mmHg`
+  defaults to 80 (diastolic).
+- **Validator** `_validate_outlet_pressure_reference()` rejects
+  all-`zeroGradient` configs that lack both a steady inlet and a
+  `pressure_anchor`, with a clear remediation message at config-build
+  time (not 17 minutes into a doomed solve).
+- **Replaces** the previous undocumented `loop.last fixedValue 0`
+  fallback in `p.tpl` with the explicit, user-configurable anchor.
+
 ### Added (v1.2.0 epic D — config variability tests + hardening)
 - **`inlet.type = "MAPPED_PROFILE"`** as the new name for the pre-mapped
   per-face per-timestep inlet branch (formerly called `MRI`). The path

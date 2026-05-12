@@ -71,8 +71,15 @@ MATRIX: list[dict[str, Any]] = [
     {
         "name": "R5_zeroGradient_outlet",
         "patient": "BPM120",
-        "purpose": "zeroGradient outlet (non-Windkessel) renders and solver converges",
-        "overrides": {"boundary_conditions": {"outlets": {"type": "zeroGradient"}}},
+        "purpose": "zeroGradient outlets with pressure_anchor pin one outlet to diastolic",
+        "overrides": {
+            "boundary_conditions": {
+                "outlets": {
+                    "type": "zeroGradient",
+                    "pressure_anchor": {"outlet": "outlet1", "pressure_mmHg": 80},
+                }
+            }
+        },
     },
     {
         "name": "R6_robust_profile",

@@ -469,6 +469,7 @@ class ConfigBuilder:
         # would otherwise pass through to OpenFOAM unchecked.
         self._validate_turbulence_model_names(config)
         self._validate_inlet_profile_name(config)
+        self._validate_outlet_pressure_reference(config)
 
     def _validate_turbulence_model_names(self, config: dict) -> None:
         """Reject unknown ``physics.rans_model`` / ``physics.les_model`` values up-front.
@@ -499,6 +500,54 @@ class ConfigBuilder:
                     f"Allowed values: {sorted(LES_MODEL_ALLOWLIST)}. "
                     f"OpenFOAM 12 is case-sensitive — 'wale' != 'WALE'."
                 )
+
+    def _validate_outlet_pressure_reference(self, config: dict) -> None:
+        """Reject all-zeroGradient outlets without a pressure reference.
+
+        Cardiovascular CFD needs the pressure field anchored somewhere.
+        Windkessel / fixedPressure / resistance outlets provide that anchor
+        intrinsically. ``zeroGradient`` does not — with a pulsatile inlet
+        and no anchor, the pressure field drifts during systole and the
+        solver diverges with an FPE (verified empirically in R5 of the
+        v1.2.0 config matrix).
+
+        Three valid configurations:
+          1. ``outlets.type`` is Windkessel / fixedPressure / resistance
+             (anchor intrinsic, no further action needed)
+          2. ``inlet.type`` is CONSTANT or PARABOLIC (steady; pressure
+             field finds its own equilibrium)
+          3. ``outlets.pressure_anchor`` explicitly pins one outlet
+             (``zeroGradient`` everywhere except the anchored outlet,
+             which is rendered as ``fixedValue`` at the specified pressure)
+
+        Anything else with ``outlets.type: zeroGradient`` is a config
+        mistake that the user wants to know about at config-build time,
+        not 17 minutes into a doomed solve.
+        """
+        bc = config.get("boundary_conditions") or {}
+        outlets = bc.get("outlets") or config.get("outlets") or {}
+        outlet_type = str(outlets.get("type", "")).lower()
+        if outlet_type != "zerogradient":
+            return  # Other types provide their own pressure reference
+
+        if outlets.get("pressure_anchor"):
+            return  # Explicit anchor — well-posed
+
+        inlet = bc.get("inlet") or config.get("inlet") or {}
+        inlet_type = str(inlet.get("type", "CONSTANT")).upper()
+        if inlet_type in ("CONSTANT", "PARABOLIC"):
+            return  # Steady inlet — pressure field finds equilibrium
+
+        raise ValueError(
+            f"Outlets are 'zeroGradient' with a pulsatile inlet "
+            f"(inlet.type={inlet_type!r}) but no outlets.pressure_anchor "
+            "is set. The pressure field has no reference and will diverge "
+            "during the systolic surge (verified: FPE at ~t=0.018s on BPM120). "
+            "Add ONE of:\n"
+            "  • outlets.type: '3EWINDKESSEL'  — recommended for arterial flow\n"
+            "  • outlets.pressure_anchor: {outlet: 'outlet1', pressure_mmHg: 80}\n"
+            "  • outlets.type: 'fixedPressure'  — uniform pressure on all outlets"
+        )
 
     def _validate_inlet_profile_name(self, config: dict) -> None:
         """Reject unknown ``inlet.profile`` values.

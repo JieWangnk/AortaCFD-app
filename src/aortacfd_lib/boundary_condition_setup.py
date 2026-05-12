@@ -134,6 +134,56 @@ class BoundaryConditionSetup:
             context["header"] = self.version_adapter.get_foam_file_header("volScalarField", "omega")
             self._write_file_from_template("omega.tpl", os.path.join(zero_dir, "omega"), context)
 
+    def _resolve_pressure_anchor(self, outlet_settings: dict) -> None:
+        """Resolve ``outlets.pressure_anchor`` into a concrete (outlet name,
+        kinematic-pressure value) the Jinja template can use directly.
+
+        Input shapes accepted:
+          - dict with ``outlet: <name|'auto'>`` and ``pressure_mmHg: <float>``
+          - missing → no anchor (intended for Windkessel / steady-inlet cases)
+
+        Writes back a normalised ``pressure_anchor_resolved`` dict with:
+          - ``outlet``: the resolved outlet patch name (real, not 'auto')
+          - ``p_kinematic``: pressure in OpenFOAM kinematic units (m²/s²),
+            i.e. gauge_Pa / rho. Default rho = 1060 kg/m³.
+
+        Logs a clear summary when an anchor is in effect.
+        """
+        anchor = outlet_settings.get("pressure_anchor")
+        if not anchor:
+            return
+
+        outlet_name = anchor.get("outlet", "auto")
+        if outlet_name == "auto":
+            if not self.outlet_patches:
+                self.log.warning("pressure_anchor='auto' but no outlets defined; skipping anchor")
+                return
+            outlet_name = self.outlet_patches[0]
+        elif outlet_name not in self.outlet_patches:
+            raise ValueError(
+                f"outlets.pressure_anchor.outlet={outlet_name!r} is not one of "
+                f"the configured outlets {self.outlet_patches}"
+            )
+
+        p_mmhg = float(anchor.get("pressure_mmHg", 80))  # diastolic default
+        rho = float(self.physics_settings.get("rho") or self.config.get("physics", {}).get("rho") or 1060)
+        # mmHg → Pa (gauge) → kinematic (Pa/rho), matching OpenFOAM 12 incompressibleFluid convention
+        p_kinematic = p_mmhg * MMHG_TO_PA / rho
+
+        resolved = {
+            "outlet": outlet_name,
+            "p_kinematic": p_kinematic,
+            "p_mmHg": p_mmhg,
+        }
+        outlet_settings["pressure_anchor_resolved"] = resolved
+        # Mirror on the instance so callers/tests can inspect post-render.
+        self.outlet_settings["pressure_anchor_resolved"] = resolved
+        self.log.info(
+            f"Pressure anchor: {outlet_name} pinned to {p_mmhg:.1f} mmHg "
+            f"({p_kinematic:.4f} m²/s² kinematic). Other outlets remain "
+            f"as configured ({outlet_settings.get('type', 'zeroGradient')})."
+        )
+
     def _apply_les_stabilisation_override(self):
         """
         Auto-disable hard backflow stabilisation for LES simulations.
@@ -186,6 +236,12 @@ class BoundaryConditionSetup:
         Only calculate Murray's law for Windkessel cases.
         """
         outlet_settings = self.outlet_settings.copy()
+
+        # Resolve outlets.pressure_anchor into a concrete (outlet, kinematic_value)
+        # tuple that the template can read directly. Used to pin one outlet to a
+        # fixed pressure when outlets.type=zeroGradient (otherwise the pressure
+        # field drifts during pulsatile inlet → FPE).
+        self._resolve_pressure_anchor(outlet_settings)
 
         # Only process Windkessel cases (case-insensitive)
         outlet_type = outlet_settings.get("type", "ZEROGRADIENT").upper()
