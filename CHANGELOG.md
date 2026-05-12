@@ -7,14 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added (v1.2.0 epic D continued — pressure anchor for zeroGradient outlets)
+### Added (v1.2.0 epic D continued — pressure anchor for zeroGradient outlets, steady inlets only)
 - **`outlets.pressure_anchor`** config field pins one outlet to a fixed
-  pressure while the rest stay `zeroGradient`. Cardiovascular CFD needs
-  the pressure field anchored somewhere — Windkessel/fixedPressure
-  outlets provide that intrinsically, but `zeroGradient` does not, and
-  with a pulsatile inlet the unanchored pressure field drifts during
-  systole and the solver diverges with FPE (verified empirically in
-  R5 of the config matrix). Shape:
+  pressure while the rest stay `zeroGradient`. Limited to **steady
+  inlets** (`CONSTANT` / `PARABOLIC`) — pulsatile + `zeroGradient` is
+  rejected by the validator regardless of anchor (see "Changed" below).
+  Shape:
   ```json
   "outlets": {
     "type": "zeroGradient",
@@ -24,11 +22,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `outlet: "auto"` resolves to the first outlet patch; `pressure_mmHg`
   defaults to 80 (diastolic).
 - **Validator** `_validate_outlet_pressure_reference()` rejects
-  all-`zeroGradient` configs that lack both a steady inlet and a
-  `pressure_anchor`, with a clear remediation message at config-build
-  time (not 17 minutes into a doomed solve).
+  `outlets.type: zeroGradient` paired with a pulsatile inlet at
+  config-build time (not 17 minutes into a doomed solve), with a
+  remediation pointer to `3EWINDKESSEL` / `fixedPressure`.
 - **Replaces** the previous undocumented `loop.last fixedValue 0`
   fallback in `p.tpl` with the explicit, user-configurable anchor.
+
+### Changed
+- **Pulsatile inlet + `zeroGradient` outlets is now hard-rejected** at
+  config-build, including when a `pressure_anchor` is set. Initial
+  v1.2.0 development assumed one-outlet anchoring would cure the
+  pressure-field drift, but empirical testing on BPM120 (severe
+  pediatric coarctation) showed the solver still diverges in
+  `correctPressure` at t≈0.020s. The textbook "single anchor is
+  sufficient" rule of thumb does not survive coarctation-grade pressure
+  gradients. For pulsatile arterial flows, use `3EWINDKESSEL`
+  (recommended) or `fixedPressure`.
 
 ### Added (v1.2.0 epic D — config variability tests + hardening)
 - **`inlet.type = "MAPPED_PROFILE"`** as the new name for the pre-mapped

@@ -521,7 +521,12 @@ class TestD11_PressureAnchor:
             }
             ConfigBuilder()._validate_outlet_pressure_reference(cfg)  # no raise
 
-    def test_explicit_anchor_allows_pulsatile(self):
+    def test_pulsatile_with_anchor_still_rejected(self):
+        """v1.2.0 policy (option B): the one-outlet pressure_anchor is insufficient
+        on severe-stenosis geometries (verified empirically on BPM120 — solver
+        still diverges at t~0.020s in correctPressure even with the anchor set).
+        Pulsatile + zeroGradient is rejected regardless of anchor.
+        """
         from config.builder import ConfigBuilder
 
         cfg = {
@@ -533,7 +538,25 @@ class TestD11_PressureAnchor:
                 },
             }
         }
-        ConfigBuilder()._validate_outlet_pressure_reference(cfg)  # no raise
+        with pytest.raises(ValueError, match="anchor was set but is insufficient"):
+            ConfigBuilder()._validate_outlet_pressure_reference(cfg)
+
+    def test_anchor_with_steady_inlet_still_allowed(self):
+        """The anchor remains useful for steady (CONSTANT/PARABOLIC) inlets where
+        the pressure field is well-posed by construction."""
+        from config.builder import ConfigBuilder
+
+        for inlet_type in ("CONSTANT", "PARABOLIC"):
+            cfg = {
+                "boundary_conditions": {
+                    "inlet": {"type": inlet_type},
+                    "outlets": {
+                        "type": "zeroGradient",
+                        "pressure_anchor": {"outlet": "outlet1", "pressure_mmHg": 80},
+                    },
+                }
+            }
+            ConfigBuilder()._validate_outlet_pressure_reference(cfg)  # no raise
 
     def test_anchor_renders_fixedValue_on_named_outlet(self, tmp_case_dir):
         """The anchored outlet must render as fixedValue at the kinematic-converted

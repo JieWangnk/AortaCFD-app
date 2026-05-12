@@ -71,13 +71,18 @@ MATRIX: list[dict[str, Any]] = [
     {
         "name": "R5_zeroGradient_outlet",
         "patient": "BPM120",
-        "purpose": "zeroGradient outlets with pressure_anchor pin one outlet to diastolic",
+        "purpose": (
+            "zeroGradient outlets with CONSTANT inlet + pressure_anchor. "
+            "Pulsatile + zeroGradient is rejected by v1.2.0 validator (Option B); "
+            "this variant exercises the path that actually works."
+        ),
         "overrides": {
             "boundary_conditions": {
+                "inlet": {"type": "CONSTANT", "velocity": 0.5, "profile": "plug"},
                 "outlets": {
                     "type": "zeroGradient",
                     "pressure_anchor": {"outlet": "outlet1", "pressure_mmHg": 80},
-                }
+                },
             }
         },
     },

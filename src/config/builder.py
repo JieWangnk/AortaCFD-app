@@ -502,27 +502,32 @@ class ConfigBuilder:
                 )
 
     def _validate_outlet_pressure_reference(self, config: dict) -> None:
-        """Reject all-zeroGradient outlets without a pressure reference.
+        """Reject pulsatile inlet + zeroGradient outlets (with or without anchor).
 
         Cardiovascular CFD needs the pressure field anchored somewhere.
         Windkessel / fixedPressure / resistance outlets provide that anchor
-        intrinsically. ``zeroGradient`` does not — with a pulsatile inlet
-        and no anchor, the pressure field drifts during systole and the
-        solver diverges with an FPE (verified empirically in R5 of the
-        v1.2.0 config matrix).
+        intrinsically. ``zeroGradient`` does not.
 
-        Three valid configurations:
-          1. ``outlets.type`` is Windkessel / fixedPressure / resistance
-             (anchor intrinsic, no further action needed)
-          2. ``inlet.type`` is CONSTANT or PARABOLIC (steady; pressure
-             field finds its own equilibrium)
-          3. ``outlets.pressure_anchor`` explicitly pins one outlet
-             (``zeroGradient`` everywhere except the anchored outlet,
-             which is rendered as ``fixedValue`` at the specified pressure)
+        Empirical finding (R5 of v1.2.0 config matrix, BPM120):
+          - No anchor      → FPE at t≈0.018s  (pressure field has no reference)
+          - Single anchor  → FPE at t≈0.020s  (one anchor is insufficient on
+                                               severe-stenosis geometries; the
+                                               pressure correction step still
+                                               diverges)
+          - Windkessel     → converges (R2/R3 verified)
 
-        Anything else with ``outlets.type: zeroGradient`` is a config
-        mistake that the user wants to know about at config-build time,
-        not 17 minutes into a doomed solve.
+        v1.2.0 rejection policy:
+          - ``outlets.type: zeroGradient`` with pulsatile inlet (TIMEVARYING /
+            WOMERSLEY / MAPPED_PROFILE) is **rejected** at config-build,
+            regardless of whether ``pressure_anchor`` is set. The user must
+            switch to ``3EWINDKESSEL`` or ``fixedPressure``.
+          - Steady inlets (CONSTANT / PARABOLIC) may use ``zeroGradient`` with
+            or without a ``pressure_anchor`` (the pressure field finds its own
+            equilibrium, and the anchor is helpful but optional).
+
+        Anything else with ``outlets.type: zeroGradient`` is a config mistake
+        that the user wants to know about at config-build time, not 17 min
+        into a doomed solve.
         """
         bc = config.get("boundary_conditions") or {}
         outlets = bc.get("outlets") or config.get("outlets") or {}
@@ -530,23 +535,30 @@ class ConfigBuilder:
         if outlet_type != "zerogradient":
             return  # Other types provide their own pressure reference
 
-        if outlets.get("pressure_anchor"):
-            return  # Explicit anchor — well-posed
-
         inlet = bc.get("inlet") or config.get("inlet") or {}
         inlet_type = str(inlet.get("type", "CONSTANT")).upper()
         if inlet_type in ("CONSTANT", "PARABOLIC"):
             return  # Steady inlet — pressure field finds equilibrium
 
+        # Pulsatile + zeroGradient: REJECT, regardless of anchor.
+        has_anchor = bool(outlets.get("pressure_anchor"))
+        anchor_note = (
+            " A pressure_anchor was set but is insufficient on severe-stenosis "
+            "geometries (verified empirically on BPM120: FPE at t≈0.020s even "
+            "with one outlet pinned to 80 mmHg)."
+            if has_anchor
+            else " No pressure_anchor was set, so the pressure field has no "
+            "reference at all."
+        )
         raise ValueError(
-            f"Outlets are 'zeroGradient' with a pulsatile inlet "
-            f"(inlet.type={inlet_type!r}) but no outlets.pressure_anchor "
-            "is set. The pressure field has no reference and will diverge "
-            "during the systolic surge (verified: FPE at ~t=0.018s on BPM120). "
-            "Add ONE of:\n"
+            f"Pulsatile inlet (inlet.type={inlet_type!r}) with "
+            f"outlets.type='zeroGradient' is not supported."
+            f"{anchor_note}\n"
+            "Switch to ONE of:\n"
             "  • outlets.type: '3EWINDKESSEL'  — recommended for arterial flow\n"
-            "  • outlets.pressure_anchor: {outlet: 'outlet1', pressure_mmHg: 80}\n"
-            "  • outlets.type: 'fixedPressure'  — uniform pressure on all outlets"
+            "  • outlets.type: 'fixedPressure' — uniform pressure on all outlets\n"
+            "Or change inlet.type to CONSTANT/PARABOLIC if you need a "
+            "zeroGradient outlet study."
         )
 
     def _validate_inlet_profile_name(self, config: dict) -> None:

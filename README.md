@@ -423,9 +423,16 @@ For pulsatile simulations, backflow stabilisation prevents divergence during dia
 
 `betaN = 0` preserves Windkessel pressure-flow coupling. Only increase for severe instabilities.
 
-### zeroGradient outlets with pressure anchor
+### zeroGradient outlets — steady inlets only
 
-When using `zeroGradient` outlets (e.g. for sensitivity studies that don't need a Windkessel response), the pressure field has no built-in reference and will diverge under a pulsatile inlet during the systolic surge. v1.2.0 catches this at config-build time and exposes `pressure_anchor` to pin one outlet to a fixed pressure:
+`zeroGradient` outlets do not provide a pressure reference, so the pressure field is only well-posed when the inlet itself is steady. v1.2.0 enforces this at config-build time:
+
+| Inlet | `outlets.type: zeroGradient` |
+|---|---|
+| `CONSTANT`, `PARABOLIC` | ✅ allowed (pressure field finds equilibrium) |
+| `TIMEVARYING`, `WOMERSLEY`, `MAPPED_PROFILE` | ❌ rejected — use `3EWINDKESSEL` or `fixedPressure` |
+
+For steady inlets, you can optionally pin one outlet to a fixed pressure (helps convergence and gives a clinically meaningful reference):
 
 ```json
 {
@@ -439,9 +446,9 @@ When using `zeroGradient` outlets (e.g. for sensitivity studies that don't need 
 }
 ```
 
-The named outlet is rendered as `fixedValue` at the kinematic-converted pressure; the other outlets stay `zeroGradient`. The solver now has the reference it needs.
+The named outlet is rendered as `fixedValue` at the kinematic-converted pressure; the other outlets stay `zeroGradient`.
 
-Steady inlets (`CONSTANT`, `PARABOLIC`) do **not** require a `pressure_anchor` — the pressure field finds its own equilibrium and the validator allows the unanchored config.
+> **Why not allow `pressure_anchor` with a pulsatile inlet?** We tried — empirically, on BPM120's severe pediatric coarctation, even one outlet pinned to 80 mmHg with three unanchored zeroGradient siblings still diverges during systole (FPE in `correctPressure` at t≈0.020s). The single-anchor textbook rule that works on benign geometries doesn't survive coarctation-grade pressure gradients. For pulsatile arterial flows, use `3EWINDKESSEL` (recommended) or `fixedPressure`.
 
 ---
 
