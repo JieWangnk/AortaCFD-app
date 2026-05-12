@@ -438,7 +438,7 @@ class WkSetup:
             times, flow_inlet = self._read_inlet_flow(inlet_csv_path, self.inlet_settings["data_type"], area_inlet)
             return float(np.mean(flow_inlet)), times, flow_inlet
 
-        if inlet_type == "MRI":
+        if inlet_type in ("MAPPED_PROFILE", "MRI"):
             mean_q_inlet = self._compute_mri_mean_inlet_flow(area_inlet)
             return mean_q_inlet, None, None
 
@@ -475,7 +475,10 @@ class WkSetup:
         raise ValueError(f"Unknown inlet type: {inlet_type}")
 
     def _compute_mri_mean_inlet_flow(self, area_inlet: float) -> float:
-        """Compute mean inlet flow from prepared MRI boundaryData velocity fields."""
+        """Compute mean inlet flow from prepared mapped-profile boundaryData velocity fields.
+
+        Method name kept for backwards compatibility; works for any pre-mapped source.
+        """
         mri_velocity_dir = self._resolve_mri_velocity_directory()
         flow_direction = self._compute_inlet_flow_direction()
         time_dirs = [
@@ -485,7 +488,7 @@ class WkSetup:
         ]
 
         if not time_dirs:
-            raise ValueError(f"No MRI time directories found in {mri_velocity_dir}")
+            raise ValueError(f"No mapped-profile time directories found in {mri_velocity_dir}")
 
         flow_samples = []
         for time_dir in sorted(time_dirs, key=float):
@@ -501,20 +504,23 @@ class WkSetup:
             flow_samples.append(float(np.mean(normal_velocity) * area_inlet))
 
         if not flow_samples:
-            raise ValueError(f"No MRI velocity samples found in {mri_velocity_dir}")
+            raise ValueError(f"No mapped-profile velocity samples found in {mri_velocity_dir}")
 
         mean_q_inlet = float(np.mean(flow_samples))
         if mean_q_inlet < 0:
             self.log.warning(
-                f"MRI inlet mean flow projected negative ({mean_q_inlet*1e6:.2f} mL/s); using magnitude for q_init"
+                f"Mapped-profile mean flow projected negative ({mean_q_inlet*1e6:.2f} mL/s); "
+                "using magnitude for q_init"
             )
             mean_q_inlet = abs(mean_q_inlet)
 
-        self.log.info(f"MRI inlet: mean flow Q = {mean_q_inlet*1e6:.2f} mL/s from {len(flow_samples)} time steps")
+        self.log.info(
+            f"Mapped-profile inlet: mean flow Q = {mean_q_inlet*1e6:.2f} mL/s from {len(flow_samples)} time steps"
+        )
         return mean_q_inlet
 
     def _resolve_mri_velocity_directory(self) -> str:
-        """Resolve the MRI velocity directory, preferring prepared boundaryData in the case directory."""
+        """Resolve the mapped-profile velocity directory, preferring prepared boundaryData in the case directory."""
         inlet_patch_name = self.geom_settings["inlet_keywords_ordered"]
         boundary_data_dir = os.path.join(self.case_dir, "constant", "boundaryData", inlet_patch_name)
         if os.path.isdir(boundary_data_dir):
@@ -522,7 +528,9 @@ class WkSetup:
 
         mri_source_dir = self.inlet_settings.get("file", self.inlet_settings.get("source_dir", ""))
         if not mri_source_dir:
-            raise ValueError("MRI inlet type requires 'file' or 'source_dir' to locate velocity data")
+            raise ValueError(
+                "Mapped-profile (MAPPED_PROFILE / MRI) inlet requires 'file' or 'source_dir' " "to locate velocity data"
+            )
 
         if os.path.isabs(mri_source_dir) and os.path.isdir(mri_source_dir):
             return mri_source_dir
@@ -540,7 +548,7 @@ class WkSetup:
         if os.path.isdir(mri_source_dir):
             return mri_source_dir
 
-        raise FileNotFoundError(f"MRI inlet source directory not found: {mri_source_dir}")
+        raise FileNotFoundError(f"Mapped-profile inlet source directory not found: {mri_source_dir}")
 
     def _compute_inlet_flow_direction(self) -> np.ndarray:
         """Compute the positive inlet flow direction based on orientation settings and outlet geometry."""
@@ -560,7 +568,7 @@ class WkSetup:
             outlet_centers.append(outlet_center)
 
         if not outlet_centers:
-            self.log.warning("MRI inlet flow direction: no outlet centers found, using inlet normal as-is")
+            self.log.warning("Mapped-profile flow direction: no outlet centers found, using inlet normal as-is")
             return inlet_normal
 
         # Use edge-ring method for robust inward direction
@@ -747,6 +755,15 @@ class WkSetup:
             Dictionary of flow split ratios (sum to 1.0)
         """
         result = {}
+
+        # Hard-reject negative inputs up-front. Without this, a typo like
+        # {"outlet1": -20, "outlet2": 120} produces a negative R/C/Z and the
+        # solver diverges with no clear cause.
+        for name, value in flow_split_config.items():
+            if name in ("_rest", "_method"):
+                continue
+            if isinstance(value, (int, float)) and value < 0:
+                raise ValueError(f"flow_split[{name!r}] = {value}: ratios and percentages must be non-negative.")
 
         # Remove special keys
         rest_mode = flow_split_config.pop("_rest", None)

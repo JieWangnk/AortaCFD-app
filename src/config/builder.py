@@ -465,6 +465,63 @@ class ConfigBuilder:
             if end_time <= 0:
                 self.logger.warning(f"⚠️  simulation_control.end_time must be positive, got: {end_time}")
 
+        # Hard-validate user-facing string-substituted fields that the templates
+        # would otherwise pass through to OpenFOAM unchecked.
+        self._validate_turbulence_model_names(config)
+        self._validate_inlet_profile_name(config)
+
+    def _validate_turbulence_model_names(self, config: dict) -> None:
+        """Reject unknown ``physics.rans_model`` / ``physics.les_model`` values up-front.
+
+        These are interpolated literally into ``momentumTransport`` — a typo
+        (e.g. ``"wale"`` lower-case) used to surface only at solver-launch time
+        with a cryptic OpenFOAM error. v1.2.0 catches it at config-build time.
+        """
+        from .schema import LES_MODEL_ALLOWLIST, RANS_MODEL_ALLOWLIST
+
+        physics = config.get("physics", {})
+        model_name = str(physics.get("model", "laminar")).lower()
+
+        if model_name.startswith("rans") and "rans_model" in physics:
+            rans = physics["rans_model"]
+            if rans not in RANS_MODEL_ALLOWLIST:
+                raise ValueError(
+                    f"Unknown physics.rans_model='{rans}'. "
+                    f"Allowed values: {sorted(RANS_MODEL_ALLOWLIST)}. "
+                    f"OpenFOAM 12 is case-sensitive — 'komegasst' != 'kOmegaSST'."
+                )
+
+        if model_name.startswith("les") and "les_model" in physics:
+            les = physics["les_model"]
+            if les not in LES_MODEL_ALLOWLIST:
+                raise ValueError(
+                    f"Unknown physics.les_model='{les}'. "
+                    f"Allowed values: {sorted(LES_MODEL_ALLOWLIST)}. "
+                    f"OpenFOAM 12 is case-sensitive — 'wale' != 'WALE'."
+                )
+
+    def _validate_inlet_profile_name(self, config: dict) -> None:
+        """Reject unknown ``inlet.profile`` values.
+
+        The dispatch in ``inlet_mapping.py:716-775`` is a string compare; a
+        typo used to silently fall through to ``parabolic`` with no warning.
+        """
+        from .schema import InletProfile
+
+        inlet = config.get("inlet") or config.get("boundary_conditions", {}).get("inlet", {})
+        if not inlet:
+            return
+        profile = inlet.get("profile")
+        if profile is None:
+            return
+        allowed = {member.value for member in InletProfile}
+        if str(profile).lower().strip() not in allowed:
+            raise ValueError(
+                f"Unknown inlet.profile='{profile}'. "
+                f"Allowed values: {sorted(allowed)}. "
+                f"Profiles are case-insensitive."
+            )
+
     def _validate_windkessel_parameters(self, config: dict) -> None:
         """
         Validate Windkessel model parameters are within physiological ranges.

@@ -374,11 +374,13 @@ After meshing, AortaCFD writes `reports/mesh_audit.json`:
 | Type | Description | Data Source |
 |------|-------------|------------|
 | `CONSTANT` | Steady flow | `cardiac_output`, `flowrate`, or `velocity` in config |
-| `TIMEVARYING` | Pulsatile from CSV | `csv_file` with time and flow columns |
-| `WOMERSLEY` | Analytical pulsatile | Computed from flow waveform |
-| `MRI` | Patient-specific 4D flow | Pre-processed OpenFOAM boundary data |
+| `TIMEVARYING` | Pulsatile from CSV waveform — pipeline computes spatial profile | `csv_file` with time and flow columns |
+| `WOMERSLEY` | Analytical pulsatile from Fourier-decomposed CSV | Computed from flow waveform |
+| `MAPPED_PROFILE` | User-supplied pre-mapped per-face per-timestep data (4D MRI, Doppler, 1D model, synthetic — any source) | Directory of OpenFOAM `timeVaryingMappedFixedValue` snapshots; pointed to by `file` or `source_dir` |
 
-Profile options: `plug`, `parabolic`, `womersley`, `wall_distance`
+> **Note on renaming (v1.2.0):** `MAPPED_PROFILE` was previously called `MRI`. The old name still works but emits a `DeprecationWarning`; it will be removed in v2.0. The path is unchanged — the rename only reflects that this branch consumes pre-mapped boundary data regardless of source modality.
+
+Profile options (computed by `TIMEVARYING` / `CONSTANT`): `plug`, `parabolic`, `womersley`, `wall_distance`, `elliptical`. `MAPPED_PROFILE` doesn't use these — the spatial profile is whatever the source file provides.
 
 The workflow writes an inlet audit report (`reports/inlet_audit.json`) documenting the derived flow rate, velocity, inlet geometry, Womersley number, and profile recommendation.
 

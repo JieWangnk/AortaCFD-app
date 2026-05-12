@@ -242,62 +242,80 @@ class PrepareBoundaryDataTask(Task):
             inlet_type = inlet_config.get("type", "TIMEVARYING").upper()
 
             if inlet_type == "MRI":
-                # MRI inlet type: pre-processed 4D flow MRI data in OpenFOAM format
-                # User provides directory with time directories containing U files
-                mri_source_dir = inlet_config.get("file", inlet_config.get("source_dir", ""))
-                if not mri_source_dir:
-                    raise ValueError("MRI inlet type requires 'file' parameter pointing to inlet data directory")
+                import warnings
+
+                warnings.warn(
+                    "inlet.type='MRI' is deprecated; use inlet.type='MAPPED_PROFILE' instead. "
+                    "The path is unchanged — the rename only reflects that this branch consumes "
+                    "pre-mapped face-level boundaryData (any source, not just MRI). "
+                    "MRI will be removed in v2.0.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                inlet_type = "MAPPED_PROFILE"
+
+            if inlet_type == "MAPPED_PROFILE":
+                # Pre-mapped inlet data in OpenFOAM timeVaryingMappedFixedValue format.
+                # User provides a directory with time directories containing U files
+                # (source can be 4D MRI, Doppler, 1D model output, etc.).
+                mapped_source_dir = inlet_config.get("file", inlet_config.get("source_dir", ""))
+                if not mapped_source_dir:
+                    raise ValueError(
+                        "MAPPED_PROFILE inlet type requires 'file' parameter pointing to inlet data directory"
+                    )
 
                 # Resolve the source directory path
-                if not os.path.isabs(mri_source_dir):
+                if not os.path.isabs(mapped_source_dir):
                     # Try relative to patient case directory first
                     patient_case_dir = self.config.get("patient_case_directory", "")
-                    if patient_case_dir and os.path.isdir(os.path.join(patient_case_dir, mri_source_dir)):
-                        mri_source_dir = os.path.join(patient_case_dir, mri_source_dir)
-                    elif os.path.isdir(mri_source_dir):
+                    if patient_case_dir and os.path.isdir(os.path.join(patient_case_dir, mapped_source_dir)):
+                        mapped_source_dir = os.path.join(patient_case_dir, mapped_source_dir)
+                    elif os.path.isdir(mapped_source_dir):
                         pass  # Already a valid relative path
                     else:
-                        raise FileNotFoundError(f"MRI inlet source directory not found: {mri_source_dir}")
+                        raise FileNotFoundError(f"Mapped-profile inlet source not found: {mapped_source_dir}")
 
-                if not os.path.isdir(mri_source_dir):
-                    raise FileNotFoundError(f"MRI inlet source directory not found: {mri_source_dir}")
+                if not os.path.isdir(mapped_source_dir):
+                    raise FileNotFoundError(f"Mapped-profile inlet source not found: {mapped_source_dir}")
 
-                self.log.info(f"Using pre-processed MRI inlet data from: {mri_source_dir}")
+                self.log.info(f"Using pre-mapped inlet boundaryData from: {mapped_source_dir}")
 
                 # Find time directories in source
                 source_time_dirs = [
                     d
-                    for d in os.listdir(mri_source_dir)
-                    if os.path.isdir(os.path.join(mri_source_dir, d)) and d.replace(".", "", 1).isdigit()
+                    for d in os.listdir(mapped_source_dir)
+                    if os.path.isdir(os.path.join(mapped_source_dir, d)) and d.replace(".", "", 1).isdigit()
                 ]
 
                 if not source_time_dirs:
-                    raise ValueError(f"No time directories found in MRI source: {mri_source_dir}")
+                    raise ValueError(f"No time directories found in mapped-profile source: {mapped_source_dir}")
 
                 source_times = sorted([float(d) for d in source_time_dirs])
 
                 # Determine cardiac cycle from the data (max time in source)
                 cardiac_cycle = max(source_times)
                 context["cardiac_cycle"] = cardiac_cycle
-                self.log.info(f"MRI inlet data: {len(source_times)} time points, cardiac cycle = {cardiac_cycle}s")
+                self.log.info(
+                    f"Mapped-profile inlet: {len(source_times)} time points, cardiac cycle = {cardiac_cycle}s"
+                )
 
                 # Copy time directories from source to boundaryData
                 for time_str in source_time_dirs:
-                    src_path = os.path.join(mri_source_dir, time_str)
+                    src_path = os.path.join(mapped_source_dir, time_str)
                     dst_path = os.path.join(boundary_data_inlet_dir, time_str)
                     if os.path.exists(dst_path):
                         shutil.rmtree(dst_path)
                     shutil.copytree(src_path, dst_path)
-                    self.log.debug(f"Copied MRI inlet data: {time_str}")
+                    self.log.debug(f"Copied mapped-profile inlet data: {time_str}")
 
                 self.log.info(f"Copied {len(source_time_dirs)} time directories to boundaryData")
 
-                # Interpolate MRI velocity data from MRI source points onto mesh face centres.
+                # Interpolate mapped velocity data from source points onto mesh face centres.
                 # The mesh face centres were already written to boundaryData/inlet/points (line 210).
                 # This ensures the flowrate is preserved regardless of mesh resolution.
-                mri_points_file = os.path.join(mri_source_dir, "points")
+                mri_points_file = os.path.join(mapped_source_dir, "points")
                 if os.path.exists(mri_points_file):
-                    self.log.info("Interpolating MRI velocity data onto mesh face centres...")
+                    self.log.info("Interpolating mapped-profile velocity onto mesh face centres...")
                     self._interpolate_mri_to_mesh_faces(mri_points_file, boundary_data_inlet_dir, source_time_dirs)
 
                 # Set up data for multiple cycles using symbolic links
@@ -305,7 +323,7 @@ class PrepareBoundaryDataTask(Task):
                 cycle_setup = CycleDataSetup(config=self.config, cardiac_cycle=cardiac_cycle, case_directory=case_dir)
                 cycle_setup.execute()
 
-                # Save MRI inlet audit
+                # Save mapped-profile inlet audit
                 try:
                     from aortacfd_lib.inlet_qc import InletAudit
 
@@ -319,11 +337,11 @@ class PrepareBoundaryDataTask(Task):
                         inlet_radius_eq_m=0.0,
                         inlet_center=[0, 0, 0],
                         inlet_normal=[0, 0, 0],
-                        csv_file=str(mri_source_dir),
-                        data_type="MRI_4D_flow",
+                        csv_file=str(mapped_source_dir),
+                        data_type="mapped_profile",
                         n_points=n_spatial_points,
                         detected_period_s=cardiac_cycle,
-                        inlet_type="MRI",
+                        inlet_type="MAPPED_PROFILE",
                         profile="patient-specific",
                         orientation="from_data",
                         n_output_timesteps=len(source_time_dirs),
@@ -331,7 +349,7 @@ class PrepareBoundaryDataTask(Task):
                     reports_dir = os.path.join(os.path.dirname(case_dir), "reports")
                     os.makedirs(reports_dir, exist_ok=True)
                     audit.save_json(Path(os.path.join(reports_dir, "inlet_audit.json")))
-                    self.log.info(f"MRI inlet audit saved: {reports_dir}/inlet_audit.json")
+                    self.log.info(f"Mapped-profile inlet audit saved: {reports_dir}/inlet_audit.json")
                 except Exception as e:
                     self.log.warning(f"InletQC audit skipped: {e}")
 
@@ -547,22 +565,25 @@ class PrepareBoundaryDataTask(Task):
             self.log.debug("No .obj files found to clean up.")
 
     def _interpolate_mri_to_mesh_faces(self, mri_points_file, boundary_data_dir, time_dirs):
-        """Interpolate MRI velocity data from MRI source points onto mesh face centres.
+        """Interpolate mapped-profile velocity data onto mesh face centres.
 
         The mesh face centres (already in boundaryData/points) are used as target points.
-        MRI source points and velocity data are used as source. This ensures the flowrate
-        is conserved regardless of mesh resolution.
+        The source's per-face points + velocity data are used as source. This ensures
+        the flowrate is conserved regardless of mesh resolution.
+
+        Method name kept for backwards compatibility; works for any mapped source
+        (4D MRI, Doppler, 1D model, etc.).
         """
         from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
 
-        # Read MRI source points
+        # Read source (mapped-profile) points
         mri_pts = self._read_bare_points(mri_points_file)
 
         # Read mesh face centres (already written to boundaryData/points by the mesh step)
         mesh_pts_file = os.path.join(boundary_data_dir, "points")
         mesh_pts = self._read_bare_points(mesh_pts_file)
 
-        self.log.info(f"Mapping {len(mri_pts)} MRI points → {len(mesh_pts)} mesh face centres")
+        self.log.info(f"Mapping {len(mri_pts)} source points → {len(mesh_pts)} mesh face centres")
 
         # Build interpolators lazily (reuse across timesteps for the same component)
         # Process all time directories
@@ -571,7 +592,7 @@ class PrepareBoundaryDataTask(Task):
             if not os.path.exists(u_file):
                 continue
 
-            # Read MRI velocity at this timestep
+            # Read source velocity at this timestep
             mri_vels = self._read_bare_velocities(u_file)
 
             # Interpolate each component: linear with nearest-neighbor fallback

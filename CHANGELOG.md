@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (v1.2.0 epic D — config variability tests + hardening)
+- **`inlet.type = "MAPPED_PROFILE"`** as the new name for the pre-mapped
+  per-face per-timestep inlet branch (formerly called `MRI`). The path
+  is unchanged — the rename reflects that the branch consumes pre-mapped
+  `timeVaryingMappedFixedValue` data regardless of source modality
+  (4D MRI, Doppler, 1D model output, synthetic, etc.). `MRI` continues
+  to work as a deprecated alias and emits a `DeprecationWarning`;
+  removal scheduled for v2.0.
+- **`InletProfile` schema enum** validates `inlet.profile` at
+  config-build time (was a silent string compare). Typos like
+  `walldistance` now raise `ValueError` with the allowed list instead
+  of falling through to `parabolic`.
+- **`physics.rans_model` / `physics.les_model` allow-lists** in
+  `src/config/schema.py`. Unknown models (e.g. lowercase `wale`) used
+  to surface as a cryptic OpenFOAM error hours into a solver run;
+  v1.2.0 catches them at `ConfigBuilder.build()`.
+- **`tests/test_config_matrix.py`** — 13 new mock-OpenFOAM integration
+  tests rotating one config axis at a time (Epic D: MAPPED_PROFILE
+  end-to-end, RAS+zeroGradient, LES auto-stabilization, precise
+  numerics, hardening fuzz, flow-split edge cases). Runs in ~0.5s
+  alongside the rest of the suite.
+
+### Fixed
+- **`WkSetup._parse_custom_flow_split` rejects negative values.**
+  Previously, a typo like `{"outlet1": -20, "outlet2": 120}` silently
+  produced a negative `R/C/Z` and the solver diverged with no clear
+  cause. Now raises `ValueError` at config-build time.
+
 ### Added (v1.2.0 epic B + A.3 — UX polish and benchmark scaffold)
 - **`--end-time T` CLI flag** on `run_patient.py` / `aortacfd` overrides
   the simulation `endTime` (in seconds) regardless of `cardiac_cycle ×

@@ -54,15 +54,75 @@ class NumericsProfile(str, Enum):
 class InletType(str, Enum):
     """Inlet boundary condition types.
 
-    The code treats MRI as a time-varying inlet backed by a folder of
-    OpenFOAM-format snapshots (see setup_tasks.py, wk_setup.py, U.tpl).
+    ``MAPPED_PROFILE`` (formerly ``MRI``) consumes a folder of pre-mapped,
+    per-timestep, per-face velocity snapshots in OpenFOAM
+    ``timeVaryingMappedFixedValue`` format. The source can be 4D flow MRI,
+    Doppler, a 1D model, or anything else that produces face-level data —
+    the pipeline doesn't process raw MRI itself. ``MRI`` remains as a
+    backwards-compatible alias and emits a deprecation warning at config
+    load time; removal scheduled for v2.0.
     """
 
     CONSTANT = "CONSTANT"
     TIMEVARYING = "TIMEVARYING"
     WOMERSLEY = "WOMERSLEY"
     PARABOLIC = "PARABOLIC"
-    MRI = "MRI"
+    MAPPED_PROFILE = "MAPPED_PROFILE"
+    MRI = "MRI"  # deprecated alias; use MAPPED_PROFILE
+
+
+class InletProfile(str, Enum):
+    """Spatial profile functions for CONSTANT / TIMEVARYING inlets.
+
+    Read by ``inlet_mapping.py``. ``MAPPED_PROFILE`` ignores this — the
+    spatial profile is whatever the source data provides. Misspellings
+    used to fall through silently to ``parabolic``; v1.2.0 validates the
+    value at config-load time.
+    """
+
+    PLUG = "plug"
+    PARABOLIC = "parabolic"
+    POISEUILLE = "poiseuille"
+    WOMERSLEY = "womersley"
+    WOMERSLEY_FFT = "womersley_fft"
+    WALL_DISTANCE = "wall_distance"
+    ELLIPTICAL = "elliptical"
+    HYBRID_JET = "hybrid_jet"
+    BLUNTED = "blunted"
+    BLUNTED_PARABOLIC = "blunted_parabolic"
+    POWER_LAW = "power_law"
+
+
+# RANS turbulence models recognised by the OpenFOAM momentumTransport template.
+# The user-facing ``physics.rans_model`` value is substituted literally into
+# the dictionary; an unknown value used to surface only at solver-launch
+# time with a cryptic OpenFOAM error. v1.2.0 validates against this list.
+RANS_MODEL_ALLOWLIST = frozenset(
+    {
+        "kOmegaSST",
+        "kOmegaSSTLM",
+        "kOmegaSSTSAS",
+        "kEpsilon",
+        "realizableKE",
+        "RNGkEpsilon",
+        "LaunderSharmaKE",
+        "v2f",
+        "SpalartAllmaras",
+        "laminar",  # fall-through, equivalent to physics.model = laminar
+    }
+)
+
+# LES subgrid models recognised by the OpenFOAM momentumTransport template.
+LES_MODEL_ALLOWLIST = frozenset(
+    {
+        "WALE",
+        "Smagorinsky",
+        "dynamicKEqn",
+        "dynamicLagrangian",
+        "kEqn",
+        "DeardorffDiffStress",
+    }
+)
 
 
 class OutletType(str, Enum):
