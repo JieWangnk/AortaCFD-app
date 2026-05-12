@@ -100,6 +100,24 @@ def preflight() -> None:
         sys.exit(2)
 
 
+def _absolutise_inlet_paths(config: dict, patient_dir: Path) -> None:
+    """Rewrite relative inlet.csv_file / inlet.file to absolute paths anchored
+    at the patient's cases_input dir. Necessary when the temp config lives
+    outside cases_input/, because PrepareBoundaryDataTask resolves these
+    paths relative to the config file's parent."""
+    for key in ("inlet", "boundary_conditions"):
+        block = config.get(key, {})
+        inlet = block.get("inlet") if key == "boundary_conditions" else block
+        if not isinstance(inlet, dict):
+            continue
+        for path_key in ("csv_file", "file", "source_dir"):
+            val = inlet.get(path_key)
+            if isinstance(val, str) and not os.path.isabs(val):
+                resolved = (patient_dir / val).resolve()
+                if resolved.exists():
+                    inlet[path_key] = str(resolved)
+
+
 def run_variant(variant: dict, repo_root: Path, results_dir: Path, end_time: float) -> dict:
     name = variant["name"]
     patient = variant["patient"]
@@ -108,11 +126,13 @@ def run_variant(variant: dict, repo_root: Path, results_dir: Path, end_time: flo
 
     print(f"\n{'=' * 78}\n=== {name} — {purpose}\n{'=' * 78}", flush=True)
 
-    default_config_path = repo_root / "cases_input" / patient / "config.json"
+    patient_dir = repo_root / "cases_input" / patient
+    default_config_path = patient_dir / "config.json"
     with default_config_path.open() as f:
         config = json.load(f)
     if overrides:
         config = deep_merge(config, overrides)
+    _absolutise_inlet_paths(config, patient_dir)
 
     temp_config_path = results_dir / f"{name}_config.json"
     with temp_config_path.open("w") as f:

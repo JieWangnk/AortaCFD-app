@@ -177,3 +177,6 @@ validation/QUICK_START_*.md
 validation/REALISTIC_*.md
 validation/VALIDATION_*.md
 validation/analyzers/*_README.md
+
+# Live-solver config-matrix runs (scripts/run_config_matrix.py)
+config_matrix_results/
