@@ -44,13 +44,35 @@ python run_patient.py --version       # → AortaCFD 1.1.1
 python run_patient.py --list          # → BPM120, PAT002, VOL04
 ```
 
-OpenFOAM 12 must be sourced before running the `mesh`, `solver`, or `reconstruct` steps:
+Run `python run_patient.py --doctor` after install — it checks Python version, importable deps, sample STLs, OpenFOAM sourced, and disk space.
+
+### Installing OpenFOAM 12
+
+OpenFOAM 12 (Foundation version, **not** ESI) must be installed and sourced for the `mesh`, `solver`, and `reconstruct` steps. The `case` and `postprocess` steps work without it — useful for config sanity-checks.
+
+**Ubuntu / Debian** (recommended; uses Foundation's apt repository):
+
+```bash
+sudo sh -c "wget -O - https://dl.openfoam.org/gpg.key > /etc/apt/trusted.gpg.d/openfoam.asc"
+sudo add-apt-repository "deb http://dl.openfoam.org/ubuntu $(lsb_release -cs) main"
+sudo apt update
+sudo apt install openfoam12
+```
+
+**macOS** — Foundation OpenFOAM 12 is not pre-built for macOS; use Docker:
+
+```bash
+docker pull openfoamorg/openfoam12-ubuntu:latest
+docker run -it -v $(pwd):/case openfoamorg/openfoam12-ubuntu bash
+```
+
+**Other distros / from source** — see the official guide: <https://openfoam.org/download/>
+
+Then source it before running the OpenFOAM-dependent steps:
 
 ```bash
 source /opt/openfoam12/etc/bashrc
 ```
-
-The `case` step (generates OpenFOAM dictionaries) and `postprocess` step work without OpenFOAM sourced — useful for quick config sanity-checks.
 
 ### HPC / non-default OpenFOAM installs
 

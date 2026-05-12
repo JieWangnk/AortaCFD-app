@@ -245,11 +245,20 @@ class PatientCaseRunner:
         # Determine run directory
         run_dir = self._resolve_run_directory(patient_output_dir, options)
 
+        # Optional: prune oldest run_*/ siblings to keep at most max_runs (new run included).
+        # Only triggered for fresh runs (not --update mode, which reuses an existing dir).
+        if options and options.get("max_runs", 0) > 0 and not options.get("update_mode"):
+            self._prune_old_runs(patient_output_dir, keep=int(options["max_runs"]), new_run=run_dir)
+
         # Build numerics configuration
         numerics_config, profile_name = self._build_numerics_config(config)
 
         # Build merged configuration
         merged_config = self._build_merged_config(case_info, config, numerics_config, profile_name)
+
+        # Apply CLI overrides that must take precedence over config defaults
+        if options and "end_time" in options:
+            merged_config.setdefault("simulation_control", {})["end_time"] = float(options["end_time"])
 
         return {
             "config": merged_config,
@@ -296,6 +305,30 @@ class PatientCaseRunner:
             run_dir.mkdir(exist_ok=True)
 
         return run_dir
+
+    def _prune_old_runs(self, patient_output_dir: Path, keep: int, new_run: Path) -> None:
+        """Delete oldest run_*/ siblings so that at most `keep` remain (new_run is preserved).
+
+        Used by the --max-runs CLI flag to keep output/ from growing without bound.
+        Safe by default: skips anything that isn't a directory matching run_*.
+        """
+        import shutil
+
+        run_dirs = sorted(
+            (p for p in patient_output_dir.glob("run_*") if p.is_dir()),
+            key=lambda p: p.stat().st_mtime,
+        )
+        candidates = [p for p in run_dirs if p.resolve() != new_run.resolve()]
+        excess = len(run_dirs) - keep
+        if excess <= 0:
+            return
+        to_delete = candidates[:excess]
+        for p in to_delete:
+            self.logger.info(f"--max-runs={keep}: pruning {p}")
+            try:
+                shutil.rmtree(p)
+            except OSError as e:
+                self.logger.warning(f"Could not delete {p}: {e}")
 
     def _build_numerics_config(self, config: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
         """

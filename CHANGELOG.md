@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (v1.2.0 epic B + A.3 — UX polish and benchmark scaffold)
+- **`--end-time T` CLI flag** on `run_patient.py` / `aortacfd` overrides
+  the simulation `endTime` (in seconds) regardless of `cardiac_cycle ×
+  number_of_cycles`. Lets a user run a short demo simulation without
+  editing config files. Pairs with `--quick` for fast first-time runs.
+- **`--max-runs N` CLI flag** prunes the oldest `run_*/` subdirectories
+  under `output/<patient>/` so at most `N` remain (excluding the
+  current run). Default `0` keeps current behaviour. Each AortaCFD run
+  is ~150 MB, so a researcher iterating on configs will fill disk
+  quickly without this.
+- **`--doctor` CLI subcommand** runs environment diagnostics:
+  Python ≥3.10, all declared runtime deps importable, sample STLs
+  under `cases_input/*/*.stl` parse cleanly, OpenFOAM 12 sourced (soft
+  warning if not), ≥5 GB free in `output/`. Exits 0 (green) / 1 (red).
+- **`benchmark` pytest marker** registered in `pyproject.toml` and a
+  new `tests/benchmarks/test_bpm120_benchmark.py` that validates a
+  produced `qoi_summary.json` against `benchmarks/expected_values.json`
+  (published Wang et al. Table 3 values for BPM120). Skipped unless
+  `BPM120_QOI=path/to/qoi_summary.json` is set. CI hook target.
+- **`benchmarks/expected_values.json`** as the single machine-readable
+  source of truth for benchmark expected values + tolerances. Wired
+  into the new tests. Placeholders for PAT002 and VOL04 (A.2 milestone).
+
+### Changed
+- **Hemodynamics postprocess** emits a clear `UserWarning` (instead of
+  silently zeroing `tawss_*`/`osi_*`/`rrt_*`) when the simulation is
+  shorter than `skip_cycles × cardiac_cycle`. The message names the
+  exact `--end-time` value needed to populate the time-averaged QoIs.
+- **`qoi_summary.json` schema** gained a top-level
+  `_metadata.tawss_status` field with one of `OK`, `INCOMPLETE_CYCLES`,
+  `NO_FIELDS`, `STEADY`. Lets downstream pipelines distinguish "TAWSS
+  is genuinely small" from "TAWSS was never computed". Backwards-
+  compatible additive change.
+- **Hemodynamics report (`hemodynamics_report.txt`)** prints an explicit
+  "TIME-AVERAGED METRICS — NOT AVAILABLE" section with a remediation
+  hint when `tawss_status == INCOMPLETE_CYCLES`, rather than just
+  omitting the block.
+- **README install section** now includes platform-specific OpenFOAM 12
+  install commands (Ubuntu apt + Foundation repo, macOS Docker, link to
+  the official guide). Earlier versions only told users to `source` it
+  without saying where to get it.
+
 ## [1.1.1] - 2026-05-11
 
 Pre-release hygiene pass: dead code, lint, security, CI gate alignment, and

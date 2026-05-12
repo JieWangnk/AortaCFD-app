@@ -46,6 +46,11 @@ steps:
     info_group.add_argument("--version", "-V", action="version", version=f"AortaCFD {_aortacfd_version}")
     info_group.add_argument("--list", "-l", action="store_true", help="list available cases in cases_input/")
     info_group.add_argument("--list-steps", action="store_true", help="show workflow steps and their dependencies")
+    info_group.add_argument(
+        "--doctor",
+        action="store_true",
+        help="run environment diagnostics (Python, deps, STLs, OpenFOAM, disk space)",
+    )
 
     # Workflow control
     workflow_group = parser.add_argument_group("workflow control")
@@ -81,6 +86,12 @@ steps:
     profile_choices = list(_PCR().get_available_profiles().keys())
     config_group.add_argument("--profile", metavar="NAME", choices=profile_choices, help="override simulation profile")
     config_group.add_argument("--quick", action="store_true", help="coarse-mesh fast-settings test mode")
+    config_group.add_argument(
+        "--end-time",
+        metavar="T",
+        type=float,
+        help="override simulation endTime in seconds (overrides config and cardiac-cycle calculation)",
+    )
 
     # Output and update
     output_group = parser.add_argument_group("output and update")
@@ -95,6 +106,13 @@ steps:
     )
     output_group.add_argument(
         "--postprocess", "-p", metavar="RUN_DIR", help="re-run post-processing on an existing run directory"
+    )
+    output_group.add_argument(
+        "--max-runs",
+        metavar="N",
+        type=int,
+        default=0,
+        help="after creating a new run, prune oldest run_*/ subdirs so at most N remain " "(0 = no pruning, default)",
     )
 
     # Other
@@ -214,6 +232,12 @@ def main():
 
     runner = PatientCaseRunner()
 
+    # Environment diagnostics
+    if args.doctor:
+        from .doctor import run_doctor
+
+        sys.exit(run_doctor())
+
     # List available patients
     if args.list:
         patients = runner.list_available_patients()
@@ -274,6 +298,13 @@ def main():
         options["profile"] = args.profile
     if args.run_name:
         options["run_name"] = args.run_name
+    if args.end_time is not None:
+        if args.end_time <= 0:
+            print(f"Error: --end-time must be > 0 (got {args.end_time})")
+            sys.exit(1)
+        options["end_time"] = args.end_time
+    if args.max_runs > 0:
+        options["max_runs"] = args.max_runs
 
     # Get config override
     config_override = args.config

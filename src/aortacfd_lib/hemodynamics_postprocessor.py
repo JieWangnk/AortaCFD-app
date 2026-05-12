@@ -76,6 +76,13 @@ class HemodynamicsResults:
     # 5-20% error in regions with oscillatory flow.
     tawss_is_approximate: bool = False
 
+    # Status of time-averaged hemodynamics computation. One of:
+    #   "OK"                 — full cycle data available, TAWSS/OSI/RRT computed
+    #   "INCOMPLETE_CYCLES"  — t_final < skip_cycles * cardiac_cycle; values are zero
+    #   "NO_FIELDS"          — wallShearStressMean field missing in time directories
+    #   "STEADY"             — steady inlet, TAWSS/OSI/RRT not applicable
+    tawss_status: str = "OK"
+
     # Per-cycle TAWSS (for convergence checking)
     per_cycle_tawss: List[float] = field(default_factory=list)
 
@@ -359,7 +366,18 @@ class HemodynamicsPostProcessor:
 
         valid_dirs = [d for d in time_dirs if float(d.name) >= skip_time]
         if not valid_dirs:
-            self.log.warning(f"No time directories after skip_cycles ({skip_time}s)")
+            import warnings
+
+            t_final = max((float(d.name) for d in time_dirs), default=0.0)
+            msg = (
+                f"TAWSS/OSI/RRT not computed: simulation t_final={t_final:.3f}s is below "
+                f"skip_cycles × cardiac_cycle = {self.skip_cycles} × {self.cardiac_cycle}s "
+                f"= {skip_time:.3f}s. Re-run with --end-time >= {skip_time + self.cardiac_cycle:.2f} "
+                f"to populate time-averaged hemodynamics."
+            )
+            self.log.warning(msg)
+            warnings.warn(msg, UserWarning, stacklevel=2)
+            results.tawss_status = "INCOMPLETE_CYCLES"
             return
 
         # Get TAWSS from wallShearStressMean
@@ -368,6 +386,7 @@ class HemodynamicsPostProcessor:
 
         if not mean_file.exists():
             self.log.warning(f"wallShearStressMean not found at {latest}")
+            results.tawss_status = "NO_FIELDS"
             return
 
         try:
@@ -852,7 +871,18 @@ boundaryField
             f.write(f"  Minimum:        {results.wss_min:.4f} Pa\n")
             f.write("\n")
 
-            if results.is_pulsatile and results.tawss_mean > 0:
+            if results.is_pulsatile and results.tawss_status == "INCOMPLETE_CYCLES":
+                f.write("-" * 70 + "\n")
+                f.write("TIME-AVERAGED METRICS — NOT AVAILABLE\n")
+                f.write("-" * 70 + "\n")
+                f.write(
+                    f"  TAWSS / OSI / RRT were not computed because the simulation\n"
+                    f"  was shorter than skip_cycles × cardiac_cycle.\n"
+                    f"  Re-run with a longer endTime (recommend "
+                    f"  >= {(self.skip_cycles + 1) * results.cardiac_cycle:.2f} s) to populate these.\n"
+                )
+                f.write("\n")
+            elif results.is_pulsatile and results.tawss_mean > 0:
                 f.write("-" * 70 + "\n")
                 f.write("TIME-AVERAGED METRICS (Pulsatile Flow)\n")
                 f.write("-" * 70 + "\n")
@@ -1046,6 +1076,7 @@ boundaryField
                 "is_pulsatile": results.is_pulsatile,
                 "cardiac_cycle_s": results.cardiac_cycle,
                 "peak_systole_time_s": results.peak_systole_time if results.peak_systole_detected else None,
+                "tawss_status": results.tawss_status,
             },
             "qoi": {
                 "pressure_drop_mean_mmhg": {

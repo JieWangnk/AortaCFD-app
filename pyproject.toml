@@ -104,6 +104,7 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks integration tests",
     "e2e: marks end-to-end tests requiring OpenFOAM",
+    "benchmark: validates simulation outputs against published reference values (requires BPM120_QOI env var)",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

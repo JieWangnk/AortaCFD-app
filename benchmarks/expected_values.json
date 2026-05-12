@@ -1,0 +1,36 @@
+{
+  "_metadata": {
+    "description": "Expected QoI values for AortaCFD benchmark cases. Single source of truth for tests/benchmarks/.",
+    "source": "Wang et al., Table 3 (BPM120). PAT002 and VOL04 pending v1.2.0 A.2 milestone."
+  },
+  "cases": {
+    "BPM120": {
+      "production": {
+        "config": "cases_input/BPM120/config.json",
+        "profile": "standard",
+        "expected": {
+          "pressure_drop_mean_mmhg": {"value": 11.26, "tolerance_rel": 0.05},
+          "tawss_p99_pa":           {"value": 14.12, "tolerance_rel": 0.10},
+          "osi_mean_masked":        {"value": null,  "tolerance_abs": 0.02, "_comment": "value pending; placeholder for tolerance shape"}
+        },
+        "mesh_cells_min": 1700000,
+        "mesh_cells_max": 2100000
+      },
+      "tutorial_coarse": {
+        "config": "cases_input/BPM120/config_tutorial_coarse.json",
+        "profile": "standard",
+        "expected": {
+          "pressure_drop_outlet4_peak_mmhg": {"value": 44.0, "tolerance_rel": 0.20, "_comment": "1-cycle coarse mesh, Windkessel not equilibrated"}
+        },
+        "mesh_cells_min": 80000,
+        "mesh_cells_max": 140000
+      }
+    },
+    "PAT002": {
+      "_status": "TODO — populate during v1.2.0 A.2 milestone with full standard-profile run"
+    },
+    "VOL04": {
+      "_status": "TODO — populate during v1.2.0 A.2 milestone with full standard-profile run"
+    }
+  }
+}
