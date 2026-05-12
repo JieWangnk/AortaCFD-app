@@ -244,6 +244,15 @@ def main() -> int:
         help="simulation duration in seconds (default 0.05 — enough to catch solver crashes)",
     )
     parser.add_argument(
+        "--cool-down",
+        type=int,
+        default=0,
+        metavar="SECONDS",
+        help="pause N seconds between variants so the machine can cool off "
+        "(important on laptops — mpirun foamRun is thermally intense). "
+        "Default 0; recommended 300 (5 min) for back-to-back BPM120 runs.",
+    )
+    parser.add_argument(
         "--list",
         action="store_true",
         help="list available variants and exit",
@@ -271,9 +280,12 @@ def main() -> int:
             sys.stderr.write(f"ERROR: unknown variants: {sorted(missing)}\n")
             return 2
 
-    print(f"Running {len(selected)} variant(s); end_time={args.end_time}s; results → {results_dir}")
+    print(
+        f"Running {len(selected)} variant(s); end_time={args.end_time}s; "
+        f"cool_down={args.cool_down}s; results → {results_dir}"
+    )
     results = []
-    for variant in selected:
+    for idx, variant in enumerate(selected):
         try:
             results.append(run_variant(variant, repo_root, results_dir, args.end_time))
         except Exception as exc:
@@ -288,6 +300,11 @@ def main() -> int:
                     "error": str(exc),
                 }
             )
+
+        # Cool-down between variants (laptop thermal budget). Skip after the last one.
+        if args.cool_down > 0 and idx < len(selected) - 1:
+            print(f"\n  💤 Cooling down for {args.cool_down}s before next variant…", flush=True)
+            time.sleep(args.cool_down)
 
     (results_dir / "summary.json").write_text(json.dumps(results, indent=2))
 
