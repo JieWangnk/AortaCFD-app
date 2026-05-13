@@ -650,3 +650,107 @@ class TestD11_PressureAnchor:
             bcs = BoundaryConditionSetup(config, str(tmp_case_dir))
             with pytest.raises(ValueError, match="not one of the configured outlets"):
                 bcs.write_all_bc_files()
+
+
+# =============================================================================
+# D.12 — Per-outlet BC types validator (v1.4.0 schema)
+# =============================================================================
+
+
+class TestD12_PerOutletValidator:
+    """outlets.per_outlet lets users override the outlet type per outlet
+    (e.g. outlet1: fixedValue, outlet2-4: 3EWINDKESSEL). v1.4.0 ships
+    schema + validator for it; rendering and wk_setup integration come
+    in subsequent commits."""
+
+    @staticmethod
+    def _cfg(per_outlet=None, default_type="3EWINDKESSEL", inlet_type="TIMEVARYING"):
+        outlets = {"type": default_type, "windkessel_settings": {}}
+        if per_outlet is not None:
+            outlets["per_outlet"] = per_outlet
+        return {
+            "geometry": {
+                "case_name": "test",
+                "wall_keywords_ordered": "wall",
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet1", "outlet2", "outlet3", "outlet4"],
+            },
+            "boundary_conditions": {
+                "inlet": {"type": inlet_type},
+                "outlets": outlets,
+            },
+        }
+
+    def test_per_outlet_unknown_name_rejected(self):
+        from config.builder import ConfigBuilder
+
+        cfg = self._cfg(per_outlet={"outlet99": {"type": "fixedValue", "pressure_mmHg": 80}})
+        with pytest.raises(ValueError, match="not in geometry.outlet_keywords_ordered"):
+            ConfigBuilder()._validate_outlet_per_outlet(cfg)
+
+    def test_per_outlet_unknown_type_rejected(self):
+        from config.builder import ConfigBuilder
+
+        cfg = self._cfg(per_outlet={"outlet1": {"type": "ZeroGrad"}})  # wrong case
+        with pytest.raises(ValueError, match="is not a valid outlet type"):
+            ConfigBuilder()._validate_outlet_per_outlet(cfg)
+
+    def test_per_outlet_missing_type_rejected(self):
+        from config.builder import ConfigBuilder
+
+        cfg = self._cfg(per_outlet={"outlet1": {"pressure_mmHg": 80}})  # no 'type'
+        with pytest.raises(ValueError, match="missing the required 'type' key"):
+            ConfigBuilder()._validate_outlet_per_outlet(cfg)
+
+    def test_per_outlet_windkessel_without_settings_rejected(self):
+        """Windkessel override needs windkessel_settings — either inline or global."""
+        from config.builder import ConfigBuilder
+
+        cfg = self._cfg(
+            per_outlet={"outlet1": {"type": "3EWINDKESSEL"}},
+            default_type="zeroGradient",  # no global windkessel_settings
+        )
+        # Strip the global windkessel_settings that _cfg adds by default
+        cfg["boundary_conditions"]["outlets"].pop("windkessel_settings", None)
+        with pytest.raises(ValueError, match="requires windkessel_settings"):
+            ConfigBuilder()._validate_outlet_per_outlet(cfg)
+
+    def test_per_outlet_valid_mixed_config_passes(self):
+        from config.builder import ConfigBuilder
+
+        cfg = self._cfg(
+            per_outlet={
+                "outlet1": {"type": "fixedValue", "pressure_mmHg": 80},
+                "outlet2": {"type": "zeroGradient"},
+                "outlet3": {"type": "3EWINDKESSEL"},  # inherits global windkessel_settings
+            }
+        )
+        ConfigBuilder()._validate_outlet_per_outlet(cfg)  # no raise
+
+    def test_per_outlet_anchoring_allows_pulsatile_with_default_zerogradient(self):
+        """The pressure-reference validator must accept a pulsatile + default-
+        zeroGradient config when per_outlet pins at least one outlet to a
+        pressure-anchoring type (fixedValue / Windkessel / fixedPressure /
+        resistance). Previously this combo was hard-rejected."""
+        from config.builder import ConfigBuilder
+
+        cfg = self._cfg(
+            default_type="zeroGradient",
+            inlet_type="TIMEVARYING",
+            per_outlet={
+                "outlet1": {"type": "3EWINDKESSEL"},
+                "outlet2": {"type": "fixedValue", "pressure_mmHg": 80},
+            },
+        )
+        # Should pass — outlet1 + outlet2 anchor the pressure field even
+        # though the default for outlet3+4 is zeroGradient.
+        ConfigBuilder()._validate_outlet_pressure_reference(cfg)  # no raise
+
+    def test_default_zerogradient_pulsatile_still_rejected_without_anchors(self):
+        """Sanity check: removing the per_outlet overrides re-triggers the
+        existing v1.2.0 rejection."""
+        from config.builder import ConfigBuilder
+
+        cfg = self._cfg(default_type="zeroGradient", inlet_type="TIMEVARYING")  # no per_outlet
+        with pytest.raises(ValueError, match="zeroGradient"):
+            ConfigBuilder()._validate_outlet_pressure_reference(cfg)

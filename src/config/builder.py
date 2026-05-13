@@ -469,6 +469,7 @@ class ConfigBuilder:
         # would otherwise pass through to OpenFOAM unchecked.
         self._validate_turbulence_model_names(config)
         self._validate_inlet_profile_name(config)
+        self._validate_outlet_per_outlet(config)
         self._validate_outlet_pressure_reference(config)
 
     def _validate_turbulence_model_names(self, config: dict) -> None:
@@ -501,6 +502,91 @@ class ConfigBuilder:
                     f"OpenFOAM 12 is case-sensitive — 'wale' != 'WALE'."
                 )
 
+    def _validate_outlet_per_outlet(self, config: dict) -> None:
+        """Validate the optional ``outlets.per_outlet`` block (v1.4.0 schema).
+
+        Shape (all fields optional; ``per_outlet`` is itself optional):
+
+            outlets:
+              type: 3EWINDKESSEL                 # default for unspecified outlets
+              windkessel_settings: {...}         # default Windkessel params
+              per_outlet:
+                outlet1:                         # override for one outlet
+                  type: fixedValue
+                  pressure_mmHg: 80
+                outlet4:
+                  type: zeroGradient
+
+        Validates:
+          - Every key in ``per_outlet`` is an outlet name listed in
+            ``geometry.outlet_keywords_ordered`` (catches typos).
+          - Every override has a valid ``type`` from ``OutletType``.
+          - Windkessel-typed overrides have ``windkessel_settings`` either
+            inline or as a fallback in the outer ``outlets`` block.
+          - ``fixedValue`` / ``fixedPressure`` overrides have
+            ``pressure_mmHg`` (or a defaultable value).
+        """
+        from .schema import OutletType
+
+        bc = config.get("boundary_conditions") or {}
+        outlets = bc.get("outlets") or config.get("outlets") or {}
+        per_outlet = outlets.get("per_outlet")
+        if not per_outlet:
+            return  # not used — nothing to validate
+
+        if not isinstance(per_outlet, dict):
+            raise ValueError(
+                f"outlets.per_outlet must be a dict mapping outlet name → "
+                f"settings dict; got {type(per_outlet).__name__}"
+            )
+
+        configured_outlets = config.get("geometry", {}).get("outlet_keywords_ordered", []) or []
+        if isinstance(configured_outlets, str):
+            configured_outlets = [configured_outlets]
+        allowed_types = {t.value for t in OutletType}
+
+        for outlet_name, spec in per_outlet.items():
+            if outlet_name not in configured_outlets:
+                raise ValueError(
+                    f"outlets.per_outlet[{outlet_name!r}] refers to an outlet "
+                    f"that is not in geometry.outlet_keywords_ordered "
+                    f"({configured_outlets}). Check the spelling."
+                )
+            if not isinstance(spec, dict):
+                raise ValueError(
+                    f"outlets.per_outlet[{outlet_name!r}] must be a dict with at "
+                    f"least a 'type' key; got {type(spec).__name__}"
+                )
+            outlet_type = spec.get("type")
+            if outlet_type is None:
+                raise ValueError(
+                    f"outlets.per_outlet[{outlet_name!r}] is missing the required "
+                    f"'type' key. Allowed: {sorted(allowed_types)}."
+                )
+            if outlet_type not in allowed_types:
+                raise ValueError(
+                    f"outlets.per_outlet[{outlet_name!r}].type={outlet_type!r} "
+                    f"is not a valid outlet type. Allowed: {sorted(allowed_types)}."
+                )
+            if outlet_type in ("2EWINDKESSEL", "3EWINDKESSEL"):
+                has_inline_wk = "windkessel_settings" in spec
+                has_global_wk = "windkessel_settings" in outlets
+                if not (has_inline_wk or has_global_wk):
+                    raise ValueError(
+                        f"outlets.per_outlet[{outlet_name!r}].type={outlet_type!r} "
+                        "requires windkessel_settings (either inline on this "
+                        "outlet, or as a fallback in the outer outlets block)."
+                    )
+            if outlet_type in ("fixedValue", "fixedPressure"):
+                if "pressure_mmHg" not in spec:
+                    # Allow the omission — the renderer will use a sensible
+                    # default (diastolic = 80 mmHg). But log it so the user
+                    # knows what they're getting.
+                    self.logger.info(
+                        f"outlets.per_outlet[{outlet_name!r}].type={outlet_type!r} "
+                        "with no pressure_mmHg — using diastolic default (80 mmHg)."
+                    )
+
     def _validate_outlet_pressure_reference(self, config: dict) -> None:
         """Reject pulsatile inlet + zeroGradient outlets (with or without anchor).
 
@@ -529,18 +615,31 @@ class ConfigBuilder:
         that the user wants to know about at config-build time, not 17 min
         into a doomed solve.
         """
+        from .schema import PRESSURE_ANCHORING_OUTLET_TYPES
+
         bc = config.get("boundary_conditions") or {}
         outlets = bc.get("outlets") or config.get("outlets") or {}
         outlet_type = str(outlets.get("type", "")).lower()
         if outlet_type != "zerogradient":
-            return  # Other types provide their own pressure reference
+            return  # Default outlet type provides its own pressure reference
+
+        # If outlets.per_outlet overrides any outlet to a pressure-anchoring
+        # type (Windkessel, fixedValue, fixedPressure, resistance), the
+        # pressure field IS anchored even though the default type is
+        # zeroGradient. Allow the config.
+        per_outlet = outlets.get("per_outlet", {}) or {}
+        per_outlet_types = {
+            str(spec.get("type", "")) for spec in per_outlet.values() if isinstance(spec, dict)
+        }
+        if per_outlet_types & PRESSURE_ANCHORING_OUTLET_TYPES:
+            return  # At least one outlet is pinned via per_outlet — well-posed
 
         inlet = bc.get("inlet") or config.get("inlet") or {}
         inlet_type = str(inlet.get("type", "CONSTANT")).upper()
         if inlet_type in ("CONSTANT", "PARABOLIC"):
             return  # Steady inlet — pressure field finds equilibrium
 
-        # Pulsatile + zeroGradient: REJECT, regardless of anchor.
+        # Pulsatile + zeroGradient (everywhere): REJECT, regardless of anchor.
         has_anchor = bool(outlets.get("pressure_anchor"))
         anchor_note = (
             " A pressure_anchor was set but is insufficient on severe-stenosis "

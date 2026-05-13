@@ -126,12 +126,34 @@ LES_MODEL_ALLOWLIST = frozenset(
 
 
 class OutletType(str, Enum):
-    """Outlet boundary condition types."""
+    """Outlet boundary condition types.
+
+    Accepted as ``outlets.type`` (default for all outlets) or, from v1.4.0,
+    inside an ``outlets.per_outlet[<name>].type`` override block. Templates
+    in p.tpl / U.tpl dispatch on the resolved per-outlet type.
+    """
 
     ZEROGRADIENT = "zeroGradient"
     FIXEDVALUE = "fixedValue"
+    FIXEDPRESSURE = "fixedPressure"
+    RESISTANCE = "resistance"
     WINDKESSEL_2E = "2EWINDKESSEL"
     WINDKESSEL_3E = "3EWINDKESSEL"
+
+
+# Outlet types that intrinsically anchor the pressure field (no extra
+# pressure_anchor or per-outlet fixedValue needed). Used by the validator
+# in _validate_outlet_pressure_reference to allow zeroGradient-mixed
+# configurations as long as at least one outlet pins pressure.
+PRESSURE_ANCHORING_OUTLET_TYPES = frozenset(
+    {
+        "fixedValue",
+        "fixedPressure",
+        "resistance",
+        "2EWINDKESSEL",
+        "3EWINDKESSEL",
+    }
+)
 
 
 class ReferenceRadiusStrategy(str, Enum):
