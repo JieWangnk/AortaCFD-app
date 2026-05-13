@@ -450,6 +450,8 @@ The named outlet is rendered as `fixedValue` at the kinematic-converted pressure
 
 > **Why not allow `pressure_anchor` with a pulsatile inlet?** We tried — empirically, on BPM120's severe pediatric coarctation, even one outlet pinned to 80 mmHg with three unanchored zeroGradient siblings still diverges during systole (FPE in `correctPressure` at t≈0.020s). The single-anchor textbook rule that works on benign geometries doesn't survive coarctation-grade pressure gradients. For pulsatile arterial flows, use `3EWINDKESSEL` (recommended) or `fixedPressure`.
 
+> **Known limitation — zeroGradient outlets on severe-stenosis geometries:** Even the *steady* `CONSTANT` + `zeroGradient` + `pressure_anchor` combination is fragile on BPM120's severe pediatric coarctation. We observed `PIMPLE: Not converged` followed by adaptive-`deltaT` collapse to underflow at t≈0.001 s, regardless of numerics tuning (we tried `nOuterCorrectors` 3→8, `max_co` 1.0→0.5, inlet velocity 0.5→0.2 m/s — none survived more than a fraction of a millisecond). The GAMG pressure solver can't reliably handle the matrix conditioning when an outlet is pressure-unconstrained on this geometry. **Use Windkessel outlets for severe-stenosis cases** (verified to converge across all numerics profiles).
+
 ---
 
 ## Hemodynamic Metrics

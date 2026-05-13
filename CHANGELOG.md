@@ -39,6 +39,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gradients. For pulsatile arterial flows, use `3EWINDKESSEL`
   (recommended) or `fixedPressure`.
 
+### Known limitations (deferred to v1.3.0+)
+- **`zeroGradient` outlets are fragile on severe-stenosis geometries
+  regardless of inlet type.** Steady `CONSTANT` + `zeroGradient` +
+  `pressure_anchor` is the physically well-posed combination per the
+  validator, but on BPM120's pediatric coarctation we observed
+  `PIMPLE: Not converged` followed by adaptive-`deltaT` collapse to
+  underflow at t≈0.001 s — even with `nOuterCorrectors` boosted 3→8,
+  `max_co` tightened 1.0→0.5, and inlet velocity reduced 0.5→0.2 m/s.
+  The GAMG pressure solver can't reliably handle the matrix
+  conditioning when an outlet is pressure-unconstrained on this
+  geometry. R5 (the zG live-solver matrix entry) was therefore removed
+  from `scripts/run_config_matrix.py`; the rendering path remains
+  exercised by 5 unit tests in `tests/test_config_matrix.py
+  TestD11_PressureAnchor`. A future release will investigate either
+  (a) using PCG with a stronger preconditioner instead of GAMG for
+  this matrix structure, or (b) re-introducing the zG live test on a
+  less pathological patient case.
+
 ### Added (v1.2.0 epic D — config variability tests + hardening)
 - **`inlet.type = "MAPPED_PROFILE"`** as the new name for the pre-mapped
   per-face per-timestep inlet branch (formerly called `MRI`). The path

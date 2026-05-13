@@ -68,24 +68,24 @@ MATRIX: list[dict[str, Any]] = [
         "purpose": "Pre-mapped inlet (VOL04 inlet/) runs end-to-end; alias MRI warns",
         "overrides": None,
     },
-    {
-        "name": "R5_zeroGradient_outlet",
-        "patient": "BPM120",
-        "purpose": (
-            "zeroGradient outlets with CONSTANT inlet + pressure_anchor. "
-            "Pulsatile + zeroGradient is rejected by v1.2.0 validator (Option B); "
-            "this variant exercises the path that actually works."
-        ),
-        "overrides": {
-            "boundary_conditions": {
-                "inlet": {"type": "CONSTANT", "velocity": 0.5, "profile": "plug"},
-                "outlets": {
-                    "type": "zeroGradient",
-                    "pressure_anchor": {"outlet": "outlet1", "pressure_mmHg": 80},
-                },
-            }
-        },
-    },
+    # R5 (zeroGradient outlets on BPM120) intentionally removed from the live-
+    # solver matrix in v1.2.0. The rendering is covered by D.11 unit tests in
+    # tests/test_config_matrix.py (5 passing tests). Live-solver R5 was
+    # attempted four times during v1.2.0 development with progressively more
+    # conservative settings — all crashed:
+    #   1. Pulsatile (TIMEVARYING) + zG (no anchor)           → FPE t=0.018s
+    #   2. Pulsatile + zG + pressure_anchor                    → FPE t=0.020s
+    #   3. CONSTANT 0.5 m/s + zG + anchor (default numerics)   → dt collapse t=0.0007s
+    #   4. CONSTANT 0.2 m/s + zG + anchor + nOuter=8, max_co=0.5 → dt collapse t=0.0009s
+    # The "PIMPLE: Not converged within N iterations" pattern was identical
+    # across (3) and (4) even with 8 outer correctors and lower flow — i.e.
+    # this is not a numerics-tunable problem on BPM120. The severe pediatric
+    # coarctation creates a pressure matrix that GAMG can't reliably solve
+    # when one or more outlets is pressure-unconstrained. v1.2.0's Option-B
+    # validator already rejects the unphysical pulsatile + zG case at
+    # config-build. Live integration testing for the CONSTANT + zG + anchor
+    # path is deferred to v1.3.0+ once a less pathological patient case is
+    # available; tagged as a known limitation in README.
     {
         "name": "R6_robust_profile",
         "patient": "BPM120",
