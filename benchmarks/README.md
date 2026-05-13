@@ -30,6 +30,12 @@ capacitor has not fully equilibrated. This is expected and not a failure.
 python run_patient.py BPM120 --steps all
 ```
 
+**To reproduce the paper-reference mesh:**
+
+```bash
+python run_patient.py BPM120 --config cases_input/BPM120/config_paper_reference.json --steps all
+```
+
 ### Expected outputs (BPM120 standard, paper reference)
 
 | Metric | Expected | Source |
@@ -38,7 +44,15 @@ python run_patient.py BPM120 --steps all
 | TAWSS p99 | 14.12 Pa | Standard profile, Table 3 |
 | P_sys / P_dia | ~142 / 65 mmHg | Windkessel 120/80 target |
 
-> **Mesh-cell note (verified 2026-05-13):** The current `cases_input/BPM120/config.json` produces **~246K cells** with the default `legacy_surface` mesh strategy, or **~317K cells** if you switch to `mesh_strategy: "adaptive_span"` with `default_cells_across_span: 16`. **Neither reproduces the paper's "~1.9M" claim with the v1.2.x mesh-setup code.** The paper's mesh used additional settings (higher span target, custom surface-refinement levels, or older mesh-setup code) that aren't currently exposed in `config.json`. A future release will either expose those knobs or update the paper-reference values to match what's reproducible today. Until then, the pressure_drop / TAWSS targets above are the paper's values, not values you'll reach on a 246K-cell mesh.
+> **Mesh-cell investigation (verified 2026-05-13):** the paper's "~1.9M cells" turned out to be a function of `cells_per_diameter`, not the `span_target` notation suggested in earlier versions of this doc. Empirical scaling on BPM120 (mesh-only runs verified on a laptop, no solver):
+>
+> | `cells_per_diameter` | Final cell count | Wall time (8 cores) |
+> |---|---|---|
+> | 15 (`config.json` default) | 246,151 | ~2 min |
+> | 30 | 1,170,935 | ~9 min |
+> | **40** (`config_paper_reference.json`) | **2,223,645** | ~14 min |
+>
+> Cells scale as `~cpd^2.25` on this geometry (tube-like, surface-driven). The default `config.json` uses **cpd=15** for fast onboarding. To reproduce the paper's Table 3 values, use **`cases_input/BPM120/config_paper_reference.json`** (`cpd=40`, ~2.2M cells — slightly over the paper's 1.9M but within typical mesh-sensitivity tolerance). The `adaptive_span` strategy with `default_cells_across_span: 16` is **not** the lever for this — it produces ~317K cells regardless of span value, because the algorithm trades blockMesh background coarseness against local span refinement.
 
 ### Scheme sensitivity (paper values, change one line in JSON)
 

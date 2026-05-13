@@ -2,7 +2,7 @@
   "_metadata": {
     "description": "Expected QoI values for AortaCFD benchmark cases. Single source of truth for tests/benchmarks/.",
     "source": "Wang et al. Table 3 (BPM120 production). Tutorial-coarse values from 2026-04-09 reference run on /media/Elements1.",
-    "verified_2026_05_13": "BPM120 production mesh-cell expectation lowered from 1.7-2.1M to 240-330K — the current v1.2.x config produces ~246K cells (legacy_surface) or ~317K (adaptive_span, span=16); the paper's '1.9M' setting is not reproducible with current code. See benchmarks/README.md mesh-cell note."
+    "verified_2026_05_13": "BPM120 production mesh-cell investigation closed. cells_per_diameter (not span_target) is the lever: cpd=15 → 246K, cpd=30 → 1.17M, cpd=40 → 2.22M (cells ~ cpd^2.25 on BPM120). config_paper_reference.json uses cpd=40 to reach the paper's ~1.9M target (verified 2.22M, slightly over but within mesh-sensitivity tolerance). Default config.json keeps cpd=15 for fast onboarding."
   },
   "cases": {
     "BPM120": {
@@ -15,8 +15,9 @@
           "tawss_p99_pa":           {"value": 14.12, "tolerance_rel": 0.10},
           "osi_mean_masked":        {"value": null,  "tolerance_abs": 0.02, "_comment": "value pending; placeholder for tolerance shape"}
         },
-        "mesh_cells_min": 240000,
-        "mesh_cells_max": 330000
+        "mesh_cells_min": 2000000,
+        "mesh_cells_max": 2400000,
+        "_mesh_note": "Reproduce via cases_input/BPM120/config_paper_reference.json (cpd=40, verified 2.22M cells 2026-05-13). Default config.json uses cpd=15 (~246K cells) for fast onboarding and is NOT the paper reference."
       },
       "production_robust": {
         "config": "cases_input/BPM120/config.json (with numerics.profile=robust)",
@@ -26,8 +27,9 @@
           "pressure_drop_mean_mmhg": {"value": 10.82, "tolerance_rel": 0.05},
           "tawss_p99_pa":           {"value": 17.88, "tolerance_rel": 0.10}
         },
-        "mesh_cells_min": 240000,
-        "mesh_cells_max": 330000
+        "mesh_cells_min": 2000000,
+        "mesh_cells_max": 2400000,
+        "_mesh_note": "Reproduce via cases_input/BPM120/config_paper_reference.json (cpd=40, verified 2.22M cells 2026-05-13). Default config.json uses cpd=15 (~246K cells) for fast onboarding and is NOT the paper reference."
       },
       "production_precise": {
         "config": "cases_input/BPM120/config.json (with numerics.profile=precise)",
@@ -37,8 +39,9 @@
           "pressure_drop_mean_mmhg": {"value": 11.32, "tolerance_rel": 0.05},
           "tawss_p99_pa":           {"value": 13.99, "tolerance_rel": 0.10}
         },
-        "mesh_cells_min": 240000,
-        "mesh_cells_max": 330000
+        "mesh_cells_min": 2000000,
+        "mesh_cells_max": 2400000,
+        "_mesh_note": "Reproduce via cases_input/BPM120/config_paper_reference.json (cpd=40, verified 2.22M cells 2026-05-13). Default config.json uses cpd=15 (~246K cells) for fast onboarding and is NOT the paper reference."
       },
       "tutorial_coarse": {
         "config": "cases_input/BPM120/config_tutorial_coarse.json",
