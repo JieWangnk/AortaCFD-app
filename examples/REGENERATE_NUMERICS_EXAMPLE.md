@@ -393,7 +393,7 @@ See [MESH_QUALITY_WARNINGS.md](../docs/MESH_QUALITY_WARNINGS.md) for details.
 
 ## Further Reading
 
-- [REGENERATE_NUMERICS_USAGE.md](../docs/REGENERATE_NUMERICS_USAGE.md) - Complete usage guide
+- [REGENERATE_NUMERICS_USAGE.md](../docs/_internal/REGENERATE_NUMERICS_USAGE.md) - Complete usage guide
 - [MESH_QUALITY_WARNINGS.md](../docs/MESH_QUALITY_WARNINGS.md) - Critical warnings
 - [MESH_ADAPTIVE_SOLVER_SYSTEM.md](../docs/MESH_ADAPTIVE_SOLVER_SYSTEM.md) - Technical details
 - [MESH_ADAPTIVE_INTEGRATION.md](../docs/MESH_ADAPTIVE_INTEGRATION.md) - Integration guide

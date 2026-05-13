@@ -210,8 +210,8 @@ After 8 sessions, you should be able to:
 
 - `README.md` — Quick start and configuration reference
 - `examples/README_CONFIG.md` — Full configuration documentation
-- `docs/PIMPLE_SOLVER_SETTINGS.md` — Solver settings deep dive
-- `docs/PROFILE_SETTINGS_EVIDENCE.md` — Why profiles are set as they are
-- `docs/BACKFLOW_STABILIZATION_ANALYSIS.md` — Stabilisation details
+- `docs/_internal/PIMPLE_SOLVER_SETTINGS.md` — Solver settings deep dive
+- `docs/_internal/PROFILE_SETTINGS_EVIDENCE.md` — Why profiles are set as they are
+- `docs/_internal/BACKFLOW_STABILIZATION_ANALYSIS.md` — Stabilisation details
 - OpenFOAM User Guide: https://doc.cfd.direct/openfoam/user-guide-v12/
 - CFD Direct notes on PIMPLE: https://doc.cfd.direct/notes/cfd-general-principles/the-pimple-algorithm

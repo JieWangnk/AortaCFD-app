@@ -7,9 +7,9 @@ aggregation scoped to the current batch outputs.
 
 Examples:
     python run_batch.py
-    python run_batch.py --cases PAT002 PAT003 --workers 2
+    python run_batch.py --cases 0014_H_AO_COA BPM120 --workers 2
     python run_batch.py --steps case,mesh,boundary
-    python run_batch.py --config-list PAT002:config_mesh10.json PAT002:config_mesh12.json -w 2
+    python run_batch.py --config-list 0014_H_AO_COA:config_mesh10.json 0014_H_AO_COA:config_mesh12.json -w 2
     python run_batch.py --slurm
 """
 
@@ -45,7 +45,7 @@ def _run_single_case(args: Tuple[str, str, Dict]) -> Dict:
 
     Args:
         args: Tuple of (output_id, patient_id, options_dict).
-              output_id  - name used for output directory (e.g. "PAT002_mesh10").
+              output_id  - name used for output directory (e.g. "0014_H_AO_COA_mesh10").
                            For normal runs this equals patient_id.
               patient_id - actual case directory name under cases_input/.
 
@@ -281,7 +281,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--config-list', nargs='+', metavar='CASE:CONFIG',
         help=('Run the same patient with multiple configs. '
-              'Format: CASE_ID:config_file.json (e.g. PAT002:config_mesh10.json). '
+              'Format: CASE_ID:config_file.json (e.g. 0014_H_AO_COA:config_mesh10.json). '
               'Config paths are relative to cases_input/CASE_ID/.'),
     )
     parser.add_argument(
@@ -333,12 +333,12 @@ def main() -> None:
     cases_dir = Path(args.cases_dir)
 
     # ── Build job list: list of (output_id, patient_id, config_path | None) ──
-    # output_id  = directory name under output/ (e.g. "PAT002_mesh10")
-    # patient_id = actual case dir under cases_input/ (e.g. "PAT002")
+    # output_id  = directory name under output/ (e.g. "0014_H_AO_COA_mesh10")
+    # patient_id = actual case dir under cases_input/ (e.g. "0014_H_AO_COA")
     jobs: List[Tuple[str, str, Optional[str]]] = []
 
     if args.config_list:
-        # --config-list PAT002:config_mesh10.json PAT002:config_mesh12.json ...
+        # --config-list 0014_H_AO_COA:config_mesh10.json 0014_H_AO_COA:config_mesh12.json ...
         for entry in args.config_list:
             if ':' not in entry:
                 print(f'Error: --config-list entries must be CASE_ID:CONFIG_FILE, got: {entry}')
@@ -351,7 +351,7 @@ def main() -> None:
             if not Path(config_path).is_file():
                 print(f'Error: config file not found: {config_path}')
                 sys.exit(1)
-            # output_id: "PAT002_mesh10" from "config_mesh10.json"
+            # output_id: "0014_H_AO_COA_mesh10" from "config_mesh10.json"
             suffix = Path(config_name).stem.replace('config_', '')
             output_id = f'{case_id}_{suffix}'
             jobs.append((output_id, case_id, config_path))

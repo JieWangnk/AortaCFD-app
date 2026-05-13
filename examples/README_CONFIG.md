@@ -293,7 +293,7 @@ Mesh generation parameters.
 }
 ```
 
-**Resolution Guidelines** (see [MESH_SPECIFICATION_GUIDE.md](../docs/MESH_SPECIFICATION_GUIDE.md)):
+**Resolution Guidelines** (see [MESH_SPECIFICATION_GUIDE.md](../docs/_internal/MESH_SPECIFICATION_GUIDE.md)):
 
 | Category | cells/D | Typical Elements | Use Case |
 |----------|---------|------------------|----------|

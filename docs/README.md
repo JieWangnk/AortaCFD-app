@@ -88,7 +88,7 @@ The code implements three mesh quality presets, validated by a 22-test DOE study
 - Unsafe: `span_refinement_level` = 3 with `cells_across_span` > 10
 
 **Source**: `src/config/mesh_quality_presets.py`
-**Study Details**: `docs/MESH_PARAMETER_STUDY.md`
+**Study Details**: `docs/_internal/MESH_PARAMETER_STUDY.md`
 
 ---
 

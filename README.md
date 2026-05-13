@@ -40,8 +40,8 @@ pip install -e ".[dev]"           # runtime + test/lint/security tools
 Verify the install:
 
 ```bash
-python run_patient.py --version       # → AortaCFD 1.1.1
-python run_patient.py --list          # → BPM120, PAT002, VOL04
+python run_patient.py --version       # → AortaCFD 1.2.0
+python run_patient.py --list          # → BPM120, 0014_H_AO_COA, VOL04
 ```
 
 Run `python run_patient.py --doctor` after install — it checks Python version, importable deps, sample STLs, OpenFOAM sourced, and disk space.
@@ -96,7 +96,7 @@ If you plan to use 3-element Windkessel outlets, install the custom boundary con
 
 ## Case Layout
 
-Each case lives under `cases_input/<case_id>/`.
+Each case lives under `cases_input/<case_id>/`. To run your own data, just create a new directory with the same layout.
 
 ```text
 cases_input/<case_id>/
@@ -110,6 +110,16 @@ cases_input/<case_id>/
 ```
 
 STL files should be in millimetres. The workflow scales them to metres using the `scale_factor` in config (typically `0.001`). STL naming must match the `geometry` keywords in `config.json`.
+
+### Sample cases shipped with the repo
+
+| Case | Description | Inlet | Outlets |
+|---|---|---|---|
+| `BPM120` | Pediatric aortic coarctation, published reference (Wang et al.) | TIMEVARYING from CSV waveform | 4 × 3EWindkessel |
+| `0014_H_AO_COA` | Pediatric coarctation from SimVascular Vascular Model Repository | TIMEVARYING from CSV waveform | 5 × 3EWindkessel |
+| `VOL04` | Healthy adult aorta; demonstrates `MAPPED_PROFILE` inlet (pre-mapped per-face velocity snapshots — could be 4D MRI, Doppler, 1D-model output, etc.) | `MAPPED_PROFILE` | 4 × 3EWindkessel |
+
+All three are usable out of the box with `python run_patient.py <case_id>`. Use them as templates for your own patient data — just replace the STLs and flow waveform.
 
 ---
 
@@ -514,15 +524,15 @@ Output files:
 python run_batch.py
 
 # Specific cases with limited parallelism
-python run_batch.py --cases PAT002 PAT003 --workers 2
+python run_batch.py --cases 0014_H_AO_COA BPM120 --workers 2
 
 # Mesh convergence study (same patient, different configs)
 python run_batch.py \
-  --config-list PAT002:config_mesh10.json PAT002:config_mesh12.json PAT002:config_mesh14.json \
+  --config-list 0014_H_AO_COA:config_mesh10.json 0014_H_AO_COA:config_mesh12.json 0014_H_AO_COA:config_mesh14.json \
   --workers 2
 
 # Dry run
-python run_batch.py --cases PAT002 BPM120 --dry-run
+python run_batch.py --cases 0014_H_AO_COA BPM120 --dry-run
 ```
 
 After a batch completes, QoIs from the current batch are aggregated into `output/cohort_comparison.csv`.
