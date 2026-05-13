@@ -72,8 +72,11 @@ PyFoam*
 *.gz
 
 # Development/testing case configs (keep only production configs tracked)
+cases_input/PAT002/    # replaced by 0014_H_AO_COA as canonical sample (v1.2.1)
 cases_input/PAT003/
 cases_input/G[0-9]*/
+cases_input/EXP_*/
+cases_input/0023_*/
 cases_input/*/config_newmesh*.json
 cases_input/*/config_mesh[0-9]*.json
 cases_input/*/config_gci*.json
