@@ -754,3 +754,100 @@ class TestD12_PerOutletValidator:
         cfg = self._cfg(default_type="zeroGradient", inlet_type="TIMEVARYING")  # no per_outlet
         with pytest.raises(ValueError, match="zeroGradient"):
             ConfigBuilder()._validate_outlet_pressure_reference(cfg)
+
+
+class TestD12_PerOutletResolver:
+    """The resolver in boundary_condition_setup builds an `_outlet_type_map`
+    that the templates will consume in step 3/6. Step 2/6 just builds it and
+    exposes it; these tests verify the map is shaped correctly under each
+    config flavour."""
+
+    @staticmethod
+    def _make_bcs(per_outlet=None, default_type="3EWINDKESSEL", pressure_anchor=None, tmp_case_dir=None):
+        from aortacfd_lib.boundary_condition_setup import BoundaryConditionSetup
+
+        outlets = {"type": default_type, "windkessel_settings": {"systolic_pressure": 120}}
+        if per_outlet is not None:
+            outlets["per_outlet"] = per_outlet
+        if pressure_anchor is not None:
+            outlets["pressure_anchor"] = pressure_anchor
+
+        config = _base_config(
+            boundary_conditions={"inlet": {"type": "CONSTANT", "velocity": 0.5, "profile": "plug"}, "outlets": outlets},
+        )
+        config["geometry"]["outlet_keywords_ordered"] = ["outlet1", "outlet2", "outlet3"]
+
+        with patch(
+            "aortacfd_lib.utils.patch_processing.PatchProcessing",
+            return_value=_patch_processor_mock(),
+        ), patch("aortacfd_lib.boundary_condition_setup.detect_world_patch_mode", return_value=False):
+            bcs = BoundaryConditionSetup(config, str(tmp_case_dir or "/tmp"))
+        return bcs
+
+    def test_resolver_no_per_outlet_uses_default_for_all(self, tmp_case_dir):
+        bcs = self._make_bcs(default_type="3EWINDKESSEL", tmp_case_dir=tmp_case_dir)
+        prepared = bcs._prepare_outlet_settings()
+        m = prepared["_outlet_type_map"]
+        assert set(m.keys()) == {"outlet1", "outlet2", "outlet3"}
+        for entry in m.values():
+            assert entry["type"] == "3EWINDKESSEL"
+            assert "windkessel_settings" in entry
+
+    def test_resolver_per_outlet_overrides_only_named_outlets(self, tmp_case_dir):
+        bcs = self._make_bcs(
+            default_type="3EWINDKESSEL",
+            per_outlet={"outlet1": {"type": "fixedValue", "pressure_mmHg": 80}},
+            tmp_case_dir=tmp_case_dir,
+        )
+        m = bcs._prepare_outlet_settings()["_outlet_type_map"]
+        # outlet1 was overridden; outlet2/3 keep the default
+        assert m["outlet1"]["type"] == "fixedValue"
+        assert m["outlet1"]["pressure_mmHg"] == 80
+        assert "p_kinematic" in m["outlet1"]
+        # 80 mmHg / 1060 kg/m³ × 133.322 Pa/mmHg ≈ 10.06 m²/s²
+        assert abs(m["outlet1"]["p_kinematic"] - 10.062) < 0.01
+        assert m["outlet2"]["type"] == "3EWINDKESSEL"
+        assert m["outlet3"]["type"] == "3EWINDKESSEL"
+
+    def test_resolver_pressure_anchor_legacy_path_writes_into_map(self, tmp_case_dir):
+        """v1.2.0 outlets.pressure_anchor should rewrite into a per_outlet
+        entry on the named outlet. Existing v1.2.0 configs keep working."""
+        bcs = self._make_bcs(
+            default_type="zeroGradient",
+            pressure_anchor={"outlet": "outlet2", "pressure_mmHg": 75},
+            tmp_case_dir=tmp_case_dir,
+        )
+        m = bcs._prepare_outlet_settings()["_outlet_type_map"]
+        assert m["outlet2"]["type"] == "fixedValue"
+        assert m["outlet2"]["pressure_mmHg"] == 75.0
+        assert "_from" in m["outlet2"]  # marks the legacy rewrite
+        # outlet1, outlet3 stay at the default
+        assert m["outlet1"]["type"] == "zeroGradient"
+        assert m["outlet3"]["type"] == "zeroGradient"
+
+    def test_resolver_pressure_anchor_wins_over_per_outlet(self, tmp_case_dir):
+        """If both set on the same outlet, pressure_anchor wins (it's the
+        explicit "I really want this pinned" lever from v1.2.0)."""
+        bcs = self._make_bcs(
+            default_type="zeroGradient",
+            per_outlet={"outlet1": {"type": "3EWINDKESSEL", "windkessel_settings": {}}},
+            pressure_anchor={"outlet": "outlet1", "pressure_mmHg": 90},
+            tmp_case_dir=tmp_case_dir,
+        )
+        m = bcs._prepare_outlet_settings()["_outlet_type_map"]
+        # pressure_anchor wins — outlet1 is fixedValue 90, not Windkessel.
+        assert m["outlet1"]["type"] == "fixedValue"
+        assert m["outlet1"]["pressure_mmHg"] == 90.0
+
+    def test_resolver_windkessel_per_outlet_falls_back_to_global_settings(self, tmp_case_dir):
+        """If per_outlet specifies Windkessel without inline settings, the
+        resolver falls back to the global windkessel_settings."""
+        bcs = self._make_bcs(
+            default_type="zeroGradient",
+            per_outlet={"outlet1": {"type": "3EWINDKESSEL"}},  # no inline wk_settings
+            tmp_case_dir=tmp_case_dir,
+        )
+        m = bcs._prepare_outlet_settings()["_outlet_type_map"]
+        assert m["outlet1"]["type"] == "3EWINDKESSEL"
+        # Falls back to the outer windkessel_settings (systolic_pressure: 120)
+        assert m["outlet1"]["windkessel_settings"]["systolic_pressure"] == 120

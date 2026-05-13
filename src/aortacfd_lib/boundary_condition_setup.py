@@ -184,6 +184,72 @@ class BoundaryConditionSetup:
             f"as configured ({outlet_settings.get('type', 'zeroGradient')})."
         )
 
+    def _build_outlet_type_map(self, outlet_settings: dict) -> dict:
+        """Build a per-outlet effective configuration from defaults + overrides.
+
+        Produces ``{outlet_name: {"type": ..., **type-specific-settings}}``
+        for every outlet in ``geometry.outlet_keywords_ordered``. Each entry
+        is the *resolved* config the template should render for that outlet.
+
+        Resolution priority (later wins):
+          1. ``outlets.type`` + ``outlets.windkessel_settings`` (default for all)
+          2. ``outlets.per_outlet[<name>]`` (per-outlet override)
+          3. ``outlets.pressure_anchor`` (legacy v1.2.0 — rewritten into a
+             one-entry override on the named outlet)
+
+        The output is attached to ``outlet_settings`` as ``_outlet_type_map``
+        so the templates in step 3 can iterate it directly. Doesn't change
+        existing template rendering yet — step 2/6 of theme B.
+        """
+        default_type = outlet_settings.get("type", "zeroGradient")
+        default_wk = outlet_settings.get("windkessel_settings", {})
+        per_outlet = outlet_settings.get("per_outlet", {}) or {}
+
+        outlet_map: dict[str, dict] = {}
+        for name in self.outlet_patches:
+            override = per_outlet.get(name, {}) if isinstance(per_outlet, dict) else {}
+            outlet_type = override.get("type", default_type)
+
+            entry: dict = {"type": outlet_type}
+
+            if outlet_type in ("3EWINDKESSEL", "2EWINDKESSEL"):
+                # Windkessel: prefer inline windkessel_settings; fall back to global.
+                wk = override.get("windkessel_settings", default_wk)
+                entry["windkessel_settings"] = wk
+
+            elif outlet_type in ("fixedValue", "fixedPressure"):
+                # Pressure pin: inline pressure_mmHg, else diastolic default.
+                p_mmhg = float(override.get("pressure_mmHg", 80))
+                rho = float(
+                    self.physics_settings.get("rho")
+                    or self.config.get("physics", {}).get("rho")
+                    or 1060
+                )
+                entry["pressure_mmHg"] = p_mmhg
+                entry["p_kinematic"] = p_mmhg * MMHG_TO_PA / rho
+
+            elif outlet_type == "resistance":
+                if "resistance" in override:
+                    entry["resistance"] = override["resistance"]
+
+            # Legacy v1.2.0 pressure_anchor rewrites into a per_outlet entry.
+            outlet_map[name] = entry
+
+        # Apply legacy pressure_anchor LAST so it wins (one outlet pinned to
+        # fixedValue regardless of the default/per_outlet config above).
+        resolved_anchor = outlet_settings.get("pressure_anchor_resolved")
+        if resolved_anchor:
+            name = resolved_anchor["outlet"]
+            if name in outlet_map:
+                outlet_map[name] = {
+                    "type": "fixedValue",
+                    "pressure_mmHg": resolved_anchor["p_mmHg"],
+                    "p_kinematic": resolved_anchor["p_kinematic"],
+                    "_from": "pressure_anchor (legacy v1.2.0)",
+                }
+
+        return outlet_map
+
     def _apply_les_stabilisation_override(self):
         """
         Auto-disable hard backflow stabilisation for LES simulations.
@@ -242,6 +308,12 @@ class BoundaryConditionSetup:
         # fixed pressure when outlets.type=zeroGradient (otherwise the pressure
         # field drifts during pulsatile inlet → FPE).
         self._resolve_pressure_anchor(outlet_settings)
+
+        # Build the per-outlet effective configuration map. Used by the
+        # templates (step 3 of v1.4.0 theme B) to dispatch BC rendering on a
+        # per-outlet basis. Step 2 just builds it; templates still rely on
+        # the legacy "outlets.type for all" path until step 3 lands.
+        outlet_settings["_outlet_type_map"] = self._build_outlet_type_map(outlet_settings)
 
         # Only process Windkessel cases (case-insensitive)
         outlet_type = outlet_settings.get("type", "ZEROGRADIENT").upper()
