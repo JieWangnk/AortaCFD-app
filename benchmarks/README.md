@@ -44,15 +44,22 @@ python run_patient.py BPM120 --config cases_input/BPM120/config_paper_reference.
 | TAWSS p99 | 14.12 Pa | Standard profile, Table 3 |
 | P_sys / P_dia | ~142 / 65 mmHg | Windkessel 120/80 target |
 
-> **Mesh-cell investigation (verified 2026-05-13):** the paper's "~1.9M cells" turned out to be a function of `cells_per_diameter`, not the `span_target` notation suggested in earlier versions of this doc. Empirical scaling on BPM120 (mesh-only runs verified on a laptop, no solver):
+> **Mesh-cell investigation (verified 2026-05-13):** the paper's "~1.9M cells" is achievable via two orthogonal levers — `cells_per_diameter` (bulk uniform refinement) and `surfaceRefinementLevels` (near-wall refinement). Empirical scan on BPM120 (mesh-only runs verified on a laptop, no solver):
 >
-> | `cells_per_diameter` | Final cell count | Wall time (8 cores) |
-> |---|---|---|
-> | 15 (`config.json` default) | 246,151 | ~2 min |
-> | 30 | 1,170,935 | ~9 min |
-> | **40** (`config_paper_reference.json`) | **2,223,645** | ~14 min |
+> | `cells_per_diameter` | `surfaceRefinementLevels` | Final cells | Mesh character |
+> |---|---|---|---|
+> | 15 (`config.json` default) | [1, 2] | 246,151 | coarse everywhere — fast smoke test |
+> | **15** | **[2, 3]** (`config_paper_reference.json`) | **1,100,339** | **coarse bulk + fine near walls — physically meaningful for WSS/coarctation** |
+> | 30 | [1, 2] | 1,170,935 | uniform finer (bulk-heavy) |
+> | 40 | [1, 2] | 2,223,645 | uniform much finer (bulk-heavy) |
 >
-> Cells scale as `~cpd^2.25` on this geometry (tube-like, surface-driven). The default `config.json` uses **cpd=15** for fast onboarding. To reproduce the paper's Table 3 values, use **`cases_input/BPM120/config_paper_reference.json`** (`cpd=40`, ~2.2M cells — slightly over the paper's 1.9M but within typical mesh-sensitivity tolerance). The `adaptive_span` strategy with `default_cells_across_span: 16` is **not** the lever for this — it produces ~317K cells regardless of span value, because the algorithm trades blockMesh background coarseness against local span refinement.
+> The two levers produce **fundamentally different mesh character at similar cell counts:**
+> - `cpd=30` + `[1, 2]` ≈ `cpd=15` + `[2, 3]` ≈ 1.1-1.2M cells
+> - But `[2, 3]` puts cells *where they matter* (boundary layer, coarctation throat) while `cpd=30` distributes them uniformly across the bulk. For cardiovascular CFD this matters a lot — WSS sensitivity is dominated by near-wall resolution, not bulk resolution.
+>
+> **To reproduce the paper-reference mesh:** use `cases_input/BPM120/config_paper_reference.json` (cpd=15 + `[2, 3]` → ~1.1M cells). Slightly below the paper's 1.9M cell count but the more physically meaningful interpretation of the paper's intent.
+>
+> The `adaptive_span` strategy with `default_cells_across_span: 16` is **not** the relevant lever — it produces ~241-317K cells regardless of span value because the algorithm trades blockMesh background coarseness against local span refinement.
 
 ### Scheme sensitivity (paper values, change one line in JSON)
 

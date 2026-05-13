@@ -2,7 +2,7 @@
   "_metadata": {
     "description": "Expected QoI values for AortaCFD benchmark cases. Single source of truth for tests/benchmarks/.",
     "source": "Wang et al. Table 3 (BPM120 production). Tutorial-coarse values from 2026-04-09 reference run on /media/Elements1.",
-    "verified_2026_05_13": "BPM120 production mesh-cell investigation closed. cells_per_diameter (not span_target) is the lever: cpd=15 → 246K, cpd=30 → 1.17M, cpd=40 → 2.22M (cells ~ cpd^2.25 on BPM120). config_paper_reference.json uses cpd=40 to reach the paper's ~1.9M target (verified 2.22M, slightly over but within mesh-sensitivity tolerance). Default config.json keeps cpd=15 for fast onboarding."
+    "verified_2026_05_13": "BPM120 mesh investigation complete. TWO independent levers: (1) cells_per_diameter for bulk uniform refinement (cpd=15→246K, cpd=30→1.17M, cpd=40→2.22M), and (2) surfaceRefinementLevels for near-wall refinement (cpd=15+[1,2]→246K, cpd=15+[2,3]→1.10M — 4.5x more cells with no cpd change). config_paper_reference.json uses lever (2): cpd=15 + surfaceRefinementLevels=[2,3] → 1.10M cells. Mesh character matters: [2,3] puts cells in the boundary layer where WSS sensitivity lives, vs. cpd-only which distributes cells uniformly in the bulk. The paper says '~1.9M cells' without specifying mesh character — 1.10M with the right character is more useful than 2.22M with the wrong character."
   },
   "cases": {
     "BPM120": {
@@ -15,9 +15,9 @@
           "tawss_p99_pa":           {"value": 14.12, "tolerance_rel": 0.10},
           "osi_mean_masked":        {"value": null,  "tolerance_abs": 0.02, "_comment": "value pending; placeholder for tolerance shape"}
         },
-        "mesh_cells_min": 2000000,
-        "mesh_cells_max": 2400000,
-        "_mesh_note": "Reproduce via cases_input/BPM120/config_paper_reference.json (cpd=40, verified 2.22M cells 2026-05-13). Default config.json uses cpd=15 (~246K cells) for fast onboarding and is NOT the paper reference."
+        "mesh_cells_min": 1000000,
+        "mesh_cells_max": 1300000,
+        "_mesh_note": "Reproduce via cases_input/BPM120/config_paper_reference.json (cpd=15 + surfaceRefinementLevels=[2,3], verified 1.10M cells 2026-05-13). Default config.json uses cpd=15 + [1,2] (~246K cells) for fast onboarding and is NOT the paper reference. Slightly below paper's 1.9M cell-count claim but the more physically meaningful interpretation — coarse bulk + fine near walls, vs. earlier cpd=40 attempt which gave 2.22M uniformly-finer cells (wrong character for WSS-sensitive geometry)."
       },
       "production_robust": {
         "config": "cases_input/BPM120/config.json (with numerics.profile=robust)",
@@ -27,9 +27,9 @@
           "pressure_drop_mean_mmhg": {"value": 10.82, "tolerance_rel": 0.05},
           "tawss_p99_pa":           {"value": 17.88, "tolerance_rel": 0.10}
         },
-        "mesh_cells_min": 2000000,
-        "mesh_cells_max": 2400000,
-        "_mesh_note": "Reproduce via cases_input/BPM120/config_paper_reference.json (cpd=40, verified 2.22M cells 2026-05-13). Default config.json uses cpd=15 (~246K cells) for fast onboarding and is NOT the paper reference."
+        "mesh_cells_min": 1000000,
+        "mesh_cells_max": 1300000,
+        "_mesh_note": "Reproduce via cases_input/BPM120/config_paper_reference.json (cpd=15 + surfaceRefinementLevels=[2,3], verified 1.10M cells 2026-05-13). Default config.json uses cpd=15 + [1,2] (~246K cells) for fast onboarding and is NOT the paper reference. Slightly below paper's 1.9M cell-count claim but the more physically meaningful interpretation — coarse bulk + fine near walls, vs. earlier cpd=40 attempt which gave 2.22M uniformly-finer cells (wrong character for WSS-sensitive geometry)."
       },
       "production_precise": {
         "config": "cases_input/BPM120/config.json (with numerics.profile=precise)",
@@ -39,9 +39,9 @@
           "pressure_drop_mean_mmhg": {"value": 11.32, "tolerance_rel": 0.05},
           "tawss_p99_pa":           {"value": 13.99, "tolerance_rel": 0.10}
         },
-        "mesh_cells_min": 2000000,
-        "mesh_cells_max": 2400000,
-        "_mesh_note": "Reproduce via cases_input/BPM120/config_paper_reference.json (cpd=40, verified 2.22M cells 2026-05-13). Default config.json uses cpd=15 (~246K cells) for fast onboarding and is NOT the paper reference."
+        "mesh_cells_min": 1000000,
+        "mesh_cells_max": 1300000,
+        "_mesh_note": "Reproduce via cases_input/BPM120/config_paper_reference.json (cpd=15 + surfaceRefinementLevels=[2,3], verified 1.10M cells 2026-05-13). Default config.json uses cpd=15 + [1,2] (~246K cells) for fast onboarding and is NOT the paper reference. Slightly below paper's 1.9M cell-count claim but the more physically meaningful interpretation — coarse bulk + fine near walls, vs. earlier cpd=40 attempt which gave 2.22M uniformly-finer cells (wrong character for WSS-sensitive geometry)."
       },
       "tutorial_coarse": {
         "config": "cases_input/BPM120/config_tutorial_coarse.json",

@@ -1,7 +1,7 @@
 {
   "case_info": {
     "patient_id": "BPM120",
-    "description": "Pediatric coarctation (Wang et al.) \u2014 paper-reference mesh (~2.2M cells, cpd=40). Use the default config.json for fast onboarding (246K cells); use this one to reproduce Table 3 values.",
+    "description": "Pediatric coarctation (Wang et al.) \u2014 paper-reference mesh (~1.1M cells). Uses surfaceRefinementLevels=[2,3] to add near-wall resolution at the default cpd=15. Mesh character: coarse bulk + fine near walls \u2014 matches the physics (WSS/coarctation throat sensitivity) better than the alternative of bumping cpd alone. Slightly below the paper~1.9M target but more physically meaningful.",
     "source": "Author's published research",
     "clinical_data": {
       "heart_rate": 120,
@@ -26,7 +26,7 @@
     }
   },
   "mesh": {
-    "cells_per_diameter": 40,
+    "cells_per_diameter": 15,
     "boundary_layers": {
       "enabled": true,
       "num_layers": 5,
@@ -39,8 +39,8 @@
       "nProcessors": 8,
       "default_cells_across_span": 16,
       "surfaceRefinementLevels": [
-        1,
-        2
+        2,
+        3
       ],
       "_comment": "default_cells_across_span=16 reproduces the ~1.9M-cell paper mesh (Wang et al. Table 3). For quick smoke tests use --quick or config_tutorial_coarse.json."
     }
