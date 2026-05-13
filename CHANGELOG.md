@@ -39,6 +39,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gradients. For pulsatile arterial flows, use `3EWINDKESSEL`
   (recommended) or `fixedPressure`.
 
+### Added (v1.2.0 benchmark validation — tutorial-coarse path)
+- **`benchmarks/expected_values.json`** `cases.BPM120.tutorial_coarse`
+  populated with reference QoI values from a 2026-04-09 reference run
+  (109,597 cells, 1 cycle = 0.5s, wall ~1h46m on 8 cores). Three values
+  with explicit tolerances:
+    - `pressure_drop_mean_mmhg`: 9.20 ± 10 %
+    - `wss_p99_pa`: 1.79 ± 20 % (mesh-sensitive on coarse mesh)
+    - `per_outlet_pressure_drop_mmhg.outlet4`: 27.71 ± 15 %
+      (coarctation jet)
+- **Three new benchmark tests** in
+  `tests/benchmarks/test_bpm120_benchmark.py` validate a produced
+  `qoi_summary.json` against the tutorial-coarse expected values.
+  Skipped unless ``BPM120_TUTORIAL_QOI`` points to a real file.
+  Verified passing against the 2026-04-09 reference. The production
+  benchmark (1.9M cells, full 1.5s, Wang et al. Table 3 values) still
+  uses ``BPM120_QOI`` and is deferred to v1.2.1 — needs ~10-25 h on HPC.
+
 ### Known limitations (deferred to v1.3.0+)
 - **`zeroGradient` outlets are fragile on severe-stenosis geometries
   regardless of inlet type.** Steady `CONSTANT` + `zeroGradient` +

@@ -1,12 +1,26 @@
-"""Benchmark validation for BPM120 against the published reference values.
+"""Benchmark validation for BPM120 against the reference QoI values.
 
-These tests do NOT run the simulation; they assume a `qoi_summary.json`
-already exists (produced by `python run_patient.py BPM120 --steps all`)
-and only validate its contents against `benchmarks/expected_values.json`.
+Two test groups, each skipped unless its env var points to a real
+``qoi_summary.json``:
 
-Skipped by default. To run:
+1. **Production** (``BPM120_QOI``) — full 1.5s, ~1.9M-cell mesh, the
+   Wang et al. Table 3 reference. Deferred to v1.2.1 (requires HPC).
 
-    BPM120_QOI=output/BPM120/run_XXX/reports/results/qoi_summary.json \\
+2. **Tutorial coarse** (``BPM120_TUTORIAL_QOI``) — 1 cycle (0.5s),
+   ~110K-cell mesh, the v1.2.0 live-solver smoke-test reference. The
+   shipped reference values were captured from
+   ``output/BPM120/run_20260409_195511`` (8-core, 1h46m wall) and are
+   stored in ``benchmarks/expected_values.json`` under
+   ``cases.BPM120.tutorial_coarse``.
+
+Examples:
+
+    # Tutorial coarse (v1.2.0 quick smoke)
+    BPM120_TUTORIAL_QOI=output/BPM120/run_XXX/results/qoi_summary.json \\
+        pytest tests/benchmarks/test_bpm120_benchmark.py -v
+
+    # Production (v1.2.1+)
+    BPM120_QOI=output/BPM120/run_XXX/results/qoi_summary.json \\
         pytest tests/benchmarks/test_bpm120_benchmark.py -v
 
 CI hook: a self-hosted runner with OpenFOAM 12 should execute the full
@@ -98,3 +112,83 @@ def test_qoi_summary_is_complete(actual_qoi):
     for key in ("pressure_drop_mean_mmhg", "wss_p99_pa", "tawss_p99_pa"):
         v = qoi[key]["value"]
         assert v > 0, f"{key} = {v} — production run should produce non-zero QoIs"
+
+
+# =============================================================================
+# Tutorial-coarse benchmark — v1.2.0 live-solver validation
+# =============================================================================
+#
+# Reference run: output/BPM120/run_20260409_195511 (109,597 cells, 1 cycle,
+# wall ~1h46m on 8 cores). Expected QoIs stored in
+# benchmarks/expected_values.json cases.BPM120.tutorial_coarse.
+# Skipped unless BPM120_TUTORIAL_QOI env var is set.
+
+
+def _tutorial_qoi_path() -> Path | None:
+    raw = os.environ.get("BPM120_TUTORIAL_QOI")
+    if not raw:
+        return None
+    p = Path(raw)
+    return p if p.is_file() else None
+
+
+@pytest.fixture(scope="module")
+def expected_tutorial() -> dict:
+    with EXPECTED_VALUES.open() as f:
+        data = json.load(f)
+    return data["cases"]["BPM120"]["tutorial_coarse"]["expected"]
+
+
+@pytest.fixture(scope="module")
+def actual_tutorial_qoi() -> dict:
+    path = _tutorial_qoi_path()
+    if path is None:
+        pytest.skip(
+            "BPM120_TUTORIAL_QOI env var not set or path missing. "
+            "Set it to a qoi_summary.json from a BPM120 tutorial-coarse run."
+        )
+    with path.open() as f:
+        return json.load(f)
+
+
+def _rel_err(actual: float, expected: float) -> float:
+    return abs(actual - expected) / abs(expected) if expected else float("inf")
+
+
+@pytest.mark.benchmark
+def test_tutorial_pressure_drop_mean(expected_tutorial, actual_tutorial_qoi):
+    spec = expected_tutorial["pressure_drop_mean_mmhg"]
+    actual = actual_tutorial_qoi["qoi"]["pressure_drop_mean_mmhg"]["value"]
+    err = _rel_err(actual, spec["value"])
+    assert err <= spec["tolerance_rel"], (
+        f"tutorial pressure_drop_mean_mmhg = {actual:.3f}, expected "
+        f"{spec['value']:.3f} ± {spec['tolerance_rel'] * 100:.0f}% "
+        f"({err * 100:.1f}% deviation)"
+    )
+
+
+@pytest.mark.benchmark
+def test_tutorial_wss_p99(expected_tutorial, actual_tutorial_qoi):
+    spec = expected_tutorial["wss_p99_pa"]
+    actual = actual_tutorial_qoi["qoi"]["wss_p99_pa"]["value"]
+    err = _rel_err(actual, spec["value"])
+    assert err <= spec["tolerance_rel"], (
+        f"tutorial wss_p99_pa = {actual:.3f}, expected "
+        f"{spec['value']:.3f} ± {spec['tolerance_rel'] * 100:.0f}% "
+        f"({err * 100:.1f}% deviation)"
+    )
+
+
+@pytest.mark.benchmark
+def test_tutorial_outlet4_pressure_drop(expected_tutorial, actual_tutorial_qoi):
+    """outlet4 is the coarctation jet — clinically meaningful per-outlet QoI."""
+    spec = expected_tutorial["per_outlet_pressure_drop_mmhg.outlet4"]
+    per_outlet = actual_tutorial_qoi.get("per_outlet_pressure_drop_mmhg", {})
+    actual = per_outlet.get("outlet4")
+    assert actual is not None, "per_outlet_pressure_drop_mmhg.outlet4 missing from qoi_summary.json"
+    err = _rel_err(actual, spec["value"])
+    assert err <= spec["tolerance_rel"], (
+        f"tutorial outlet4 ΔP = {actual:.3f} mmHg, expected "
+        f"{spec['value']:.3f} ± {spec['tolerance_rel'] * 100:.0f}% "
+        f"({err * 100:.1f}% deviation)"
+    )

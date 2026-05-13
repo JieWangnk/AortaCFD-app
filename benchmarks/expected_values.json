@@ -19,11 +19,17 @@
       "tutorial_coarse": {
         "config": "cases_input/BPM120/config_tutorial_coarse.json",
         "profile": "standard",
+        "_reference_run": "output/BPM120/run_20260409_195511 (on /media/Elements1 backup, 109,597 cells, 1 cycle = 0.5s, wall ~1h46m on 8 cores). QoIs extracted via v1.2.0 --postprocess.",
+        "_use": "Live-solver benchmark validation for v1.2.0. Full 1.9M-cell production benchmark deferred to v1.2.1 (requires ~10-25 h HPC run).",
         "expected": {
-          "pressure_drop_outlet4_peak_mmhg": {"value": 44.0, "tolerance_rel": 0.20, "_comment": "1-cycle coarse mesh, Windkessel not equilibrated"}
+          "pressure_drop_mean_mmhg":               {"value":  9.20, "tolerance_rel": 0.10, "_comment": "cycle-averaged across all 4 outlets"},
+          "wss_p99_pa":                            {"value":  1.79, "tolerance_rel": 0.20, "_comment": "mesh-sensitive on 109K cells; wider tolerance"},
+          "per_outlet_pressure_drop_mmhg.outlet4": {"value": 27.71, "tolerance_rel": 0.15, "_comment": "coarctation jet — clinically meaningful"}
         },
-        "mesh_cells_min": 80000,
-        "mesh_cells_max": 140000
+        "mesh_cells_min": 95000,
+        "mesh_cells_max": 130000,
+        "cycles_min": 1,
+        "tawss_expected": false
       }
     },
     "PAT002": {
