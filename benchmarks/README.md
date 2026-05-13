@@ -30,16 +30,17 @@ capacitor has not fully equilibrated. This is expected and not a failure.
 python run_patient.py BPM120 --steps all
 ```
 
-### Expected outputs (BPM120 standard, 1.9M cells)
+### Expected outputs (BPM120 standard, paper reference)
 
 | Metric | Expected | Source |
 |--------|----------|--------|
-| Mesh cells | ~1.9M | Span target 16, 5 boundary layers |
-| Pressure drop (cycle-avg) | 11.26 mmHg | Standard profile, Table 3 in paper |
-| TAWSS p99 | 14.12 Pa | Standard profile |
+| Pressure drop (cycle-avg) | 11.26 mmHg | Standard profile, Table 3 in Wang et al. |
+| TAWSS p99 | 14.12 Pa | Standard profile, Table 3 |
 | P_sys / P_dia | ~142 / 65 mmHg | Windkessel 120/80 target |
 
-### Scheme sensitivity (change one line in JSON)
+> **Mesh-cell note (verified 2026-05-13):** The current `cases_input/BPM120/config.json` produces **~246K cells** with the default `legacy_surface` mesh strategy, or **~317K cells** if you switch to `mesh_strategy: "adaptive_span"` with `default_cells_across_span: 16`. **Neither reproduces the paper's "~1.9M" claim with the v1.2.x mesh-setup code.** The paper's mesh used additional settings (higher span target, custom surface-refinement levels, or older mesh-setup code) that aren't currently exposed in `config.json`. A future release will either expose those knobs or update the paper-reference values to match what's reproducible today. Until then, the pressure_drop / TAWSS targets above are the paper's values, not values you'll reach on a 246K-cell mesh.
+
+### Scheme sensitivity (paper values, change one line in JSON)
 
 Run the same case with `"profile": "robust"` and `"profile": "precise"`:
 
@@ -49,12 +50,16 @@ Run the same case with `"profile": "robust"` and `"profile": "precise"`:
 | Standard | 11.26 mmHg | 14.12 Pa | 29.0 hrs |
 | Precise | 11.32 mmHg | 13.99 Pa | 33.8 hrs |
 
-Pressure varies +/-2.2%. TAWSS varies +/-14%. This is expected.
+**Variability between profiles:**
+- Pressure drop: max deviation **3.9 %** (robust vs standard). Half-range / mean = ±2.2 %.
+- TAWSS p99: max deviation **26.6 %** (robust gives a sharper resolved peak at the coarctation throat due to first-order numerical diffusion). Half-range / mean = ±12.7 %.
+
+> The TAWSS spread is the larger one and is what scheme sensitivity actually means here — the same simulation gives a 26 %-different TAWSS p99 depending on numerics profile, even though pressure drop is stable to ±4 %. Use `standard` for clinical comparison; `precise` for LES; `robust` only for debugging convergence. Don't compare TAWSS across profiles without flagging this.
 
 ## Multi-case portability
 
 ```bash
-python run_patient.py PAT002 --steps all
+python run_patient.py 0014_H_AO_COA --steps all
 python run_patient.py VOL04 --steps all
 ```
 

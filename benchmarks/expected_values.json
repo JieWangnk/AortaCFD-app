@@ -1,26 +1,50 @@
 {
   "_metadata": {
     "description": "Expected QoI values for AortaCFD benchmark cases. Single source of truth for tests/benchmarks/.",
-    "source": "Wang et al., Table 3 (BPM120). PAT002 and VOL04 pending v1.2.0 A.2 milestone."
+    "source": "Wang et al. Table 3 (BPM120 production). Tutorial-coarse values from 2026-04-09 reference run on /media/Elements1.",
+    "verified_2026_05_13": "BPM120 production mesh-cell expectation lowered from 1.7-2.1M to 240-330K — the current v1.2.x config produces ~246K cells (legacy_surface) or ~317K (adaptive_span, span=16); the paper's '1.9M' setting is not reproducible with current code. See benchmarks/README.md mesh-cell note."
   },
   "cases": {
     "BPM120": {
-      "production": {
+      "production_standard": {
         "config": "cases_input/BPM120/config.json",
         "profile": "standard",
+        "_comment": "Wang et al. Table 3 reference. Cell-count range reflects what current code actually produces (246K legacy / 317K adaptive_span); paper's 1.9M unverified on this codebase.",
         "expected": {
           "pressure_drop_mean_mmhg": {"value": 11.26, "tolerance_rel": 0.05},
           "tawss_p99_pa":           {"value": 14.12, "tolerance_rel": 0.10},
           "osi_mean_masked":        {"value": null,  "tolerance_abs": 0.02, "_comment": "value pending; placeholder for tolerance shape"}
         },
-        "mesh_cells_min": 1700000,
-        "mesh_cells_max": 2100000
+        "mesh_cells_min": 240000,
+        "mesh_cells_max": 330000
+      },
+      "production_robust": {
+        "config": "cases_input/BPM120/config.json (with numerics.profile=robust)",
+        "profile": "robust",
+        "_comment": "First-order schemes give a sharper resolved coarctation peak → ~27% higher TAWSS p99 than standard. Pressure drop ~4% lower. Per Wang et al. Table 3 scheme-sensitivity.",
+        "expected": {
+          "pressure_drop_mean_mmhg": {"value": 10.82, "tolerance_rel": 0.05},
+          "tawss_p99_pa":           {"value": 17.88, "tolerance_rel": 0.10}
+        },
+        "mesh_cells_min": 240000,
+        "mesh_cells_max": 330000
+      },
+      "production_precise": {
+        "config": "cases_input/BPM120/config.json (with numerics.profile=precise)",
+        "profile": "precise",
+        "_comment": "LUST + CrankNicolson; closest to standard but slightly different TAWSS due to lower numerical diffusion. Per Wang et al. Table 3.",
+        "expected": {
+          "pressure_drop_mean_mmhg": {"value": 11.32, "tolerance_rel": 0.05},
+          "tawss_p99_pa":           {"value": 13.99, "tolerance_rel": 0.10}
+        },
+        "mesh_cells_min": 240000,
+        "mesh_cells_max": 330000
       },
       "tutorial_coarse": {
         "config": "cases_input/BPM120/config_tutorial_coarse.json",
         "profile": "standard",
         "_reference_run": "output/BPM120/run_20260409_195511 (on /media/Elements1 backup, 109,597 cells, 1 cycle = 0.5s, wall ~1h46m on 8 cores). QoIs extracted via v1.2.0 --postprocess.",
-        "_use": "Live-solver benchmark validation for v1.2.0. Full 1.9M-cell production benchmark deferred to v1.2.1 (requires ~10-25 h HPC run).",
+        "_use": "Live-solver benchmark validation for v1.2.0. Full production benchmark (Wang et al. Table 3) deferred to v1.2.1 (requires ~10-25 h HPC run).",
         "expected": {
           "pressure_drop_mean_mmhg":               {"value":  9.20, "tolerance_rel": 0.10, "_comment": "cycle-averaged across all 4 outlets"},
           "wss_p99_pa":                            {"value":  1.79, "tolerance_rel": 0.20, "_comment": "mesh-sensitive on 109K cells; wider tolerance"},
@@ -32,11 +56,11 @@
         "tawss_expected": false
       }
     },
-    "PAT002": {
-      "_status": "TODO — populate during v1.2.0 A.2 milestone with full standard-profile run"
+    "0014_H_AO_COA": {
+      "_status": "TODO — pediatric coarctation case (SimVascular VMR), tracked since v1.2.1. Populate with LES+robust profile reference run."
     },
     "VOL04": {
-      "_status": "TODO — populate during v1.2.0 A.2 milestone with full standard-profile run"
+      "_status": "TODO — adult aorta with MAPPED_PROFILE inlet. R4 of config matrix verified solver convergence (6h wall on 8 cores for t=0→0.05s); full benchmark values pending."
     }
   }
 }

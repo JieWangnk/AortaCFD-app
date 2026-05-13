@@ -52,7 +52,7 @@ def _qoi_path() -> Path | None:
 def expected_bpm120() -> dict:
     with EXPECTED_VALUES.open() as f:
         data = json.load(f)
-    return data["cases"]["BPM120"]["production"]["expected"]
+    return data["cases"]["BPM120"]["production_standard"]["expected"]
 
 
 @pytest.fixture(scope="module")
