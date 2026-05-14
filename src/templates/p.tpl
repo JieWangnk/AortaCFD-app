@@ -37,22 +37,27 @@ boundaryField
         type            zeroGradient;
     }
 
-    // The outlets are created dynamically based on the JSON settings
+    // The outlets are created dynamically based on the JSON settings.
+    // Per-outlet dispatch: each outlet looks up its effective type in
+    // _outlet_type_map (built by BoundaryConditionSetup._build_outlet_type_map
+    // from outlets.type defaults + outlets.per_outlet overrides + legacy
+    // outlets.pressure_anchor). v1.4.0 — see CHANGELOG theme B.
     {% set of_version = template_vars.openfoam_major_version if template_vars else openfoam_major_version %}
-    {% set outlet_type = outlet_settings.get('type', '3EWINDKESSEL') %}
+    {% set default_outlet_type = outlet_settings.get('type', '3EWINDKESSEL') %}
+    {% set outlet_type_map = outlet_settings.get('_outlet_type_map', {}) %}
     {% if not outlet_patches %}
     // WARNING: No outlet patches defined! Simulation will likely fail.
     // Check that outlet_patches is set in the template context.
     {% endif %}
-    {% set pressure_anchor_resolved = outlet_settings.get('pressure_anchor_resolved') %}
     {% for outlet in outlet_patches|default([]) %}
     {{ outlet }}
     {
-        {% if pressure_anchor_resolved and pressure_anchor_resolved.outlet == outlet %}
-        // Pressure anchor outlet — pins the otherwise-floating pressure field
-        // for zeroGradient outlets with pulsatile inlet (otherwise FPE during systole).
+        {% set _entry = outlet_type_map.get(outlet, {'type': default_outlet_type}) %}
+        {% set outlet_type = _entry.get('type', default_outlet_type) %}
+        {% if outlet_type == "fixedValue" %}
+        // Per-outlet fixed pressure ({{ _entry.get('pressure_mmHg', 80) }} mmHg{% if _entry.get('_from') %}; from {{ _entry.get('_from') }}{% endif %})
         type            fixedValue;
-        value           uniform {{ pressure_anchor_resolved.p_kinematic|round(6) }};  // {{ pressure_anchor_resolved.p_mmHg }} mmHg
+        value           uniform {{ _entry.get('p_kinematic', 0)|round(6) }};
 
         {% elif outlet_type == "3EWINDKESSEL" or outlet_type == "2EWINDKESSEL" %}
             {# ========== Option 1: Windkessel (Physiological) ========== #}
@@ -61,7 +66,8 @@ boundaryField
             {% if of_version >= 12 %}
         // OpenFOAM 12+ modularWKPressure boundary condition
         // Windkessel model - 3-Element (R-C-Z) or 2-Element (R-C, Z=0) - ALL KINEMATIC UNITS
-        {% set wk_settings = outlet_settings.get('windkessel_settings', {}) %}
+        // Prefer per-outlet windkessel_settings; fall back to the global block
+        {% set wk_settings = _entry.get('windkessel_settings', outlet_settings.get('windkessel_settings', {})) %}
         {% set outlet_params = wk_settings.get('outlet_parameters', {}).get(outlet, {}) %}
         {% set outlet_pressure_pa = outlet_initial_pressures.get(outlet, initial_pressure)|default(0) %}
         {% set fluid_rho = outlet_settings.get('rho', 1060) %}
@@ -109,12 +115,12 @@ boundaryField
 
         {% elif outlet_type == "fixedPressure" %}
             {# ========== Option 2: Fixed Pressure (Simple) ========== #}
-        // Fixed pressure outlet - all outlets at same pressure
-        // Note: Using kinematic pressure (m²/s²) = dynamic pressure (Pa) / rho
-        {% set pressure_pa = outlet_settings.get('pressure_mmHg', 80) * 133.322 %}
-        {% set pressure_kinematic = pressure_pa / rho %}
+        // Fixed pressure outlet (kinematic pressure m²/s² = dynamic Pa / rho).
+        // Prefer per-outlet pressure_mmHg from the type map; fall back to the global setting.
+        {% set _p_mmhg = _entry.get('pressure_mmHg', outlet_settings.get('pressure_mmHg', 80)) %}
+        {% set _p_kin = _entry.get('p_kinematic', _p_mmhg * 133.322 / 1060) %}
         type            fixedValue;
-        value           uniform {{ pressure_kinematic|round(6) }};  // {{ outlet_settings.get('pressure_mmHg', 80) }} mmHg = {{ pressure_pa|round(0) }} Pa
+        value           uniform {{ _p_kin|round(6) }};  // {{ _p_mmhg }} mmHg
 
         {% elif outlet_type == "resistance" %}
             {# ========== Option 3: Resistance (Advanced) ========== #}

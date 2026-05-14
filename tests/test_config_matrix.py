@@ -851,3 +851,106 @@ class TestD12_PerOutletResolver:
         assert m["outlet1"]["type"] == "3EWINDKESSEL"
         # Falls back to the outer windkessel_settings (systolic_pressure: 120)
         assert m["outlet1"]["windkessel_settings"]["systolic_pressure"] == 120
+
+
+class TestD12_PerOutletRendering:
+    """Step 3/6: per-outlet template dispatch. The templates loop over outlets
+    and look up each one's effective type in _outlet_type_map. These tests
+    verify the rendered 0/p and 0/U files reflect per-outlet types correctly."""
+
+    def _render(self, per_outlet, default_type, tmp_case_dir):
+        from aortacfd_lib.boundary_condition_setup import BoundaryConditionSetup
+
+        outlets = {"type": default_type, "windkessel_settings": {"systolic_pressure": 120, "diastolic_pressure": 80}}
+        if per_outlet is not None:
+            outlets["per_outlet"] = per_outlet
+
+        config = _base_config(
+            boundary_conditions={
+                "inlet": {"type": "CONSTANT", "velocity": 0.5, "profile": "plug"},
+                "outlets": outlets,
+            }
+        )
+        config["geometry"]["outlet_keywords_ordered"] = ["outlet1", "outlet2", "outlet3"]
+
+        with patch(
+            "aortacfd_lib.utils.patch_processing.PatchProcessing",
+            return_value=_patch_processor_mock(),
+        ), patch("aortacfd_lib.boundary_condition_setup.detect_world_patch_mode", return_value=False):
+            bcs = BoundaryConditionSetup(config, str(tmp_case_dir))
+            bcs.write_all_bc_files()
+
+        return (tmp_case_dir / "0" / "p").read_text(), (tmp_case_dir / "0" / "U").read_text()
+
+    @staticmethod
+    def _block(text, outlet):
+        """Slice the outlet-specific Jinja-rendered block out of a 0/p or 0/U
+        file. Each outlet block is:
+
+            <outlet>
+            {
+                ... settings ...
+            }
+
+        Match from the outlet name to the closing brace at 4-space indent."""
+        import re
+
+        m = re.search(rf"    {re.escape(outlet)}\n    \{{(.*?)\n    \}}", text, re.DOTALL)
+        assert m, f"Could not find outlet block for {outlet} in rendered text"
+        return m.group(1)
+
+    def test_p_dispatch_per_outlet_mixed_types(self, tmp_case_dir):
+        """Mixed config: outlet1 fixedValue, outlet2 zeroGradient, outlet3 default Windkessel."""
+        p_text, _ = self._render(
+            per_outlet={
+                "outlet1": {"type": "fixedValue", "pressure_mmHg": 80},
+                "outlet2": {"type": "zeroGradient"},
+                # outlet3 inherits the default 3EWINDKESSEL
+            },
+            default_type="3EWINDKESSEL",
+            tmp_case_dir=tmp_case_dir,
+        )
+
+        outlet1_block = self._block(p_text, "outlet1")
+        outlet2_block = self._block(p_text, "outlet2")
+        outlet3_block = self._block(p_text, "outlet3")
+
+        # outlet1 is fixedValue at the per-outlet pressure (80 mmHg kinematic ~ 10.06)
+        assert "fixedValue" in outlet1_block
+        assert "10.06" in outlet1_block, f"expected kinematic ~10.06 in outlet1 block; got:\n{outlet1_block[:300]}"
+        assert "modularWKPressure" not in outlet1_block
+
+        # outlet2 is zeroGradient
+        assert "zeroGradient" in outlet2_block
+        assert "fixedValue" not in outlet2_block
+        assert "modularWKPressure" not in outlet2_block
+
+        # outlet3 is the default Windkessel
+        assert "modularWKPressure" in outlet3_block
+        assert "fixedValue" not in outlet3_block
+
+    def test_u_dispatch_per_outlet_zerogradient_does_not_get_stabilized_wk(self, tmp_case_dir):
+        """A zeroGradient per-outlet override must NOT render the
+        stabilizedWindkesselVelocity (only Windkessel + enable_stabilization does).
+        Regression guard against the entire-file outlet_type lookup."""
+        _, u_text = self._render(
+            per_outlet={
+                "outlet1": {"type": "zeroGradient"},
+            },
+            default_type="3EWINDKESSEL",
+            tmp_case_dir=tmp_case_dir,
+        )
+        outlet1_block = self._block(u_text, "outlet1")
+        # Even with default 3EWINDKESSEL, the zeroGradient per-outlet override
+        # means outlet1 gets pressureInletOutletVelocity, not stabilizedWindkesselVelocity.
+        assert "stabilizedWindkesselVelocity" not in outlet1_block
+        assert "pressureInletOutletVelocity" in outlet1_block
+
+    def test_backwards_compat_no_per_outlet_renders_identically(self, tmp_case_dir):
+        """Configs without per_outlet should produce the same rendering as
+        before — the dispatch resolves every outlet to the global default."""
+        p_text, _ = self._render(per_outlet=None, default_type="3EWINDKESSEL", tmp_case_dir=tmp_case_dir)
+        # All outlets render as Windkessel modularWKPressure
+        for outlet in ("outlet1", "outlet2", "outlet3"):
+            block = self._block(p_text, outlet)
+            assert "modularWKPressure" in block, f"outlet {outlet} should be Windkessel; got: {block[:200]}"

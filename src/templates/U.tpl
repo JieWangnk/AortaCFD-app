@@ -54,14 +54,12 @@ boundaryField
         {% endif %}
     }
 
-    // The outlets are created dynamically based on the JSON settings
-    {% set outlet_type = outlet_settings.get('type', '3EWINDKESSEL') %}
-    {% set wk_settings = outlet_settings.get('windkessel_settings', {}) %}
-    {% set enable_stabilization = wk_settings.get('enable_stabilization', false) %}
-    {# Two-parameter stabilization: betaT (tangential), betaN (normal) #}
-    {# Backward compatibility: if old 'beta' is used, map to betaT with betaN=0 #}
-    {% set betaT = wk_settings.get('betaT', wk_settings.get('beta', 0.3)) %}
-    {% set betaN = wk_settings.get('betaN', 0.0) %}
+    // The outlets are created dynamically based on the JSON settings.
+    // Per-outlet dispatch via _outlet_type_map (v1.4.0 theme B step 3/6) —
+    // each outlet looks up its own type/settings rather than sharing one
+    // global outlet_type for all.
+    {% set default_outlet_type = outlet_settings.get('type', '3EWINDKESSEL') %}
+    {% set outlet_type_map = outlet_settings.get('_outlet_type_map', {}) %}
     {% if not outlet_patches %}
     // WARNING: No outlet patches defined! Simulation will likely fail.
     // Check that outlet_patches is set in the template context.
@@ -69,6 +67,13 @@ boundaryField
     {% for outlet in outlet_patches|default([]) %}
     {{ outlet }}
     {
+        {% set _entry = outlet_type_map.get(outlet, {'type': default_outlet_type}) %}
+        {% set outlet_type = _entry.get('type', default_outlet_type) %}
+        {# Per-outlet Windkessel settings (with global fallback) and stabilisation flags #}
+        {% set wk_settings = _entry.get('windkessel_settings', outlet_settings.get('windkessel_settings', {})) %}
+        {% set enable_stabilization = wk_settings.get('enable_stabilization', false) %}
+        {% set betaT = wk_settings.get('betaT', wk_settings.get('beta', 0.3)) %}
+        {% set betaN = wk_settings.get('betaN', 0.0) %}
         {% if outlet_type == "3EWINDKESSEL" and enable_stabilization %}
         // Two-parameter directional backflow stabilization (Esmaily-Moghadam formulation)
         // Tensor: F = H(-φ) × [βN·n⊗n + βT·(I - n⊗n)]
@@ -89,8 +94,9 @@ boundaryField
         phi             phi;
         value           uniform (0 0 0);
 
-        {% elif outlet_type == "fixedPressure" %}
-        // Fixed pressure: use pressureInletOutletVelocity for better coupling
+        {% elif outlet_type in ["fixedValue", "fixedPressure"] %}
+        // Fixed pressure (per-outlet or global): use pressureInletOutletVelocity for U
+        // so that backflow during diastole doesn't fight the pressure BC.
         type            pressureInletOutletVelocity;
         phi             phi;
         value           uniform (0 0 0);
@@ -102,7 +108,7 @@ boundaryField
         value           uniform (0 0 0);
 
         {% else %}
-        // Default: pressureInletOutletVelocity for pressure-driven outlets
+        // zeroGradient / fallback: pressure-driven outlet velocity coupling
         type            pressureInletOutletVelocity;
         phi             phi;
         value           uniform (0 0 0);
