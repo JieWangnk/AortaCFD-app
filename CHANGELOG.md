@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-05-14
+
+Publishing-prep patch. No code or behaviour changes; documentation and community-health files only. Cut so this release is the first one Zenodo archives (DOI minting).
+
+### Added
+- `CONTRIBUTING.md` — dev-environment setup, test/lint commands, PR
+  conventions, backwards-compatibility and physics-integrity rules.
+- `CODE_OF_CONDUCT.md` — Contributor Covenant 2.1, contact
+  jie.wang-2@manchester.ac.uk.
+- `.github/ISSUE_TEMPLATE/bug_report.md` and
+  `.github/ISSUE_TEMPLATE/feature_request.md` — guided issue forms.
+- `.github/PULL_REQUEST_TEMPLATE.md` — checklist enforcing tests,
+  CHANGELOG entry, `make lint`/`make test`, and backwards-compat.
+- README "How to cite" block with BibTeX entry.
+- README "Contributing" section linking to the new community-health
+  files.
+
+### Changed
+- README install-verify version bumped 1.2.0 → 1.4.1.
+- README: Windkessel BC install promoted from optional aside to
+  required step. All three canonical sample cases use Windkessel
+  outlets — skipping the install fails at solver startup with
+  `unknown patch type modularWKPressure`.
+
 ## [1.4.0] - 2026-05-14
 
 Theme B (per-outlet BC types) + fresh-clone-safety fixes + repo polish.

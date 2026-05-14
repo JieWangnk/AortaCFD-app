@@ -16,14 +16,14 @@ If you use AortaCFD in academic work, please cite both the software (via the Zen
 @software{Wang_AortaCFD_2026,
   author  = {Wang, Jie},
   title   = {{AortaCFD: Patient-Specific Aortic Blood Flow Simulation}},
-  version = {1.4.0},
+  version = {1.4.1},
   year    = {2026},
   url     = {https://github.com/JieWangnk/AortaCFD-app},
   doi     = {10.5281/zenodo.placeholder}
 }
 ```
 
-GitHub's "Cite this repository" button (top right) reads `CITATION.cff` and offers ready-to-paste APA / BibTeX. Replace the DOI placeholder once Zenodo issues a real DOI for v1.4.0 — see the [release notes](https://github.com/JieWangnk/AortaCFD-app/releases) for that link.
+GitHub's "Cite this repository" button (top right) reads `CITATION.cff` and offers ready-to-paste APA / BibTeX. Replace the DOI placeholder once Zenodo issues a real DOI for v1.4.1 — see the [release notes](https://github.com/JieWangnk/AortaCFD-app/releases) for that link.
 
 ## Contributing
 
@@ -66,7 +66,7 @@ pip install -e ".[dev]"           # runtime + test/lint/security tools
 Verify the install:
 
 ```bash
-python run_patient.py --version       # → AortaCFD 1.4.0
+python run_patient.py --version       # → AortaCFD 1.4.1
 python run_patient.py --list          # → 0014_H_AO_COA, BPM120, VOL04
 ```
 
