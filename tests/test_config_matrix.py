@@ -1019,3 +1019,66 @@ class TestD12_WkSetupFiltering:
         # data sufficient for a real Windkessel computation
         wk.execute()
         # If we got here without an exception, the early-return path is working
+
+
+class TestD12_PressureAnchorDeprecation:
+    """Step 6/6: outlets.pressure_anchor still works in v1.4.0 but emits a
+    DeprecationWarning. Users should migrate to outlets.per_outlet."""
+
+    def test_pressure_anchor_emits_deprecation_warning(self, tmp_case_dir):
+        from aortacfd_lib.boundary_condition_setup import BoundaryConditionSetup
+
+        config = _base_config(
+            boundary_conditions={
+                "inlet": {"type": "CONSTANT", "velocity": 0.5, "profile": "plug"},
+                "outlets": {
+                    "type": "zeroGradient",
+                    "pressure_anchor": {"outlet": "outlet1", "pressure_mmHg": 80},
+                },
+            }
+        )
+
+        with patch(
+            "aortacfd_lib.utils.patch_processing.PatchProcessing",
+            return_value=_patch_processor_mock(),
+        ), patch("aortacfd_lib.boundary_condition_setup.detect_world_patch_mode", return_value=False):
+            bcs = BoundaryConditionSetup(config, str(tmp_case_dir))
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                bcs.write_all_bc_files()
+
+            dep = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+            assert any("pressure_anchor is deprecated" in str(w.message) for w in dep), (
+                f"Expected DeprecationWarning about pressure_anchor; got: "
+                f"{[str(w.message)[:80] for w in caught]}"
+            )
+
+    def test_pressure_anchor_still_renders_correctly_with_warning(self, tmp_case_dir):
+        """The deprecation warning is informational only — pressure_anchor
+        must continue to produce the same rendered 0/p as before."""
+        from aortacfd_lib.boundary_condition_setup import BoundaryConditionSetup
+
+        config = _base_config(
+            boundary_conditions={
+                "inlet": {"type": "CONSTANT", "velocity": 0.5, "profile": "plug"},
+                "outlets": {
+                    "type": "zeroGradient",
+                    "pressure_anchor": {"outlet": "outlet1", "pressure_mmHg": 80},
+                },
+            }
+        )
+
+        with patch(
+            "aortacfd_lib.utils.patch_processing.PatchProcessing",
+            return_value=_patch_processor_mock(),
+        ), patch("aortacfd_lib.boundary_condition_setup.detect_world_patch_mode", return_value=False):
+            bcs = BoundaryConditionSetup(config, str(tmp_case_dir))
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                bcs.write_all_bc_files()
+
+        p_text = (tmp_case_dir / "0" / "p").read_text()
+        # outlet1 must still render as fixedValue with the 80 mmHg kinematic value
+        outlet1_block = p_text.split("outlet1")[1].split("outlet2")[0]
+        assert "fixedValue" in outlet1_block
+        assert "10.06" in outlet1_block  # 80 * 133.322 / 1060 ≈ 10.062

@@ -433,6 +433,40 @@ For pulsatile simulations, backflow stabilisation prevents divergence during dia
 
 `betaN = 0` preserves Windkessel pressure-flow coupling. Only increase for severe instabilities.
 
+### Mixed outlet types (per-outlet BC, v1.4.0)
+
+Real cardiovascular configs sometimes need different BC types on different outlets — e.g. three branches modelled with Windkessel plus one outlet pinned to a clinical reference pressure. v1.4.0 supports this directly:
+
+```json
+{
+  "outlets": {
+    "type": "3EWINDKESSEL",                 // default for unspecified outlets
+    "windkessel_settings": {"systolic_pressure": 120, "diastolic_pressure": 80},
+    "per_outlet": {
+      "outlet1": {                          // override: pressure-anchor at IVC reference
+        "type": "fixedValue",
+        "pressure_mmHg": 80
+      },
+      "outlet4": {                          // override: zero-gradient for sensitivity study
+        "type": "zeroGradient"
+      }
+      // outlet2, outlet3 inherit the default 3EWINDKESSEL
+    }
+  }
+}
+```
+
+Each outlet's effective type resolves in this order (later wins):
+1. The default `outlets.type` (applies to outlets not named in `per_outlet`)
+2. The `per_outlet[<name>]` override (if present)
+
+**Validator:** unknown outlet names (typos against `geometry.outlet_keywords_ordered`), unknown types, or Windkessel-typed overrides without `windkessel_settings` are rejected at config-build time.
+
+**Windkessel processing:** when only a subset of outlets is Windkessel-typed, `wk_setup` operates only on that subset — Murray's-law flow distribution is computed across the Windkessel outlets only, not over-distributing inlet flow to outlets that aren't pressure-driven.
+
+**Allowed types** for `outlets.type` and `outlets.per_outlet[*].type`:
+`3EWINDKESSEL`, `2EWINDKESSEL`, `fixedValue`, `fixedPressure`, `resistance`, `zeroGradient`.
+
 ### zeroGradient outlets — steady inlets only
 
 `zeroGradient` outlets do not provide a pressure reference, so the pressure field is only well-posed when the inlet itself is steady. v1.2.0 enforces this at config-build time:
@@ -442,21 +476,34 @@ For pulsatile simulations, backflow stabilisation prevents divergence during dia
 | `CONSTANT`, `PARABOLIC` | ✅ allowed (pressure field finds equilibrium) |
 | `TIMEVARYING`, `WOMERSLEY`, `MAPPED_PROFILE` | ❌ rejected — use `3EWINDKESSEL` or `fixedPressure` |
 
-For steady inlets, you can optionally pin one outlet to a fixed pressure (helps convergence and gives a clinically meaningful reference):
+For steady inlets, you can optionally pin one outlet to a fixed pressure (helps convergence and gives a clinically meaningful reference). The recommended way from v1.4.0 is the per-outlet block above; the legacy `pressure_anchor` shorthand still works but emits a `DeprecationWarning`:
 
 ```json
 {
   "outlets": {
     "type": "zeroGradient",
-    "pressure_anchor": {
-      "outlet": "outlet1",       // or "auto" → first outlet patch
-      "pressure_mmHg": 80        // default diastolic pressure
+    "pressure_anchor": {                   // DEPRECATED in v1.4.0
+      "outlet": "outlet1",                 // or "auto" → first outlet patch
+      "pressure_mmHg": 80
     }
   }
 }
 ```
 
-The named outlet is rendered as `fixedValue` at the kinematic-converted pressure; the other outlets stay `zeroGradient`.
+Recommended v1.4.0 equivalent (same behaviour, no warning, scales to multiple anchors):
+
+```json
+{
+  "outlets": {
+    "type": "zeroGradient",
+    "per_outlet": {
+      "outlet1": {"type": "fixedValue", "pressure_mmHg": 80}
+    }
+  }
+}
+```
+
+`pressure_anchor` is scheduled for removal in v2.0.
 
 > **Why not allow `pressure_anchor` with a pulsatile inlet?** We tried — empirically, on BPM120's severe pediatric coarctation, even one outlet pinned to 80 mmHg with three unanchored zeroGradient siblings still diverges during systole (FPE in `correctPressure` at t≈0.020s). The single-anchor textbook rule that works on benign geometries doesn't survive coarctation-grade pressure gradients. For pulsatile arterial flows, use `3EWINDKESSEL` (recommended) or `fixedPressure`.
 

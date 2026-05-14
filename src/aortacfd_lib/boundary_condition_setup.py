@@ -153,6 +153,19 @@ class BoundaryConditionSetup:
         if not anchor:
             return
 
+        # v1.4.0 deprecation: outlets.pressure_anchor is now syntactic sugar for
+        # a single-entry outlets.per_outlet override. Both still work for v1.4.x;
+        # pressure_anchor is scheduled for removal in v2.0.
+        import warnings
+
+        warnings.warn(
+            "outlets.pressure_anchor is deprecated since v1.4.0. Use outlets.per_outlet "
+            "instead: {'outlet1': {'type': 'fixedValue', 'pressure_mmHg': 80}}. "
+            "Behaviour is unchanged; the legacy field will be removed in v2.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         outlet_name = anchor.get("outlet", "auto")
         if outlet_name == "auto":
             if not self.outlet_patches:

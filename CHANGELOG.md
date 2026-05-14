@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (v1.4.0 theme B — per-outlet BC types)
+- **`outlets.per_outlet`** config block lets users specify different BC
+  types per outlet, e.g. three outlets modelled with Windkessel + one
+  pinned to a clinical reference pressure:
+  ```json
+  "outlets": {
+    "type": "3EWINDKESSEL",
+    "windkessel_settings": {...},
+    "per_outlet": {
+      "outlet1": {"type": "fixedValue", "pressure_mmHg": 80}
+    }
+  }
+  ```
+  Each outlet's effective type resolves from `outlets.per_outlet[<name>]`
+  with fallback to the default `outlets.type`. The validator rejects
+  unknown outlet names, unknown types, and Windkessel overrides without
+  `windkessel_settings`.
+- **`OutletType` enum** gained `FIXEDPRESSURE` and `RESISTANCE` entries
+  (always supported by `p.tpl`, were missing from the enum).
+- **`PRESSURE_ANCHORING_OUTLET_TYPES` constant** lists the types that
+  intrinsically pin pressure; used by the pulsatile + zeroGradient
+  validator to accept mixed configs where at least one outlet anchors
+  the pressure field via `per_outlet`.
+- **`examples/config_per_outlet.json`** demonstrating a mixed
+  Windkessel + fixedValue configuration.
+
+### Changed
+- **`p.tpl` and `U.tpl` outlet loops** now dispatch on the effective
+  per-outlet type from a resolver-built type map rather than the global
+  `outlets.type`. Configs without `per_outlet` render byte-identically
+  to v1.3.0.
+- **`WkSetup.execute()`** filters its outlet list to the Windkessel
+  subset via the same resolution logic; non-Windkessel outlets in
+  mixed configs no longer participate in Murray's-law flow distribution
+  (which used to silently over-distribute inlet flow). Returns early
+  (no-op) when no outlet is Windkessel-typed.
+- **Workflow gate** in `PrepareBoundaryDataTask` now checks
+  `per_outlet` for any Windkessel-typed override, not just the default
+  `outlets.type`. Mixed configs with one Windkessel outlet still
+  trigger Windkessel setup.
+
+### Deprecated
+- **`outlets.pressure_anchor`** is now a deprecated shorthand for
+  `outlets.per_outlet`. It still works in v1.4.x and emits a
+  `DeprecationWarning` pointing users at the new form. Scheduled for
+  removal in v2.0. The legacy resolver rewrites it into the per-outlet
+  type map so behaviour is unchanged.
+
+
+
 ### Added (v1.2.0 epic D continued — pressure anchor for zeroGradient outlets, steady inlets only)
 - **`outlets.pressure_anchor`** config field pins one outlet to a fixed
   pressure while the rest stay `zeroGradient`. Limited to **steady
