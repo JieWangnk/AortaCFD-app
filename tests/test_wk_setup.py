@@ -916,13 +916,17 @@ class TestExecuteMethod:
             "boundary_conditions": {
                 "inlet": {"type": "CONSTANT", "csv_file": "inlet.csv", "data_type": "flowrate", "cardiac_output": 5.0},
                 "outlets": {
+                    # v1.4.0: outlets.type is now explicitly required for the
+                    # Windkessel path. Previously, having windkessel_settings
+                    # was an implicit signal.
+                    "type": "3EWINDKESSEL",
                     "windkessel_settings": {
                         "systolic_pressure": 120,
                         "diastolic_pressure": 80,
                         "tau": 1.8,
                         "venous_pressure": 5,
                         "pwv": 6.0,
-                    }
+                    },
                 },
             },
             "physics": {"blood_density": 1060},

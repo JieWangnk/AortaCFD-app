@@ -474,18 +474,26 @@ class PrepareBoundaryDataTask(Task):
                 except Exception as e:
                     self.log.warning(f"InletQC audit skipped: {e}")
 
-            # Set up Windkessel if needed (case-insensitive) - supports both 2-element and 3-element
-            # Support both nested (boundary_conditions.outlets) and flattened (outlets) config structures
+            # Set up Windkessel if needed. v1.4.0: check default outlets.type
+            # AND per_outlet overrides — a mixed config with one Windkessel outlet
+            # still needs wk_setup to run, even if the default is zeroGradient/etc.
             outlets = self.config.get("boundary_conditions", {}).get("outlets") or self.config.get("outlets", {})
-            outlet_type = outlets.get("type", "").upper()
-            if outlet_type in ["2EWINDKESSEL", "3EWINDKESSEL"]:
+            default_outlet_type = str(outlets.get("type", "")).upper()
+            per_outlet = outlets.get("per_outlet", {}) or {}
+            any_windkessel = default_outlet_type in ("2EWINDKESSEL", "3EWINDKESSEL") or any(
+                str(spec.get("type", "")).upper() in ("2EWINDKESSEL", "3EWINDKESSEL")
+                for spec in per_outlet.values()
+                if isinstance(spec, dict)
+            )
+            if any_windkessel:
                 self.log.info("Calculating and writing Windkessel properties...")
                 tri_surface_dir = os.path.join(case_dir, "constant", "triSurface")
                 stl_files = os.listdir(tri_surface_dir)
-                # This class will also need to be refactored to use 'cardiac_cycle'
                 wk_setup = WkSetup(
                     config=self.config, stl_files=stl_files, case_directory=case_dir, cardiac_cycle=cardiac_cycle
                 )
+                # wk_setup.execute() filters internally to the Windkessel subset
+                # via _resolve_windkessel_outlets() — safe for mixed configs.
                 wk_setup.execute()
 
             # Clean up temporary .obj files generated during mesh processing

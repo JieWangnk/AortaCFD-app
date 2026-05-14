@@ -107,13 +107,48 @@ class WkSetup:
         )
         self.wk_model_settings = self.outlet_settings["windkessel_settings"]
 
+    def _resolve_windkessel_outlets(self, all_outlets):
+        """Filter the full outlet list to only those typed as Windkessel
+        (via outlets.per_outlet override or the default outlets.type).
+
+        Mixed configs (some Windkessel, some fixedValue/zeroGradient) need
+        wk_setup to operate ONLY on the Windkessel subset — otherwise the
+        Murray's-law flow split over-distributes inlet flow to outlets that
+        aren't actually pressure-driven.
+        """
+        default_type = str(self.outlet_settings.get("type", "")).upper()
+        per_outlet = self.outlet_settings.get("per_outlet", {}) or {}
+        wk_outlets = []
+        for name in all_outlets:
+            override = per_outlet.get(name, {}) if isinstance(per_outlet, dict) else {}
+            effective_type = str(override.get("type", default_type)).upper()
+            if effective_type in ("2EWINDKESSEL", "3EWINDKESSEL"):
+                wk_outlets.append(name)
+        return wk_outlets
+
     def execute(self):
         """Main method to compute Windkessel coefficients and store them in config."""
         self.log.info("=" * 80)
         self.log.info("Windkessel Boundary Condition Setup")
         self.log.info("=" * 80)
 
-        outlet_patches = self.geom_settings["outlet_keywords_ordered"]
+        all_outlet_patches = self.geom_settings["outlet_keywords_ordered"]
+        outlet_patches = self._resolve_windkessel_outlets(all_outlet_patches)
+
+        if not outlet_patches:
+            self.log.info(
+                "No outlets are typed as Windkessel (default or per_outlet); "
+                "skipping Windkessel coefficient computation."
+            )
+            return
+
+        if len(outlet_patches) != len(all_outlet_patches):
+            skipped = [n for n in all_outlet_patches if n not in outlet_patches]
+            self.log.info(
+                f"Windkessel setup processing {len(outlet_patches)}/"
+                f"{len(all_outlet_patches)} outlets. Non-Windkessel outlets "
+                f"skipped via per_outlet override: {skipped}"
+            )
 
         # Check for direct RCZ mode first
         if self._check_direct_rcz_mode(outlet_patches):

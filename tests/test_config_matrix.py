@@ -954,3 +954,68 @@ class TestD12_PerOutletRendering:
         for outlet in ("outlet1", "outlet2", "outlet3"):
             block = self._block(p_text, outlet)
             assert "modularWKPressure" in block, f"outlet {outlet} should be Windkessel; got: {block[:200]}"
+
+
+class TestD12_WkSetupFiltering:
+    """Step 4/6: wk_setup must operate ONLY on the Windkessel subset of
+    outlets — otherwise Murray's-law flow split over-distributes inlet flow
+    to outlets that aren't pressure-driven (e.g. a per_outlet fixedValue)."""
+
+    @staticmethod
+    def _make_wk(default_type, per_outlet=None, outlet_names=("o1", "o2", "o3")):
+        from aortacfd_lib.wk_setup import WkSetup
+
+        outlets_dict = {"type": default_type, "windkessel_settings": {"systolic_pressure": 120, "diastolic_pressure": 80}}
+        if per_outlet is not None:
+            outlets_dict["per_outlet"] = per_outlet
+
+        cfg = {
+            "geometry": {
+                "case_name": "test",
+                "wall_keywords_ordered": "wall",
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": list(outlet_names),
+            },
+            "boundary_conditions": {
+                "inlet": {"type": "TIMEVARYING"},
+                "outlets": outlets_dict,
+            },
+        }
+        return WkSetup(cfg, [], tempfile.mkdtemp(prefix="wk-filter-"), 0.8)
+
+    def test_resolve_all_windkessel_returns_full_list(self):
+        wk = self._make_wk(default_type="3EWINDKESSEL")
+        result = wk._resolve_windkessel_outlets(["o1", "o2", "o3"])
+        assert result == ["o1", "o2", "o3"]
+
+    def test_resolve_no_windkessel_returns_empty(self):
+        """All outlets zeroGradient → no Windkessel processing."""
+        wk = self._make_wk(default_type="zeroGradient")
+        result = wk._resolve_windkessel_outlets(["o1", "o2", "o3"])
+        assert result == []
+
+    def test_resolve_mixed_returns_only_windkessel_outlets(self):
+        """Default WK + 1 per_outlet override to fixedValue → 2 WK outlets remain."""
+        wk = self._make_wk(
+            default_type="3EWINDKESSEL",
+            per_outlet={"o1": {"type": "fixedValue", "pressure_mmHg": 80}},
+        )
+        result = wk._resolve_windkessel_outlets(["o1", "o2", "o3"])
+        assert result == ["o2", "o3"]  # o1 filtered out
+
+    def test_resolve_inverted_mixed(self):
+        """Default zeroGradient + 1 per_outlet WK override → 1 WK outlet."""
+        wk = self._make_wk(
+            default_type="zeroGradient",
+            per_outlet={"o2": {"type": "3EWINDKESSEL"}},
+        )
+        result = wk._resolve_windkessel_outlets(["o1", "o2", "o3"])
+        assert result == ["o2"]
+
+    def test_execute_returns_early_when_no_windkessel(self):
+        """Empty WK subset → execute() is a no-op (doesn't crash)."""
+        wk = self._make_wk(default_type="zeroGradient")
+        # Should not raise even though config doesn't have inlet flow / cardiac cycle
+        # data sufficient for a real Windkessel computation
+        wk.execute()
+        # If we got here without an exception, the early-return path is working
