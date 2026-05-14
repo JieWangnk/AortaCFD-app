@@ -101,6 +101,37 @@ MATRIX: list[dict[str, Any]] = [
         "overrides": None,
         "end_time": 1.5,  # default endTime; matrix smoke-test override skipped
     },
+    {
+        "name": "R8_WOMERSLEY_inlet",
+        "patient": "BPM120",
+        "purpose": (
+            "WOMERSLEY analytical pulsatile inlet end-to-end. Closes another "
+            "untested-at-solver-level branch from the v1.2.0 audit. Uses BPM120's "
+            "default mesh + Windkessel outlets — only the inlet type changes. "
+            "Note: WOMERSLEY requires profile=womersley (BC-validator-enforced)."
+        ),
+        "overrides": {
+            "boundary_conditions": {
+                "inlet": {
+                    "type": "WOMERSLEY",
+                    "csv_file": "BPM120.csv",
+                    "data_type": "flowrate",
+                    "profile": "womersley",
+                }
+            }
+        },
+    },
+    # R7 (per_outlet mixed BC on BPM120) intentionally NOT in the live-solver
+    # matrix. Attempted during v1.4.0 development (2026-05-14); the solver
+    # got to t=0.0049s of 0.05s in 28 min wall, then PIMPLE non-convergence
+    # locked the same timestep indefinitely. Same failure mode as R5
+    # (CONSTANT + zeroGradient + anchor on BPM120, v1.2.0): a fixedValue
+    # outlet adjacent to severe coarctation makes the pressure equation
+    # ill-conditioned. The 20 mock tests in tests/test_config_matrix.py
+    # TestD12_* verify the rendering, resolver, and wk_setup filter are
+    # correct — solver-level marginality is a geometry issue, not a
+    # feature bug. To live-test per_outlet on a less pathological geometry,
+    # extend the matrix with a healthy-aorta case once one is available.
 ]
 
 
