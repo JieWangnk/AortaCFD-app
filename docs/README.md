@@ -114,7 +114,7 @@ Three patient cases are available:
 |---------|-------------|--------|
 | `0014_H_AO_COA` | Pediatric coarctation | SimVascular VMR |
 | `BPM120` | Pediatric coarctation | Published (Wang et al.) |
-| `PAT002` | Adult aorta | Cape Town collaboration |
+| `VOL04` | Adult aorta | Volunteer dataset |
 
 ### Running Demo Simulations
 
