@@ -1,0 +1,37 @@
+{
+  "title": "AortaCFD: Patient-Specific Aortic Blood Flow Simulation",
+  "description": "An end-to-end automated pipeline for patient-specific cardiovascular CFD using OpenFOAM 12. Streamlines the complete workflow from STL geometry + flow waveform to hemodynamic outputs (TAWSS, OSI, RRT), with composable configuration, three numerics profiles (robust/standard/precise), per-outlet boundary condition types (Windkessel, fixedValue, zeroGradient), and Windkessel coefficients computed via Murray's law.",
+  "creators": [
+    {
+      "name": "Wang, Jie",
+      "affiliation": "University of Manchester",
+      "orcid": ""
+    }
+  ],
+  "keywords": [
+    "computational-fluid-dynamics",
+    "cardiovascular",
+    "aorta",
+    "coarctation",
+    "blood-flow",
+    "openfoam",
+    "patient-specific",
+    "hemodynamics",
+    "windkessel",
+    "WSS",
+    "TAWSS",
+    "OSI"
+  ],
+  "license": "MIT",
+  "access_right": "open",
+  "upload_type": "software",
+  "related_identifiers": [
+    {
+      "scheme": "url",
+      "identifier": "https://github.com/JieWangnk/AortaCFD-app",
+      "relation": "isSupplementTo",
+      "resource_type": "software"
+    }
+  ],
+  "communities": []
+}

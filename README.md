@@ -1,9 +1,12 @@
 # AortaCFD
 
 ![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)
-![Tests](https://img.shields.io/badge/tests-2167%20passing-success.svg)
+![Tests](https://img.shields.io/badge/tests-2210%20passing-success.svg)
 ![OpenFOAM](https://img.shields.io/badge/OpenFOAM-12-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.placeholder.svg)](https://doi.org/10.5281/zenodo.placeholder)
+
+> **Citing this work:** every tagged release gets an archived snapshot + DOI on Zenodo (auto-published from this repo's GitHub Releases). See [`CITATION.cff`](CITATION.cff) for the current version, or click the DOI badge above for all versions.
 
 AortaCFD is an automated OpenFOAM 12 workflow for patient-specific aortic CFD. It takes case geometry (STL patches) and a JSON config, builds the OpenFOAM case, generates the mesh, applies inlet and outlet boundary conditions, runs the solver, and exports hemodynamic quantities of interest with run reports.
 

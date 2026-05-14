@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-05-14
+
+Theme B (per-outlet BC types) + fresh-clone-safety fixes + repo polish.
+
+### Highlights
+- **`outlets.per_outlet`** lets users mix BC types per outlet (Windkessel
+  on most, fixedValue on one for clinical reference, etc.). See README
+  "Mixed outlet types" section.
+- **`0014_H_AO_COA` canonical case** now works on fresh clones — its
+  default inlet was switched from `MRI` (pointing at a 19 MB gitignored
+  directory) to `TIMEVARYING` + tracked `inflow.csv`.
+- **WOMERSLEY inlet** verified at solver level (R8 in
+  `scripts/run_config_matrix.py`).
+- **Mesh-reproducibility investigation** documented `cells_per_diameter`
+  as the actual lever for the paper-reference mesh (not span_target),
+  with a verified scaling curve. `config_paper_reference.json` updated
+  to use `surfaceRefinementLevels=[2, 3]` for physically-correct mesh
+  character (fine near walls).
+- **Makefile rewritten** to drop cargo-cult targets (`docker-build` /
+  `docker-run` / `deploy-k8s` / `docs` / `app.py` references — none of
+  the underlying files existed).
+- **Repo lightness**: `tests/README.md` + `scripts/README.md` added;
+  `TEST_STRATEGY.md` consolidated into `docs/_internal/`.
+- **`.zenodo.json`** added so every tagged release gets a DOI when the
+  GitHub↔Zenodo OAuth integration is enabled.
+
 ### Added (v1.4.0 theme B — per-outlet BC types)
 - **`outlets.per_outlet`** config block lets users specify different BC
   types per outlet, e.g. three outlets modelled with Windkessel + one
