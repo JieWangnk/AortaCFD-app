@@ -75,17 +75,17 @@
 
   "boundary_conditions": {
     "inlet": {
-      "type": "MRI",
-      "file": "./inlet/",
-      "_comment": "Pre-processed 4D flow MRI inlet data in OpenFOAM format (time directories with U files)"
+      "type": "TIMEVARYING",
+      "csv_file": "inflow.csv",
+      "data_type": "flowrate",
+      "profile": "parabolic",
+      "_comment": "Pulsatile flowrate waveform (Time,Flowrate columns in m^3/s). Works for fresh clones — the CSV is tracked in this directory."
     },
 
-    "_inlet_alternative_csv": {
-      "_type": "TIMEVARYING",
-      "_csv_file": "inflow.csv",
-      "_data_type": "flowrate",
-      "_profile": "parabolic",
-      "_comment": "Alternative: CSV-based inlet with velocity profile mapping"
+    "_inlet_alternative_mapped_profile": {
+      "_type": "MAPPED_PROFILE",
+      "_file": "./inlet/",
+      "_comment": "Alternative if you have the pre-mapped per-face per-timestep data: drop a 'inlet/' directory of OpenFOAM-format time snapshots in this case and switch type. NOTE: the inlet/ directory is gitignored (19MB) so fresh clones do NOT include it. Use this only if you have the data locally."
     },
 
     "outlets": {
