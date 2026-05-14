@@ -8,6 +8,29 @@
 
 > **Citing this work:** every tagged release gets an archived snapshot + DOI on Zenodo (auto-published from this repo's GitHub Releases). See [`CITATION.cff`](CITATION.cff) for the current version, or click the DOI badge above for all versions.
 
+## How to cite
+
+If you use AortaCFD in academic work, please cite both the software (via the Zenodo DOI for the version you used) and any peer-reviewed paper this repository underlies. A BibTeX entry generated from [`CITATION.cff`](CITATION.cff):
+
+```bibtex
+@software{Wang_AortaCFD_2026,
+  author  = {Wang, Jie},
+  title   = {{AortaCFD: Patient-Specific Aortic Blood Flow Simulation}},
+  version = {1.4.0},
+  year    = {2026},
+  url     = {https://github.com/JieWangnk/AortaCFD-app},
+  doi     = {10.5281/zenodo.placeholder}
+}
+```
+
+GitHub's "Cite this repository" button (top right) reads `CITATION.cff` and offers ready-to-paste APA / BibTeX. Replace the DOI placeholder once Zenodo issues a real DOI for v1.4.0 — see the [release notes](https://github.com/JieWangnk/AortaCFD-app/releases) for that link.
+
+## Contributing
+
+Bug reports, feature requests, and pull requests welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for dev-environment setup, test/lint commands, and PR conventions; [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) for community guidelines.
+
+---
+
 AortaCFD is an automated OpenFOAM 12 workflow for patient-specific aortic CFD. It takes case geometry (STL patches) and a JSON config, builds the OpenFOAM case, generates the mesh, applies inlet and outlet boundary conditions, runs the solver, and exports hemodynamic quantities of interest with run reports.
 
 The project is designed for practical case execution rather than manual OpenFOAM case assembly. A typical workflow is:
@@ -43,8 +66,8 @@ pip install -e ".[dev]"           # runtime + test/lint/security tools
 Verify the install:
 
 ```bash
-python run_patient.py --version       # → AortaCFD 1.2.0
-python run_patient.py --list          # → BPM120, 0014_H_AO_COA, VOL04
+python run_patient.py --version       # → AortaCFD 1.4.0
+python run_patient.py --list          # → 0014_H_AO_COA, BPM120, VOL04
 ```
 
 Run `python run_patient.py --doctor` after install — it checks Python version, importable deps, sample STLs, OpenFOAM sourced, and disk space.
@@ -89,11 +112,16 @@ export foamDotFile=/share/apps/openfoam/12/etc/bashrc
 
 `run_patient.py` and `run_batch.py` pick these up automatically — no config edit needed.
 
-If you plan to use 3-element Windkessel outlets, install the custom boundary condition:
+### Install the Windkessel boundary condition (required for all three canonical cases)
+
+All three sample cases (`BPM120`, `0014_H_AO_COA`, `VOL04`) use 3-element Windkessel outlets, which depend on a small custom boundary-condition library (`modularWKPressure`) compiled against your OpenFOAM 12 install. Run this once after sourcing OpenFOAM:
 
 ```bash
+source /opt/openfoam12/etc/bashrc
 ./scripts/install_windkessel_of12.sh
 ```
+
+The script builds the BC into `$FOAM_USER_LIBBIN`. If you skip this step, the solver will fail at startup with `unknown patch type modularWKPressure`. If you're only running the `case` step (config sanity-check) you can defer this; you'll need it before any `--steps mesh` or beyond.
 
 ---
 
