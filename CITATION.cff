@@ -12,6 +12,7 @@ url: "https://github.com/JieWangnk/AortaCFD-app"
 license: MIT
 version: "1.4.1"
 date-released: "2026-05-14"
+doi: "10.5281/zenodo.20184620"
 keywords:
   - computational-fluid-dynamics
   - cardiovascular
