@@ -31,7 +31,7 @@ that hand off via the filesystem (no Python imports across blocks). See
   geometry generator → packaging → running → aggregating.
 
 The Blender geometry generator (**Block A**) lives separately at
-`~/GitHub/blender/` (independent repo). It has its own README, three
+`~/GitHub/aortacfd-geomgen/` ([GitHub](https://github.com/JieWangnk/aortacfd-geomgen)). It has its own README, three
 example specs (single / sweep / sample), Sobol/LHS/random samplers, and
 absorbs the patch-splitter so each case folder is ready for Block B
 without an external splitter step.

@@ -14,7 +14,7 @@ progress, and pull results back. Same code, different runner.
 ### 1. Generate the sweep locally
 
 ```bash
-cd ~/GitHub/blender
+cd ~/GitHub/aortacfd-geomgen
 python cli.py --spec specs/sample_sobol_50.json --output /tmp/gen_sobol_50
 
 cd ~/GitHub/AortaCFD-app

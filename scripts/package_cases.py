@@ -2,7 +2,7 @@
 
 Takes a directory of case folders that already contain split STL patches
 (typically produced by the Blender geometry generator under
-``~/GitHub/blender/``, but any source works as long as the folder
+``~/GitHub/aortacfd-geomgen/``, but any source works as long as the folder
 contains ``inlet.stl``, ``outlet*.stl``, and ``wall_aorta.stl``) and
 stamps each one with a ``config.json`` so it is ready for
 ``run_patient.py``.

@@ -13,7 +13,7 @@ If you don't have Blender, skip to **"No Blender?"** at the bottom.
 ## Steps
 
 ```bash
-cd ~/GitHub/blender
+cd ~/GitHub/aortacfd-geomgen   # git clone https://github.com/JieWangnk/aortacfd-geomgen.git
 python cli.py --spec specs/single_baseline.json --output /tmp/gen_single
 ```
 
@@ -62,8 +62,8 @@ python cli.py --spec specs/my_aorta.json --output /tmp/gen_custom
 ```
 
 All Blender parameters are documented in
-[`README.md`](../../../blender/README.md) and in the source at
-[`blender_aorta_like_generator.py`](../../../blender/blender_aorta_like_generator.py).
+[`README.md`](../../../aortacfd-geomgen/README.md) and in the source at
+[`blender_aorta_like_generator.py`](../../../aortacfd-geomgen/blender_aorta_like_generator.py).
 
 ### (b) Sweep one parameter (linear)
 

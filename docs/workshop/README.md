@@ -8,7 +8,7 @@ composable blocks:
 
 | Block | What it does | Lives in |
 |---|---|---|
-| **A — Geometry generator** | Parametric Blender aorta. Single / sweep / Sobol-sample modes. Outputs split STL patches. | `~/GitHub/blender/` |
+| **A — Geometry generator** | Parametric Blender aorta. Single / sweep / Sobol-sample modes. Outputs split STL patches. | `~/GitHub/aortacfd-geomgen/` ([repo](https://github.com/JieWangnk/aortacfd-geomgen)) |
 | **B — Case packager** | Stamps a config.json template onto a folder of generated cases. | `scripts/package_cases.py` |
 | **C — Runners** | `run_patient.py` (one case), `run_batch.py --workers N` (local parallel), `run_batch.py --slurm` (HPC). | `run_patient.py`, `run_batch.py`, `scripts/hpc/` |
 | **D — Cohort aggregator** | Joins per-case QoIs + sweep params into one CSV. | `scripts/compare_cohort.py` |

@@ -7,7 +7,7 @@ stamp a default `config.json` on each so they are ready for
 ## Block A: 10 cases varying coarctation severity
 
 ```bash
-cd ~/GitHub/blender
+cd ~/GitHub/aortacfd-geomgen
 python cli.py --spec specs/sweep_severity.json --output /tmp/gen_sweep
 ```
 
