@@ -1,12 +1,12 @@
 {
-  "_doc": "Workshop-quick template: minimal mesh, 1 cycle, robust numerics, CONSTANT inlet (no CSV needed). Designed so 6 cases run in under 30 minutes on a laptop with `run_batch.py --workers 2 --quick`. Use config_sweep_default.json for production-quality sweeps.",
+  "_doc": "Workshop-quick variant with 2-element Windkessel (R-C) outlets instead of zeroGradient + fixed-pressure anchor. Trade-off: gives a physical resistance-driven pressure-drop story (more clinically meaningful) at the cost of a startup transient (Windkessel ODE state takes a few timesteps to settle). Compare timings against config_workshop_quick.json on the same geometry to decide which BC is better for your workshop.",
 
   "case_info": {
     "patient_id": "WORKSHOP_CASE",
-    "description": "Workshop quick-demo case (config_workshop_quick.json template)"
+    "description": "Workshop quick-demo, resistance outlets (config_workshop_quick_resistance.json template)"
   },
 
-  "cardiac_cycle": 0.8,
+  "cardiac_cycle": 0.2,
 
   "physics": {
     "model": "laminar",
@@ -51,13 +51,14 @@
       "profile": "plug"
     },
     "outlets": {
-      "_comment": "Default = zeroGradient; outlet1 (descending) pinned to p=0 for a well-posed pressure problem. No Windkessel ODE, so no startup transient — much more stable for the workshop demo than 3EWINDKESSEL.",
-      "type": "zeroGradient",
-      "per_outlet": {
-        "outlet1": {
-          "type": "fixedValue",
-          "pressure_mmHg": 0
-        }
+      "_comment": "2-element Windkessel (R-C only, no proximal Z) — simpler than 3-element and faster startup. Murray's law auto-tunes per-outlet R and C based on outlet diameter.",
+      "type": "2EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80,
+        "venous_pressure": 0,
+        "methodology": "murray_law_automatic",
+        "tau": 1.0
       }
     },
     "walls": {
