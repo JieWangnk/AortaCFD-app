@@ -1,0 +1,74 @@
+{
+  "_doc": "Workshop-quick template: minimal mesh, 1 cycle, robust numerics, CONSTANT inlet (no CSV needed). Designed so 6 cases run in under 30 minutes on a laptop with `run_batch.py --workers 2 --quick`. Use config_sweep_default.json for production-quality sweeps.",
+
+  "case_info": {
+    "patient_id": "WORKSHOP_CASE",
+    "description": "Workshop quick-demo case (config_workshop_quick.json template)"
+  },
+
+  "cardiac_cycle": 0.8,
+
+  "physics": {
+    "model": "laminar",
+    "transport_properties": {
+      "rho": 1060,
+      "nu": 3.7736e-6
+    }
+  },
+
+  "numerics": {
+    "profile": "robust"
+  },
+
+  "mesh": {
+    "cells_per_diameter": 8,
+    "boundary_layers": {
+      "enabled": false
+    },
+    "SNAPPY_SETTINGS": {
+      "parallel": true,
+      "nProcessors": 4,
+      "surfaceRefinementLevels": [0, 1]
+    }
+  },
+
+  "geometry": {
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": ["outlet1", "outlet2", "outlet3", "outlet4"],
+    "wall_keywords_ordered": "wall_aorta",
+    "scale_factor": 0.001
+  },
+
+  "boundary_conditions": {
+    "inlet": {
+      "type": "CONSTANT",
+      "data_type": "flowrate",
+      "value_m3_per_s": 8.33e-5,
+      "profile": "parabolic"
+    },
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80,
+        "venous_pressure": 0,
+        "methodology": "murray_law_automatic",
+        "tau": 1.0
+      }
+    },
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+
+  "simulation_control": {
+    "number_of_cycles": 1,
+    "writeInterval": 0.1
+  },
+
+  "run_settings": {
+    "solution_type": "parallel",
+    "subdomains": 4,
+    "decomposition_method": "scotch"
+  }
+}

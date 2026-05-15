@@ -1,0 +1,96 @@
+{
+  "_doc": "LES research template: WALE subgrid model, precise numerics (2nd-order minimal diffusion), TIMEVARYING inlet, 3-element Windkessel. Wall-clock is hours-per-case; designed for HPC scale (--slurm).",
+
+  "case_info": {
+    "patient_id": "LES_CASE",
+    "description": "LES research case (config_les_precise.json template)"
+  },
+
+  "cardiac_cycle": 0.8,
+
+  "physics": {
+    "model": "LES",
+    "les_settings": {
+      "model": "WALE"
+    },
+    "transport_properties": {
+      "rho": 1060,
+      "nu": 3.7736e-6
+    }
+  },
+
+  "numerics": {
+    "profile": "precise"
+  },
+
+  "mesh": {
+    "cells_per_diameter": 30,
+    "boundary_layers": {
+      "enabled": true,
+      "num_layers": 5,
+      "expansion_ratio": 1.2,
+      "final_layer_thickness": 0.3,
+      "min_thickness": 0.1
+    },
+    "SNAPPY_SETTINGS": {
+      "parallel": true,
+      "nProcessors": 16,
+      "surfaceRefinementLevels": [2, 3]
+    }
+  },
+
+  "geometry": {
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": ["outlet1", "outlet2", "outlet3", "outlet4"],
+    "wall_keywords_ordered": "wall_aorta",
+    "scale_factor": 0.001
+  },
+
+  "boundary_conditions": {
+    "inlet": {
+      "type": "TIMEVARYING",
+      "csv_file": "inflow.csv",
+      "data_type": "flowrate",
+      "profile": "womersley"
+    },
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80,
+        "venous_pressure": 0,
+        "methodology": "murray_law_automatic",
+        "tau": 1.0,
+        "enable_stabilization": true,
+        "betaT": 0.3,
+        "betaN": 0.0
+      }
+    },
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+
+  "hemodynamics": {
+    "runtime_functions": {
+      "wallShearStress": true,
+      "fieldAverage": true,
+      "pressureMonitoring": true
+    },
+    "tawss_settings": {
+      "skip_cycles": 1,
+      "periodicRestart": true
+    }
+  },
+
+  "simulation_control": {
+    "number_of_cycles": 3,
+    "writeInterval": 0.02
+  },
+
+  "run_settings": {
+    "solution_type": "parallel",
+    "subdomains": 16,
+    "decomposition_method": "scotch"
+  }
+}

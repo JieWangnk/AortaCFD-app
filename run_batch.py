@@ -1,16 +1,32 @@
 #!/usr/bin/env python3
-"""AortaCFD batch entrypoint.
+"""AortaCFD batch entrypoint (Block C of the parametric-study workflow).
 
-Runs multiple cases locally with multiprocessing or generates a SLURM job-array
-script for cluster execution. Successful local runs are followed by cohort QoI
-aggregation scoped to the current batch outputs.
+Three compute tiers, same code path:
 
-Examples:
-    python run_batch.py
-    python run_batch.py --cases 0014_H_AO_COA BPM120 --workers 2
-    python run_batch.py --steps case,mesh,boundary
-    python run_batch.py --config-list 0014_H_AO_COA:config_mesh10.json 0014_H_AO_COA:config_mesh12.json -w 2
-    python run_batch.py --slurm
+  1. Local single (one case)           python run_patient.py <case>
+  2. Local parallel (workstation)      python run_batch.py --cases A B C --workers N
+  3. HPC SLURM job array               python run_batch.py --cases A B C --slurm --partition X
+
+After the SLURM script is generated, transfer + submit + download via
+``scripts/hpc/{upload,status,download}.sh`` (copy ``hpc.conf`` to a per-cluster
+``<sitename>.conf`` and edit for your environment — see
+``scripts/hpc/README.md`` and ``scripts/hpc/example_cluster.conf``).
+
+Common patterns:
+    # Run all cases under cases_input/ locally with 2 workers
+    python run_batch.py --workers 2
+
+    # Run a specific subset, resuming after a previous failure
+    python run_batch.py --cases A B C --workers 4 --resume
+
+    # Run the same patient with several configs
+    python run_batch.py --config-list BPM120:config_mesh10.json BPM120:config_mesh12.json -w 2
+
+    # Preview commands without executing (sanity-check before HPC submission)
+    python run_batch.py --cases sobol_demo_* --dry-run
+
+    # Generate a SLURM job-array script for HPC
+    python run_batch.py --cases sobol_demo_* --slurm --partition multicore
 """
 
 import sys
@@ -322,8 +338,40 @@ def create_parser() -> argparse.ArgumentParser:
         '--dry-run', action='store_true',
         help='List cases that would be run without executing',
     )
+    parser.add_argument(
+        '--resume', action='store_true',
+        help='Skip cases that have already completed successfully '
+             '(checks output/<case>/*/manifest.json status=ok, or falls back '
+             'to qoi_summary.json existence). Useful after partial batch failure.',
+    )
 
     return parser
+
+
+def _is_case_done(output_id: str, output_root: str = 'output') -> bool:
+    """Return True if a previous run of this case completed successfully.
+
+    A case counts as "done" if any of its run directories under
+    ``<output_root>/<output_id>/`` has either:
+      - a ``manifest.json`` with ``status`` == ``"ok"``, OR
+      - a ``qoi_summary.json`` anywhere underneath (legacy fallback).
+    """
+    out_dir = Path(output_root) / output_id
+    if not out_dir.exists():
+        return False
+    for run_dir in out_dir.iterdir():
+        if not run_dir.is_dir():
+            continue
+        manifest = run_dir / 'manifest.json'
+        if manifest.exists():
+            try:
+                if json.loads(manifest.read_text()).get('status') == 'ok':
+                    return True
+            except Exception:
+                pass
+        if any(run_dir.rglob('qoi_summary.json')):
+            return True
+    return False
 
 
 def main() -> None:
@@ -372,6 +420,18 @@ def main() -> None:
         for case_id in cases:
             jobs.append((case_id, case_id, args.config))
 
+    # ── Apply --resume: filter out completed cases ──
+    if args.resume:
+        skipped = [oid for oid, _, _ in jobs if _is_case_done(oid)]
+        jobs = [(oid, pid, cfg) for oid, pid, cfg in jobs if oid not in skipped]
+        if skipped:
+            print(f'\n[--resume] Skipping {len(skipped)} already-completed case(s):')
+            for s in skipped:
+                print(f'  - {s}')
+        if not jobs:
+            print('\n[--resume] All requested cases already completed. Nothing to do.')
+            sys.exit(0)
+
     # ── Print header ──
     print(f'\nAortaCFD Batch Runner')
     print(f'{"=" * 50}')
@@ -386,7 +446,13 @@ def main() -> None:
 
     # ── Dry run ──
     if args.dry_run:
-        print(f'\n[DRY RUN] Would execute {len(jobs)} jobs.')
+        print(f'\n[DRY RUN] Would execute {len(jobs)} job(s):')
+        for output_id, patient_id, cfg in jobs:
+            cfg_arg = f' --config {cfg}' if cfg else ''
+            profile_arg = f' --profile {args.profile}' if args.profile else ''
+            steps_arg = f' --steps {args.steps}' if args.steps != 'all' else ''
+            print(f'  python run_patient.py {patient_id}{steps_arg}{cfg_arg}{profile_arg}'
+                  f'   # -> output/{output_id}/')
         sys.exit(0)
 
     # ── SLURM mode ──

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — parametric-study workflow (four-block architecture)
+
+The parametric-study workflow is organised as four composable blocks
+that hand off via the filesystem (no Python imports across blocks). See
+[`docs/workshop/`](docs/workshop/) for the end-to-end walkthrough.
+
+- **Block B — Case packager** (`scripts/package_cases.py`): stamps a
+  `config.json` template on every case folder in a source directory,
+  writes `case.meta.json` per case. Three workshop-ready templates
+  under `examples/templates/`: `config_sweep_default.json`,
+  `config_workshop_quick.json`, `config_les_precise.json`.
+- **Block D — Cohort aggregator** (`scripts/compare_cohort.py`): walks
+  per-case `qoi_summary.json`, joins with `case.meta.json` and run
+  manifests, writes `output/cohort_comparison.csv`. This fixes the
+  broken import at `run_batch.py:471–472`.
+- **Block C extensions**: `run_batch.py` now has `--dry-run` (prints
+  command lines without executing) and `--resume` (skips cases whose
+  output shows completion). `scripts/hpc/example_cluster.conf` and
+  `scripts/hpc/README.md` document the per-cluster customisation point.
+- **Workshop materials**: six lesson markdowns + a Jupyter notebook for
+  QoI sensitivity analysis. Reference for the four-block workflow:
+  geometry generator → packaging → running → aggregating.
+
+The Blender geometry generator (**Block A**) lives separately at
+`~/GitHub/blender/` (independent repo). It has its own README, three
+example specs (single / sweep / sample), Sobol/LHS/random samplers, and
+absorbs the patch-splitter so each case folder is ready for Block B
+without an external splitter step.
+
 ## [1.4.1] - 2026-05-14
 
 Publishing-prep patch. No code or behaviour changes; documentation and community-health files only. Cut so this release is the first one Zenodo archives (DOI minting).

@@ -84,6 +84,11 @@ python run_batch.py \
 
 After batch completion: `output/cohort_comparison.csv` aggregates QoIs.
 
+For an end-to-end walkthrough of parametric studies at scale —
+synthetic-geometry generation, packaging, local batch, HPC submission,
+and cohort analysis — see the [**workshop guide**](../workshop/README.md)
+(six lessons over the four composable blocks A→B→C→D).
+
 ### 1.3 Mesh Convergence and GCI (20 min)
 
 The Grid Convergence Index (GCI) quantifies mesh independence:
