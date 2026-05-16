@@ -4,6 +4,15 @@ Goal: generate 10 synthetic aortas varying coarctation severity, then
 stamp a default `config.json` on each so they are ready for
 `run_patient.py`. ~10 minutes (mostly Blender start-up × 10).
 
+> **Customising the sweep.** Block A ships six example specs covering all
+> four modes (`single`, `sweep`, `sample`, `grid`). To author your own,
+> see the [`aortacfd-geomgen` README "How to customise" section][howto]
+> and the full parameter reference [`PARAMETERS.md`][params]. Quick
+> ad-hoc overrides without editing files: `python cli.py --spec ... --param diameter=28`.
+>
+> [howto]: https://github.com/JieWangnk/aortacfd-geomgen#how-to-customise-your-sweep
+> [params]: https://github.com/JieWangnk/aortacfd-geomgen/blob/main/PARAMETERS.md
+
 ## Block A: 10 cases varying coarctation severity
 
 ```bash
