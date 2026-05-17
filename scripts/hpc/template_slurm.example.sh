@@ -54,6 +54,6 @@ echo "Node         : $(hostname)"
 echo "Start time   : $(date)"
 echo "=========================="
 
-python run_patient.py "$CASE_ID" --steps %%STEPS%%%%CONFIG_FLAG%%
+python run_patient.py "$CASE_ID" --steps %%STEPS%%%%CONFIG_FLAG%%%%RUN_NAME_FLAG%%
 
 echo "=== Finished: $CASE_ID at $(date) ==="

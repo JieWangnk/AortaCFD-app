@@ -124,6 +124,77 @@ locally.
 python -m scripts.compare_cohort output/sobol_50/
 ```
 
+## Hybrid: local prep + HPC solver + local post
+
+The flow above (steps 1–6) ships the whole repo to HPC and runs every
+workflow step there (case setup, meshing, BCs, solver, reconstruct,
+hemodynamics, postprocessing). That's simplest, but it means HPC needs
+Python + scipy + all the package's pip deps, and you spend HPC compute
+budget on the cheap steps (mesh + BCs take seconds; only the solver
+benefits from parallel HPC).
+
+For production runs (large meshes, hours of solver time) the cleaner
+pattern is **prep locally, solve on HPC, post-process locally**. The
+existing `--steps` and the new `--run-name` flags compose into this
+without any new tool. All three phases write into the same
+`output/<case>/<run_name>/` so the case dir round-trips intact.
+
+```bash
+# ── Phase 1: local prep (case dirs + mesh + BCs, no solver) ──
+python run_batch.py --cases-dir cases_input/sobol_50 \
+    --steps case,mesh,boundary \
+    --run-name hpc_batch \
+    --workers 4
+# → output/<case>/hpc_batch/openfoam/ is now a ready-to-solve OpenFOAM case
+
+# ── Phase 2a: upload prepped cases ──
+bash scripts/hpc/sync_prepared_cases.sh up scripts/hpc/csf3.conf \
+    output/sev_001/hpc_batch output/sev_002/hpc_batch ... output/sev_050/hpc_batch
+
+# ── Phase 2b: generate solver-only SLURM script, submit, wait ──
+python run_batch.py --cases-dir cases_input/sobol_50 \
+    --slurm \
+    --steps solver \
+    --run-name hpc_batch \
+    --partition multicore_small \
+    --time-limit 4:00:00 \
+    --cpus-per-task 8 \
+    --cluster-conf scripts/hpc/csf3.conf
+
+# Upload the generated batch_submit.sh + cases_input/ so the script can
+# resolve case names, then submit. (Sketch — adapt paths to your cluster.)
+rsync -avz batch_submit.sh cases_input/sobol_50 \
+    csf3:~/scratch/AortaCFD-batch/
+
+ssh csf3 "cd ~/scratch/AortaCFD-batch && sbatch batch_submit.sh"
+bash scripts/hpc/status.sh scripts/hpc/csf3.conf      # poll until done
+
+# ── Phase 2c: download solved cases back ──
+bash scripts/hpc/sync_prepared_cases.sh down scripts/hpc/csf3.conf \
+    output/sev_001/hpc_batch output/sev_002/hpc_batch ... output/sev_050/hpc_batch
+
+# ── Phase 3: local post-process + aggregate ──
+python run_batch.py --cases-dir cases_input/sobol_50 \
+    --steps hemodynamics,post \
+    --run-name hpc_batch \
+    --workers 4
+
+python -m scripts.compare_cohort output/sobol_50/
+```
+
+**Why this works**: `--run-name hpc_batch` makes every `run_batch.py`
+invocation write into `output/<case>/hpc_batch/` instead of a new
+`run_<timestamp>/`. Phase 1 creates the case and mesh there; Phase 2
+adds the solver fields; Phase 3 reads everything back and produces the
+QoI summary. The case dir is the unit of transfer between laptop and
+cluster.
+
+**When NOT to use the hybrid pattern**: small synthetic sweeps with
+fast solves (workshop_quick template, ~95 s/case). The whole-thing-on-HPC
+pattern is simpler and the round-trip overhead would dominate. The
+hybrid pattern shines when each solver run is hours, not minutes.
+```
+
 → `output/sobol_50/cohort_comparison.csv`, ready for the lesson 5
 notebook.
 

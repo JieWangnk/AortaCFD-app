@@ -185,3 +185,31 @@ def test_generated_script_is_bash_valid(tmp_path: Path) -> None:
     )
     result = subprocess.run(["bash", "-n", str(out)], capture_output=True, text=True)
     assert result.returncode == 0, f"bash -n failed: {result.stderr}"
+
+
+def test_run_name_appears_in_python_invocation(tmp_path: Path) -> None:
+    """For hybrid local/HPC workflows, --run-name must propagate to each task."""
+    out = tmp_path / "submit.sh"
+    generate_slurm_script(
+        cases=["A", "B"],
+        steps="solver",
+        config_override=None,
+        partition="multicore_small",
+        output_script=str(out),
+        run_name="hpc_batch",
+    )
+    text = out.read_text()
+    assert 'python run_patient.py "$CASE_ID" --steps solver --run-name hpc_batch' in text
+
+
+def test_no_run_name_keeps_python_invocation_clean(tmp_path: Path) -> None:
+    out = tmp_path / "submit.sh"
+    generate_slurm_script(
+        cases=["A"],
+        steps="all",
+        config_override=None,
+        output_script=str(out),
+    )
+    text = out.read_text()
+    assert 'python run_patient.py "$CASE_ID" --steps all' in text
+    assert "--run-name" not in text

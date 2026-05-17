@@ -260,7 +260,7 @@ echo "Node         : $(hostname)"
 echo "Start time   : $(date)"
 echo "=========================="
 
-python run_patient.py "$CASE_ID" --steps %%STEPS%%%%CONFIG_FLAG%%
+python run_patient.py "$CASE_ID" --steps %%STEPS%%%%CONFIG_FLAG%%%%RUN_NAME_FLAG%%
 
 echo "=== Finished: $CASE_ID at $(date) ==="
 """
@@ -292,6 +292,7 @@ def generate_slurm_script(
     cluster_conf: Optional[str] = None,
     slurm_template: Optional[str] = None,
     job_name: str = 'AortaCFD-batch',
+    run_name: Optional[str] = None,
 ) -> str:
     """
     Generate a SLURM job-array script that submits one job per case.
@@ -311,6 +312,7 @@ def generate_slurm_script(
     """
     n_cases = len(cases)
     config_flag = f' --config {config_override}' if config_override else ''
+    run_name_flag = f' --run-name {run_name}' if run_name else ''
     conf = _load_cluster_conf(cluster_conf)
     cluster_env_setup = _build_cluster_env_setup(conf, cluster_conf)
 
@@ -325,6 +327,7 @@ def generate_slurm_script(
         'CASES': ' '.join(f'"{c}"' for c in cases),
         'STEPS': steps,
         'CONFIG_FLAG': config_flag,
+        'RUN_NAME_FLAG': run_name_flag,
         'GENERATED_AT': datetime.now().isoformat(),
         'CLUSTER_ENV_SETUP': cluster_env_setup,
     }
@@ -476,6 +479,14 @@ def create_parser() -> argparse.ArgumentParser:
               'directives, module systems, MPI launchers, or accounting. '
               'See scripts/hpc/template_slurm.example.sh for the token list.'),
     )
+    parser.add_argument(
+        '--run-name', '-n', default=None, metavar='NAME',
+        help=('Output sub-directory name to share across run_batch.py invocations. '
+              'Default: each run gets a fresh `run_<timestamp>/` per case. '
+              'Pass a fixed name (e.g. `--run-name hpc_batch`) when you want '
+              'phased workflows like local prep → HPC solve → local post '
+              'to all write into the same `output/<case>/<NAME>/` dir.'),
+    )
 
     # Output
     parser.add_argument(
@@ -613,6 +624,7 @@ def main() -> None:
             mem_per_cpu=args.mem_per_cpu,
             cluster_conf=args.cluster_conf,
             slurm_template=args.slurm_template,
+            run_name=args.run_name,
         )
         print(f'\nSLURM job-array script generated: {script}')
         print(f'Submit with:  sbatch {script}')
@@ -653,6 +665,8 @@ def main() -> None:
             opts['config'] = config_path
         if args.profile:
             opts['profile'] = args.profile
+        if args.run_name:
+            opts['run_name'] = args.run_name
         worker_args.append((output_id, patient_id, opts))
 
     # Determine worker count
