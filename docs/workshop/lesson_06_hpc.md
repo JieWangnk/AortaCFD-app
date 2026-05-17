@@ -47,23 +47,40 @@ python run_batch.py --cases-dir cases_input/sobol_50 \
     --partition multicore \
     --time-limit 4:00:00 \
     --cpus-per-task 8 \
-    --mem-per-cpu 4G
+    --mem-per-cpu 4G \
+    --cluster-conf scripts/hpc/csf3.conf
 ```
 
-This writes `batch_submit.sh` with `#SBATCH --array=0-49`. Inspect it:
+**`--cluster-conf` is critical** — without it, the generated `batch_submit.sh`
+won't `module load openfoam/12` and every job will fail with
+"`foamRun: command not found`". The script also activates `venv/`
+if it's at the repo root, and `cd`s to `$SLURM_SUBMIT_DIR` so paths
+work out.
+
+Inspect the result before submitting:
 
 ```bash
-cat batch_submit.sh
+cat batch_submit.sh           # should see `module load apps/gcc/openfoam/12`
+bash -n batch_submit.sh       # syntax-check (no execution)
 ```
 
 ### 4. Upload, submit, monitor
 
-```bash
-# Upload cases + scripts to the cluster
-bash scripts/hpc/upload.sh scripts/hpc/csf3.conf
+> **About `scripts/hpc/upload.sh`** — it's tuned for a *single* canonical
+> patient run (reads `LOCAL_CASE_DIR` from the conf and rsyncs that ONE
+> case dir). For a multi-case sweep, you need a slightly different
+> upload: rsync the whole repo (or at least `cases_input/sev_*` plus
+> the generated `batch_submit.sh`) to the cluster, then sbatch from
+> the submission dir. The single-case `upload.sh` is right for the
+> production canonical runs but not for sweeps.
 
-# Submit
-ssh csf3 "cd ~/scratch && sbatch /path/to/AortaCFD-app/batch_submit.sh"
+```bash
+# Manual batch upload (for a sweep) — adapt the host + remote path
+rsync -avz --exclude='output/' --exclude='venv/' --exclude='__pycache__' \
+    . csf3:~/scratch/AortaCFD-app/
+
+# Submit (the script auto-detects SLURM_SUBMIT_DIR, so cd matters)
+ssh csf3 "cd ~/scratch/AortaCFD-app && sbatch batch_submit.sh"
 
 # Monitor from your laptop
 bash scripts/hpc/status.sh scripts/hpc/csf3.conf

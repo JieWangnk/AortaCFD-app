@@ -162,6 +162,35 @@ def discover_cases(cases_dir: Path) -> List[str]:
 # SLURM script generation
 # ---------------------------------------------------------------------------
 
+def _load_cluster_conf(path: Optional[str]) -> Dict[str, str]:
+    """Read scripts/hpc/<sitename>.conf (bash KEY=VALUE pairs) into a dict.
+
+    Returns an empty dict if path is None or the file does not exist.
+    Only the keys the SLURM template uses are looked at; others are ignored.
+    """
+    if not path:
+        return {}
+    p = Path(path)
+    if not p.is_file():
+        print(f'Warning: --cluster-conf file not found: {path}')
+        return {}
+    out: Dict[str, str] = {}
+    for line in p.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        if '=' not in line:
+            continue
+        key, _, val = line.partition('=')
+        key = key.strip()
+        val = val.strip().strip('"').strip("'")
+        # strip trailing comments after the value (e.g. `HPC_NCORES=32  # comment`)
+        if '#' in val:
+            val = val.split('#', 1)[0].strip().strip('"').strip("'")
+        out[key] = val
+    return out
+
+
 def generate_slurm_script(
     cases: List[str],
     steps: str,
@@ -171,16 +200,38 @@ def generate_slurm_script(
     cpus_per_task: int = 8,
     mem_per_cpu: str = '4G',
     output_script: str = 'batch_submit.sh',
+    cluster_conf: Optional[str] = None,
 ) -> str:
     """
     Generate a SLURM job-array script that submits one job per case.
 
     Each array element runs ``python run_patient.py <case_id> --steps <steps>``.
+    When ``cluster_conf`` is given (a `scripts/hpc/<sitename>.conf` file),
+    the script injects ``module load $HPC_OF_MODULE`` and sources the
+    OpenFOAM environment so each task can find ``foamRun`` etc.
     """
     case_list_str = ' '.join(f'"{c}"' for c in cases)
     n_cases = len(cases)
 
     config_flag = f' --config {config_override}' if config_override else ''
+
+    conf = _load_cluster_conf(cluster_conf)
+    of_module = conf.get('HPC_OF_MODULE', '')
+
+    if of_module:
+        env_setup = f"""
+# ── Cluster environment (from {cluster_conf}) ──
+module purge
+module load {of_module}
+source "${{foamDotFile:-/opt/openfoam12/etc/bashrc}}"
+"""
+    else:
+        env_setup = """
+# ── Cluster environment ──
+# No --cluster-conf passed. If this script is for a real cluster, add
+# `module load <openfoam-module>` + `source $foamDotFile` here, OR
+# regenerate with --cluster-conf scripts/hpc/<sitename>.conf.
+"""
 
     script = f"""#!/bin/bash
 #SBATCH --job-name=AortaCFD-batch
@@ -195,6 +246,23 @@ def generate_slurm_script(
 # ── AortaCFD SLURM Batch Script ──
 # Generated: {datetime.now().isoformat()}
 # Cases: {n_cases}
+{env_setup}
+# Resolve the repo root (= submission directory).
+REPO_ROOT="${{SLURM_SUBMIT_DIR:-$PWD}}"
+cd "$REPO_ROOT"
+
+# Activate the AortaCFD venv if it exists locally; otherwise rely on the
+# system python (must have the AortaCFD package importable).
+if [[ -f "$REPO_ROOT/venv/bin/activate" ]]; then
+    # shellcheck disable=SC1091
+    source "$REPO_ROOT/venv/bin/activate"
+fi
+
+# Fail fast if OpenFOAM 12 + the WK BC are not actually on PATH yet.
+command -v foamRun >/dev/null 2>&1 || {{
+    echo "ERROR: foamRun not on PATH. Did you forget --cluster-conf or to source OpenFOAM?"
+    exit 64
+}}
 
 CASES=({case_list_str})
 CASE_ID="${{CASES[$SLURM_ARRAY_TASK_ID]}}"
@@ -332,6 +400,12 @@ def create_parser() -> argparse.ArgumentParser:
         '--mem-per-cpu', default='4G',
         help='SLURM memory per CPU (default: 4G)',
     )
+    parser.add_argument(
+        '--cluster-conf', default=None, metavar='PATH',
+        help=('Path to a scripts/hpc/<sitename>.conf with HPC_OF_MODULE etc. '
+              'Used to inject `module load` + OpenFOAM environment into the '
+              'generated SLURM script. See scripts/hpc/example_cluster.conf.'),
+    )
 
     # Output
     parser.add_argument(
@@ -467,6 +541,7 @@ def main() -> None:
             time_limit=args.time_limit,
             cpus_per_task=args.cpus_per_task,
             mem_per_cpu=args.mem_per_cpu,
+            cluster_conf=args.cluster_conf,
         )
         print(f'\nSLURM job-array script generated: {script}')
         print(f'Submit with:  sbatch {script}')

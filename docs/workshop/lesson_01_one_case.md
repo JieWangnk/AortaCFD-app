@@ -3,6 +3,18 @@
 Goal: confirm AortaCFD-app installs cleanly and run a single canonical
 patient case end-to-end. ~10 minutes on a laptop with `--quick`.
 
+> **ParaView heads-up.** OpenFOAM 12 bundles its own `paraview-5.11` libraries
+> on `LD_LIBRARY_PATH` after you source `/opt/openfoam12/etc/bashrc`.
+> If you launch a separate standalone ParaView (e.g. an unpacked
+> `~/ParaView-6.0.1/bin/paraview`) from the same shell you'll typically
+> hit an `undefined symbol ... libQt6DBus.so.6` error because the system's
+> Qt6 gets loaded before ParaView's bundled Qt6.
+>
+> Workshop convention: use the **system ParaView** (`/usr/bin/paraview`,
+> installed via `apt`) for all visualisation in the workshop. It avoids
+> the Qt6 conflict and the OF12-bundled paraview-5.11 is too old for some
+> of the postprocessing filters we use.
+
 ## Steps
 
 ```bash
