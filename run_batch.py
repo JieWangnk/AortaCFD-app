@@ -191,6 +191,95 @@ def _load_cluster_conf(path: Optional[str]) -> Dict[str, str]:
     return out
 
 
+def _render_template(text: str, vars_: Dict[str, str]) -> str:
+    """Substitute ``%%KEY%%`` tokens in the template text with the values from ``vars_``.
+
+    Token format: ``%%CASES%%``, ``%%PARTITION%%`` etc. Deliberately
+    non-bash-like so it cannot collide with the many ``$VAR`` references
+    a SLURM script typically has.
+
+    Unknown ``%%...%%`` tokens are left in place (a warning is printed).
+    """
+    rendered = text
+    for key, val in vars_.items():
+        rendered = rendered.replace(f'%%{key}%%', val)
+    # Detect leftover unresolved tokens
+    import re
+    leftover = re.findall(r'%%([A-Z][A-Z0-9_]*)%%', rendered)
+    for tok in set(leftover):
+        print(f'Warning: template token %%{tok}%% not substituted '
+              f'(not in cluster conf or CLI args).')
+    return rendered
+
+
+# Default built-in template — used when --slurm-template is not given.
+# Same tokens as a user-provided template would use; rendered by
+# the same _render_template path. Edit this if you want to change the
+# default look-and-feel for all clusters.
+_DEFAULT_SLURM_TEMPLATE = """#!/bin/bash
+#SBATCH --job-name=%%JOB_NAME%%
+#SBATCH --array=0-%%ARRAY_MAX%%
+#SBATCH --partition=%%PARTITION%%
+#SBATCH --time=%%TIME_LIMIT%%
+#SBATCH --cpus-per-task=%%CPUS_PER_TASK%%
+#SBATCH --mem-per-cpu=%%MEM_PER_CPU%%
+#SBATCH --output=output/slurm_%A_%a.log
+#SBATCH --error=output/slurm_%A_%a.err
+
+# ── AortaCFD SLURM Batch Script ──
+# Generated: %%GENERATED_AT%%
+# Cases:     %%N_CASES%%
+
+%%CLUSTER_ENV_SETUP%%
+
+# Resolve the repo root (= submission directory).
+REPO_ROOT="${SLURM_SUBMIT_DIR:-$PWD}"
+cd "$REPO_ROOT"
+
+# Activate the AortaCFD venv if it exists locally; otherwise rely on the
+# system python (must have the AortaCFD package importable).
+if [[ -f "$REPO_ROOT/venv/bin/activate" ]]; then
+    # shellcheck disable=SC1091
+    source "$REPO_ROOT/venv/bin/activate"
+fi
+
+# Fail fast if OpenFOAM 12 is not actually on PATH yet.
+command -v foamRun >/dev/null 2>&1 || {
+    echo "ERROR: foamRun not on PATH. Did you forget --cluster-conf or to source OpenFOAM?"
+    exit 64
+}
+
+CASES=(%%CASES%%)
+CASE_ID="${CASES[$SLURM_ARRAY_TASK_ID]}"
+
+echo "=== AortaCFD SLURM Job ==="
+echo "Job array ID : $SLURM_ARRAY_JOB_ID"
+echo "Task index   : $SLURM_ARRAY_TASK_ID"
+echo "Case         : $CASE_ID"
+echo "Node         : $(hostname)"
+echo "Start time   : $(date)"
+echo "=========================="
+
+python run_patient.py "$CASE_ID" --steps %%STEPS%%%%CONFIG_FLAG%%
+
+echo "=== Finished: $CASE_ID at $(date) ==="
+"""
+
+
+def _build_cluster_env_setup(conf: Dict[str, str], conf_path: Optional[str]) -> str:
+    """Build the `module load + foam source` block injected into the default template."""
+    of_module = conf.get('HPC_OF_MODULE', '')
+    if of_module:
+        return (f'# ── Cluster environment (from {conf_path}) ──\n'
+                f'module purge\n'
+                f'module load {of_module}\n'
+                f'source "${{foamDotFile:-/opt/openfoam12/etc/bashrc}}"')
+    return ('# ── Cluster environment ──\n'
+            '# No --cluster-conf passed. Add `module load <openfoam-module>`\n'
+            '# + `source $foamDotFile` here, OR regenerate with\n'
+            '# --cluster-conf scripts/hpc/<sitename>.conf.')
+
+
 def generate_slurm_script(
     cases: List[str],
     steps: str,
@@ -201,89 +290,63 @@ def generate_slurm_script(
     mem_per_cpu: str = '4G',
     output_script: str = 'batch_submit.sh',
     cluster_conf: Optional[str] = None,
+    slurm_template: Optional[str] = None,
+    job_name: str = 'AortaCFD-batch',
 ) -> str:
     """
     Generate a SLURM job-array script that submits one job per case.
 
-    Each array element runs ``python run_patient.py <case_id> --steps <steps>``.
-    When ``cluster_conf`` is given (a `scripts/hpc/<sitename>.conf` file),
-    the script injects ``module load $HPC_OF_MODULE`` and sources the
-    OpenFOAM environment so each task can find ``foamRun`` etc.
+    The script is built by token-substitution on a template (the default
+    is in ``_DEFAULT_SLURM_TEMPLATE``; pass ``slurm_template`` to use your
+    own). Token syntax: ``%%KEY%%``. Available tokens:
+
+      %%JOB_NAME%%, %%ARRAY_MAX%%, %%N_CASES%%, %%PARTITION%%,
+      %%TIME_LIMIT%%, %%CPUS_PER_TASK%%, %%MEM_PER_CPU%%,
+      %%CASES%%, %%STEPS%%, %%CONFIG_FLAG%%, %%GENERATED_AT%%,
+      %%CLUSTER_ENV_SETUP%% (the `module load` block, injected from conf),
+      plus any HPC_* key from the cluster conf as %%HPC_PARTITION%% etc.
+
+    User-supplied templates can use any subset of the tokens. Unknown
+    bash ``$VAR`` references pass through untouched.
     """
-    case_list_str = ' '.join(f'"{c}"' for c in cases)
     n_cases = len(cases)
-
     config_flag = f' --config {config_override}' if config_override else ''
-
     conf = _load_cluster_conf(cluster_conf)
-    of_module = conf.get('HPC_OF_MODULE', '')
+    cluster_env_setup = _build_cluster_env_setup(conf, cluster_conf)
 
-    if of_module:
-        env_setup = f"""
-# ── Cluster environment (from {cluster_conf}) ──
-module purge
-module load {of_module}
-source "${{foamDotFile:-/opt/openfoam12/etc/bashrc}}"
-"""
+    vars_: Dict[str, str] = {
+        'JOB_NAME': job_name,
+        'ARRAY_MAX': str(n_cases - 1),
+        'N_CASES': str(n_cases),
+        'PARTITION': partition,
+        'TIME_LIMIT': time_limit,
+        'CPUS_PER_TASK': str(cpus_per_task),
+        'MEM_PER_CPU': mem_per_cpu,
+        'CASES': ' '.join(f'"{c}"' for c in cases),
+        'STEPS': steps,
+        'CONFIG_FLAG': config_flag,
+        'GENERATED_AT': datetime.now().isoformat(),
+        'CLUSTER_ENV_SETUP': cluster_env_setup,
+    }
+    # Also expose every HPC_* key from the conf, so user templates can
+    # reference things like %%HPC_ACCOUNT%% directly.
+    for k, v in conf.items():
+        vars_.setdefault(k, v)
+
+    if slurm_template:
+        tpath = Path(slurm_template)
+        if not tpath.is_file():
+            raise FileNotFoundError(f'--slurm-template file not found: {slurm_template}')
+        template_text = tpath.read_text()
+        print(f'Using user template: {slurm_template}')
     else:
-        env_setup = """
-# ── Cluster environment ──
-# No --cluster-conf passed. If this script is for a real cluster, add
-# `module load <openfoam-module>` + `source $foamDotFile` here, OR
-# regenerate with --cluster-conf scripts/hpc/<sitename>.conf.
-"""
+        template_text = _DEFAULT_SLURM_TEMPLATE
 
-    script = f"""#!/bin/bash
-#SBATCH --job-name=AortaCFD-batch
-#SBATCH --array=0-{n_cases - 1}
-#SBATCH --partition={partition}
-#SBATCH --time={time_limit}
-#SBATCH --cpus-per-task={cpus_per_task}
-#SBATCH --mem-per-cpu={mem_per_cpu}
-#SBATCH --output=output/slurm_%A_%a.log
-#SBATCH --error=output/slurm_%A_%a.err
-
-# ── AortaCFD SLURM Batch Script ──
-# Generated: {datetime.now().isoformat()}
-# Cases: {n_cases}
-{env_setup}
-# Resolve the repo root (= submission directory).
-REPO_ROOT="${{SLURM_SUBMIT_DIR:-$PWD}}"
-cd "$REPO_ROOT"
-
-# Activate the AortaCFD venv if it exists locally; otherwise rely on the
-# system python (must have the AortaCFD package importable).
-if [[ -f "$REPO_ROOT/venv/bin/activate" ]]; then
-    # shellcheck disable=SC1091
-    source "$REPO_ROOT/venv/bin/activate"
-fi
-
-# Fail fast if OpenFOAM 12 + the WK BC are not actually on PATH yet.
-command -v foamRun >/dev/null 2>&1 || {{
-    echo "ERROR: foamRun not on PATH. Did you forget --cluster-conf or to source OpenFOAM?"
-    exit 64
-}}
-
-CASES=({case_list_str})
-CASE_ID="${{CASES[$SLURM_ARRAY_TASK_ID]}}"
-
-echo "=== AortaCFD SLURM Job ==="
-echo "Job array ID : $SLURM_ARRAY_JOB_ID"
-echo "Task index   : $SLURM_ARRAY_TASK_ID"
-echo "Case         : $CASE_ID"
-echo "Node         : $(hostname)"
-echo "Start time   : $(date)"
-echo "=========================="
-
-python run_patient.py "$CASE_ID" --steps {steps}{config_flag}
-
-echo "=== Finished: $CASE_ID at $(date) ==="
-"""
+    rendered = _render_template(template_text, vars_)
 
     with open(output_script, 'w') as f:
-        f.write(script)
+        f.write(rendered)
     os.chmod(output_script, 0o755)
-
     return output_script
 
 
@@ -405,6 +468,13 @@ def create_parser() -> argparse.ArgumentParser:
         help=('Path to a scripts/hpc/<sitename>.conf with HPC_OF_MODULE etc. '
               'Used to inject `module load` + OpenFOAM environment into the '
               'generated SLURM script. See scripts/hpc/example_cluster.conf.'),
+    )
+    parser.add_argument(
+        '--slurm-template', default=None, metavar='PATH',
+        help=('Path to a custom SLURM template (with %%TOKEN%% placeholders). '
+              'Use this to support clusters that need different #SBATCH '
+              'directives, module systems, MPI launchers, or accounting. '
+              'See scripts/hpc/template_slurm.example.sh for the token list.'),
     )
 
     # Output
@@ -542,6 +612,7 @@ def main() -> None:
             cpus_per_task=args.cpus_per_task,
             mem_per_cpu=args.mem_per_cpu,
             cluster_conf=args.cluster_conf,
+            slurm_template=args.slurm_template,
         )
         print(f'\nSLURM job-array script generated: {script}')
         print(f'Submit with:  sbatch {script}')

@@ -44,7 +44,7 @@ Run the checklist at the bottom of the conf file before going further.
 ```bash
 python run_batch.py --cases-dir cases_input/sobol_50 \
     --slurm \
-    --partition multicore \
+    --partition multicore_small \
     --time-limit 4:00:00 \
     --cpus-per-task 8 \
     --mem-per-cpu 4G \
@@ -56,6 +56,26 @@ won't `module load openfoam/12` and every job will fail with
 "`foamRun: command not found`". The script also activates `venv/`
 if it's at the repo root, and `cd`s to `$SLURM_SUBMIT_DIR` so paths
 work out.
+
+**Need a different SLURM script shape?** If your cluster needs specific
+`#SBATCH` directives (accounting, QoS, GPU partitions, custom MPI launcher),
+pass a user template via `--slurm-template`:
+
+```bash
+cp scripts/hpc/template_slurm.example.sh scripts/hpc/my_cluster.template.sh
+$EDITOR scripts/hpc/my_cluster.template.sh   # add --account, --qos, etc.
+
+python run_batch.py --cases-dir cases_input/sobol_50 --slurm \
+    --slurm-template scripts/hpc/my_cluster.template.sh \
+    --cluster-conf scripts/hpc/my_cluster.conf \
+    --partition my_partition --time-limit 4:00:00
+```
+
+The template uses `%%TOKEN%%` placeholders. Every variable defined in
+your `--cluster-conf` is exposed as a token (so `HPC_ACCOUNT=foo` →
+`%%HPC_ACCOUNT%%` in the template). See
+[`scripts/hpc/README.md`](../../scripts/hpc/README.md#slurm-template-tokens)
+for the full token list.
 
 Inspect the result before submitting:
 
