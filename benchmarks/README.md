@@ -1,6 +1,16 @@
 # AortaCFD Benchmark Cases
 
-Quick validation cases to verify your installation produces correct results.
+Quick validation cases to **verify your installation produces correct results**
+— published reference values + tolerances against which pytest can assert.
+
+Different from neighbouring dirs:
+
+- **`examples/`** — JSON config templates you copy when building a new case.
+- **`tests/benchmarks/`** — the pytest tests that read this directory's
+  `expected_values.json` and assert tolerances against a real solver-run
+  `qoi_summary.json`.
+- **`docs/tutorial/`**, **`docs/workshop/`** — learning material (one-case
+  deep dive and parametric study, respectively).
 
 ## Quick validation (~1 hour on 4 cores, ~20 min on 8 cores)
 

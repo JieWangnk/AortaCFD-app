@@ -1,6 +1,16 @@
 # AortaCFD Examples
 
-This directory contains working config templates and supporting notes for common AortaCFD usage patterns.
+This directory contains working **config-JSON templates** and supporting notes
+for common AortaCFD usage patterns. The files here are inputs you copy into a
+case folder.
+
+If you want learning material instead of templates:
+
+- **`docs/tutorial/`** — 8-week PhD course teaching the CFD pipeline using one
+  canonical patient case (depth-first).
+- **`docs/workshop/`** — 6-lesson parametric-study walkthrough showing the
+  four-block geometry → packaging → running → aggregation workflow
+  (breadth-first).
 
 ## Configuration Tiers
 
