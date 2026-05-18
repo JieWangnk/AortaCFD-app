@@ -88,6 +88,7 @@ cases_input/*/config_cpd*.json
 cases_input/*/config_robust*.json
 cases_input/*/config_repeatability*.json
 cases_input/*/config_profile_*.json
+cases_input/*/config_validation*.json
 # 0014_H_AO_COA: keep only canonical config + waveform + STLs
 cases_input/0014_H_AO_COA/config_csv.json
 cases_input/0014_H_AO_COA/config_laminar_robust.json

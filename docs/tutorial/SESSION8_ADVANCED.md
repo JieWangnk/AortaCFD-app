@@ -111,6 +111,21 @@ Where:
 - GCI < 10% for TAWSS → mesh is adequate for WSS (hard to achieve)
 - Non-monotonic convergence for WSS → report the range, not GCI
 
+![VOL04 mesh-convergence — real 3-mesh validation run on this laptop](figures/validation_session08_gci.png)
+
+*Three meshes on VOL04 (CONSTANT plug inlet + per-outlet Windkessel,
+robust profile, 4 CPU, 10-min wall budget each) — 26 k, 40 k, 75 k
+cells (cell-count ratio 2.9×, linear refinement ratio ≈ √2). Mean
+pressure drop comes out at 0.607 / 0.588 / 0.605 mmHg, agreeing
+within 3 % across nearly 3× the cell count. The non-monotonic
+"V-shape" in this validation isn't a true GCI failure — it's because
+the three runs reached different sim times (coarse completed the
+full 0.81 s cycle, fine only 0.17 s in its 10-min budget), so they're
+sampling the unsteady transient at different points. For a clean
+Roache GCI calculation, give each level a longer wall budget or
+specify a much shorter `end_time` so all three finish the same
+amount of simulated time.*
+
 ### 1.4 Reporting Standards (15 min)
 
 What to include in a paper using AortaCFD:

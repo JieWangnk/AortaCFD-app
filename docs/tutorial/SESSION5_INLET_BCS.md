@@ -110,6 +110,19 @@ inlet/
 
 This is the most accurate but requires MRI post-processing beforehand.
 
+**Validation note:** the `inlet/` directory for VOL04 in this repo
+contains 811 time snapshots (~58 MB) at 1 ms resolution covering
+one cycle. The pipeline reads each, interpolates onto the mesh's
+inlet face centroids, and writes OpenFOAM-format `boundaryData`.
+On this laptop with a 4-CPU 10-min wall budget, the per-face
+interpolation step alone (`Prepare Boundary Data...`) does not
+finish — VOL04 with the full MRI dataset wants more like 30-60 min
+of wall time before the solver starts. The workflow IS wired and
+the config validates; just plan for a longer budget when running
+MRI-mapped cases. For laptop demos, the `inflow.csv` TIMEVARYING
+flow on the same VOL04 geometry (see workshop lesson 4 for the
+analogous BPM120 setup) is the practical substitute.
+
 ---
 
 ## Hour 2: Inlet Quality and Comparison (60 min)
