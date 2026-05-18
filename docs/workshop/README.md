@@ -34,6 +34,14 @@ stop after lesson 2. If you only want batches of clinical cases, you
 can skip lesson 2 entirely and use your own STL folders as input to
 lesson 3.
 
+## Cleaning up afterwards
+
+When you're done, `make clean-all CONFIRM=yes` resets the app to a
+fresh-clone-equivalent state (removes `output/`, build artefacts, all
+Python caches). It preserves `cases_input/`, the venv, and the repo
+source. Run `make clean-all` without `CONFIRM=yes` first to dry-run
+and see what would be removed plus the total disk freed.
+
 ## Prerequisites
 
 - AortaCFD-app installed and working (`python run_patient.py --doctor` passes)

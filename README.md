@@ -615,6 +615,17 @@ python run_batch.py --cases 0014_H_AO_COA BPM120 --dry-run
 
 After a batch completes, QoIs from the current batch are aggregated into `output/cohort_comparison.csv`.
 
+### Resetting the app
+
+When you're done with a study (or before starting a fresh one) and want to reclaim disk space:
+
+```bash
+make clean-all                  # dry-run: shows what would be removed, with sizes
+make clean-all CONFIRM=yes      # actually removes output/, caches, build artefacts
+```
+
+The reset preserves `cases_input/`, the venv, and the repo source — only regenerable artefacts are removed. Add `INCLUDE_VENV=yes` to also delete `venv/` (rare; rebuild with `make install`).
+
 ---
 
 ## Output Structure

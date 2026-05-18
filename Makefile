@@ -2,7 +2,7 @@
 # Conventions: tabs for recipe indentation (Make requirement).
 #               assumes ./venv exists; create with `make install`.
 
-.PHONY: help install test test-all test-bench lint format build clean
+.PHONY: help install test test-all test-bench lint format build clean clean-all
 
 help:
 	@echo "AortaCFD — common tasks"
@@ -15,6 +15,9 @@ help:
 	@echo "  make format      black + isort"
 	@echo "  make build       sdist + wheel into dist/"
 	@echo "  make clean       Remove build artefacts and pycache"
+	@echo "  make clean-all   Reset to a fresh-clone state (output/, caches, build/)."
+	@echo "                   Preserves cases_input/, venv/, repo source. Dry-run by"
+	@echo "                   default; pass CONFIRM=yes to actually delete."
 
 install:
 	python3 -m venv venv
@@ -52,3 +55,6 @@ clean:
 	rm -rf .pytest_cache/ .coverage htmlcov/ coverage.xml
 	find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 	find . -name "*.pyc" -delete 2>/dev/null || true
+
+clean-all:
+	@. venv/bin/activate && python -m scripts.reset_app $(if $(filter yes,$(CONFIRM)),--yes,) $(if $(filter yes,$(INCLUDE_VENV)),--include-venv,)
