@@ -3,6 +3,12 @@
 Goal: produce a single AortaCFD-ready case folder using the Blender
 geometry generator (Block A). ~5 minutes, mostly Blender start-up time.
 
+![Branched aorta mesh — example Block A output](figures/branched_aorta_mesh.png)
+
+*Block A produces a parametric aortic-arch geometry with three
+supra-aortic branches and (optionally) a smooth coarctation. Above:
+the surface mesh of one such generated case rendered in ParaView.*
+
 ## Prereq
 
 - Blender 3.x+ on PATH (`blender --version`). On Ubuntu: `sudo snap install blender --classic`.
@@ -47,6 +53,14 @@ This runs three things behind the scenes:
 
 Open `baseline.stl` in ParaView, Meshlab, or Blender (GUI) to look at
 the geometry.
+
+![Branched aorta — velocity field](figures/branched_aorta_velocity.png)
+![Branched aorta — pressure field](figures/branched_aorta_pressure.png)
+
+*Once the generated geometry is run through Blocks B-C (lessons 3-4),
+you get velocity and pressure fields like these. Geometry parameters
+(diameter, arch height, coarctation severity) propagate directly to
+QoI variation across the cohort.*
 
 ## Vary the geometry
 

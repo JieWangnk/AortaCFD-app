@@ -123,6 +123,9 @@ coarc_refine*
 *.png
 *.jpg
 *.jpeg
+# ... except curated workshop / docs figures (committed deliberately)
+!docs/workshop/figures/*.png
+!docs/workshop/figures/*.jpg
 
 # Jupyter notebooks
 *.ipynb

@@ -13,6 +13,11 @@ stamp a default `config.json` on each so they are ready for
 > [howto]: https://github.com/JieWangnk/aortacfd-geomgen#how-to-customise-your-sweep
 > [params]: https://github.com/JieWangnk/aortacfd-geomgen/blob/main/PARAMETERS.md
 
+The `--list-params` flag prints every parameter you can sweep, with
+type, default value, and a workshop-sensible range:
+
+![cli.py --list-params output](figures/cli_list_params.png)
+
 ## Block A: 10 cases varying coarctation severity
 
 ```bash
@@ -80,6 +85,17 @@ python run_patient.py sev_001 --quick --steps case,mesh   # mesh-only check
 
 For lesson 4 the workshop-quick template is right; switch to
 sweep-default when you're ready for production-quality runs.
+
+## What a 10-case sweep produces
+
+Once you complete lessons 4 (run) + 5 (aggregate), you'll have a
+plot like this — one column per QoI, severity along the x-axis:
+
+![Severity sweep — pressure drop and WSS rise with severity](figures/severity_sweep_demo.png)
+
+*The point of running a sweep instead of a single case: variance,
+sensitivity, and the (params → QoI) pairs that downstream ML
+surrogate training needs.*
 
 ## Customising the template per case
 

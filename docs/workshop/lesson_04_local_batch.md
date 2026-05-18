@@ -4,6 +4,11 @@ Goal: run the 10 cases from lesson 3 in parallel on a laptop /
 workstation. Time budget: 30 min on 8-core laptop with `--quick`, hours
 on a workstation with full config.
 
+![Velocity streamlines from a typical AortaCFD run](figures/velocity_streamlines.png)
+
+*What each of your 10 cases will produce: a full unsteady velocity
+field. Lesson 5 will reduce these to scalar QoIs per case.*
+
 ## Steps
 
 ```bash

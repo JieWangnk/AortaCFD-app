@@ -3,6 +3,13 @@
 Goal: read the cohort CSV produced by Block D, plot parameter →
 QoI sensitivity, and compute first-order Sobol indices. ~15 min.
 
+![QoI definitions used in the cohort CSV](figures/qoi_schematic.png)
+
+*The QoIs Block D exposes — pressure drop, percentile WSS / TAWSS,
+masked OSI, residence time — are computed per case by the AortaCFD
+hemodynamics post-processor. Block D's job is to turn one row per
+case into a tidy table.*
+
 ## Aggregate (if not done automatically)
 
 `run_batch.py` calls `compare_cohort` at the end of every successful
@@ -71,6 +78,13 @@ For a Sobol sample (e.g. `specs/sample_sobol_50.json`):
 For a clean coarctation sweep we expect `S_coarctation_area_reduction`
 ≈ 0.6–0.9 for pressure drop, with much smaller contributions from arch
 geometry parameters.
+
+![Severity sweep — sensitivity plot from the workshop demo](figures/severity_sweep_demo.png)
+
+*The finale figure of the workshop demo. Pressure drop and 99th-
+percentile wall shear stress both rise monotonically with coarctation
+severity (10-case sweep). Mesh-level convergence checks and Sobol
+indices live in the notebook.*
 
 ## Going further: ML surrogate training
 

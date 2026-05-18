@@ -3,6 +3,13 @@
 Goal: submit a 50–100 case Sobol sweep to a SLURM cluster, monitor
 progress, and pull results back. Same code, different runner.
 
+![Generated SLURM job-array script with `--cluster-conf` env block](figures/slurm_script_head.png)
+
+*The head of a `batch_submit.sh` produced by `run_batch.py --slurm
+--cluster-conf scripts/hpc/<sitename>.conf`. The `module load`
+incantation + venv activation + foamRun-on-PATH check are auto-
+injected from the conf — every cluster's quirks live in one file.*
+
 ## Prerequisites
 
 - SSH access to a SLURM cluster (this lesson uses CSF3 at Manchester as the example; substitute your own)
@@ -76,6 +83,8 @@ your `--cluster-conf` is exposed as a token (so `HPC_ACCOUNT=foo` →
 `%%HPC_ACCOUNT%%` in the template). See
 [`scripts/hpc/README.md`](../../scripts/hpc/README.md#slurm-template-tokens)
 for the full token list.
+
+![Template head with %%TOKEN%% placeholders](figures/slurm_template_tokens.png)
 
 Inspect the result before submitting:
 

@@ -3,6 +3,12 @@
 Goal: confirm AortaCFD-app installs cleanly and run a single canonical
 patient case end-to-end. ~10 minutes on a laptop with `--quick`.
 
+![BPM120 mesh overview — the canonical workshop case](figures/bpm120_mesh_overview.png)
+
+*BPM120 is a published pediatric aortic coarctation case (Wang et al.).
+Three supra-aortic branches, severe isthmus narrowing, ~1.9M-cell
+production mesh. This is what we'll be running below.*
+
 > **ParaView heads-up.** OpenFOAM 12 bundles its own `paraview-5.11` libraries
 > on `LD_LIBRARY_PATH` after you source `/opt/openfoam12/etc/bashrc`.
 > If you launch a separate standalone ParaView (e.g. an unpacked
@@ -53,6 +59,13 @@ python -c "import json; \
 The pressure drop, peak systolic WSS, and OSI numbers all come from
 `src/aortacfd_lib/hemodynamics_postprocessor.py`. Their physical meaning
 is defined alongside each value in the JSON.
+
+![BPM120 peak-systolic velocity field](figures/bpm120_velocity.png)
+
+*Peak-systolic velocity through BPM120. The high-speed jet through the
+coarctation is the geometry-dominated feature that drives the pressure
+drop and elevated WSS. This is what `paraview output/BPM120/run_*/openfoam/BPM120.foam`
+will show you when the run finishes.*
 
 ## What's happening
 
