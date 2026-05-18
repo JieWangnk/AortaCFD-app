@@ -4,8 +4,6 @@
 > command assumes you're at the AortaCFD-app repo root with the venv
 > active and OpenFOAM 12 sourced.
 
-![AortaCFD pipeline visual summary](figures/multicase_overview.png)
-
 ## Install (once)
 
 ```bash

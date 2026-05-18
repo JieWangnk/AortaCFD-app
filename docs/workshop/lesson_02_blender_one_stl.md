@@ -64,14 +64,10 @@ outlet1..4, wall_aorta) is a separate STL file that Block B's case
 packager wires into the OpenFOAM boundary conditions.*
 
 Once the generated geometry is run through Blocks B-C (lessons 3-4),
-you get velocity and pressure fields like the ones below — generated
-by AortaCFD-app, exported by ParaView:
-
-![Velocity streamlines from a comparable case](figures/branched_aorta_velocity.png)
-![Pressure field from a comparable case](figures/branched_aorta_pressure.png)
-
-*Geometry parameters (diameter, arch height, coarctation severity)
-propagate directly to QoI variation across the cohort.*
+you'll get velocity, pressure, and WSS fields per case. Lesson 4
+shows the actual run, lesson 5 aggregates the QoIs. Geometry
+parameters (diameter, arch height, coarctation severity) propagate
+directly to QoI variation across the cohort.
 
 ## Vary the geometry
 

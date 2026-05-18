@@ -3,12 +3,6 @@
 End-to-end walkthrough of running AortaCFD at scale: from a single
 patient case to a hundred synthetic Sobol-sampled cases on HPC.
 
-![Hero — aortic geometry + velocity + WSS produced by AortaCFD](figures/hero_aorta_geometry.png)
-
-*A typical output of the AortaCFD pipeline: split STL geometry, the
-generated computational mesh, peak-systolic velocity, and wall shear
-stress — all from one JSON config.*
-
 The workshop is structured as **six independent lessons** over four
 composable blocks:
 
@@ -42,12 +36,11 @@ lesson 3.
 
 ## What the pipeline produces
 
-![Pipeline outputs across multiple cases](figures/multicase_overview.png)
-
-*Velocity, pressure, and wall shear stress fields across a multi-case
-cohort. Each row is one patient or synthetic geometry; each column
-is one quantity of interest. This is the kind of figure you can
-produce after lesson 5 (cohort aggregation).*
+After lesson 5 you have, per case, a full OpenFOAM unsteady solution
+(velocity / pressure / WSS time-series in `output/<case>/run_*/`)
+plus a `qoi_summary.json` with the scalar QoIs (pressure drop,
+TAWSS p99, OSI, per-outlet ΔP). Lesson 5 also aggregates these into
+a single `cohort_comparison.csv` for plotting / regression.
 
 ## Cleaning up afterwards
 
