@@ -3,6 +3,19 @@
 **Duration:** 2 hours
 **Goal:** Choose the right profile, read solver logs, diagnose problems
 
+![BPM120 inlet pressure — standard 2nd-order profile, same mesh as the robust comparison in SESSION1](figures/validation_session04_bpm120_standard.png)
+
+*Real 10-min validation run on the BPM120 mesh from SESSION1 (25 k cells,
+no boundary layers, 4 CPU). Profile switched from `robust` (1st-order
+upwind + Euler) to `standard` (2nd-order linearUpwind + backward). The
+settled inlet pressure (~40 mmHg) matches the robust run from SESSION1
+within 1 mmHg — physically identical because the BCs are the same — but
+this run only reached t≈0.022 s in 10 min wall time vs robust's 0.04 s
+on the same mesh and budget. The slowdown is the 2nd-order schemes
+asking for tighter convergence at every PIMPLE inner loop. That's the
+trade you're learning to recognise: 1st-order = cheap but diffusive,
+2nd-order = faithful but expensive.*
+
 ---
 
 ## Hour 1: The Three Profiles (60 min)

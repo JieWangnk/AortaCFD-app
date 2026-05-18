@@ -17,6 +17,24 @@ python run_patient.py --postprocess output/BPM120/run_xxx
 python run_patient.py BPM120 --steps postprocess
 ```
 
+Real output from the SESSION1 validation run (BPM120, 25 k cells,
+4 CPU, 10-min wall budget):
+
+```text
+Post-processing: output/BPM120/validation_lesson01
+  Computing hemodynamic metrics...
+
+Results:
+  Pressure drop (mean): 10.79 mmHg
+  WSS p99 (peak systole): 58.11 Pa
+```
+
+That **10.79 mmHg** mean pressure drop is within 4.2 % of the Wang
+et al. paper reference (11.26 mmHg ± 5 %) — expected agreement for
+a coarse 1-cycle laptop run; the paper result comes from a ~1 M-cell
+mesh on HPC. The `qoi_summary.json` produced here is what the
+`compare_cohort` Block-D aggregator ingests in workshop lesson 5.
+
 Outputs:
 ```
 reports/hemodynamics_report.txt    # Human-readable summary
