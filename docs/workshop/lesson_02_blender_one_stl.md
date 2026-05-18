@@ -3,11 +3,13 @@
 Goal: produce a single AortaCFD-ready case folder using the Blender
 geometry generator (Block A). ~5 minutes, mostly Blender start-up time.
 
-![Branched aorta mesh — example Block A output](figures/branched_aorta_mesh.png)
+![Real Block A output — baseline synthetic aorta](figures/synthetic_aorta_geometry.png)
 
-*Block A produces a parametric aortic-arch geometry with three
-supra-aortic branches and (optionally) a smooth coarctation. Above:
-the surface mesh of one such generated case rendered in ParaView.*
+*This is an actual Block A output, generated from
+`specs/single_baseline.json` and rendered headlessly with Blender's
+Workbench engine. The geometry is parametric — ascending aorta, arch
+with three supra-aortic branches, and a smooth coarctation with a
+controllable bulge severity.*
 
 ## Prereq
 
@@ -54,13 +56,22 @@ This runs three things behind the scenes:
 Open `baseline.stl` in ParaView, Meshlab, or Blender (GUI) to look at
 the geometry.
 
-![Branched aorta — velocity field](figures/branched_aorta_velocity.png)
-![Branched aorta — pressure field](figures/branched_aorta_pressure.png)
+![Split patches: inlet cap exploded outward from the wall](figures/synthetic_aorta_patches.png)
 
-*Once the generated geometry is run through Blocks B-C (lessons 3-4),
-you get velocity and pressure fields like these. Geometry parameters
-(diameter, arch height, coarctation severity) propagate directly to
-QoI variation across the cohort.*
+*Same geometry with the inlet cap offset outward to show the
+split-patch decomposition. After Block A, each patch (inlet,
+outlet1..4, wall_aorta) is a separate STL file that Block B's case
+packager wires into the OpenFOAM boundary conditions.*
+
+Once the generated geometry is run through Blocks B-C (lessons 3-4),
+you get velocity and pressure fields like the ones below — generated
+by AortaCFD-app, exported by ParaView:
+
+![Velocity streamlines from a comparable case](figures/branched_aorta_velocity.png)
+![Pressure field from a comparable case](figures/branched_aorta_pressure.png)
+
+*Geometry parameters (diameter, arch height, coarctation severity)
+propagate directly to QoI variation across the cohort.*
 
 ## Vary the geometry
 
