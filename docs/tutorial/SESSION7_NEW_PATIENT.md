@@ -3,6 +3,19 @@
 **Duration:** 2 hours
 **Goal:** Full independence — set up a case from scratch
 
+![0014_H_AO_COA inlet pressure — real 10-min validation run with 5-outlet Windkessel](figures/validation_session07_0014_wk.png)
+
+*Validation run on the canonical "new patient" case (`0014_H_AO_COA`,
+SimVascular VMR pediatric coarctation), using the actual per-outlet
+Windkessel coefficients (`Z`, `C`, `R`) from the SimVascular RCRT file
+captured in `cases_input/0014_H_AO_COA/config.json`. 4 CPU parallel
+mesh (~43 k cells, surfaceRefinementLevels=[1,2], no boundary
+layers, robust profile, TIMEVARYING inflow from `inflow.csv`). 10-min
+wall budget; reached t ≈ 0.082 s of the 0.845 s cycle. The pressure
+trace shows the expected Windkessel transient (initial-condition
+ringing in the first ms) followed by the characteristic ramp toward
+systole driven by the inflow waveform.*
+
 ---
 
 ## Hour 1: Case Setup from Scratch (60 min)
