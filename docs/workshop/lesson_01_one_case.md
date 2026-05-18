@@ -67,6 +67,17 @@ coarctation is the geometry-dominated feature that drives the pressure
 drop and elevated WSS. This is what `paraview output/BPM120/run_*/openfoam/BPM120.foam`
 will show you when the run finishes.*
 
+![BPM120 inlet pressure — actual 10-min validation run](figures/validation_lesson01_bpm120.png)
+
+*Real output captured from a 10-minute validation run on this exact
+laptop: BPM120, 4 CPU parallel mesh (snappyHexMesh, ~25 k cells),
+robust profile, CONSTANT plug inlet at CO=5 L/min, outlet1 pinned to
+p=0. The startup transient peaks at ~95 mmHg (pressure-velocity
+coupling initialising) then settles toward the steady-state value
+the boundary conditions dictate. Re-running with a finer mesh, longer
+end-time, and Windkessel outlets would give the publication-quality
+waveform from the BPM120 paper.*
+
 ## What's happening
 
 ```

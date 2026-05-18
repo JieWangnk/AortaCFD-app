@@ -84,6 +84,17 @@ python run_patient.py BPM120 --quick    # Auto coarse-mesh test mode
 
 ## Hour 2: First Run (60 min)
 
+![Real first-run inlet pressure from a 10-min validation on 4 CPU](figures/validation_session01_bpm120.png)
+
+*What "first run" actually looks like on a small laptop: BPM120,
+robust profile, parallel mesh on 4 cores, 25 k cells, CONSTANT plug
+inlet at CO=5 L/min, end_time=0.1 s. The pressure spike at t=0 is
+the startup transient (pressure-velocity coupling initialising).
+Re-running with the production `config.json` (Windkessel outlets,
+finer mesh, longer end-time, CSV waveform) is what produces the
+publication-quality waveform — but for the first run on day one,
+a coarse short run that completes in 10 minutes is the goal.*
+
 ### 2.1 Examine the Case Input (10 min)
 
 ```bash

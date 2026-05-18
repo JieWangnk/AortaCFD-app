@@ -10,6 +10,17 @@ masked OSI, residence time — are computed per case by the AortaCFD
 hemodynamics post-processor. Block D's job is to turn one row per
 case into a tidy table.*
 
+![Sweep comparison: 2 cases on one axis — actual validation output](figures/validation_lesson05_sweep.png)
+
+*Real cohort plot from the validation: two cases (sev_001 = no
+coarctation, sev_002 = moderate) overlaid by reading their
+`inletPressure` function-object output. Each case ran sequentially
+within a 10-min wall budget on 4 CPU. The mild case settles to a
+lower mean pressure than the moderate case as expected. A full Block
+D run with `compare_cohort` aggregates per-case QoIs from
+`qoi_summary.json` — this plot is a thin substitute that demonstrates
+the workflow is working end-to-end.*
+
 ## Aggregate (if not done automatically)
 
 `run_batch.py` calls `compare_cohort` at the end of every successful

@@ -8,6 +8,15 @@ Each of your 10 cases produces a full unsteady velocity / pressure /
 WSS field in OpenFOAM time-step format under `output/sev_NNN/run_*/`.
 Lesson 5 reduces these to scalar QoIs per case.
 
+![sev_001 inlet pressure — actual 10-min sequential validation run](figures/validation_lesson04_sev001.png)
+
+*One of the 10 cases captured from the actual local-batch validation
+run (4 CPU per case, sequential, 10-min wall budget each). sev_001 is
+the mildest coarctation in the sweep; it reached t≈0.47 s of the
+0.2-s × 1-cycle target before the budget was hit. Pressure trace is
+the area-averaged inlet pressure recorded by the `inletPressure`
+function object every solver step.*
+
 ## Steps
 
 ```bash

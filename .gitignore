@@ -77,6 +77,7 @@ cases_input/PAT002/
 cases_input/PAT003/
 cases_input/G[0-9]*/
 cases_input/EXP_*/
+cases_input/sev_*/
 cases_input/0023_*/
 cases_input/*/config_newmesh*.json
 cases_input/*/config_mesh[0-9]*.json
@@ -126,6 +127,8 @@ coarc_refine*
 # ... except curated workshop / docs figures (committed deliberately)
 !docs/workshop/figures/*.png
 !docs/workshop/figures/*.jpg
+!docs/tutorial/figures/*.png
+!docs/tutorial/figures/*.jpg
 
 # Jupyter notebooks
 *.ipynb
