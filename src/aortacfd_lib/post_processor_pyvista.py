@@ -555,8 +555,8 @@ def render_velocity_time_series(
         written.append(out_png)
 
     logger.info(
-        "PyVista wrote %d time-series frames to %s (|U| clim 0–%.3f m/s, opacity=%r)",
-        len(written), out_dir, global_max, interior_opacity,
+        "PyVista wrote %d time-series frames to %s (|U| clim 0–%.3f m/s, %d iso @ %.0f%% opacity)",
+        len(written), out_dir, global_max, iso_levels, iso_opacity * 100,
     )
     return written
 
