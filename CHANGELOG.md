@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — PyVista post-processing backend (opt-in)
+
+New pure-Python post-processor at `src/aortacfd_lib/post_processor_pyvista.py`
+that replaces the ParaView/`pvbatch` figure-generation step. Selected via
+`config.post_processing.backend: "pyvista"`; default remains `"paraview"`
+so existing cases are unaffected.
+
+- **Renderers shipped (Phase 1-2):** velocity magnitude with nested
+  iso-surfaces + translucent wall shell (correctly shows the interior
+  jet despite the no-slip layer at the wall), WSS-on-wall in Pa,
+  pressure clip plane through the PCA-aligned arch plane, locked-camera
+  / locked-colourmap velocity time series.
+- **Auto camera (Phase 1):** SVD on the mesh point cloud picks the
+  view direction that maximises silhouette area — i.e. looks along the
+  shortest principal axis, the same anatomic view radiologists use.
+- **Interactive viewer:** `open_interactive_viewer(case_dir)` opens a
+  PyVista window with checkbox widgets for U / p / wallShearStress.
+- **Backend dispatch (Phase 3):** `ExecutePostProcessingTask` now
+  inspects `config.post_processing.backend` and routes to either the
+  legacy pvbatch path (unchanged) or the new pyvista path. PyVista
+  import is lazy so the paraview path doesn't pay any import-time cost.
+
+**Motivation:** the existing pvbatch pipeline is broken on current
+ParaView 6.0.1 + OpenFOAM 12: it produces images with the colorbar
+but no geometry, because the `arrayCalculator` filter can't resolve
+the OpenFOAM field symbols (`wallShearStress`, `p`) through ParaView 6
+when the reader is set to "Internal Mesh" only. The pure-Python path
+reads via VTK's POpenFOAMReader directly, sidestepping ParaView's
+filter layer.
+
+**How to opt in:**
+
+```json
+{
+  "post_processing": { "backend": "pyvista" }
+}
+```
+
+**Deprecation plan:** the `"paraview"` backend remains the default for
+v1.5.x while the workshop / tutorial material is updated. In v1.6.0
+the default flips to `"pyvista"` and `"paraview"` becomes a soft
+deprecation (logs a warning at startup). The `pvbatch`-based code path
+is scheduled for removal in v1.7.0 — together with the indirect
+dependency on a system-installed ParaView application.
+
+Validated on `output/BPM120/validation_lesson01/` (25 k cells, robust
+profile, t=0.1 s): 9 PNGs produced cleanly in ~30 s with no ParaView
+install needed, whereas pvbatch on the same case produced 15 PNGs that
+were all field-empty due to the ParaView-6 reader issue described
+above.
+
+### Fixed — stray `logs/` directory leaked at repo root
+
+`ExecutePostProcessingTask._execute_paraview` previously called
+`run_command(self.config, cmd, ".", "log.postProcessing")`, which
+wrote `./logs/log.postProcessing` relative to the current working
+directory (i.e. the repo root) on every `--postprocess` invocation.
+Passing the actual case directory now keeps the log inside the run's
+own `openfoam/logs/` tree, matching every other workflow-step log.
+
 ### Added — parametric-study workflow (four-block architecture)
 
 The parametric-study workflow is organised as four composable blocks
