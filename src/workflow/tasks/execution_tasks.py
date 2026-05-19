@@ -1116,7 +1116,7 @@ class ExecutePostProcessingTask(Task):
             cmd = [pvbatch_exe, script_path, case_dir]
             logger.info(f"Running: {' '.join(cmd)}")
 
-            run_command(self.config, cmd, ".", "log.postProcessing")
+            run_command(self.config, cmd, case_dir, "log.postProcessing")
         except CommandExecutionError as e:
             logger.error(f"Post-processing failed: {e}")
             logger.warning("You can run post-processing manually:")
