@@ -146,6 +146,51 @@ def _load_case(case_openfoam_dir: Path, time: Optional[float]):
     return reader.read(), t
 
 
+def _ensure_umag(internal: "pv.DataSet") -> str:
+    """Compute |U| on `internal` if not already there. Returns scalar name."""
+    if "U_magnitude" in internal.point_data or "U_magnitude" in internal.cell_data:
+        return "U_magnitude"
+    if "U" in internal.point_data:
+        u = np.asarray(internal.point_data["U"])
+        internal.point_data["U_magnitude"] = np.linalg.norm(u, axis=1)
+    elif "U" in internal.cell_data:
+        u = np.asarray(internal.cell_data["U"])
+        internal.cell_data["U_magnitude"] = np.linalg.norm(u, axis=1)
+    else:
+        raise RuntimeError("No 'U' field on the mesh")
+    return "U_magnitude"
+
+
+def _build_isosurfaces(
+    internal: "pv.DataSet",
+    scalar: str,
+    *,
+    n_levels: int = 6,
+    low_frac: float = 0.10,
+    high_percentile: float = 98.0,
+) -> "pv.PolyData":
+    """Return iso-surfaces of `scalar` on `internal`, evenly spaced
+    between `low_frac * max` and the `high_percentile` of the field.
+
+    Bypasses the no-slip-layer occlusion problem: the 0-velocity skin
+    is skipped (since low_frac > 0) and we render purely the interior
+    shells where the actual flow lives. This is the unstructured-mesh
+    analogue of volume rendering in ParaView — same look, same
+    physically-meaningful "see the jet through the wall" effect.
+    """
+    if scalar in internal.point_data:
+        arr = np.asarray(internal.point_data[scalar])
+    else:
+        arr = np.asarray(internal.cell_data[scalar])
+
+    hi = float(np.percentile(arr, high_percentile))
+    lo = max(low_frac * hi, 1e-6)
+    if hi <= lo:
+        hi = lo * 1.1
+    levels = np.linspace(lo, hi, n_levels)
+    return internal.contour(isosurfaces=list(levels), scalars=scalar)
+
+
 def render_velocity_magnitude(
     case_openfoam_dir: Path,
     out_png: Path,
@@ -153,66 +198,68 @@ def render_velocity_magnitude(
     time: Optional[float] = None,
     window_size: tuple[int, int] = (1280, 720),
     cmap: str = "viridis",
+    wall_patch: str = "wall_aorta",
+    wall_opacity: float = 0.10,
+    iso_levels: int = 6,
+    iso_opacity: float = 0.55,
 ) -> Path:
-    """Render velocity magnitude on the internal mesh at one time step.
+    """Render velocity magnitude on the internal flow using nested
+    iso-surfaces at multiple |U| levels, with a translucent wall shell
+    behind for anatomical context.
 
-    Returns the path to the PNG that was written.
+    The no-slip layer at the wall (|U|≈0) is excluded by starting the
+    iso-surface stack at 10 % of the |U| 98th-percentile — so the
+    interior jet through the coarctation actually shows up instead of
+    being occluded by the slow-flow skin. This is the unstructured-mesh
+    equivalent of ParaView's volume rendering.
 
-    Raises:
-        FileNotFoundError: if no .foam file is found in `case_openfoam_dir`.
-        RuntimeError: if PyVista can't read the case or the time step
-            has no `U` field.
+    Args:
+        iso_levels:   number of |U| iso-surfaces stacked from low to high.
+        iso_opacity:  alpha applied uniformly to every iso-surface.
+        wall_opacity: alpha of the wall_aorta shell (0 to omit entirely).
     """
     import pyvista as pv
 
-    foam = _find_foam_file(case_openfoam_dir)
-    if foam is None:
-        raise FileNotFoundError(
-            f"No .foam pointer file found under {case_openfoam_dir} — "
-            "is this a real AortaCFD openfoam/ directory?"
-        )
-
-    reader = pv.POpenFOAMReader(str(foam))
-    time_values = list(reader.time_values or [])
-    if not time_values:
-        raise RuntimeError(
-            f"No time values found in {foam} — has the solver actually written any output yet?"
-        )
-
-    t = _resolve_render_time(time_values, time)
-    reader.set_active_time_value(t)
-    multiblock = reader.read()
-
+    multiblock, t = _load_case(case_openfoam_dir, time)
     if "internalMesh" not in multiblock.keys():
         raise RuntimeError(
             f"PyVista returned a MultiBlock with no 'internalMesh' block: {list(multiblock.keys())}"
         )
 
     internal = multiblock["internalMesh"]
-    if "U" not in internal.point_data and "U" not in internal.cell_data:
-        raise RuntimeError(
-            f"No 'U' field on internalMesh at t={t}; available point arrays: "
-            f"{list(internal.point_data.keys())}; cell arrays: "
-            f"{list(internal.cell_data.keys())}"
-        )
+    umag_name = _ensure_umag(internal)
 
-    # Compute |U|. Use point data if available; fall back to cell.
-    if "U" in internal.point_data:
-        velocity = np.asarray(internal.point_data["U"])
-        umag_name = "U_magnitude"
-        internal.point_data[umag_name] = np.linalg.norm(velocity, axis=1)
-    else:
-        velocity = np.asarray(internal.cell_data["U"])
-        umag_name = "U_magnitude"
-        internal.cell_data[umag_name] = np.linalg.norm(velocity, axis=1)
+    # Iso-surface stack — skips the no-slip layer, shows actual flow regions
+    iso = _build_isosurfaces(internal, umag_name, n_levels=iso_levels)
+    # Colourmap range matches what the iso-surfaces actually span (5th–98th pct)
+    umag_arr = (
+        np.asarray(internal.point_data[umag_name])
+        if umag_name in internal.point_data
+        else np.asarray(internal.cell_data[umag_name])
+    )
+    clim = (0.0, float(np.percentile(umag_arr, 98)))
 
     out_png.parent.mkdir(parents=True, exist_ok=True)
 
     plotter = pv.Plotter(off_screen=True, window_size=list(window_size))
+    plotter.set_background("white")
+
+    # 1) Wall shell — translucent grey for anatomy
+    boundary = multiblock.get("boundary") if hasattr(multiblock, "get") else None
+    wall = boundary[wall_patch] if (boundary is not None and wall_patch in boundary.keys()) else None
+    if wall is not None and wall_opacity > 0.0:
+        plotter.add_mesh(
+            wall, color="lightgray", opacity=wall_opacity,
+            specular=0.1, show_scalar_bar=False,
+        )
+
+    # 2) Nested iso-surfaces of |U|
     plotter.add_mesh(
-        internal,
+        iso,
         scalars=umag_name,
         cmap=cmap,
+        clim=clim,
+        opacity=iso_opacity,
         scalar_bar_args=dict(
             title=f"|U| (m/s) — t={t:.3f}s",
             n_labels=5,
@@ -224,12 +271,16 @@ def render_velocity_magnitude(
             height=0.76,
         ),
     )
-    plotter.set_background("white")
+
     plotter.camera_position = _camera_pose_max_silhouette(internal)
     plotter.screenshot(str(out_png))
     plotter.close()
 
-    logger.info("PyVista wrote %s (t=%.3fs, |U| from %s)", out_png, t, umag_name)
+    logger.info(
+        "PyVista wrote %s (t=%.3fs, %d iso-surfaces from %s, clim 0-%.2f m/s, wall=%s @ %.0f%%)",
+        out_png, t, iso_levels, umag_name, clim[1],
+        wall_patch if wall is not None else "none", wall_opacity * 100,
+    )
     return out_png
 
 
@@ -415,14 +466,18 @@ def render_velocity_time_series(
     times: Optional[list[float]] = None,
     window_size: tuple[int, int] = (1280, 720),
     cmap: str = "viridis",
+    wall_patch: str = "wall_aorta",
+    wall_opacity: float = 0.10,
+    iso_levels: int = 6,
+    iso_opacity: float = 0.55,
 ) -> list[Path]:
     """Render |U| at every requested time step (or every available step).
 
-    Returns the list of written PNGs, named `velocity_t<sim_time>.png`.
-
-    Crucially, the colormap clim is FROZEN across the series at the
-    global 5–98th percentile so the same colour means the same |U| in
-    every frame (essential for visual comparison between time steps).
+    Uses the same iso-surface stack and translucent wall shell as
+    `render_velocity_magnitude`, with the colourmap clim FROZEN across
+    the series at the global 98th percentile so the same colour means
+    the same |U| in every frame, and the camera locked to the first
+    frame's PCA pose.
     """
     import pyvista as pv
 
@@ -458,24 +513,29 @@ def render_velocity_time_series(
     for t in times:
         t_eff = _resolve_render_time(all_times, t)
         reader.set_active_time_value(t_eff)
-        internal = reader.read()["internalMesh"]
-        if "U" in internal.point_data:
-            u = np.asarray(internal.point_data["U"])
-            internal.point_data["U_magnitude"] = np.linalg.norm(u, axis=1)
-            scalar_name = "U_magnitude"
-        else:
-            u = np.asarray(internal.cell_data["U"])
-            internal.cell_data["U_magnitude"] = np.linalg.norm(u, axis=1)
-            scalar_name = "U_magnitude"
+        multiblock = reader.read()
+        internal = multiblock["internalMesh"]
+        _ensure_umag(internal)
 
         out_png = out_dir / f"velocity_t{t_eff:.3f}s.png"
         plotter = pv.Plotter(off_screen=True, window_size=list(window_size))
         plotter.set_background("white")
+
+        boundary = multiblock.get("boundary") if hasattr(multiblock, "get") else None
+        wall = boundary[wall_patch] if boundary is not None and wall_patch in boundary.keys() else None
+        if wall is not None and wall_opacity > 0.0:
+            plotter.add_mesh(
+                wall, color="lightgray", opacity=wall_opacity,
+                specular=0.1, show_scalar_bar=False,
+            )
+
+        iso = _build_isosurfaces(internal, "U_magnitude", n_levels=iso_levels)
         plotter.add_mesh(
-            internal,
-            scalars=scalar_name,
+            iso,
+            scalars="U_magnitude",
             cmap=cmap,
             clim=(0.0, global_max),
+            opacity=iso_opacity,
             scalar_bar_args=dict(
                 title=f"|U| (m/s) — t={t_eff:.3f}s",
                 n_labels=5,
@@ -495,8 +555,8 @@ def render_velocity_time_series(
         written.append(out_png)
 
     logger.info(
-        "PyVista wrote %d time-series frames to %s (|U| clim 0–%.3f m/s)",
-        len(written), out_dir, global_max,
+        "PyVista wrote %d time-series frames to %s (|U| clim 0–%.3f m/s, opacity=%r)",
+        len(written), out_dir, global_max, interior_opacity,
     )
     return written
 
