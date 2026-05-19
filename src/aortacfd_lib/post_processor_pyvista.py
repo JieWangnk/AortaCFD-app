@@ -691,21 +691,33 @@ def post_process(
 ) -> list[Path]:
     """Run the PyVista post-processor on an AortaCFD run.
 
-    `case_dir` is the top-level run directory (the one that contains
-    `openfoam/`, `reports/`, `results/`). Writes PNGs under
-    `case_dir/<out_subdir>/` and returns the list of paths written.
+    `case_dir` may be EITHER:
+      - the run directory (containing `openfoam/`, `reports/`, `results/`)
+        → Images/ is written alongside openfoam/ at the run-dir level
+      - the openfoam case directory (containing `*.foam`, `system/`,
+        `constant/`, time directories) → Images/ is written at the
+        SAME parent level for parity with the layout above. This is
+        the path the pvbatch ExecutePostProcessingTask passes in.
 
     Each renderer is wrapped in try/except — a missing field on one
     output should not block the others.
     """
     case_dir = Path(case_dir)
-    openfoam_dir = case_dir / "openfoam"
-    if not openfoam_dir.is_dir():
+
+    # Auto-detect which shape of case directory we got.
+    if list(case_dir.glob("*.foam")):
+        openfoam_dir = case_dir
+        images_root = case_dir.parent
+    elif (case_dir / "openfoam").is_dir():
+        openfoam_dir = case_dir / "openfoam"
+        images_root = case_dir
+    else:
         raise FileNotFoundError(
-            f"Expected `{openfoam_dir}` (with snappy mesh + solver output); not found."
+            f"`{case_dir}` is neither a run directory (with openfoam/ inside) "
+            f"nor an openfoam case directory (with *.foam inside)."
         )
 
-    images_dir = case_dir / out_subdir
+    images_dir = images_root / out_subdir
     written: list[Path] = []
 
     # Static single-time renders

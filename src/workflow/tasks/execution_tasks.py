@@ -1068,14 +1068,63 @@ class ExecuteReconstructionTask(Task):
 
 
 class ExecutePostProcessingTask(Task):
-    """Runs the pvbatch post-processing script."""
+    """Generates the figure set (velocity / WSS / pressure / time series)
+    via one of two interchangeable backends:
+
+      `paraview` (default): pvbatch + src/aortacfd_lib/post_processor.py.
+                            Stable for v1.4.x; deprecated in v1.6.0.
+      `pyvista`:            pure-Python via PyVista (no ParaView install
+                            needed); writes to <run>/Images/.
+
+    Selected via config.post_processing.backend.
+    """
 
     def execute(self, context: dict) -> bool:
-        """This task contains the execution logic from your original run_postprocessing method."""
-        logger.info("Executing post-processing script...")
         case_dir = context["case_directory"]
         pp_config = self.config.get("post_processing", {})
+        backend = pp_config.get("backend", "paraview")
 
+        if backend == "pyvista":
+            return self._execute_pyvista(case_dir)
+        if backend == "paraview":
+            return self._execute_paraview(case_dir, pp_config)
+
+        logger.error(
+            "Unknown post_processing.backend %r; expected 'paraview' or 'pyvista'", backend
+        )
+        return False
+
+    def _execute_pyvista(self, case_dir: str) -> bool:
+        logger.info("Executing post-processing via PyVista backend...")
+        logger.info("Case directory: %s", case_dir)
+        try:
+            # Lazy import — only required if user actually selects this backend
+            from aortacfd_lib.post_processor_pyvista import post_process as pyvista_pp
+
+            paths = pyvista_pp(case_dir)
+        except ImportError as exc:
+            logger.error(
+                "PyVista backend unavailable: %s. Install with `pip install pyvista`, "
+                "or switch post_processing.backend to 'paraview'.",
+                exc,
+            )
+            return False
+        except Exception as exc:    # noqa: BLE001
+            logger.error("PyVista post-processing failed: %s", exc)
+            return False
+
+        if not paths:
+            logger.warning("PyVista post-processing produced no images.")
+            return False
+
+        logger.info("PyVista post-processing wrote %d figure(s):", len(paths))
+        for p in paths:
+            logger.info("  %s", p)
+        return True
+
+    def _execute_paraview(self, case_dir: str, pp_config: dict) -> bool:
+        """Original pvbatch path — unchanged behaviour."""
+        logger.info("Executing post-processing via ParaView (pvbatch) backend...")
         # Setup environment variables for the script
         os.environ["CASE_PATH"] = case_dir
 
@@ -1089,7 +1138,10 @@ class ExecutePostProcessingTask(Task):
             if not pvbatch_exe:
                 logger.error("pvbatch executable not found in PATH")
                 logger.error("Install ParaView: sudo apt-get install paraview")
-                logger.error("Or set 'pvbatch_exe' in config.json post_processing section")
+                logger.error(
+                    "Or set 'pvbatch_exe' in config.json post_processing section, "
+                    "or switch post_processing.backend to 'pyvista'."
+                )
                 return False
             logger.info(f"Found pvbatch: {pvbatch_exe}")
 
