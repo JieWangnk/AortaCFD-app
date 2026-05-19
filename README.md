@@ -57,11 +57,11 @@ cd AortaCFD-app
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
-pip install -e .                  # runtime
-pip install -e ".[dev]"           # runtime + test/lint/security tools
+pip install -e .                  # runtime (≈ 1-2 min on a fresh cache)
+pip install -e ".[dev]"           # runtime + test/lint/security tools (≈ 5-10 min: pulls ~200 MB of transitive deps incl. vtk, scikit-learn)
 ```
 
-`pip install -r requirements.txt` also works — it's a thin shim over `pip install -e .`. Dependencies are declared in `pyproject.toml` (see `CHANGELOG.md` for recent changes).
+If you only want to *run* the pipeline, the first line is enough — `[dev]` is only needed for `pytest`, `flake8`, `safety`, and similar contributor tooling. `pip install -r requirements.txt` also works — it's a thin shim over `pip install -e .`. Dependencies are declared in `pyproject.toml` (see `CHANGELOG.md` for recent changes).
 
 Verify the install:
 
