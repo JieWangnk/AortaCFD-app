@@ -5,14 +5,12 @@ A pure-Python replacement for the ParaView/pvbatch post-processor in
 `POpenFOAMReader` (handles decomposed `processor*/` cases) and renders
 the workshop / tutorial figure set headlessly.
 
-Phase 1 scope: produce a single peak-systole velocity-magnitude PNG so
-the backend wiring can be validated end-to-end against an existing
-`output/<case>/<run>/` directory. Subsequent phases add WSS, pressure
-clip, and multi-time outputs.
-
 The output directory layout matches the existing post-processor:
     <run_dir>/Images/
         velocity_peak_systole.png
+        wall_shear_stress.png
+        pressure_clip.png
+        velocity_t<sim_time>.png   (one per time step in the time series)
 """
 from __future__ import annotations
 
@@ -118,6 +116,36 @@ def _camera_pose_max_silhouette(
     )
 
 
+RHO_BLOOD = 1060.0       # kg/m^3 — converts OpenFOAM kinematic to dynamic
+MMHG_PER_PA = 1.0 / 133.322
+
+
+def _load_case(case_openfoam_dir: Path, time: Optional[float]):
+    """Open the .foam file, pick a time step, and return (multiblock, t).
+
+    Centralises the read so each renderer doesn't re-open the case.
+    """
+    import pyvista as pv
+
+    foam = _find_foam_file(case_openfoam_dir)
+    if foam is None:
+        raise FileNotFoundError(
+            f"No .foam pointer file found under {case_openfoam_dir} — "
+            "is this a real AortaCFD openfoam/ directory?"
+        )
+
+    reader = pv.POpenFOAMReader(str(foam))
+    time_values = list(reader.time_values or [])
+    if not time_values:
+        raise RuntimeError(
+            f"No time values found in {foam} — has the solver actually written any output yet?"
+        )
+
+    t = _resolve_render_time(time_values, time)
+    reader.set_active_time_value(t)
+    return reader.read(), t
+
+
 def render_velocity_magnitude(
     case_openfoam_dir: Path,
     out_png: Path,
@@ -203,6 +231,274 @@ def render_velocity_magnitude(
 
     logger.info("PyVista wrote %s (t=%.3fs, |U| from %s)", out_png, t, umag_name)
     return out_png
+
+
+def render_wall_shear_stress(
+    case_openfoam_dir: Path,
+    out_png: Path,
+    *,
+    time: Optional[float] = None,
+    wall_patch: str = "wall_aorta",
+    window_size: tuple[int, int] = (1280, 720),
+    cmap: str = "viridis",
+    clip_percentile: tuple[float, float] = (2, 98),
+) -> Path:
+    """Render |WSS| (Pa) on the wall patch at one time step.
+
+    The 2nd-to-98th-percentile clip stops the colormap being washed out
+    by the handful of cells at sharp geometric features (the
+    coarctation throat) that hold the global max.
+    """
+    import pyvista as pv
+
+    multiblock, t = _load_case(case_openfoam_dir, time)
+    if "boundary" not in multiblock.keys():
+        raise RuntimeError(
+            f"No 'boundary' block at top level; got: {list(multiblock.keys())}"
+        )
+    boundary = multiblock["boundary"]
+    if wall_patch not in boundary.keys():
+        raise RuntimeError(
+            f"Wall patch '{wall_patch}' not found. Available patches: "
+            f"{list(boundary.keys())}"
+        )
+    wall = boundary[wall_patch]
+
+    if "wallShearStress" not in wall.point_data and "wallShearStress" not in wall.cell_data:
+        raise RuntimeError(
+            f"No 'wallShearStress' on {wall_patch} at t={t}. Has the wallShearStress "
+            "function object run? See hemodynamics_postprocessor.py."
+        )
+
+    # Convert kinematic (m^2/s^2) to dynamic (Pa) via density
+    if "wallShearStress" in wall.point_data:
+        wss = np.asarray(wall.point_data["wallShearStress"])
+        wss_mag_pa = np.linalg.norm(wss, axis=1) * RHO_BLOOD
+        scalar_name = "WSS_magnitude_Pa"
+        wall.point_data[scalar_name] = wss_mag_pa
+    else:
+        wss = np.asarray(wall.cell_data["wallShearStress"])
+        wss_mag_pa = np.linalg.norm(wss, axis=1) * RHO_BLOOD
+        scalar_name = "WSS_magnitude_Pa"
+        wall.cell_data[scalar_name] = wss_mag_pa
+
+    lo, hi = np.percentile(wss_mag_pa, clip_percentile)
+    if hi <= lo:
+        hi = lo + 1e-9  # degenerate field; avoid zero-range crash
+
+    out_png.parent.mkdir(parents=True, exist_ok=True)
+
+    plotter = pv.Plotter(off_screen=True, window_size=list(window_size))
+    plotter.set_background("white")
+    plotter.add_mesh(
+        wall,
+        scalars=scalar_name,
+        cmap=cmap,
+        clim=(float(lo), float(hi)),
+        scalar_bar_args=dict(
+            title=f"|WSS| (Pa) — t={t:.3f}s",
+            n_labels=5,
+            fmt="%.2f",
+            vertical=True,
+            position_x=0.88,
+            position_y=0.12,
+            width=0.06,
+            height=0.76,
+        ),
+    )
+    plotter.camera_position = _camera_pose_max_silhouette(wall)
+    plotter.screenshot(str(out_png))
+    plotter.close()
+
+    logger.info(
+        "PyVista wrote %s (t=%.3fs, |WSS| Pa range %.2f–%.2f at %s%%)",
+        out_png, t, lo, hi, clip_percentile,
+    )
+    return out_png
+
+
+def render_pressure_clip(
+    case_openfoam_dir: Path,
+    out_png: Path,
+    *,
+    time: Optional[float] = None,
+    window_size: tuple[int, int] = (1280, 720),
+    cmap: str = "coolwarm",
+    wall_opacity: float = 0.15,
+    units: str = "mmHg",  # "mmHg" | "Pa"
+) -> Path:
+    """Slice the internal mesh by a plane through its PCA centre normal
+    to PC3 (the arch plane), colour by pressure, and overlay the wall
+    as a translucent shell so the slice has anatomical context.
+    """
+    import pyvista as pv
+
+    multiblock, t = _load_case(case_openfoam_dir, time)
+    internal = multiblock["internalMesh"]
+    if "p" not in internal.point_data and "p" not in internal.cell_data:
+        raise RuntimeError(f"No 'p' field on internalMesh at t={t}")
+
+    # Promote pressure to point data (clip needs it on points) and convert units
+    if "p" in internal.point_data:
+        p_kin = np.asarray(internal.point_data["p"])
+    else:
+        # cell → point interpolation
+        internal = internal.cell_data_to_point_data()
+        p_kin = np.asarray(internal.point_data["p"])
+
+    p_pa = p_kin * RHO_BLOOD
+    if units == "mmHg":
+        p_disp = p_pa * MMHG_PER_PA
+        unit_label = "mmHg"
+        fmt = "%.1f"
+    else:
+        p_disp = p_pa
+        unit_label = "Pa"
+        fmt = "%.1f"
+    scalar_name = f"p_{unit_label}"
+    internal.point_data[scalar_name] = p_disp
+
+    centre, axes = _principal_axes(np.asarray(internal.points))
+    pc3 = axes[2]
+    clip = internal.clip(normal=tuple(pc3), origin=tuple(centre), invert=False)
+    if clip.n_points == 0:
+        # Some meshes produce a degenerate clip on one side; flip orientation
+        clip = internal.clip(normal=tuple(-pc3), origin=tuple(centre), invert=False)
+
+    # Pressure range from the *clip* itself (visible content), 5–95th percentile
+    p_clip = np.asarray(clip.point_data[scalar_name])
+    lo, hi = np.percentile(p_clip, [5, 95])
+    if hi <= lo:
+        hi = lo + 1e-9
+
+    wall = multiblock["boundary"]["wall_aorta"] if "wall_aorta" in multiblock["boundary"].keys() else None
+
+    out_png.parent.mkdir(parents=True, exist_ok=True)
+
+    plotter = pv.Plotter(off_screen=True, window_size=list(window_size))
+    plotter.set_background("white")
+
+    if wall is not None:
+        plotter.add_mesh(wall, color="lightgray", opacity=wall_opacity, show_scalar_bar=False)
+
+    plotter.add_mesh(
+        clip,
+        scalars=scalar_name,
+        cmap=cmap,
+        clim=(float(lo), float(hi)),
+        scalar_bar_args=dict(
+            title=f"p ({unit_label}) — t={t:.3f}s",
+            n_labels=5,
+            fmt=fmt,
+            vertical=True,
+            position_x=0.88,
+            position_y=0.12,
+            width=0.06,
+            height=0.76,
+        ),
+    )
+    plotter.camera_position = _camera_pose_max_silhouette(internal)
+    plotter.screenshot(str(out_png))
+    plotter.close()
+
+    logger.info(
+        "PyVista wrote %s (t=%.3fs, p %s range %.2f–%.2f)",
+        out_png, t, unit_label, lo, hi,
+    )
+    return out_png
+
+
+def render_velocity_time_series(
+    case_openfoam_dir: Path,
+    out_dir: Path,
+    *,
+    times: Optional[list[float]] = None,
+    window_size: tuple[int, int] = (1280, 720),
+    cmap: str = "viridis",
+) -> list[Path]:
+    """Render |U| at every requested time step (or every available step).
+
+    Returns the list of written PNGs, named `velocity_t<sim_time>.png`.
+
+    Crucially, the colormap clim is FROZEN across the series at the
+    global 5–98th percentile so the same colour means the same |U| in
+    every frame (essential for visual comparison between time steps).
+    """
+    import pyvista as pv
+
+    foam = _find_foam_file(case_openfoam_dir)
+    if foam is None:
+        raise FileNotFoundError(f"No .foam under {case_openfoam_dir}")
+    reader = pv.POpenFOAMReader(str(foam))
+    all_times = list(reader.time_values or [])
+    if not all_times:
+        raise RuntimeError(f"No time values in {foam}")
+    if times is None:
+        times = all_times
+
+    # First pass: find the global |U| range across the whole series so the
+    # colourmap is comparable frame-to-frame.
+    global_max = 0.0
+    for t in times:
+        reader.set_active_time_value(_resolve_render_time(all_times, t))
+        internal = reader.read()["internalMesh"]
+        if "U" in internal.point_data:
+            u = np.asarray(internal.point_data["U"])
+        else:
+            u = np.asarray(internal.cell_data["U"])
+        umag = np.linalg.norm(u, axis=1)
+        global_max = max(global_max, float(np.percentile(umag, 98)))
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+
+    # Cache the camera from the first frame so it stays still across the series
+    camera_pose = None
+
+    for t in times:
+        t_eff = _resolve_render_time(all_times, t)
+        reader.set_active_time_value(t_eff)
+        internal = reader.read()["internalMesh"]
+        if "U" in internal.point_data:
+            u = np.asarray(internal.point_data["U"])
+            internal.point_data["U_magnitude"] = np.linalg.norm(u, axis=1)
+            scalar_name = "U_magnitude"
+        else:
+            u = np.asarray(internal.cell_data["U"])
+            internal.cell_data["U_magnitude"] = np.linalg.norm(u, axis=1)
+            scalar_name = "U_magnitude"
+
+        out_png = out_dir / f"velocity_t{t_eff:.3f}s.png"
+        plotter = pv.Plotter(off_screen=True, window_size=list(window_size))
+        plotter.set_background("white")
+        plotter.add_mesh(
+            internal,
+            scalars=scalar_name,
+            cmap=cmap,
+            clim=(0.0, global_max),
+            scalar_bar_args=dict(
+                title=f"|U| (m/s) — t={t_eff:.3f}s",
+                n_labels=5,
+                fmt="%.2f",
+                vertical=True,
+                position_x=0.88,
+                position_y=0.12,
+                width=0.06,
+                height=0.76,
+            ),
+        )
+        if camera_pose is None:
+            camera_pose = _camera_pose_max_silhouette(internal)
+        plotter.camera_position = camera_pose
+        plotter.screenshot(str(out_png))
+        plotter.close()
+        written.append(out_png)
+
+    logger.info(
+        "PyVista wrote %d time-series frames to %s (|U| clim 0–%.3f m/s)",
+        len(written), out_dir, global_max,
+    )
+    return written
 
 
 def open_interactive_viewer(
@@ -331,12 +627,16 @@ def post_process(
     case_dir: str | Path,
     *,
     out_subdir: str = "Images",
+    time_series: bool = True,
 ) -> list[Path]:
-    """Run the Phase-1 PyVista post-processor on an AortaCFD run.
+    """Run the PyVista post-processor on an AortaCFD run.
 
     `case_dir` is the top-level run directory (the one that contains
-    `openfoam/`, `reports/`, `results/`). Writes PNG(s) under
+    `openfoam/`, `reports/`, `results/`). Writes PNGs under
     `case_dir/<out_subdir>/` and returns the list of paths written.
+
+    Each renderer is wrapped in try/except — a missing field on one
+    output should not block the others.
     """
     case_dir = Path(case_dir)
     openfoam_dir = case_dir / "openfoam"
@@ -348,8 +648,24 @@ def post_process(
     images_dir = case_dir / out_subdir
     written: list[Path] = []
 
-    velocity_png = images_dir / "velocity_peak_systole.png"
-    render_velocity_magnitude(openfoam_dir, velocity_png)
-    written.append(velocity_png)
+    # Static single-time renders
+    for label, fn, name in [
+        ("velocity",        render_velocity_magnitude, "velocity_peak_systole.png"),
+        ("wallShearStress", render_wall_shear_stress,  "wall_shear_stress.png"),
+        ("pressure_clip",   render_pressure_clip,      "pressure_clip.png"),
+    ]:
+        try:
+            written.append(fn(openfoam_dir, images_dir / name))
+        except Exception as exc:    # noqa: BLE001
+            logger.warning("PyVista %s render failed: %s", label, exc)
+
+    # Multi-time velocity series, locked colourmap so frames are comparable
+    if time_series:
+        try:
+            written.extend(
+                render_velocity_time_series(openfoam_dir, images_dir / "velocity_series")
+            )
+        except Exception as exc:    # noqa: BLE001
+            logger.warning("PyVista velocity time-series render failed: %s", exc)
 
     return written
