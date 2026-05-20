@@ -39,12 +39,18 @@ the OpenFOAM internal unit (m).
 | File | Purpose |
 |---|---|
 | `inlet.stl`, `outlet1.stl`, `wall_aorta.stl` | Split patches used by AortaCFD's mesh + BC pipeline |
-| `baseline_v2.stl` | Monolithic STL — visualisation only, not consumed by the pipeline |
-| `baseline_v2.json` | Generator arguments (Blender params, segment counts) |
-| `geometry.meta.json` | Provenance (spec name, seed, patch checksums, generation timestamp) |
-| `config.json` | Ready-to-run 1-cycle laminar pulsatile config — Method A (`cells_per_diameter: 15`) with WK auto-calculator. The default config picked up by `python run_patient.py ubend` (no `--config` flag needed). |
-| `config_adaptive_span.json` | Same case, same BCs, but Method C — `mesh_strategy: "adaptive_span"` with `cells_across_span: 16`. Invoke explicitly via `--config`. Useful for side-by-side cell-count / wall-time comparison with the default. |
+| `geometry.meta.json` | Provenance from aortacfd-geomgen (spec name, seed, patch checksums) |
 | `ubend_inflow.csv` | Synthesised pulsatile waveform — 5 L/min mean, 14.6 L/min peak (half-rectified sine, T=0.8 s) |
+| `config.json` | **Method A — `cells_per_diameter: 15`.** Default config; `python run_patient.py ubend` picks it up with no `--config` flag. |
+| `config_target_mm.json` | **Method B — `target_cell_size_mm: 2.0`.** Absolute size in mm, vessel-independent. Invoke explicitly via `--config`. |
+| `config_adaptive_span.json` | **Method C — `cells_across_span: 17` with `span_refinement_level: 1`.** Local-lumen target via snappy `insideSpan`. Invoke explicitly via `--config`. |
+
+All three configs share identical physics, boundary conditions, WK
+auto-calculator path, simulation_control and run_settings — only
+the `mesh` block differs. That makes them a fair head-to-head of
+the three CLI mesh-resolution methods documented in
+[`docs/MESH_SPECIFICATION_GUIDE.md`](../../docs/MESH_SPECIFICATION_GUIDE.md)
+and [`docs/tutorial/SESSION3_MESH_GENERATION.md`](../../docs/tutorial/SESSION3_MESH_GENERATION.md).
 
 ## Three demos
 
@@ -104,16 +110,20 @@ cd ~/GitHub/AortaCFD-app
 source venv/bin/activate
 source /opt/openfoam12/etc/bashrc
 
-# 1. Mesh-only first — verify cell count before committing to the long solver run
-python run_patient.py ubend --steps case,mesh --run-name mesh_check
-# (defaults to cases_input/ubend/config.json since the case is auto-discovered)
+# 1. Three-method mesh comparison (mesh-only, cheap — ~1-3 min each)
+python run_patient.py ubend --steps case,mesh --run-name mesh_A
+python run_patient.py ubend --config cases_input/ubend/config_target_mm.json \
+    --steps case,mesh --run-name mesh_B
+python run_patient.py ubend --config cases_input/ubend/config_adaptive_span.json \
+    --steps case,mesh --run-name mesh_C
 
-# 1b. Same mesh-only check but with the adaptive_span variant (Method C)
-python run_patient.py ubend \
-    --config cases_input/ubend/config_adaptive_span.json \
-    --steps case,mesh --run-name mesh_check_adaptive_span
+# Compare resulting cell counts
+for run in mesh_A mesh_B mesh_C; do
+    cells=$(grep -E "^cells:" output/ubend/$run/openfoam/logs/log.checkMesh | tail -1)
+    echo "$run  $cells"
+done
 
-# 2. Full 1-cycle run with auto-calculated Windkessel (default cpd=15 config)
+# 2. Full 1-cycle run with auto-calculated Windkessel (default Method A)
 python run_patient.py ubend --run-name 1cycle_wk
 
 # 3. Inspect the auto-derived Windkessel parameters

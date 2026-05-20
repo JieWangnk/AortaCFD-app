@@ -1,9 +1,9 @@
 {
-  "_doc": "Method A — cells_per_diameter. The default config picked up by `python run_patient.py ubend` (no --config flag needed). For Method B / C comparison see config_target_mm.json and config_adaptive_span.json.",
+  "_doc": "Method B — target_cell_size_mm. Absolute size in mm, vessel-independent. Invoke with: python run_patient.py ubend --config cases_input/ubend/config_target_mm.json. Identical physics / BCs / WK auto-calc to config.json — only the mesh block changes.",
 
   "case_info": {
     "patient_id": "ubend",
-    "description": "U-bend 1-cycle laminar pulsatile — Method A (cells_per_diameter)"
+    "description": "U-bend 1-cycle laminar pulsatile — Method B (target_cell_size_mm)"
   },
 
   "physics": {
@@ -14,7 +14,8 @@
   "numerics": { "profile": "standard" },
 
   "mesh": {
-    "cells_per_diameter": 15,
+    "_doc": "Method B: cell size in mm overrides cells_per_diameter (priority 1 in the 3-priority cascade). target=2.0 mm matches ~cpd=14 on the 27.4 mm inlet diameter, slightly coarser than config.json's cpd=15 for direct comparison.",
+    "target_cell_size_mm": 2.0,
     "boundary_layers": {
       "enabled": true, "num_layers": 3, "expansion_ratio": 1.2,
       "final_layer_thickness": 0.3, "min_thickness": 0.05, "relativeSizes": true
@@ -41,7 +42,6 @@
     "outlets": {
       "type": "3EWINDKESSEL",
       "windkessel_settings": {
-        "_doc": "Auto-calculate mode: outlet_parameters omitted. wk_setup.py derives Z/C/R from systolic/diastolic + inlet flow (CSV) + outlet geometry (Murray's law) + default PWV formula.",
         "systolic_pressure": 120,
         "diastolic_pressure": 80,
         "venous_pressure": 0,
