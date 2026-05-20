@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import List, Tuple
@@ -34,6 +35,47 @@ def _warn(msg: str) -> None:
 
 def _fail(msg: str) -> None:
     print(f"  {_color('✗', 'red')} {msg}")
+
+
+def _check_version(repo_root: Path) -> bool:
+    """Report the installed package version + git commit SHA + branch.
+
+    Soft check — never fails. Lets users instantly see what code version
+    they're running, which makes "did `git pull` actually take effect?"
+    trivial to answer.
+    """
+    # Package version from installed metadata
+    try:
+        from importlib.metadata import version as _pkg_version
+        pkg_v = _pkg_version("aortacfd")
+        _ok(f"AortaCFD {pkg_v} (from installed package metadata)")
+    except Exception:    # noqa: BLE001
+        _warn("could not read AortaCFD version from package metadata")
+
+    # Git commit SHA + branch, if this is a git checkout
+    git_dir = repo_root / ".git"
+    if git_dir.exists():
+        try:
+            sha = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=repo_root, capture_output=True, text=True, timeout=2,
+            ).stdout.strip()
+            branch = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd=repo_root, capture_output=True, text=True, timeout=2,
+            ).stdout.strip()
+            dirty = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=repo_root, capture_output=True, text=True, timeout=2,
+            ).stdout.strip()
+            suffix = " (uncommitted changes present)" if dirty else ""
+            _ok(f"git: {branch} @ {sha}{suffix}")
+        except (subprocess.SubprocessError, FileNotFoundError):
+            _warn("git available in .git/ but `git` binary failed — version unverifiable")
+    else:
+        _warn("not a git checkout — running `make update` won't work without it")
+
+    return True
 
 
 def _check_python() -> bool:
@@ -178,6 +220,9 @@ def run_doctor() -> int:
     repo_root = Path(__file__).resolve().parents[2]
     print(_color("AortaCFD doctor", "bold"))
     print(_color(f"  repo: {repo_root}", "dim"))
+
+    _section("Version")
+    _check_version(repo_root)  # soft
 
     _section("Python")
     py_ok = _check_python()

@@ -2,11 +2,12 @@
 # Conventions: tabs for recipe indentation (Make requirement).
 #               assumes ./venv exists; create with `make install`.
 
-.PHONY: help install test test-all test-bench lint format build clean clean-all
+.PHONY: help install update test test-all test-bench lint format build clean clean-all
 
 help:
 	@echo "AortaCFD — common tasks"
 	@echo "  make install     Create ./venv and install package + dev deps"
+	@echo "  make update      git pull origin main + refresh deps + report new HEAD"
 	@echo "  make test        Fast test suite (~30s, deselects slow/e2e/benchmark)"
 	@echo "  make test-all    Full suite minus benchmark fixtures"
 	@echo "  make test-bench  Benchmark tests against a real qoi_summary.json"
@@ -23,6 +24,15 @@ install:
 	python3 -m venv venv
 	. venv/bin/activate && pip install --upgrade pip && pip install -e ".[dev]"
 	@echo "✓ venv ready — run 'source venv/bin/activate' to use it"
+
+update:
+	@echo "→ git pull origin main"
+	@git pull origin main
+	@echo "→ refresh dependencies (`pip install -e .`)"
+	@. venv/bin/activate && pip install -e . --quiet
+	@echo "→ verify"
+	@echo "  $$(git rev-parse --short HEAD) on $$(git rev-parse --abbrev-ref HEAD)"
+	@echo "  run 'python run_patient.py --doctor' to confirm environment health"
 
 test:
 	. venv/bin/activate && PYTHONPATH=src pytest tests/ -q \
