@@ -484,6 +484,6 @@ citable version for the paper; do not re-tag.
 ### Test baseline
 - 2,098 automated tests, 83% code coverage.
 
-[Unreleased]: https://github.com/JieWangnk/AortaCFD-app/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/JieWangnk/AortaCFD-app/compare/v1.4.1...HEAD
 [1.1.0]: https://github.com/JieWangnk/AortaCFD-app/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/JieWangnk/AortaCFD-app/releases/tag/v1.0.0

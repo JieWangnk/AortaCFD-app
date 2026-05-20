@@ -92,6 +92,9 @@ where = ["src"]
 minversion = "7.0"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
+# Resolve imports for both src/<package>/ layout and the top-level scripts/ helpers
+# (so a fresh `pytest tests/` works without PYTHONPATH= prefix)
+pythonpath = ["src", "."]
 python_functions = ["test_*"]
 python_classes = ["Test*"]
 addopts = [

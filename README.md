@@ -1,7 +1,7 @@
 # AortaCFD
 
 ![Python Version](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)
-![Tests](https://img.shields.io/badge/tests-2210%20passing-success.svg)
+![Tests](https://img.shields.io/badge/tests-2263%20passing-success.svg)
 ![OpenFOAM](https://img.shields.io/badge/OpenFOAM-12-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 [![DOI](https://zenodo.org/badge/826315242.svg)](https://doi.org/10.5281/zenodo.20184620)
@@ -67,7 +67,7 @@ Verify the install:
 
 ```bash
 python run_patient.py --version       # → AortaCFD 1.4.1
-python run_patient.py --list          # → 0014_H_AO_COA, BPM120, VOL04
+python run_patient.py --list          # → 0014_H_AO_COA, BPM120, VOL04, ubend
 ```
 
 Run `python run_patient.py --doctor` after install — it checks Python version, importable deps, sample STLs, OpenFOAM sourced, and disk space.
@@ -112,9 +112,9 @@ export foamDotFile=/share/apps/openfoam/12/etc/bashrc
 
 `run_patient.py` and `run_batch.py` pick these up automatically — no config edit needed.
 
-### Install the Windkessel boundary condition (required for all three canonical cases)
+### Install the Windkessel boundary condition (required for all four canonical cases)
 
-All three sample cases (`BPM120`, `0014_H_AO_COA`, `VOL04`) use 3-element Windkessel outlets, which depend on a small custom boundary-condition library (`modularWKPressure`) compiled against your OpenFOAM 12 install. Run this once after sourcing OpenFOAM:
+All four sample cases (`BPM120`, `0014_H_AO_COA`, `VOL04`, `ubend`) use 3-element Windkessel outlets, which depend on a small custom boundary-condition library (`modularWKPressure`) compiled against your OpenFOAM 12 install. Run this once after sourcing OpenFOAM:
 
 ```bash
 source /opt/openfoam12/etc/bashrc
@@ -149,8 +149,9 @@ STL files should be in millimetres. The workflow scales them to metres using the
 | `BPM120` | Pediatric aortic coarctation, published reference (Wang et al.) | TIMEVARYING from CSV waveform | 4 × 3EWindkessel |
 | `0014_H_AO_COA` | Pediatric coarctation from SimVascular Vascular Model Repository | TIMEVARYING from CSV waveform | 5 × 3EWindkessel |
 | `VOL04` | Healthy adult aorta; demonstrates `MAPPED_PROFILE` inlet (pre-mapped per-face velocity snapshots — could be 4D MRI, Doppler, 1D-model output, etc.) | `MAPPED_PROFILE` | 4 × 3EWindkessel |
+| `ubend` | Single-outlet synthetic U-bend from `aortacfd-geomgen`; demonstrates the Windkessel **auto-calculator** path (Murray's law → per-outlet R, C, Z from systolic/diastolic targets) | TIMEVARYING from synthesised CSV | 1 × 3EWindkessel (auto-derived) |
 
-All three are usable out of the box with `python run_patient.py <case_id>`. Use them as templates for your own patient data — just replace the STLs and flow waveform.
+All four are usable out of the box with `python run_patient.py <case_id>`. Use them as templates for your own patient data — just replace the STLs and flow waveform.
 
 ---
 
@@ -791,7 +792,7 @@ If you use AortaCFD in academic work, please cite via `CITATION.cff`.
   title={AortaCFD: Patient-Specific Aortic Blood Flow Simulation},
   author={Wang, Jie},
   year={2026},
-  version={1.1.1},
+  version={1.4.1},
   url={https://github.com/JieWangnk/AortaCFD-app}
 }
 ```

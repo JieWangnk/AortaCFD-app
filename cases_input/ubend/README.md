@@ -59,10 +59,11 @@ cell counts at 4 CPU mesh-only:
 | B — `target_cell_size_mm` | `2.0`, `[1,1]`, no layers | 109,826 | 22 s |
 | C — `cells_across_span` | `12`, `[0,1]`, no layers, `adaptive_span` | 10,850 | 13 s |
 
-The driver script is at `/tmp/mesh_strategy_matrix.py` (not committed;
-it's a one-off testing utility) — recreate any time from the three
-JSON snippets in
-[`docs/tutorial/SESSION3_MESH_GENERATION.md`](../../docs/tutorial/SESSION3_MESH_GENERATION.md).
+Reproduce the matrix by hand from the three JSON snippets in
+[`docs/tutorial/SESSION3_MESH_GENERATION.md`](../../docs/tutorial/SESSION3_MESH_GENERATION.md)
+— set up three `cases_input/ubend/config_mesh_*.json` files and run
+`python run_patient.py ubend --config <cfg> --steps case,mesh --run-name <name>`
+for each.
 
 ### Demo 2 — Single-outlet Windkessel auto-calculator
 
