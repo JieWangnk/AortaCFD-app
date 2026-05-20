@@ -1164,8 +1164,12 @@ class ExecutePostProcessingTask(Task):
         logger.info(f"Case directory: {case_dir}")
 
         try:
-            # Run pvbatch with the case directory as argument
-            cmd = [pvbatch_exe, script_path, case_dir]
+            # Run pvbatch with the case directory as argument.
+            # We pass run_command(cwd=case_dir) so the log file lands inside
+            # the run's own logs/ tree, but that means a *relative* case_dir
+            # would resolve incorrectly inside pvbatch — convert to absolute.
+            case_dir_abs = os.path.abspath(case_dir)
+            cmd = [pvbatch_exe, script_path, case_dir_abs]
             logger.info(f"Running: {' '.join(cmd)}")
 
             run_command(self.config, cmd, case_dir, "log.postProcessing")
