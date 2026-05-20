@@ -42,7 +42,7 @@ the OpenFOAM internal unit (m).
 | `baseline_v2.stl` | Monolithic STL — visualisation only, not consumed by the pipeline |
 | `baseline_v2.json` | Generator arguments (Blender params, segment counts) |
 | `geometry.meta.json` | Provenance (spec name, seed, patch checksums, generation timestamp) |
-| `config_3cycle.json` | Ready-to-run 1-cycle laminar pulsatile config with WK auto-calculator |
+| `config.json` | Ready-to-run 1-cycle laminar pulsatile config with WK auto-calculator |
 | `ubend_inflow.csv` | Synthesised pulsatile waveform — 5 L/min mean, 14.6 L/min peak (half-rectified sine, T=0.8 s) |
 
 ## Three demos
@@ -67,7 +67,7 @@ for each.
 
 ### Demo 2 — Single-outlet Windkessel auto-calculator
 
-`config_3cycle.json` deliberately **omits** the `outlet_parameters`
+`config.json` deliberately **omits** the `outlet_parameters`
 block under `boundary_conditions.outlets.windkessel_settings`. That
 triggers the auto-calculation path in
 [`src/aortacfd_lib/wk_setup.py`](../../src/aortacfd_lib/wk_setup.py):
@@ -88,7 +88,7 @@ for that pattern.
 
 ### Demo 3 — 1-cycle laminar pulsatile run
 
-The full pipeline on `config_3cycle.json`:
+The full pipeline on `config.json`:
 
 | Stage | Knob | Output |
 |---|---|---|
@@ -105,12 +105,12 @@ source /opt/openfoam12/etc/bashrc
 
 # 1. Mesh-only first — verify cell count before committing to the long solver run
 python run_patient.py ubend \
-    --config cases_input/ubend/config_3cycle.json \
+    --config cases_input/ubend/config.json \
     --run-name mesh_check --steps case,mesh
 
 # 2. Full 1-cycle run with auto-calculated Windkessel
 python run_patient.py ubend \
-    --config cases_input/ubend/config_3cycle.json \
+    --config cases_input/ubend/config.json \
     --run-name 1cycle_wk
 
 # 3. Inspect the auto-derived Windkessel parameters
