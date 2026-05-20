@@ -57,6 +57,96 @@ Bypasses geometry analysis and uses the specified cell size directly:
 - Matching specific literature values (e.g., "0.6mm elements")
 - Mesh independence studies requiring fixed ratios (0.5, 0.7, 1.0, 1.4mm)
 
+#### Option 3: `cells_across_span` with `mesh_strategy: "adaptive_span"`
+
+The third method sizes the mesh by the number of cells **across the
+local vessel lumen**, not the inlet diameter. Use this when the
+geometry has branches of mixed diameter (e.g., aorta + supra-aortic
+branches) — `cells_per_diameter` would under-resolve the small
+branches at any reasonable bulk-cell setting.
+
+```json
+"mesh": {
+  "SNAPPY_SETTINGS": {
+    "mesh_strategy": "adaptive_span",
+    "cells_across_span": 16,
+    "surfaceRefinementLevels": [2, 2]
+  }
+}
+```
+
+##### Mathematical definition
+
+snappyHexMesh's `insideSpan` refinement produces:
+
+```
+achievable_cells_across_span = blockMesh_cells × 2^span_level
+```
+
+Where:
+- `blockMesh_cells` — background mesh density (cells per **reference** diameter)
+- `span_level` — snappy's `insideSpan` refinement level (each level halves cell size in 3D)
+
+The **reference diameter** is set by `geometry.reference_radius_strategy`:
+
+| Strategy | What it picks | When to use |
+|---|---|---|
+| `max` (default) | Largest vessel (main aorta) | Standard aortic CFD |
+| `inlet` | Inlet radius only | Inlet-dominated flows |
+| `mean` | Average of all patches | Mixed-scale work |
+| `min` | Smallest vessel | "Cells across span must hit target everywhere — even the smallest branch" |
+
+##### How `cells_across_span` differs from `cells_per_diameter`
+
+For BPM120 (main aorta ≈ 25 mm, branches ≈ 8 mm), setting `cells_per_diameter: 15` gives:
+
+| Region | Lumen | Cell size (h) | Cells across local lumen |
+|---|---|---|---|
+| Main aorta | 25 mm | 25/15 ≈ 1.67 mm | **15** ✓ |
+| Supra-aortic branch | 8 mm | 1.67 mm (same bulk h) | **~5** — under-resolved |
+
+Same geometry with `cells_across_span: 16` and `reference_radius_strategy: "max"`:
+
+| Region | Lumen | Background h | snappy `insideSpan` refines locally → |
+|---|---|---|---|
+| Main aorta | 25 mm | 25/4 ≈ 6.25 mm (background) | × 2² = ~16 cells ✓ |
+| Supra-aortic branch | 8 mm | 6.25 mm (same background) | × 2² locally → ~5 cells (with `"max"` reference) |
+
+For the branch to also reach 16 cells across, switch to
+`reference_radius_strategy: "min"` (or `"mean"`) so the background
+cell is sized relative to the smallest branch.
+
+##### Auto vs explicit `span_refinement_level`
+
+If you omit `span_refinement_level`, `plan_span_background()` in
+`src/aortacfd_lib/utils/mesh_constants.py:324` searches the
+`(blockMesh_cells, span_level)` pairs that satisfy:
+
+```
+blockMesh_cells × 2^span_level ≥ cells_across_span
+```
+
+and picks the one that:
+1. uses the smallest `span_level` (avoid over-cooking the bulk)
+2. keeps `blockMesh_cells` near the ideal of 6 cells/D
+3. minimises overshoot of the target
+
+If you set `span_refinement_level` explicitly, the planner is
+bypassed and `blockMesh_cells` is computed directly as
+`⌈cells_across_span / 2^span_level⌉` (with a quality floor of 4).
+
+##### Worked example on the U-bend test case
+
+`cases_input/ubend/config_adaptive_span.json` exercises this path
+on a single-tube geometry (27.4 mm inlet, 24.4 mm outlet, no
+branches → diameter ratio ≈ 1.0). For multi-branch examples see
+the workshop's BPM120 / 0014_H_AO_COA cases.
+
+**Use when**:
+- Geometry has branches with diameters spanning > 2× (aorta + supra-aortic branches; pulmonary trees; coronary networks)
+- You want the SAME spatial resolution in every branch, regardless of size
+- The `mesh.goal: "routine_hemodynamics"` / `"wall_sensitive"` presets you've seen — both implicitly set this strategy
+
 ---
 
 ## 2. Resolution Guidelines
