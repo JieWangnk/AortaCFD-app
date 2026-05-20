@@ -1,0 +1,71 @@
+{
+  "_doc": "Adaptive-span variant of config.json — Method C from docs/tutorial/SESSION3_MESH_GENERATION.md. Identical physics / BCs / WK auto-calculator; only the mesh block changes. Invoke with: python run_patient.py ubend --config cases_input/ubend/config_adaptive_span.json",
+
+  "case_info": {
+    "patient_id": "ubend",
+    "description": "U-bend 1-cycle laminar pulsatile — adaptive_span mesh (cells_across_span=16)"
+  },
+
+  "physics": {
+    "model": "laminar",
+    "transport_properties": { "rho": 1060, "nu": 3.7736e-6 }
+  },
+
+  "numerics": { "profile": "standard" },
+
+  "mesh": {
+    "_doc": "Method C: adaptive_span strategy targets a number of cells across the LOCAL lumen at each region of the mesh. snappy chooses background cell size + insideSpan refinement level via plan_span_background() to hit the target. surfaceRefinementLevels are orthogonal (near-wall only).",
+    "boundary_layers": {
+      "enabled": true, "num_layers": 5, "expansion_ratio": 1.2,
+      "final_layer_thickness": 0.3, "min_thickness": 0.05, "relativeSizes": true
+    },
+    "SNAPPY_SETTINGS": {
+      "parallel": true, "nProcessors": 4,
+      "mesh_strategy": "adaptive_span",
+      "cells_across_span": 16,
+      "surfaceRefinementLevels": [2, 2]
+    }
+  },
+
+  "geometry": {
+    "_doc": "reference_radius_strategy='max' (default) anchors the background-mesh sizing to the largest vessel. For a single-tube ubend the diameter is roughly uniform (27.4 mm inlet, 24.4 mm outlet), so 'max' / 'min' / 'mean' all give similar results. For a multi-branch aorta you'd typically use 'max' for whole-vessel work or 'min' to guarantee resolution in the smallest branch.",
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": ["outlet1"],
+    "wall_keywords_ordered": "wall_aorta",
+    "scale_factor": 0.001
+  },
+
+  "boundary_conditions": {
+    "inlet": {
+      "type": "TIMEVARYING",
+      "csv_file": "ubend_inflow.csv",
+      "data_type": "flowrate",
+      "profile": "parabolic"
+    },
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "_doc": "Auto-calculate mode — same as config.json. wk_setup.py derives Z/C/R from systolic/diastolic targets + inlet flow (CSV) + outlet geometry (Murray's law) + default PWV formula.",
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80,
+        "venous_pressure": 0,
+        "initial_pressure_method": "map",
+        "enable_stabilization": true
+      }
+    },
+    "walls": { "type": "no_slip" }
+  },
+
+  "simulation_control": {
+    "cardiac_cycle_period": 0.8,
+    "number_of_cycles": 1,
+    "writeInterval": 0.016,
+    "_keep_last_cycles": 1
+  },
+
+  "run_settings": {
+    "solution_type": "parallel",
+    "subdomains": 4,
+    "decomposition_method": "scotch"
+  }
+}

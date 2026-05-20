@@ -42,7 +42,8 @@ the OpenFOAM internal unit (m).
 | `baseline_v2.stl` | Monolithic STL — visualisation only, not consumed by the pipeline |
 | `baseline_v2.json` | Generator arguments (Blender params, segment counts) |
 | `geometry.meta.json` | Provenance (spec name, seed, patch checksums, generation timestamp) |
-| `config.json` | Ready-to-run 1-cycle laminar pulsatile config with WK auto-calculator |
+| `config.json` | Ready-to-run 1-cycle laminar pulsatile config — Method A (`cells_per_diameter: 15`) with WK auto-calculator. The default config picked up by `python run_patient.py ubend` (no `--config` flag needed). |
+| `config_adaptive_span.json` | Same case, same BCs, but Method C — `mesh_strategy: "adaptive_span"` with `cells_across_span: 16`. Invoke explicitly via `--config`. Useful for side-by-side cell-count / wall-time comparison with the default. |
 | `ubend_inflow.csv` | Synthesised pulsatile waveform — 5 L/min mean, 14.6 L/min peak (half-rectified sine, T=0.8 s) |
 
 ## Three demos
@@ -104,14 +105,16 @@ source venv/bin/activate
 source /opt/openfoam12/etc/bashrc
 
 # 1. Mesh-only first — verify cell count before committing to the long solver run
-python run_patient.py ubend \
-    --config cases_input/ubend/config.json \
-    --run-name mesh_check --steps case,mesh
+python run_patient.py ubend --steps case,mesh --run-name mesh_check
+# (defaults to cases_input/ubend/config.json since the case is auto-discovered)
 
-# 2. Full 1-cycle run with auto-calculated Windkessel
+# 1b. Same mesh-only check but with the adaptive_span variant (Method C)
 python run_patient.py ubend \
-    --config cases_input/ubend/config.json \
-    --run-name 1cycle_wk
+    --config cases_input/ubend/config_adaptive_span.json \
+    --steps case,mesh --run-name mesh_check_adaptive_span
+
+# 2. Full 1-cycle run with auto-calculated Windkessel (default cpd=15 config)
+python run_patient.py ubend --run-name 1cycle_wk
 
 # 3. Inspect the auto-derived Windkessel parameters
 grep -E "PWV|outlet1.*Z|outlet1.*R|outlet1.*C" \
