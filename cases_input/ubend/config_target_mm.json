@@ -21,7 +21,9 @@
       "final_layer_thickness": 0.3, "min_thickness": 0.05, "relativeSizes": true
     },
     "SNAPPY_SETTINGS": {
-      "parallel": true, "nProcessors": 4, "surfaceRefinementLevels": [1, 1]
+      "parallel": true, "nProcessors": 4,
+      "surfaceRefinementLevels": [1, 1],
+      "featureLevel": 1
     }
   },
 

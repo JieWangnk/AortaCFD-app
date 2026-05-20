@@ -52,6 +52,24 @@ the three CLI mesh-resolution methods documented in
 [`docs/MESH_SPECIFICATION_GUIDE.md`](../../docs/MESH_SPECIFICATION_GUIDE.md)
 and [`docs/tutorial/SESSION3_MESH_GENERATION.md`](../../docs/tutorial/SESSION3_MESH_GENERATION.md).
 
+### snappy `featureLevel: 1` is set in all three
+
+The U-bend has no sharp angular features (it's a smooth synthetic
+tube + 180° bend), so the snappy `features` block doesn't need the
+default `max(surfaceRefinementLevels)` of edge-refinement. Pinning
+`featureLevel: 1` saves cells at the patch-stitch lines without
+affecting wall-resolution.
+
+The knob comes from `src/templates/snappyHexMeshDict.tpl` and maps
+1:1 to the `level` line inside snappy's `features (...)` block. For
+real CT-segmented anatomy (with mesh artefacts at vessel ostia /
+coarctation throats), leave it unset so it auto-tracks the max
+surface-refinement level. For synthetic smooth geometries like this
+one, `1` is enough.
+
+See the [snappy-feature-level discussion in MESH_SPECIFICATION_GUIDE](../../docs/MESH_SPECIFICATION_GUIDE.md)
+for the full reference.
+
 ## Three demos
 
 ### Demo 1 — Mesh-strategy matrix

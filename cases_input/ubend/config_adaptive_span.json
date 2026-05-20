@@ -24,7 +24,8 @@
       "mesh_strategy": "adaptive_span",
       "cells_across_span": 17,
       "span_refinement_level": 1,
-      "surfaceRefinementLevels": [1, 1]
+      "surfaceRefinementLevels": [1, 1],
+      "featureLevel": 1
     }
   },
 

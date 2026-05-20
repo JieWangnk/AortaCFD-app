@@ -20,7 +20,10 @@
       "final_layer_thickness": 0.3, "min_thickness": 0.05, "relativeSizes": true
     },
     "SNAPPY_SETTINGS": {
-      "parallel": true, "nProcessors": 4, "surfaceRefinementLevels": [1, 1]
+      "parallel": true, "nProcessors": 4,
+      "surfaceRefinementLevels": [1, 1],
+      "_featureLevel_doc": "U-bend is smooth (no sharp angular features) — pin featureLevel: 1 instead of letting it default to max(surfaceRefinementLevels). Avoids wasted cells at the synthetic patch joins.",
+      "featureLevel": 1
     }
   },
 
