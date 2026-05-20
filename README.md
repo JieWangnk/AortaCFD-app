@@ -68,9 +68,40 @@ Verify the install:
 ```bash
 python run_patient.py --version       # → AortaCFD 1.4.1
 python run_patient.py --list          # → 0014_H_AO_COA, BPM120, VOL04, ubend
+python run_patient.py --doctor        # pre-flight check; exits 0 if ready
 ```
 
-Run `python run_patient.py --doctor` after install — it checks Python version, importable deps, sample STLs, OpenFOAM sourced, and disk space.
+`--doctor` checks Python version, importable deps, sample STLs,
+OpenFOAM sourced, disk space, AND prints the current package version
++ git commit SHA + branch so you can tell at a glance what code you're
+running:
+
+```text
+Version
+  ✓ AortaCFD 1.4.1 (from installed package metadata)
+  ✓ git: main @ 9e64b62b
+```
+
+### Keeping your clone up to date
+
+Once installed, the refresh cycle after any upstream commit is one
+command:
+
+```bash
+make update
+```
+
+That wraps `git pull origin main` + `pip install -e . --quiet` and
+prints the new HEAD SHA so you can confirm the pull took effect.
+Re-run `python run_patient.py --doctor` afterwards to verify the
+environment is still healthy.
+
+If you have local edits you don't want to lose, `git stash` first;
+if you want to discard them entirely, `git reset --hard origin/main`
+(destructive — only after confirming there's nothing valuable in
+your tree). The repo's `output/`, `venv/`, and your own
+`cases_input/<your_patient>/` directories are gitignored and stay
+untouched by either path.
 
 ### Installing OpenFOAM 12
 
