@@ -1,0 +1,55 @@
+{
+  "schema_version": "2.0",
+  "generator": "blender_aorta_v2",
+  "geometry": "healthy_arch_v2",
+  "args": {
+    "r_ascending": 13.7,
+    "r_arch": 13.0,
+    "r_descending": 12.2,
+    "taper_mode": "smoothstep",
+    "ascending_length": 50.0,
+    "arch_R_c": 40.4,
+    "arch_angle_deg": 180.0,
+    "descending_length": 200.0,
+    "segments_radial": 64,
+    "curve_samples": 220
+  },
+  "derived": {
+    "arch_span_mm": 80.8,
+    "arch_peak_height_above_asc_top_mm": 40.4,
+    "arch_end_height_above_asc_top_mm": 4.9475730685553065e-15,
+    "arch_arc_length_mm": 126.92034320502763,
+    "total_centreline_length_mm": 376.9105496681491,
+    "outlet_xyz_mm": [
+      80.80000305175781,
+      0.0,
+      -150.0
+    ]
+  },
+  "main_diameter_mm": 27.4,
+  "branch_diameter_mm": 0.0,
+  "ascending_length_mm": 50.0,
+  "descending_length_mm": 200.0,
+  "arch_span_mm": 80.8,
+  "branches": [],
+  "inlet_xyz_mm": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "inlet_normal_xyz": [
+    0.0,
+    0.0,
+    -1.0
+  ],
+  "outlet_xyz_mm": [
+    80.80000305175781,
+    0.0,
+    -150.0
+  ],
+  "outlet_normal_xyz": [
+    1.2246468525851679e-16,
+    0.0,
+    -1.0
+  ]
+}

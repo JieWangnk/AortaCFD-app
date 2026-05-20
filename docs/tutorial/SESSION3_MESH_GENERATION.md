@@ -51,6 +51,59 @@ What this means:
 | 20 | 1-3M | Fine | Day |
 | 30+ | 3-10M | Mesh independence study | Days |
 
+`cells_per_diameter` is one of three ways AortaCFD lets you size the
+mesh; the other two are covered immediately below. Pick **one**.
+
+#### The three CLI methods, side by side
+
+Measured on a coarse U-bend pipe (`cases_input/ubend/`, 4 CPU,
+mesh-only), all with `surfaceRefinementLevels: [1, 1]` and no
+boundary layers so the resolution lever is isolated:
+
+| Method | What you set | Cell count | Wall time | When to use |
+|---|---|---:|---:|---|
+| **A — `cells_per_diameter`** | `8` (cells across the inlet diameter) | 27,896 | 15 s | Default. Scales sensibly across paediatric / adult patients. |
+| **B — `target_cell_size_mm`** | `2.0` (absolute mm, vessel-independent) | 109,826 | 22 s | Mesh-independence studies; comparing against a reference paper that quotes mm. |
+| **C — `cells_across_span` + `adaptive_span`** | `12` cells across the **local** lumen span | 10,850 | 13 s | Geometries with branches of mixed diameter — each region sizes itself locally. |
+
+All three are independent — set ONE in `mesh.*` and the others are
+ignored. Method B takes priority over A if you set both, with a
+warning logged.
+
+##### B: `target_cell_size_mm` (absolute size control)
+
+```json
+"mesh": {
+    "target_cell_size_mm": 1.5,
+    "SNAPPY_SETTINGS": { "surfaceRefinementLevels": [1, 1] }
+}
+```
+
+Bypasses geometry detection entirely. Useful for GCI studies where
+you need a precise refinement ratio (e.g. divide by √2 between
+levels), and for matching a paper that reports cell sizes in mm.
+
+##### C: `cells_across_span` with `adaptive_span` strategy
+
+```json
+"mesh": {
+    "SNAPPY_SETTINGS": {
+        "mesh_strategy": "adaptive_span",
+        "cells_across_span": 12,
+        "surfaceRefinementLevels": [0, 1]
+    }
+}
+```
+
+Unlike A (which sizes off the **inlet** diameter), `adaptive_span`
+sizes off the **local** lumen at each region of the mesh. This
+matters most when the descending aorta and the supra-aortic
+branches differ in diameter by 3-5×: method A under-resolves the
+small branches, method C handles them automatically.
+
+Try the three methods on `cases_input/ubend/` (single-outlet
+U-bend, ~5 MB STL) — full mesh in under a minute on 4 CPU each.
+
 ### 1.3 Surface Refinement Levels (10 min)
 
 ```json

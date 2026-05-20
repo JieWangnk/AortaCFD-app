@@ -243,7 +243,9 @@ AortaCFD uses a single `config.json` per case. The configuration system has thre
     "profile": "standard"
   },
   "mesh": {
-    "goal": "routine_hemodynamics"
+    "cells_per_diameter": 15,
+    "boundary_layers": { "enabled": true, "num_layers": 3 },
+    "SNAPPY_SETTINGS": { "parallel": true, "nProcessors": 4, "surfaceRefinementLevels": [1, 1] }
   },
   "geometry": {
     "inlet_keywords_ordered": "inlet",
@@ -268,6 +270,89 @@ See `examples/` for ready-to-use templates:
 - `config_minimal.json` -- smallest working config
 - `config_standard.json` -- pulsatile Windkessel workflow
 - `config_full.json` -- complete parameter reference
+
+---
+
+## Mesh resolution: three ways to control it
+
+AortaCFD exposes three independent JSON keys for sizing the
+snappyHexMesh background cell. Pick **one**; the others are ignored.
+All three work from `config.json` — no Python API.
+
+### Method A — `cells_per_diameter` (recommended default)
+
+Geometry-adaptive: cell size is set to `D_ref / cells_per_diameter`,
+where `D_ref` is the inlet diameter read from the inlet STL. Scales
+sensibly across patient sizes — the same value gives similar Reynolds
+resolution on a paediatric and an adult aorta.
+
+```json
+"mesh": {
+  "cells_per_diameter": 15,
+  "boundary_layers": { "enabled": true, "num_layers": 3 },
+  "SNAPPY_SETTINGS": { "surfaceRefinementLevels": [1, 1] }
+}
+```
+
+Typical values: `8` (quick smoke-test) · `12-15` (production hemodynamics) · `20+` (WSS-sensitive).
+
+### Method B — `target_cell_size_mm` (absolute size control)
+
+Sets cell size in millimetres directly, regardless of geometry. Useful
+for mesh-independence studies (refine by a known ratio) and when you
+need a specific cell size for comparison with a reference paper.
+
+```json
+"mesh": {
+  "target_cell_size_mm": 1.5,
+  "boundary_layers": { "enabled": true, "num_layers": 3 },
+  "SNAPPY_SETTINGS": { "surfaceRefinementLevels": [1, 1] }
+}
+```
+
+Has higher priority than `cells_per_diameter`: if you set both, the
+mm value wins and a warning is logged.
+
+### Method C — `cells_across_span` + `mesh_strategy: "adaptive_span"`
+
+Uses an alternative blockMesh strategy that targets a number of cells
+across the **lumen span** (not the inlet diameter). More reliable on
+geometries with branches of mixed diameters because each region is
+sized relative to its own local lumen.
+
+```json
+"mesh": {
+  "boundary_layers": { "enabled": false },
+  "SNAPPY_SETTINGS": {
+    "mesh_strategy": "adaptive_span",
+    "cells_across_span": 12,
+    "surfaceRefinementLevels": [0, 1]
+  }
+}
+```
+
+### Validated on the U-bend test case
+
+Same single-outlet U-bend (`cases_input/ubend/`), 4 CPU, mesh-only run:
+
+| Method | Knob | Cell count | Wall time |
+|---|---|---:|---:|
+| A — `cells_per_diameter` | `8`, `[1, 1]`, no layers | 27,896 | 15 s |
+| B — `target_cell_size_mm` | `2.0`, `[1, 1]`, no layers | 109,826 | 22 s |
+| C — `cells_across_span` | `12`, `[0, 1]`, no layers, `adaptive_span` | 10,850 | 13 s |
+
+Same geometry, three different sizing strategies, an order of
+magnitude apart in cell count. Pick the one that matches the
+control you actually need (anatomy-adaptive, absolute, or
+span-targeted).
+
+The boundary-layer profile (`mesh.boundary_layers.*`) and snappy
+quality preset (`mesh.quality_preset: "draft" | "standard" |
+"high_quality"`) are orthogonal to the resolution choice — set them
+independently. Full mathematical formulation and surface-refinement
+math in [`docs/MESH_SPECIFICATION_GUIDE.md`](docs/MESH_SPECIFICATION_GUIDE.md);
+hands-on walkthrough in
+[`docs/tutorial/SESSION3_MESH_GENERATION.md`](docs/tutorial/SESSION3_MESH_GENERATION.md).
 
 ---
 

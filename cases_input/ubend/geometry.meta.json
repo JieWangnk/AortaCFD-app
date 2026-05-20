@@ -1,0 +1,31 @@
+{
+  "schema_version": "2.0",
+  "case_id": "baseline_v2",
+  "generated_utc": "2026-05-20T06:24:52+00:00",
+  "generator": "blender_aorta_v2",
+  "generator_path": "/home/mchi4jw4/GitHub/aortacfd-geomgen/blender_aorta_v2.py",
+  "mode": "single",
+  "sampler": null,
+  "sample_index": 0,
+  "seed": null,
+  "spec_name": "single_baseline_v2",
+  "geometry": "healthy_arch_v2",
+  "params": {
+    "r_ascending": 13.7,
+    "r_arch": 13.0,
+    "r_descending": 12.2,
+    "taper_mode": "smoothstep",
+    "ascending_length": 50.0,
+    "arch_R_c": 40.4,
+    "arch_angle_deg": 180.0,
+    "descending_length": 200.0,
+    "segments_radial": 64,
+    "curve_samples": 220
+  },
+  "patch_checksums": {
+    "baseline_v2.stl": "1ca1d3b89ec15b8c",
+    "inlet.stl": "36aa52c8cca68a45",
+    "outlet1.stl": "7122666b99b86613",
+    "wall_aorta.stl": "0ded1cf4c5258cd0"
+  }
+}
