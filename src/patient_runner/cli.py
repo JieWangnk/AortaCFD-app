@@ -68,8 +68,9 @@ steps:
             "regenerate-numerics",
             "solver",
             "reconstruct",
-            "postprocess",
-            "paraview",
+            "postprocess",       # QoIs + images (combined)
+            "hemodynamics",      # QoIs only
+            "paraview",          # images only (legacy alias)
             "all",
         ],
         help="run a single step (repeatable)",
@@ -263,8 +264,9 @@ def main():
             "regenerate-numerics": ("regenerate fvSchemes/fvSolution after meshing", "setup:regenerate-numerics"),
             "solver": ("run CFD solver", "run:solver"),
             "reconstruct": ("reconstruct parallel case", "run:reconstruct"),
-            "postprocess": ("compute hemodynamics and export QoIs", "run:hemodynamics"),
-            "paraview": ("ParaView visualization", "execute_post"),
+            "postprocess": ("compute hemodynamics + render images (QoIs + PNGs)", "run:postprocess"),
+            "hemodynamics": ("compute QoIs only (no images)", "run:hemodynamics"),
+            "paraview": ("render images only (no QoIs)", "execute_post"),
             "all": ("complete workflow (default)", "runAll"),
         }
 
@@ -381,8 +383,9 @@ def main():
         "regenerate-numerics": "setup:regenerate-numerics",
         "solver": "run:solver",
         "reconstruct": "run:reconstruct",
-        "postprocess": "run:hemodynamics",
-        "paraview": "execute_post",
+        "postprocess": "run:postprocess",       # combined: hemodynamics + images
+        "hemodynamics": "run:hemodynamics",     # QoIs only
+        "paraview": "execute_post",             # images only (legacy alias)
         "all": "runAll",
     }
 

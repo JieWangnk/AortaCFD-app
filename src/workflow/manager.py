@@ -258,6 +258,10 @@ class WorkflowManager:
             # Can be run after simulation or as standalone post-processing.
             "run:hemodynamics": ["execute_hemodynamics"],
             "execute_hemodynamics": ["execute_hemodynamics"],  # Alias
+            # User-friendly: combines QoI extraction + image rendering. This is what
+            # `--steps postprocess` maps to, matching what most users expect from
+            # the word "post-processing" (numbers AND pictures, not just numbers).
+            "run:postprocess": ["execute_hemodynamics", "execute_post"],
             # COMMAND 7: Executes reconstruction.
             "run:reconstruct": ["execute_reconstruct"],
             "execute_reconstruct": ["execute_reconstruct"],  # Alias
