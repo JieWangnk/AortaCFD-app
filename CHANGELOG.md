@@ -7,20 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed — PyVista post-processing backend is now the DEFAULT
+### Added — PyVista post-processing backend (opt-in)
 
 New pure-Python post-processor at `src/aortacfd_lib/post_processor_pyvista.py`
-replaces the ParaView/`pvbatch` figure-generation step.
-`config.post_processing.backend` now defaults to `"pyvista"`. Users who
-still want the old `pvbatch` path can opt back in with
-`"post_processing": { "backend": "paraview" }`.
+runs alongside the existing ParaView / `pvbatch` figure-generation step.
+`config.post_processing.backend` defaults to `"paraview"` (the legacy
+pvbatch path); opt into the PyVista path with
+`"post_processing": { "backend": "pyvista" }`.
 
-Default was flipped (originally scheduled for v1.6.0) after multiple
-fresh-clone reports of "no images saved" with the ParaView path: the
-ParaView 6.0.1 + OpenFOAM 12 reader incompatibility documented below
-prevents pvbatch from resolving OpenFOAM field symbols, so the
-"default" path was producing blank images for new users without any
-clear error.
+**Why ParaView is still the default (after an aborted flip):**
+v1.5-pre briefly defaulted to `"pyvista"`, but field-tested headless
+laptops surfaced two real friction points:
+
+  1. PyVista's `start_xvfb()` (or any off-screen render) needs a
+     working OpenGL context. Bare laptops without `xvfb` installed
+     hit `X Error of failed request: BadValue` and the render aborts.
+  2. The fix (install xvfb OR swap `vtk` for `vtk-osmesa` from
+     `https://wheels.vtk.org`) requires either sudo OR a separate
+     pip command, neither of which is part of the standard
+     `make install`.
+
+Until headless setup is bundled (planned: v1.6.0 — ship vtk-osmesa
+as a runtime dep so PyVista just works on any machine), the legacy
+pvbatch path is the safer default — it has its own ParaView 6 +
+OpenFOAM 12 quirks but at least produces SOME output on machines
+without a GPU, since pvbatch handles its own framebuffer.
 
 - **Renderers shipped (Phase 1-2):** velocity magnitude with nested
   iso-surfaces + translucent wall shell (correctly shows the interior
@@ -45,18 +56,32 @@ when the reader is set to "Internal Mesh" only. The pure-Python path
 reads via VTK's POpenFOAMReader directly, sidestepping ParaView's
 filter layer.
 
-**How to opt back to the legacy pvbatch path:**
+**How to opt INTO PyVista:**
 
 ```json
 {
-  "post_processing": { "backend": "paraview" }
+  "post_processing": { "backend": "pyvista" }
 }
 ```
 
-**Deprecation plan:** with the default now `"pyvista"`, the
-`"paraview"` backend becomes a soft-deprecated opt-in. It is
-scheduled for removal in v1.7.0 — together with the indirect
-dependency on a system-installed ParaView application.
+On a headless laptop (most cases), add ONE of the following
+PyVista headless-setup recipes first:
+
+```bash
+# Option A — install xvfb (system package, needs sudo)
+sudo apt install xvfb
+
+# Option B — install vtk-osmesa (pip only, no sudo)
+pip uninstall -y vtk
+pip install --extra-index-url https://wheels.vtk.org vtk-osmesa
+```
+
+`_ensure_offscreen_render_ready()` in `post_processor_pyvista.py`
+tries both transparently when the backend is selected.
+
+**Deprecation plan:** the `"paraview"` backend will be removed in
+v1.7.0 once PyVista's headless setup is automated. Until then both
+backends coexist and either is a valid pick.
 
 Validated on `output/BPM120/validation_lesson01/` (25 k cells, robust
 profile, t=0.1 s): 9 PNGs produced cleanly in ~30 s with no ParaView

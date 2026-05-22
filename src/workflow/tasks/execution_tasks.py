@@ -1071,10 +1071,12 @@ class ExecutePostProcessingTask(Task):
     """Generates the figure set (velocity / WSS / pressure / time series)
     via one of two interchangeable backends:
 
-      `pyvista` (default): pure-Python via PyVista (no ParaView install
-                           needed); writes to <run>/Images/.
-      `paraview`:          legacy pvbatch + src/aortacfd_lib/post_processor.py.
-                           Soft-deprecated; scheduled for removal in v1.7.0.
+      `paraview` (default): pvbatch + src/aortacfd_lib/post_processor.py.
+                            Battle-tested on systems with ParaView installed.
+      `pyvista`:            pure-Python via PyVista (no ParaView install
+                            needed); writes to <run>/Images/. Requires
+                            xvfb OR vtk-osmesa on headless machines — see
+                            CHANGELOG for the headless-setup recipes.
 
     Selected via config.post_processing.backend.
     """
@@ -1082,7 +1084,7 @@ class ExecutePostProcessingTask(Task):
     def execute(self, context: dict) -> bool:
         case_dir = context["case_directory"]
         pp_config = self.config.get("post_processing", {})
-        backend = pp_config.get("backend", "pyvista")
+        backend = pp_config.get("backend", "paraview")
 
         if backend == "pyvista":
             return self._execute_pyvista(case_dir)
