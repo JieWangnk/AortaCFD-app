@@ -573,12 +573,11 @@ class PatientCaseRunner:
         run_dir = sim_config["run_dir"]
         output_id = case_info.get("output_id", case_info["patient_id"])
 
-        # Create basic results structure
-        results_dir = run_dir / "results"
-        results_dir.mkdir(exist_ok=True)
-
-        # NOTE: Logs are kept in openfoam/logs/ directory (created by run_command)
-        # No need to duplicate them at run_dir/logs/
+        # NOTE: results/ is NOT pre-created here. hemodynamics_postprocessor.py
+        # creates it lazily (with parents=True) when it actually has QoI files
+        # to write, so mesh-only / post-failed runs no longer leave behind an
+        # empty placeholder directory that confuses users.
+        # Logs are kept in openfoam/logs/ directory (created by run_command).
 
         # Create basic summary file
         summary = {
