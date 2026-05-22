@@ -15,12 +15,57 @@ The output directory layout matches the existing post-processor:
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_offscreen_render_ready() -> None:
+    """Initialise PyVista for headless / problematic-OpenGL environments.
+
+    Symptom this catches:
+        X Error of failed request: BadValue (integer parameter out of range)
+
+    Even with `pv.Plotter(off_screen=True)`, VTK still tries to grab an
+    OpenGL context. On laptops without a functioning GPU driver, or over
+    SSH without X-forwarding, that triggers an X11 BadValue error.
+
+    Strategy:
+      1. Set global pyvista.OFF_SCREEN so every plotter defaults to headless.
+      2. Try pyvista.start_xvfb() — needs the `xvfb` system package
+         (apt: `sudo apt install xvfb`).
+      3. If xvfb isn't available, set the environment so VTK uses
+         software rendering (OSMesa) instead of trying to bind a GL
+         context to the real display.
+
+    Idempotent — safe to call from every renderer entry point.
+    """
+    import pyvista as pv
+
+    pv.OFF_SCREEN = True
+    os.environ.setdefault("PYVISTA_OFF_SCREEN", "true")
+
+    # Prefer xvfb if available — gives a real (virtual) GL context
+    # and produces the best-quality renders.
+    try:
+        pv.start_xvfb(wait=0.2)
+        logger.debug("PyVista using xvfb virtual display")
+        return
+    except OSError as exc:
+        # xvfb binary not on PATH
+        logger.debug("xvfb unavailable (%s); falling back to software GL", exc)
+    except Exception as exc:    # noqa: BLE001  — covers VTKError, etc.
+        logger.debug("start_xvfb failed (%s); falling back to software GL", exc)
+
+    # Software-rendering fallback: tell VTK/Mesa to use llvmpipe, never
+    # bind a hardware GL context. Works on bare laptops with no GPU.
+    os.environ.setdefault("LIBGL_ALWAYS_SOFTWARE", "1")
+    os.environ.setdefault("MESA_GL_VERSION_OVERRIDE", "3.3")
+    os.environ.setdefault("GALLIUM_DRIVER", "llvmpipe")
 
 
 def _find_foam_file(case_openfoam_dir: Path) -> Optional[Path]:
@@ -703,6 +748,11 @@ def post_process(
     output should not block the others.
     """
     case_dir = Path(case_dir)
+
+    # Headless OpenGL setup — must run BEFORE any pv.Plotter() is created.
+    # Catches the classic "X Error of failed request: BadValue" on laptops
+    # without a working OpenGL context.
+    _ensure_offscreen_render_ready()
 
     # Auto-detect which shape of case directory we got.
     if list(case_dir.glob("*.foam")):
