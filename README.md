@@ -220,7 +220,7 @@ AortaCFD breaks the simulation into discrete steps that can be run individually 
 | `solver` | Run foamRun (with parallel decomposition if configured) |
 | `reconstruct` | Reconstruct parallel case from processor directories |
 | `postprocess` | Compute hemodynamic metrics (TAWSS, OSI, RRT) and export QoIs |
-| `paraview` | Run ParaView visualization |
+| `paraview` | Render velocity / WSS / pressure / time-series PNGs. Default backend is PyVista (pure Python — no ParaView install needed). Switch back to legacy pvbatch via `post_processing.backend: "paraview"` in config. |
 
 ```bash
 # Run selected steps

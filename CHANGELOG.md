@@ -7,12 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added — PyVista post-processing backend (opt-in)
+### Changed — PyVista post-processing backend is now the DEFAULT
 
 New pure-Python post-processor at `src/aortacfd_lib/post_processor_pyvista.py`
-that replaces the ParaView/`pvbatch` figure-generation step. Selected via
-`config.post_processing.backend: "pyvista"`; default remains `"paraview"`
-so existing cases are unaffected.
+replaces the ParaView/`pvbatch` figure-generation step.
+`config.post_processing.backend` now defaults to `"pyvista"`. Users who
+still want the old `pvbatch` path can opt back in with
+`"post_processing": { "backend": "paraview" }`.
+
+Default was flipped (originally scheduled for v1.6.0) after multiple
+fresh-clone reports of "no images saved" with the ParaView path: the
+ParaView 6.0.1 + OpenFOAM 12 reader incompatibility documented below
+prevents pvbatch from resolving OpenFOAM field symbols, so the
+"default" path was producing blank images for new users without any
+clear error.
 
 - **Renderers shipped (Phase 1-2):** velocity magnitude with nested
   iso-surfaces + translucent wall shell (correctly shows the interior
@@ -37,19 +45,17 @@ when the reader is set to "Internal Mesh" only. The pure-Python path
 reads via VTK's POpenFOAMReader directly, sidestepping ParaView's
 filter layer.
 
-**How to opt in:**
+**How to opt back to the legacy pvbatch path:**
 
 ```json
 {
-  "post_processing": { "backend": "pyvista" }
+  "post_processing": { "backend": "paraview" }
 }
 ```
 
-**Deprecation plan:** the `"paraview"` backend remains the default for
-v1.5.x while the workshop / tutorial material is updated. In v1.6.0
-the default flips to `"pyvista"` and `"paraview"` becomes a soft
-deprecation (logs a warning at startup). The `pvbatch`-based code path
-is scheduled for removal in v1.7.0 — together with the indirect
+**Deprecation plan:** with the default now `"pyvista"`, the
+`"paraview"` backend becomes a soft-deprecated opt-in. It is
+scheduled for removal in v1.7.0 — together with the indirect
 dependency on a system-installed ParaView application.
 
 Validated on `output/BPM120/validation_lesson01/` (25 k cells, robust
