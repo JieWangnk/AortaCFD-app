@@ -101,6 +101,7 @@ def _check_runtime_deps() -> bool:
         ("stl", "numpy-stl"),
         ("sklearn", "scikit-learn"),
         ("vtk", "vtk"),
+        ("pyvista", "pyvista"),       # default post-processing backend
         ("yaml", "pyyaml"),
         ("pydantic", "pydantic"),
         ("psutil", "psutil"),
