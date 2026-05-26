@@ -197,4 +197,4 @@ These are standard assumptions in published aortic CFD. Know them, state them in
    ```bash
    grep "PIMPLE: Converged in" logs/log.solver | awk '{print $NF}' | sort | uniq -c
    ```
-5. Read `docs/_internal/PIMPLE_SOLVER_SETTINGS.md` — focus on explicit vs implicit relaxation
+5. Read the numerics + relaxation sections of [`docs/user-guide/configuration.md`](../user-guide/configuration.md) — focus on explicit vs implicit relaxation

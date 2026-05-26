@@ -232,4 +232,4 @@ This is much faster than starting from scratch — the mesh (which takes minutes
 2. Change `diastolic_pressure` from 80 to 90 in your config
 3. Re-run: `python run_patient.py BPM120 --update <your_run> --steps boundary`
 4. Compare `0/p` before and after — how did R, C, Z change? Why?
-5. Read `docs/_internal/PIMPLE_SOLVER_SETTINGS.md` for background on solver settings
+5. Read the numerics section of [`docs/user-guide/configuration.md`](../user-guide/configuration.md) for background on solver settings

@@ -194,7 +194,7 @@ class FvSolutionWriter:
             self.log.warning("RECOMMENDED ACTION:")
             self.log.warning("  1. REMESH with improved snappyHexMesh settings")
             self.log.warning("  2. Target: Skewness <3.0, Non-orthogonality <70°")
-            self.log.warning("  3. See: docs/MESH_QUALITY_WARNINGS.md for guidance")
+            self.log.warning("  3. See: docs/user-guide/mesh-quality-warnings.md for guidance")
             self.log.warning("")
             self.log.warning("CURRENT RESULTS:")
             self.log.warning("  ✓ Should converge (solver stabilized)")

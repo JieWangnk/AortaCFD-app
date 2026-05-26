@@ -42,7 +42,7 @@ If the bug is in mesh quality or convergence on a specific patient geometry, ple
 Open an issue using the **Feature request** template. Describe:
 
 - The cardiovascular CFD problem you're trying to solve
-- What you tried with the existing config knobs (we have ~50 user-facing config keys; check `docs/_internal/MESH_SPECIFICATION_GUIDE.md` and the `outlets` / `inlet` sections of [README](README.md) first)
+- What you tried with the existing config knobs (we have ~50 user-facing config keys; check [`docs/user-guide/configuration.md`](docs/user-guide/configuration.md) and [`docs/user-guide/mesh-specification.md`](docs/user-guide/mesh-specification.md) first)
 - Alternatives you considered
 
 ## Pull requests
@@ -77,7 +77,7 @@ Open an issue using the **Feature request** template. Describe:
 - **STL files in millimetres** internally scaled to metres via `scale_factor`. Don't pre-scale your STLs.
 - **Blood properties**: ρ=1060 kg/m³, μ=0.004 Pa·s for aortic flow; lower viscosity for small vessels (Fahraeus-Lindqvist).
 - **Numerics profiles**: `robust` (1st order, debug), `standard` (production default), `precise` (LES / convergence studies). Cite Wang et al. Table 3 for scheme sensitivity.
-- **Internal documentation** lives under `docs/_internal/` — read it if you're touching boundary layers, mesh setup, or PIMPLE settings.
+- **Deep documentation** lives under [`docs/user-guide/`](docs/user-guide/) — read it if you're touching boundary layers, mesh setup, or numerics profiles.
 
 ## License
 

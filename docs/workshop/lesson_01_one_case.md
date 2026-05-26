@@ -98,7 +98,7 @@ python run_patient.py BPM120 --steps case,mesh,boundary --quick
 ```
 
 Useful for debugging: stop after mesh, eyeball the mesh in ParaView,
-then continue with `--steps solver,reconstruct,hemodynamics,post`.
+then continue with `--steps solver,reconstruct,hemodynamics,postprocess`.
 
 ## Next
 

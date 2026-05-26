@@ -105,7 +105,7 @@ python run_batch.py --cases A B C --slurm --steps solver --run-name hpc_batch \
 bash scripts/hpc/sync_prepared_cases.sh down scripts/hpc/csf3.conf output/A/hpc_batch ...
 
 # 3. local post
-python run_batch.py --cases A B C --steps hemodynamics,post --run-name hpc_batch --workers 4
+python run_batch.py --cases A B C --steps hemodynamics,postprocess --run-name hpc_batch --workers 4
 python -m scripts.compare_cohort output/
 ```
 

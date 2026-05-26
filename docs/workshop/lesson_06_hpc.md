@@ -184,7 +184,7 @@ bash scripts/hpc/sync_prepared_cases.sh down scripts/hpc/csf3.conf \
 
 # ── Phase 3: local post-process + aggregate ──
 python run_batch.py --cases-dir cases_input/sobol_50 \
-    --steps hemodynamics,post \
+    --steps hemodynamics,postprocess \
     --run-name hpc_batch \
     --workers 4
 

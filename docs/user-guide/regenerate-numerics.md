@@ -167,8 +167,8 @@ for level in coarse medium fine; do
     echo "Completed $level mesh"
 done
 
-# Compare results and calculate GCI
-python scripts/calculate_gci.py
+# Compare results and calculate GCI manually (no shipped script — write your own)
+# See `tests/test_gci_*.py` if any for the formula.
 ```
 
 ### Example 2: Update Existing Case
@@ -199,8 +199,8 @@ max_skewness=10.0
 while (( $(echo "$max_skewness > 3.0" | bc -l) )); do
     echo "=== Mesh iteration $iteration ==="
 
-    # Adjust snappyHexMesh settings
-    python scripts/adjust_snappy_settings.py --iteration $iteration
+    # Hand-edit mesh.SNAPPY_SETTINGS in config.json between iterations
+    # (no shipped script — change surfaceRefinementLevels, max_global_cells, etc.)
 
     # Generate mesh
     python run_patient.py BPM120 --steps case,mesh
@@ -381,7 +381,7 @@ relaxationFactors
 - Pressure drops inaccurate by 5-15%
 - **Must REMESH for accurate results**
 
-See [MESH_QUALITY_WARNINGS.md](../docs/MESH_QUALITY_WARNINGS.md) for details.
+See [mesh-quality-warnings.md](mesh-quality-warnings.md) for details.
 
 ## Key Takeaways
 
@@ -393,7 +393,5 @@ See [MESH_QUALITY_WARNINGS.md](../docs/MESH_QUALITY_WARNINGS.md) for details.
 
 ## Further Reading
 
-- [REGENERATE_NUMERICS_USAGE.md](../docs/_internal/REGENERATE_NUMERICS_USAGE.md) - Complete usage guide
-- [MESH_QUALITY_WARNINGS.md](../docs/MESH_QUALITY_WARNINGS.md) - Critical warnings
-- [MESH_ADAPTIVE_SOLVER_SYSTEM.md](../docs/MESH_ADAPTIVE_SOLVER_SYSTEM.md) - Technical details
-- [MESH_ADAPTIVE_INTEGRATION.md](../docs/MESH_ADAPTIVE_INTEGRATION.md) - Integration guide
+- [mesh-quality-warnings.md](mesh-quality-warnings.md) — critical warnings on what the adaptive system can and cannot save
+- [mesh-specification.md](mesh-specification.md) — how `cells_per_diameter`, `target_cell_size_mm`, and `cells_across_span` interact

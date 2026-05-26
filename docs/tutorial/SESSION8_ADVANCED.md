@@ -228,10 +228,8 @@ After 8 sessions, you should be able to:
 
 ## Further Resources
 
-- `README.md` — Quick start and configuration reference
-- `examples/README_CONFIG.md` — Full configuration documentation
-- `docs/_internal/PIMPLE_SOLVER_SETTINGS.md` — Solver settings deep dive
-- `docs/_internal/PROFILE_SETTINGS_EVIDENCE.md` — Why profiles are set as they are
-- `docs/_internal/BACKFLOW_STABILIZATION_ANALYSIS.md` — Stabilisation details
+- [`README.md`](../../README.md) — Quick start and high-level overview
+- [`docs/user-guide/configuration.md`](../user-guide/configuration.md) — Full configuration reference
+- [`docs/user-guide/mesh-specification.md`](../user-guide/mesh-specification.md) — Mesh-resolution knobs
 - OpenFOAM User Guide: https://doc.cfd.direct/openfoam/user-guide-v12/
 - CFD Direct notes on PIMPLE: https://doc.cfd.direct/notes/cfd-general-principles/the-pimple-algorithm

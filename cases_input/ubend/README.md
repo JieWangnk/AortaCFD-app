@@ -49,7 +49,7 @@ All three configs share identical physics, boundary conditions, WK
 auto-calculator path, simulation_control and run_settings — only
 the `mesh` block differs. That makes them a fair head-to-head of
 the three CLI mesh-resolution methods documented in
-[`docs/MESH_SPECIFICATION_GUIDE.md`](../../docs/MESH_SPECIFICATION_GUIDE.md)
+[`docs/user-guide/mesh-specification.md`](../../docs/user-guide/mesh-specification.md)
 and [`docs/tutorial/SESSION3_MESH_GENERATION.md`](../../docs/tutorial/SESSION3_MESH_GENERATION.md).
 
 ### snappy `featureLevel: 1` is set in all three
@@ -67,7 +67,7 @@ coarctation throats), leave it unset so it auto-tracks the max
 surface-refinement level. For synthetic smooth geometries like this
 one, `1` is enough.
 
-See the [snappy-feature-level discussion in MESH_SPECIFICATION_GUIDE](../../docs/MESH_SPECIFICATION_GUIDE.md)
+See the [snappy-feature-level discussion in mesh-specification.md](../../docs/user-guide/mesh-specification.md)
 for the full reference.
 
 ## Three demos

@@ -42,7 +42,7 @@ Currently **2210 tests** across 70+ files. Categories by purpose:
 
 See `pyproject.toml` `[tool.pytest.ini_options]` for the full marker definitions.
 
-## Internal docs
+## Related files
 
-- [`docs/_internal/TEST_STRATEGY.md`](../docs/_internal/TEST_STRATEGY.md) — historical context on the test layering decisions
 - [`benchmarks/expected_values.json`](../benchmarks/expected_values.json) — reference QoI values + tolerances for benchmark tests
+- [`pyproject.toml`](../pyproject.toml) `[tool.pytest.ini_options]` — full marker definitions and default selection

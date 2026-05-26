@@ -261,4 +261,4 @@ This reads the checkMesh results and adjusts fvSchemes/fvSolution to match the m
 2. Record for each: cell count, checkMesh non-orthogonality, skewness
 3. If you have completed solver results, compare pressure drop and TAWSS mean
 4. Plot: cell count vs pressure drop — does it converge?
-5. Read: `examples/BOUNDARY_LAYER_GUIDE.md`
+5. Read: [`docs/user-guide/boundary-layers.md`](../user-guide/boundary-layers.md)
