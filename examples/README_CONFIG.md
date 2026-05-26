@@ -5,7 +5,7 @@
 
 ---
 
-## 📋 Configuration System Overview
+## Configuration System Overview
 
 AortaCFD uses a **hierarchical configuration system** with a new **3-profile numerics system** for simplified and reliable CFD simulations.
 
@@ -32,7 +32,7 @@ AortaCFD uses a **hierarchical configuration system** with a new **3-profile num
 
 ---
 
-## 🎯 The 3-Profile System
+## The 3-Profile System
 
 ### Profile Selection Guide
 
@@ -44,7 +44,7 @@ AortaCFD uses a **hierarchical configuration system** with a new **3-profile num
 
 ### Profile Characteristics
 
-#### 🛡️ **robust** Profile
+#### **robust** Profile
 ```json
 "numerics": {
   "profile": "robust"
@@ -61,9 +61,9 @@ AortaCFD uses a **hierarchical configuration system** with a new **3-profile num
   - Poor mesh quality (high skewness)
   - Debugging divergence issues
   - Coarse meshes
-- **⚠️ Warning**: Results will have numerical diffusion - not for final results!
+- **Warning**: Results will have numerical diffusion - not for final results!
 
-#### ⚖️ **standard** Profile (Recommended)
+#### **standard** Profile (Recommended)
 ```json
 "numerics": {
   "profile": "standard"
@@ -80,9 +80,9 @@ AortaCFD uses a **hierarchical configuration system** with a new **3-profile num
   - Good quality meshes
   - Most clinical/research cases
   - Balanced accuracy and convergence
-- **✅ Recommended**: Default choice for most users
+- **Recommended**: Default choice for most users
 
-#### 🎯 **precise** Profile
+#### **precise** Profile
 ```json
 "numerics": {
   "profile": "precise"
@@ -99,11 +99,11 @@ AortaCFD uses a **hierarchical configuration system** with a new **3-profile num
   - Validation studies
   - Mesh convergence studies
   - Cases requiring minimal numerical diffusion
-- **⚠️ Note**: Requires excellent mesh quality (ortho > 70°, skewness < 2)
+- **Note**: Requires excellent mesh quality (ortho > 70°, skewness < 2)
 
 ---
 
-## 📁 Example Configuration Files
+## Example Configuration Files
 
 ### Available Examples
 
@@ -115,7 +115,7 @@ AortaCFD uses a **hierarchical configuration system** with a new **3-profile num
 
 ---
 
-## 🚀 Quick Start Guide
+## Quick Start Guide
 
 ### 1. Minimal Configuration
 
@@ -182,7 +182,7 @@ python run_patient.py --help
 
 ---
 
-## 📏 Input Data Units
+## Input Data Units
 
 AortaCFD uses **clinical-friendly units** for user input while internally converting to SI units for OpenFOAM.
 
@@ -228,7 +228,7 @@ INFO:   Converted to m³/s: max=5.500000e-05 m³/s
 
 ---
 
-## 📊 Configuration Sections
+## Configuration Sections
 
 ### 1. **case_info** (Optional)
 Metadata about the simulation case.
@@ -353,7 +353,7 @@ Inlet, outlet, and wall boundary conditions.
 }
 ```
 
-**⚠️ CSV File Units (Important!):**
+**CSV File Units (Important!):**
 
 | data_type | Expected Unit | Auto-Detection |
 |-----------|---------------|----------------|
@@ -542,7 +542,7 @@ Runtime hemodynamic metric computation.
 
 ---
 
-## 🎓 Common Workflows
+## Common Workflows
 
 ### Workflow 1: Simple Laminar Flow
 
@@ -603,7 +603,7 @@ Runtime hemodynamic metric computation.
 
 ---
 
-## 🛡️ Mesh Quality Controls for LES (NEW v2.2)
+## Mesh Quality Controls for LES (NEW v2.2)
 
 **IMPORTANT UPDATE (January 7, 2026)**: Default mesh quality controls have been significantly tightened to **prevent negative volume cells** in complex cardiovascular geometries, especially for LES simulations.
 
@@ -667,7 +667,7 @@ For different use cases, select appropriate presets:
 
 ---
 
-## 🔬 Mesh Quality Utilities (NEW v2.1 - UNDER DEVELOPMENT)
+## Mesh Quality Utilities (NEW v2.1 - UNDER DEVELOPMENT)
 
 AortaCFD now includes advanced mesh quality validation tools in `src/aortacfd_lib/utils/mesh_quality.py`.
 
@@ -716,7 +716,7 @@ print(f"Mass balanced: {result['is_balanced']}")  # True if < 1% imbalance
 
 ---
 
-## ⚙️ Advanced Configuration
+## Advanced Configuration
 
 ### Custom Relaxation Factors
 
@@ -762,7 +762,7 @@ print(f"Mass balanced: {result['is_balanced']}")  # True if < 1% imbalance
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Problem: Simulation Diverges
 
@@ -798,7 +798,7 @@ print(f"Mass balanced: {result['is_balanced']}")  # True if < 1% imbalance
 
 ---
 
-## 📚 References
+## References
 
 ### File Locations
 - **Base Config**: `src/config/base.py`
@@ -819,7 +819,7 @@ print(f"Mass balanced: {result['is_balanced']}")  # True if < 1% imbalance
 
 ---
 
-## ✅ Best Practices
+## Best Practices
 
 1. **Start Simple**: Use `standard` profile with moderate resolution
 2. **Validate Mesh**: Always run `checkMesh` before simulation (use tier system for guidance)
@@ -841,7 +841,7 @@ print(f"Mass balanced: {result['is_balanced']}")  # True if < 1% imbalance
 
 ---
 
-## 📝 Version History
+## Version History
 
 ### v2.3 (January 2026)
 - **MRI Inlet Support**: NEW `type: "MRI"` for pre-processed 4D flow MRI inlet data
@@ -857,7 +857,7 @@ print(f"Mass balanced: {result['is_balanced']}")  # True if < 1% imbalance
 - **fieldAverage Auto Mode**: `"auto"` enables time-averaging only for pulsatile flow
 - **TAWSS Settings**: Configurable skip_cycles, periodicRestart, keep_all_cycles for convergence analysis
 - **Pressure Monitoring**: Area-averaged pressure at all patches for pressure drop calculation
-- **🛡️ Mesh Quality Controls for LES**: Tightened defaults to prevent negative volume cells
+- **Mesh Quality Controls for LES**: Tightened defaults to prevent negative volume cells
   - `minVol`: 1e-13 → 1e-18 (prevent negative volumes)
   - `minDeterminant`: 0.001 → 0.01 (better cell quality)
   - `maxBoundarySkewness`: 20 → 4 (WSS accuracy)

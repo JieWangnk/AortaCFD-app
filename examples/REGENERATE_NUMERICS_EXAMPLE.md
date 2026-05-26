@@ -46,7 +46,7 @@ python run_patient.py BPM120 --steps regenerate-numerics
 3. **Review quality report** in terminal output:
 ```
 ═══════════════════════════════════════════════════════════════
-🔧 MESH-ADAPTIVE SOLVER SETTINGS
+MESH-ADAPTIVE SOLVER SETTINGS
 ═══════════════════════════════════════════════════════════════
 Mesh Quality Analysis:
   • Skewness: 5.16 (POOR - threshold 6.0)
@@ -129,7 +129,7 @@ Mesh Quality Analysis:
   • Non-orthogonality: 68.3° (FAIR)
   • Quality Tier: POOR
 
-⚠️  MESH QUALITY WARNING ⚠️
+ MESH QUALITY WARNING 
 [Detailed warnings about accuracy impacts]
 
 Adjustments Applied:

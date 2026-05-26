@@ -59,7 +59,7 @@ relativeSizes       false;             // Auto-set for absolute units
 
 ### When to Use
 
-✅ **Best for:**
+**Best for:**
 - RANS simulations (y+ ≈ 1 for wall-resolved, y+ ≈ 30-300 for wall functions)
 - LES simulations (y+ < 1 required)
 - Consistent y+ across different patient geometries
@@ -132,14 +132,14 @@ relativeSizes       false;             // Assumes absolute units (mm)
 
 ### When to Use
 
-✅ **Best for:**
+**Best for:**
 - Testing/debugging mesh generation
 - When y+ estimation fails or gives unexpected results
 - Known good values from previous studies
 - Complex geometries where auto-estimation is unreliable
 - Quick prototyping
 
-⚠️ **Warnings:**
+**Warnings:**
 - Actual y+ will vary with flow conditions
 - Different vessel regions will have different y+
 - You're responsible for ensuring appropriate y+ for your turbulence model
