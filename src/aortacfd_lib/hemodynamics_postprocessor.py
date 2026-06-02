@@ -85,6 +85,11 @@ class HemodynamicsResults:
 
     # Per-cycle TAWSS (for convergence checking)
     per_cycle_tawss: List[float] = field(default_factory=list)
+    # Inter-cycle convergence diagnostic (see _check_cycle_convergence).
+    #   tawss_cv         — coefficient of variation of cycle-averaged TAWSS across settled cycles
+    #   tawss_cv_status  — "CONVERGED" | "NOT_CONVERGED" | "INSUFFICIENT_CYCLES" | "NOT_COMPUTED"
+    tawss_cv: float = 0.0
+    tawss_cv_status: str = "NOT_COMPUTED"
 
     # Pressure drop results
     pressure_inlet: float = 0.0
@@ -414,15 +419,20 @@ class HemodynamicsPostProcessor:
             # OSI = 0.5 * (1 - |mean(WSS)| / TAWSS_proper)
             # If we only have wallShearStressMean, OSI calculation is approximate
 
-            # Compute WSS magnitude at each saved time step and average
+            # Compute WSS magnitude at each saved time step and average.
+            # Also cache the per-snapshot spatial-mean |WSS| keyed by time so the
+            # convergence diagnostic can reuse it instead of re-reading every field.
             wss_mags = []
+            wss_spatial_mean_by_time = {}
             for d in valid_dirs:
                 wss_file = d / "wallShearStress"
                 if wss_file.exists():
                     wss_vec = self._read_vector_field(wss_file)
                     if wss_vec is not None:
                         # Multiply by density for Pa
-                        wss_mags.append(np.linalg.norm(wss_vec, axis=1) * BLOOD_DENSITY_DEFAULT)
+                        mag = np.linalg.norm(wss_vec, axis=1) * BLOOD_DENSITY_DEFAULT
+                        wss_mags.append(mag)
+                        wss_spatial_mean_by_time[float(d.name)] = float(np.mean(mag))
                     else:
                         self.log.warning(f"Failed to read wallShearStress from {d.name}, skipping timestep")
 
@@ -476,36 +486,11 @@ class HemodynamicsPostProcessor:
                 results.tawss_p95 = float(np.percentile(tawss_proper, 95))
                 results.tawss_is_approximate = False
 
-                # Per-cycle TAWSS convergence check
-                if len(wss_mags) > 1 and self.cardiac_cycle > 0:
-                    cycle_groups = {}
-                    idx = 0
-                    for d in valid_dirs:
-                        wss_file = d / "wallShearStress"
-                        if wss_file.exists():
-                            t = float(d.name)
-                            cycle_idx = int((t - skip_time) / self.cardiac_cycle)
-                            cycle_groups.setdefault(cycle_idx, []).append(idx)
-                            idx += 1
-
-                    cycle_tawss_values = []
-                    for cycle_idx in sorted(cycle_groups.keys()):
-                        indices = cycle_groups[cycle_idx]
-                        cycle_mags = [wss_mags[i] for i in indices if i < len(wss_mags)]
-                        if cycle_mags:
-                            cycle_tawss = float(np.mean([np.mean(m) for m in cycle_mags]))
-                            cycle_tawss_values.append(cycle_tawss)
-
-                    results.per_cycle_tawss = cycle_tawss_values
-                    if len(cycle_tawss_values) >= 2:
-                        mean_val = np.mean(cycle_tawss_values)
-                        cv = np.std(cycle_tawss_values) / mean_val if mean_val > 0 else 0
-                        self.log.info(f"TAWSS convergence: {len(cycle_tawss_values)} cycles, CV={cv:.4f}")
-                        if cv > 0.05:
-                            self.log.warning(
-                                f"TAWSS inter-cycle CV ({cv:.3f}) exceeds 5%. "
-                                "Results may not be fully converged. Consider running more cycles."
-                            )
+                # Per-cycle periodic-convergence diagnostic. Decoupled from the
+                # skip/averaging window so it stays live under the default
+                # 3-cycle run (where only one post-skip cycle exists). Reuses the
+                # spatial means already computed above for post-skip dirs.
+                self._check_cycle_convergence(results, time_dirs, wss_spatial_mean_by_time)
 
             self.log.info(
                 f"TAWSS: max={results.tawss_max:.4f}, p99={results.tawss_p99:.4f}, mean={results.tawss_mean:.4f} Pa"
@@ -523,6 +508,112 @@ class HemodynamicsPostProcessor:
             import traceback
 
             traceback.print_exc()
+
+    # Inter-cycle TAWSS CV above this fraction flags an under-converged run.
+    CYCLE_CV_THRESHOLD = 0.05
+    # A cardiac-cycle group is counted as "complete" only if it holds at least this
+    # fraction of the snapshots of the densest cycle. This excludes the partial
+    # leading/trailing groups produced by purgeWrite or a non-integer end_time,
+    # which would otherwise be averaged as if they were whole cycles.
+    CYCLE_COMPLETE_FRACTION = 0.9
+
+    @staticmethod
+    def _cycle_cv(per_cycle_means: list) -> "tuple":
+        """Coefficient of variation across settled cardiac cycles.
+
+        When >= 3 cycles are given the first (transient) cycle is dropped, so the
+        metric reflects whether the *later* cycles have stopped changing rather
+        than being dominated by the initial transient; with exactly 2 cycles both
+        are compared. Uses the sample standard deviation (ddof=1) — the cycle
+        means are a small sample, not a population. Returns ``(cv, n_used)`` where
+        ``n_used`` is the number of cycles actually compared; ``(0.0, n)`` when
+        fewer than 2 usable cycles remain or the mean is non-positive.
+        """
+        vals = list(per_cycle_means)
+        if len(vals) >= 3:
+            vals = vals[1:]  # drop initial transient cycle
+        n_used = len(vals)
+        if n_used < 2:
+            return 0.0, n_used
+        mean_val = float(np.mean(vals))
+        if mean_val <= 0:
+            return 0.0, n_used
+        return float(np.std(vals, ddof=1) / mean_val), n_used
+
+    def _check_cycle_convergence(self, results: "HemodynamicsResults", time_dirs: list, precomputed_means=None) -> None:
+        """Soft, post-hoc periodic-convergence diagnostic for TAWSS.
+
+        Groups every saved instantaneous ``wallShearStress`` field into its
+        absolute cardiac cycle (``floor(t / cardiac_cycle)``), takes the
+        spatial-mean |WSS| per cycle over the **complete** cycles only, and
+        reports the coefficient of variation across the settled cycles (see
+        :meth:`_cycle_cv`). A warning is logged when the CV exceeds
+        ``CYCLE_CV_THRESHOLD``, recommending more cycles.
+
+        Completeness filtering (``CYCLE_COMPLETE_FRACTION``) is essential: under
+        ``purgeWrite``/``keep_last_cycles`` or a non-integer ``end_time`` the
+        first and/or last cardiac cycle on disk are partial groups (sometimes a
+        single snapshot). Treating those as whole cycles would manufacture a
+        spurious CV; instead they are dropped, and if fewer than two complete
+        cycles remain the status is ``INSUFFICIENT_CYCLES``.
+
+        Independent of ``skip_cycles`` (which governs the TAWSS *averaging*
+        window and the reported value) so it stays live under the default
+        3-cycle run. With three or more complete cycles the single initial
+        transient cycle is dropped; with exactly two, both are compared. The
+        diagnostic errs toward warning rather than silence.
+
+        ``precomputed_means`` maps a time-dir value to its spatial-mean |WSS|
+        (already computed for the post-skip dirs); those are reused instead of
+        re-reading the field. Only cycles not already in the map are read.
+        """
+        if not self.cardiac_cycle or self.cardiac_cycle <= 0:
+            return
+        precomputed_means = precomputed_means or {}
+
+        cycle_sum: dict = {}
+        cycle_count: dict = {}
+        for d in time_dirs:
+            t = float(d.name)
+            spatial_mean = precomputed_means.get(t)
+            if spatial_mean is None:
+                wss_file = d / "wallShearStress"
+                if not wss_file.exists():
+                    continue
+                wss_vec = self._read_vector_field(wss_file)
+                if wss_vec is None:
+                    continue
+                spatial_mean = float(np.mean(np.linalg.norm(wss_vec, axis=1) * BLOOD_DENSITY_DEFAULT))
+            cidx = int(t / self.cardiac_cycle)
+            cycle_sum[cidx] = cycle_sum.get(cidx, 0.0) + spatial_mean
+            cycle_count[cidx] = cycle_count.get(cidx, 0) + 1
+
+        # Keep only complete cardiac cycles (drop partial leading/trailing groups).
+        complete = []
+        if cycle_count:
+            expected = max(cycle_count.values())
+            complete = [c for c in sorted(cycle_count) if cycle_count[c] >= self.CYCLE_COMPLETE_FRACTION * expected]
+        per_cycle = [cycle_sum[c] / cycle_count[c] for c in complete]
+        results.per_cycle_tawss = per_cycle
+
+        if len(per_cycle) < 2:
+            results.tawss_cv_status = "INSUFFICIENT_CYCLES"
+            self.log.info(
+                f"Inter-cycle TAWSS CV not computed: {len(per_cycle)} complete cardiac cycle(s) "
+                f"retained (partial groups excluded). Run >= 2 full cycles with keep_last_cycles >= 2 "
+                f"to enable the convergence diagnostic."
+            )
+            return
+
+        cv, n_used = self._cycle_cv(per_cycle)
+        results.tawss_cv = cv
+        results.tawss_cv_status = "CONVERGED" if cv <= self.CYCLE_CV_THRESHOLD else "NOT_CONVERGED"
+        self.log.info(f"TAWSS convergence: CV={cv:.4f} over {n_used} of {len(per_cycle)} complete cycles")
+        if cv > self.CYCLE_CV_THRESHOLD:
+            self.log.warning(
+                f"TAWSS inter-cycle CV ({cv:.3f}) exceeds {self.CYCLE_CV_THRESHOLD:.0%}. "
+                "Results may not be fully converged. Consider running more cycles."
+            )
 
     def _save_hemodynamic_fields(self, time_dir: Path, tawss: np.ndarray, osi: np.ndarray, rrt: np.ndarray) -> None:
         """
@@ -898,6 +989,13 @@ boundaryField
                 f.write(f"  RRT Maximum:          {results.rrt_max:.4f} Pa⁻¹\n")
                 f.write(f"  RRT Mean:             {results.rrt_mean:.4f} Pa⁻¹\n")
                 f.write("\n")
+                f.write("  Periodic convergence (inter-cycle TAWSS):\n")
+                if results.tawss_cv_status == "INSUFFICIENT_CYCLES":
+                    f.write("    CV: not computed (need >= 2 retained cycles; see keep_last_cycles)\n")
+                elif results.tawss_cv_status in ("CONVERGED", "NOT_CONVERGED"):
+                    verdict = "converged" if results.tawss_cv_status == "CONVERGED" else "NOT converged (CV > 5%)"
+                    f.write(f"    CV: {results.tawss_cv:.3f} across cycles {results.per_cycle_tawss} -> {verdict}\n")
+                f.write("\n")
                 f.write("  Clinical thresholds:\n")
                 f.write("    Low TAWSS (<0.4 Pa): Atherogenic phenotype risk\n")
                 f.write("    High TAWSS (>40 Pa): Endothelial injury risk\n")
@@ -1121,8 +1219,23 @@ boundaryField
                     "unit": "-",
                     "definition": "Mean OSI where TAWSS > 0.5 Pa (Les et al. 2010)",
                 },
+                "tawss_inter_cycle_cv": {
+                    "value": results.tawss_cv,
+                    "unit": "-",
+                    "definition": (
+                        "Coefficient of variation of cycle-averaged TAWSS across settled cycles "
+                        f"(periodic-convergence diagnostic; > {self.CYCLE_CV_THRESHOLD:g} suggests an "
+                        f"under-converged run). status={results.tawss_cv_status}"
+                    ),
+                },
             },
             "per_outlet_pressure_drop_mmhg": results.pressure_drop_mmhg,
+            "tawss_convergence": {
+                "cv": results.tawss_cv,
+                "status": results.tawss_cv_status,
+                "threshold": self.CYCLE_CV_THRESHOLD,
+                "per_cycle_tawss_pa": results.per_cycle_tawss,
+            },
         }
 
         # Write JSON

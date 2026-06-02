@@ -103,6 +103,14 @@ HEART_RATE_DEFAULT: Final[float] = 72.0
 CARDIAC_CYCLE_DEFAULT: Final[float] = 0.8
 """Default cardiac cycle period in seconds (60/72 ≈ 0.833s)."""
 
+# Number of cardiac cycles to simulate
+DEFAULT_NUMBER_OF_CYCLES: Final[int] = 3
+"""Default number of cardiac cycles when neither ``end_time`` nor
+``number_of_cycles`` is given. Three cycles suffice for the pressure-and-WSS
+use case the pipeline targets (cycle-mean pressure within ~1% of the
+final-cycle value by cycle 3 for a pressure-initialised run); velocity-resolved
+or LES statistics generally require many more and must be verified by the user."""
+
 # Pulse wave velocity
 PWV_DEFAULT: Final[float] = 6.0
 """Default aortic pulse wave velocity in m/s (young healthy adult)."""

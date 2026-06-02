@@ -1091,9 +1091,7 @@ class ExecutePostProcessingTask(Task):
         if backend == "paraview":
             return self._execute_paraview(case_dir, pp_config)
 
-        logger.error(
-            "Unknown post_processing.backend %r; expected 'paraview' or 'pyvista'", backend
-        )
+        logger.error("Unknown post_processing.backend %r; expected 'paraview' or 'pyvista'", backend)
         return False
 
     def _execute_pyvista(self, case_dir: str) -> bool:
@@ -1111,7 +1109,7 @@ class ExecutePostProcessingTask(Task):
                 exc,
             )
             return False
-        except Exception as exc:    # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             logger.error("PyVista post-processing failed: %s", exc)
             return False
 
@@ -1231,6 +1229,11 @@ class ExecuteHemodynamicsTask(Task):
                 logger.info(f"  TAWSS max/mean: {results.tawss_max:.4f} / {results.tawss_mean:.4f} Pa")
                 logger.info(f"  OSI max/mean: {results.osi_max:.4f} / {results.osi_mean:.4f}")
                 logger.info(f"  RRT max/mean: {results.rrt_max:.4f} / {results.rrt_mean:.4f} Pa⁻¹")
+                if results.tawss_cv_status == "INSUFFICIENT_CYCLES":
+                    logger.info("  Inter-cycle TAWSS CV: not computed (need >= 2 retained cycles)")
+                elif results.tawss_cv_status in ("CONVERGED", "NOT_CONVERGED"):
+                    verdict = "converged" if results.tawss_cv_status == "CONVERGED" else "NOT converged"
+                    logger.info(f"  Inter-cycle TAWSS CV: {results.tawss_cv:.3f} ({verdict})")
 
             if results.pressure_drop_mmhg:
                 logger.info("  Pressure drops:")

@@ -9,20 +9,22 @@ Tests the HemodynamicsPostProcessor class for computing clinical hemodynamic met
 - Pressure drop calculations
 """
 
-import pytest
-import sys
-import numpy as np
-import tempfile
+import json
 import os
+import sys
+import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
+
+import numpy as np
+import pytest
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from aortacfd_lib.hemodynamics_postprocessor import (
-    HemodynamicsResults,
     HemodynamicsPostProcessor,
+    HemodynamicsResults,
     run_hemodynamics_analysis,
 )
 
@@ -2198,3 +2200,146 @@ inlet
         assert (time_dir / "TAWSS").exists()
         assert (time_dir / "OSI").exists()
         assert (time_dir / "RRT").exists()
+
+
+class TestCycleConvergenceCV:
+    """Tests for the inter-cycle TAWSS convergence diagnostic (_cycle_cv).
+
+    The metric must stay live and meaningful under the default 3-cycle run,
+    independent of skip_cycles. With >= 3 cycles the transient first cycle is
+    dropped so it reflects whether the later cycles have settled.
+    """
+
+    # _cycle_cv returns (cv, n_used) and uses the sample std (ddof=1).
+    # For [0.9, 1.1]: sample std = sqrt(0.02) ≈ 0.141421, mean = 1.0 -> CV ≈ 0.141421.
+    SAMPLE_CV_0p9_1p1 = 0.1414213562
+
+    def test_fewer_than_two_cycles_is_zero(self):
+        assert HemodynamicsPostProcessor._cycle_cv([1.0]) == (0.0, 1)
+        assert HemodynamicsPostProcessor._cycle_cv([]) == (0.0, 0)
+
+    def test_two_cycles_uses_both(self):
+        cv, n = HemodynamicsPostProcessor._cycle_cv([1.0, 1.0])
+        assert cv == 0.0 and n == 2  # identical cycles -> converged, both used
+        cv, n = HemodynamicsPostProcessor._cycle_cv([0.9, 1.1])
+        assert cv == pytest.approx(self.SAMPLE_CV_0p9_1p1) and n == 2
+
+    def test_three_cycles_drops_transient_first(self):
+        # First cycle is a wild transient; dropping it -> settled cycles 2,3 equal -> CV 0, n_used 2
+        cv, n = HemodynamicsPostProcessor._cycle_cv([5.0, 1.0, 1.0])
+        assert cv == 0.0 and n == 2
+
+    def test_three_cycles_still_drifting_flags(self):
+        # After dropping the transient, cycles 2,3 still differ -> CV exceeds 5%
+        cv, n = HemodynamicsPostProcessor._cycle_cv([5.0, 0.9, 1.1])
+        assert cv == pytest.approx(self.SAMPLE_CV_0p9_1p1)
+        assert n == 2 and cv > 0.05
+
+    def test_non_positive_mean_is_zero(self):
+        cv, n = HemodynamicsPostProcessor._cycle_cv([0.0, 0.0])
+        assert cv == 0.0 and n == 2
+
+    # --- completeness guard (_check_cycle_convergence) ---
+
+    def _proc(self, tmp_path, cardiac_cycle=0.5):
+        config = {
+            "inlet": {"type": "TIMEVARYING"},
+            "cardiac_cycle": cardiac_cycle,
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
+            "hemodynamics": {"tawss_settings": {"skip_cycles": 2}},
+        }
+        return HemodynamicsPostProcessor(str(tmp_path), config)
+
+    def _dirs_and_means(self, spec):
+        """spec: list of (cidx, n_snaps, mean). Returns (time_dirs, precomputed_means)
+        using cardiac_cycle 0.5 and writeInterval 0.01."""
+        time_dirs, means = [], {}
+        for cidx, n_snaps, mean in spec:
+            for i in range(n_snaps):
+                t = round(cidx * 0.5 + i * 0.01, 2)
+                p = Path(f"{t:.6f}")
+                time_dirs.append(p)
+                means[float(p.name)] = mean
+        return time_dirs, means
+
+    def test_partial_groups_excluded_reports_insufficient(self, tmp_path):
+        """Production keep_last_cycles=1 retention (one full cycle + partial fragments)
+        must report INSUFFICIENT_CYCLES, not a confident verdict from a 1-snapshot 'cycle'."""
+        proc = self._proc(tmp_path)
+        results = HemodynamicsResults()
+        # cidx1: 4 snaps (partial), cidx2: 50 snaps (full), cidx3: 1 snap (partial)
+        time_dirs, means = self._dirs_and_means([(1, 4, 0.6), (2, 50, 0.5), (3, 1, 2.0)])
+        proc._check_cycle_convergence(results, time_dirs, means)
+        assert results.tawss_cv_status == "INSUFFICIENT_CYCLES"
+        assert results.per_cycle_tawss == pytest.approx([0.5])  # only the full cycle survives
+
+    def test_three_full_cycles_compute_cv_dropping_transient(self, tmp_path):
+        """Three complete cycles: drop the transient first cycle, CV over the rest."""
+        proc = self._proc(tmp_path)
+        results = HemodynamicsResults()
+        time_dirs, means = self._dirs_and_means([(0, 50, 1.0), (1, 50, 0.5), (2, 50, 0.5)])
+        proc._check_cycle_convergence(results, time_dirs, means)
+        assert results.per_cycle_tawss == pytest.approx([1.0, 0.5, 0.5])
+        assert results.tawss_cv == pytest.approx(0.0)
+        assert results.tawss_cv_status == "CONVERGED"
+
+    def test_reuses_precomputed_means_without_reading_disk(self, tmp_path):
+        """If every dir's spatial mean is supplied, no wallShearStress file is read."""
+        proc = self._proc(tmp_path)
+        results = HemodynamicsResults()
+        time_dirs, means = self._dirs_and_means([(0, 50, 1.0), (1, 50, 0.5), (2, 50, 0.5)])
+        with patch.object(proc, "_read_vector_field", side_effect=AssertionError("should not read disk")):
+            proc._check_cycle_convergence(results, time_dirs, means)
+        assert results.tawss_cv_status == "CONVERGED"
+
+
+class TestConvergenceSurfacedInQoI:
+    """The convergence diagnostic must land in qoi_summary.json, not just the log."""
+
+    def _processor(self, tmp):
+        config = {
+            "inlet": {"type": "TIMEVARYING"},
+            "cardiac_cycle": 0.5,
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+            },
+            "hemodynamics": {"tawss_settings": {"skip_cycles": 2}},
+        }
+        return HemodynamicsPostProcessor(tmp, config)
+
+    def test_qoi_json_includes_cv_and_convergence_block(self, tmp_path):
+        proc = self._processor(str(tmp_path))
+        results = HemodynamicsResults()
+        results.tawss_cv = 0.02
+        results.tawss_cv_status = "CONVERGED"
+        results.per_cycle_tawss = [0.71, 0.52, 0.50]
+
+        json_path, csv_path = proc.export_qoi(results, str(tmp_path))
+        data = json.loads(Path(json_path).read_text())
+
+        # Flat QoI entry (also flows into the CSV)
+        assert "tawss_inter_cycle_cv" in data["qoi"]
+        assert data["qoi"]["tawss_inter_cycle_cv"]["value"] == pytest.approx(0.02)
+
+        # Detailed convergence block
+        conv = data["tawss_convergence"]
+        assert conv["status"] == "CONVERGED"
+        assert conv["cv"] == pytest.approx(0.02)
+        assert conv["threshold"] == 0.05
+        assert conv["per_cycle_tawss_pa"] == [0.71, 0.52, 0.50]
+
+        # CSV carries the CV row too
+        csv_text = Path(csv_path).read_text()
+        assert "tawss_inter_cycle_cv" in csv_text
+
+    def test_default_status_is_not_computed(self):
+        # A fresh results object (e.g. steady case) reports NOT_COMPUTED, value 0.
+        results = HemodynamicsResults()
+        assert results.tawss_cv_status == "NOT_COMPUTED"
+        assert results.tawss_cv == 0.0
