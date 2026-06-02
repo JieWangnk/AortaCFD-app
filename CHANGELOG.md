@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — inlet boundaryData now tiles to cover the full run
+
+`CycleDataSetup` previously read `simulation_control.number_of_cycles`
+(default 1) to decide how many cardiac cycles of inlet `boundaryData` to
+lay down. Configs that pin `simulation_control.end_time` without
+`number_of_cycles` therefore tiled only one cycle, and the non-periodic
+`timeVaryingMappedFixedValue` inlet BC held its last value for the rest of
+the run — a silently flat-lined inflow after cycle 1.
+
+The cycle count is now derived from `end_time / cardiac_cycle` (preferred,
+matching how the solver `endTime` is resolved), falling back to an explicit
+`number_of_cycles`, then to the new default of 3. A setup-time guard
+(`_verify_coverage`) raises immediately if the tiled data still does not
+reach `end_time`, instead of letting the inflow flat-line mid-solve. If a
+config sets both `end_time` and a conflicting `number_of_cycles`, `end_time`
+wins and a warning is logged.
+
+### Changed — default number of cardiac cycles is now 3
+
+`DEFAULT_NUMBER_OF_CYCLES = 3` (`src/aortacfd_lib/constants.py`) is now the
+single source of truth, wired into the controlDict `endTime` calculation,
+inlet tiling, and the config accessor. Previously the run-driving paths
+defaulted to 1 cycle while one accessor reported 3. **Migration:** a config
+that sets neither `end_time` nor `number_of_cycles` now runs 3 cycles
+instead of 1. All committed `cases_input/*` configs already pin one of these
+keys, so none change behaviour.
+
+### Added — inter-cycle TAWSS convergence diagnostic in QoI output
+
+Hemodynamics post-processing now reports a periodic-convergence diagnostic:
+the coefficient of variation (sample std / mean) of cycle-averaged TAWSS
+across the complete cardiac cycles retained on disk. New fields
+`tawss_cv` and `tawss_cv_status` (`CONVERGED` / `NOT_CONVERGED` /
+`INSUFFICIENT_CYCLES` / `NOT_COMPUTED`) are written to
+`qoi_summary.json`, `qoi_summary.csv`, and `hemodynamics_report.txt`, and a
+warning is logged when the CV exceeds `CYCLE_CV_THRESHOLD` (5%). Only
+*complete* cycles are used; partial leading/trailing groups (from
+`purgeWrite` / `keep_last_cycles` or a non-integer `end_time`) are excluded,
+and runs that retain fewer than two complete cycles (e.g.
+`keep_last_cycles=1`) report `INSUFFICIENT_CYCLES` rather than a misleading
+value. The exported `per_cycle_tawss` list now contains all complete
+cycles (previously only the post-skip cycles).
+
 ### Added — PyVista post-processing backend (opt-in)
 
 New pure-Python post-processor at `src/aortacfd_lib/post_processor_pyvista.py`

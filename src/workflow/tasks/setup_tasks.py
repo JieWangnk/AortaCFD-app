@@ -52,6 +52,11 @@ except ImportError:
         DistanceWallInletProfile,
     )
 
+try:
+    from ...aortacfd_lib.constants import DEFAULT_NUMBER_OF_CYCLES
+except ImportError:
+    from aortacfd_lib.constants import DEFAULT_NUMBER_OF_CYCLES
+
 
 class CreateCaseStructureTask(Task):
     """
@@ -902,12 +907,12 @@ class GenerateControlDictTask(Task):
             if not cardiac_cycle:
                 # Cardiac cycle not yet calculated - use temporary value
                 # Will be updated later by update_control_dict task
-                number_of_cycles = sim_controls.get("number_of_cycles", 1)
+                number_of_cycles = sim_controls.get("number_of_cycles", DEFAULT_NUMBER_OF_CYCLES)
                 final_end_time = 1.0 * number_of_cycles  # Temporary: assume 1s per cycle
                 logger.warning(f"Cardiac cycle not yet determined. Using temporary endTime: {final_end_time}s")
                 logger.info("This will be updated after boundary data preparation.")
             else:
-                number_of_cycles = sim_controls.get("number_of_cycles", 1)
+                number_of_cycles = sim_controls.get("number_of_cycles", DEFAULT_NUMBER_OF_CYCLES)
                 final_end_time = float(cardiac_cycle) * int(number_of_cycles)
                 logger.info(f"Calculated endTime: {final_end_time}s ({number_of_cycles} cycles of {cardiac_cycle}s)")
         else:

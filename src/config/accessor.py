@@ -482,7 +482,11 @@ class Config:
     @property
     def num_cycles(self) -> int:
         """Get number of cardiac cycles to simulate."""
-        return self.simulation_control.get("number_of_cycles", 3)
+        try:
+            from aortacfd_lib.constants import DEFAULT_NUMBER_OF_CYCLES
+        except ImportError:
+            DEFAULT_NUMBER_OF_CYCLES = 3
+        return self.simulation_control.get("number_of_cycles", DEFAULT_NUMBER_OF_CYCLES)
 
     @property
     def control_dict(self) -> Dict[str, Any]:
