@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aortacfd"
-version = "1.4.1"
+version = "1.5.0"
 description = "Automated framework for patient-specific aortic hemodynamics simulations"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [
-    {name = "AortaCFD Development Team"}
+    {name = "Jie Wang", email = "jieandwang@gmail.com"}
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -76,9 +76,9 @@ docs = [
 aortacfd = "patient_runner.cli:main"
 
 [project.urls]
-"Homepage" = "https://github.com/AortaCFD/AortaCFD-app"
-"Documentation" = "https://github.com/AortaCFD/AortaCFD-app#readme"
-"Bug Tracker" = "https://github.com/AortaCFD/AortaCFD-app/issues"
+"Homepage" = "https://github.com/JieWangnk/AortaCFD-app"
+"Documentation" = "https://github.com/JieWangnk/AortaCFD-app#readme"
+"Bug Tracker" = "https://github.com/JieWangnk/AortaCFD-app/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

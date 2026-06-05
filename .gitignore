@@ -198,3 +198,8 @@ validation/analyzers/*_README.md
 
 # Live-solver config-matrix runs (scripts/run_config_matrix.py)
 config_matrix_results/
+
+# Local U-bend batch experiment scratch (not part of the released package)
+cases_input/ub_*/
+scripts/*ubend*
+scripts/tile_inlet_csv.py
