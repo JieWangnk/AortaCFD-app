@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-06-05
+
 ### Fixed — ParaView post-processing works on ParaView 6.x
 
 The ParaView visualisation backend was written against ParaView 5.x and broke
