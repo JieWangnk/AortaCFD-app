@@ -241,24 +241,24 @@ class PostProcessor:
 
         # Create visualizer
         visualizer = OpenFOAMParaView(
-            casePath=str(self.case_dir),
-            caseType="auto" if self.config.visualization.auto_detect_case_type else "Reconstructed",
-            timeSteps=self.config.visualization.time_steps,
+            case_path=str(self.case_dir),
+            case_type="auto" if self.config.visualization.auto_detect_case_type else "Reconstructed",
+            time_steps=self.config.visualization.time_steps,
             fields=self.config.visualization.fields,
-            rescaleSettings=rescale_settings if rescale_settings else None,
+            rescale_settings=rescale_settings if rescale_settings else None,
         )
 
         # Override image directory to our output directory
-        visualizer.imageDir = str(self.output_dir / "images")
-        os.makedirs(visualizer.imageDir, exist_ok=True)
+        visualizer.image_dir = str(self.output_dir / "images")
+        os.makedirs(visualizer.image_dir, exist_ok=True)
 
         # Generate screenshots
         visualizer.generate_screenshots()
 
         return {
-            "image_dir": visualizer.imageDir,
+            "image_dir": visualizer.image_dir,
             "fields": self.config.visualization.fields,
-            "time_steps": visualizer.timeSteps,
+            "time_steps": visualizer.time_steps,
         }
 
     def run_animations(self, fps: Optional[int] = None) -> Dict[str, Any]:
@@ -283,14 +283,14 @@ class PostProcessor:
 
         # Create visualizer just for animation
         visualizer = OpenFOAMParaView(
-            casePath=str(self.case_dir), timeSteps=None, fields=self.config.visualization.fields
+            case_path=str(self.case_dir), time_steps=None, fields=self.config.visualization.fields
         )
-        visualizer.imageDir = str(self.output_dir / "images")
+        visualizer.image_dir = str(self.output_dir / "images")
 
         # Create animations
         visualizer.anima(fps=fps)
 
-        return {"fps": fps, "output_dir": visualizer.imageDir}
+        return {"fps": fps, "output_dir": visualizer.image_dir}
 
     def check_status(self) -> Dict[str, Any]:
         """

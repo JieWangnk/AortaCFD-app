@@ -381,6 +381,13 @@ class OpenFOAMParaView:
         foam_reader = OpenFOAMReader(FileName=self.foam_file)
         foam_reader.CaseType = self.case_type + " Case"
         foam_reader.MeshRegions = ["internalMesh"]
+        # Interpolate cell fields to points so the Point-Data Calculator can
+        # reference U/p/wallShearStress. This was ON by default in ParaView 5.x
+        # but OFF in 6.x, where the reader otherwise exposes only cell arrays and
+        # every Calculator expression fails with "Undefined symbol". Setting it
+        # explicitly is a no-op on 5.x and the fix on 6.x.
+        if hasattr(foam_reader, "Createcelltopointfiltereddata"):
+            foam_reader.Createcelltopointfiltereddata = 1
 
         render_view = CreateView("RenderView")
         render_view.ViewSize = list(self.resolution)
@@ -657,7 +664,7 @@ class OpenFOAMParaView:
                 # Configure color transfer function
                 lut = GetColorTransferFunction(prop["name"])
                 pwf = GetOpacityTransferFunction(prop["name"])
-                lut.ApplyPreset(prop["preset"], True)
+                lut.ApplyPreset(self._resolve_preset(prop["preset"]), True)
 
                 render_view.Update()
 
@@ -715,6 +722,30 @@ class OpenFOAMParaView:
             scalar_bar.AddRangeLabels = 1
             scalar_bar.RangeLabelFormat = "%.2f"
             scalar_bar.Visibility = 1
+
+    def _resolve_preset(self, name: str) -> str:
+        """Map a colormap preset name to one available in the running ParaView.
+
+        ParaView 6.x dropped the " (matplotlib)" suffix from the Viridis/Plasma/
+        Inferno/Magma/Cividis presets, and ``ApplyPreset`` raises on an unknown
+        name. Resolve against the actual preset list so the same config works on
+        both 5.x and 6.x; fall back to the requested name (ApplyPreset will warn)
+        when nothing matches.
+        """
+        if getattr(self, "_available_presets", None) is None:
+            presets = servermanager.vtkSMTransferFunctionPresets.GetInstance()
+            self._available_presets = {presets.GetPresetName(i) for i in range(presets.GetNumberOfPresets())}
+        avail = self._available_presets
+        if name in avail:
+            return name
+        stripped = name.replace(" (matplotlib)", "")
+        if stripped in avail:  # 6.x: "Viridis (matplotlib)" -> "Viridis"
+            return stripped
+        suffixed = f"{name} (matplotlib)"
+        if suffixed in avail:  # 5.x: bare "Viridis" -> "Viridis (matplotlib)"
+            return suffixed
+        logging.getLogger(__name__).warning("Colormap preset %r not found in this ParaView; using as-is", name)
+        return name
 
     def generate_screenshots(self) -> None:
         """

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — ParaView post-processing works on ParaView 6.x
+
+The ParaView visualisation backend was written against ParaView 5.x and broke
+on 6.x. Three version-agnostic fixes (all no-ops on 5.x):
+
+- `post_processing/core.py` called `OpenFOAMParaView(...)` with camelCase
+  keyword arguments/attributes (`casePath`, `caseType`, `timeSteps`,
+  `rescaleSettings`, `imageDir`) that never matched the class's snake_case API,
+  so the package's visualisation path raised `TypeError` on every run. Renamed
+  to `case_path`, `case_type`, `time_steps`, `rescale_settings`, `image_dir`.
+- Colormap preset names: ParaView 6.x dropped the " (matplotlib)" suffix
+  (`Viridis (matplotlib)` → `Viridis`) and `ApplyPreset` now raises on an
+  unknown name. Added `_resolve_preset()`, which maps the requested preset to
+  whatever the running ParaView actually provides (works on 5.x and 6.x).
+- Calculator fields resolved as "Undefined symbol" on 6.x because the
+  OpenFOAM reader no longer interpolates cell data to points by default. The
+  reader now sets `Createcelltopointfiltereddata = 1` (the 5.x default), so the
+  Point-Data Calculator can reference `U`/`p`/`wallShearStress` again.
+
 ### Fixed — inlet boundaryData now tiles to cover the full run
 
 `CycleDataSetup` previously read `simulation_control.number_of_cycles`
