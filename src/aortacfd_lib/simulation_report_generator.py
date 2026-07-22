@@ -544,7 +544,10 @@ Command:        python run_patient.py {self.case_name}
                 for outlet, fraction in flow_split.items():
                     section += f"  - {outlet}: {fraction*100:.1f}%\n"
             elif isinstance(flow_split, (int, float)):
-                section += f"- **Flow Split:** {flow_split}% to main branch (rest distributed by Murray's law)\n"
+                section += (
+                    f"- **Flow Split:** {flow_split}% to the branch outlets (area-split); "
+                    f"remainder to the main/descending outlet (last patch)\n"
+                )
             else:
                 section += "- **Flow Split:** Auto-calculated (Murray's law)\n"
 

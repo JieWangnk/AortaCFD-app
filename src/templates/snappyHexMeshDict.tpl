@@ -81,6 +81,11 @@ castellatedMeshControls
         {{ patch_name }}
         {
             level ({{ config.mesh.SNAPPY_SETTINGS.surfaceRefinementLevels[0] }} {{ config.mesh.SNAPPY_SETTINGS.surfaceRefinementLevels[1] }});
+            // Wall surfaces -> type wall; inlet/outlets -> type patch (flow BCs)
+            patchInfo
+            {
+                type {% if patch_name == wall_patch %}wall{% else %}patch{% endif %};
+            }
         }
         {% endfor %}
     }

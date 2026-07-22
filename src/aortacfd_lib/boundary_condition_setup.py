@@ -646,13 +646,22 @@ class BoundaryConditionSetup:
             flow_splits = wk_settings.get("flow_split", {})
             outlet_params = wk_settings.get("outlet_parameters", {})
 
-            # Initialize all outlets to uniform pressure
+            # Initialize all outlets to uniform pressure.
+            # flow_split may be a dict (per-outlet) OR a scalar "branch percentage"
+            # (MATLAB method, see wk_setup._parse_flow_split_percentage); only the
+            # dict form has outlet keys, so guard the .keys() access.
             outlet_pressures = {}
-            if flow_splits:
-                for outlet in flow_splits.keys():
+            if isinstance(flow_splits, dict) and flow_splits:
+                for outlet in flow_splits:
+                    if outlet in ("_rest", "_method"):  # special keys, not patches
+                        continue
                     outlet_pressures[outlet] = p_init_Pa
             elif outlet_params:
                 for outlet in outlet_params.keys():
+                    outlet_pressures[outlet] = p_init_Pa
+            else:
+                # scalar/percentage flow_split (or none set): use discovered patches
+                for outlet in self.outlet_patches:
                     outlet_pressures[outlet] = p_init_Pa
 
             self.log.info(f"Initial pressure field method: {method_desc}")
