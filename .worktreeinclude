@@ -1,0 +1,7 @@
+# Gitignored files COPIED into each new git worktree (by the `ccwt` helper and,
+# on the desktop app, natively). gitignore-style globs; only files that are both
+# gitignored AND match a pattern are copied. Big shared trees go in .worktreelink.
+.claude/
+.vscode/
+cases_input/**/*.json
+cases_input/**/*.flow

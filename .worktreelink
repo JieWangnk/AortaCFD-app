@@ -1,0 +1,5 @@
+# Big gitignored dirs SYMLINKED (not copied) into each new worktree by `ccwt`,
+# so a parallel session can read them without duplicating gigabytes.
+# One path per line. (Per-case STL geometry under cases_input/ can be symlinked
+# by hand if a worktree needs to run meshing.)
+output
