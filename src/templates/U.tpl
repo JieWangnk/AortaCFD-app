@@ -31,7 +31,7 @@ boundaryField
     // The inlet velocity boundary condition
     {{ inlet_patch }}
     {
-        {% if inlet_settings.type in ["TIMEVARYING", "WOMERSLEY", "MRI"] %}
+        {% if inlet_settings.type in ["TIMEVARYING", "WOMERSLEY", "MRI", "MAPPED_PROFILE"] %}
         type            timeVaryingMappedFixedValue;
         offset          (0 0 0);
         setAverage      false;

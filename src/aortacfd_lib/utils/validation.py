@@ -760,7 +760,7 @@ class BoundaryConditionValidator:
     """
 
     # Valid inlet types
-    VALID_INLET_TYPES = ["TIMEVARYING", "CONSTANT", "WOMERSLEY", "MRI"]
+    VALID_INLET_TYPES = ["TIMEVARYING", "CONSTANT", "PARABOLIC", "WOMERSLEY", "MAPPED_PROFILE", "MRI"]
 
     # Valid outlet types
     VALID_OUTLET_TYPES = ["ZEROGRADIENT", "FIXEDVALUE", "2EWINDKESSEL", "3EWINDKESSEL", "RCRLUMPED"]
@@ -1353,7 +1353,7 @@ class BoundaryConditionValidator:
                         )
 
         # Validate initial_pressure_method if specified
-        init_method = wk_settings.get("initial_pressure_method", "diastolic").lower()
+        init_method = wk_settings.get("initial_pressure_method", "map").lower()
         # Note: 'windkessel' is deprecated but still accepted (will fallback to diastolic with warning)
         valid_methods = ["diastolic", "systolic", "map", "mean", "arithmetic", "windkessel", "zero"]
         deprecated_methods = ["windkessel"]
@@ -1365,7 +1365,7 @@ class BoundaryConditionValidator:
             result.add_warning(
                 f"initial_pressure_method '{init_method}' is DEPRECATED. "
                 "Non-uniform pressure creates velocity spikes. "
-                "Recommended: 'diastolic' (per Pfaller et al. 2021)"
+                "Recommended: a uniform start such as 'map' (default) or 'diastolic' (per Pfaller et al. 2021)"
             )
 
         # For manual methodology, validate C, R_proximal, R_distal

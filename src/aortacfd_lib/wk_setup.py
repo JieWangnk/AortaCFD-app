@@ -106,6 +106,71 @@ class WkSetup:
             "outlets", {}
         )
         self.wk_model_settings = self.outlet_settings["windkessel_settings"]
+        # Sanity-range records for computed quantities (R, PWV); written to the merged config
+        self.bounds_check: list = []
+
+    def _check_bound(self, quantity: str, outlet: str, value: float, lo: float, hi: float, unit: str) -> bool:
+        """Record whether a computed quantity sits in its expected range; warn when it does not.
+
+        The ranges are wide on purpose: they catch unit slips (mm vs m, mmHg vs Pa)
+        and zero-flow outlets, not borderline physiology.
+        """
+        ok = bool(lo <= value <= hi)
+        self.bounds_check.append(
+            {
+                "quantity": quantity,
+                "outlet": outlet,
+                "value": float(value),
+                "unit": unit,
+                "low": lo,
+                "high": hi,
+                "ok": ok,
+            }
+        )
+        if not ok:
+            self.log.warning(
+                f"RANGE CHECK: {quantity} for {outlet} = {value:.3g} {unit} is outside [{lo}, {hi}] {unit}. "
+                "Check the outlet areas (STL units), the flow split and the pressures."
+            )
+        return ok
+
+    def _write_bounds_check_report(self) -> None:
+        """Write reports/windkessel_bounds_check.json next to the case (provenance; never raises)."""
+        import json
+
+        try:
+            reports_dir = os.path.join(os.path.dirname(self.case_dir), "reports")
+            os.makedirs(reports_dir, exist_ok=True)
+            path = os.path.join(reports_dir, "windkessel_bounds_check.json")
+            payload = {
+                "checks": list(self.bounds_check),
+                "n_failed": sum(1 for b in self.bounds_check if not b["ok"]),
+                "note": "Wide sanity ranges for computed Windkessel quantities; they catch unit slips and "
+                "zero-flow outlets, not borderline physiology.",
+            }
+            with open(path, "w") as fh:
+                json.dump(payload, fh, indent=2)
+            self.log.info(f"Windkessel range checks written: {path}")
+        except Exception as e:  # noqa: BLE001
+            self.log.warning(f"Could not write windkessel_bounds_check.json: {e}")
+
+    @property
+    def murray_exponent(self) -> float:
+        """Exponent n in the r^n flow split (``windkessel_settings.murray_exponent``; default 2.6).
+
+        The schema bounds it to [2, 3]: 3 is Murray's original cubic law, 2 is an
+        area-proportional split, 2.6 fits aortic branch measurements (Zamir et al.).
+        """
+        n = self.wk_model_settings.get("murray_exponent", MURRAY_LAW_EXPONENT)
+        try:
+            n = float(n)
+        except (TypeError, ValueError):
+            self.log.warning(f"murray_exponent {n!r} is not a number; using {MURRAY_LAW_EXPONENT}")
+            return MURRAY_LAW_EXPONENT
+        if not 2.0 <= n <= 3.0:
+            self.log.warning(f"murray_exponent {n} outside [2, 3]; using {MURRAY_LAW_EXPONENT}")
+            return MURRAY_LAW_EXPONENT
+        return n
 
     def _resolve_windkessel_outlets(self, all_outlets):
         """Filter the full outlet list to only those typed as Windkessel
@@ -260,6 +325,9 @@ class WkSetup:
             # Convert to mmHg·s/mL for logging
             R_total_mmHg = R_total[i] / (MMHG_TO_PA * 1e6)
             self.log.info(f"  {outlet}: R_total = {R_total[i]:.2e} Pa·s/m³ ({R_total_mmHg:.1f} mmHg·s/mL)")
+            # Per-outlet total resistance: 0.05 mmHg·s/mL would mean > 1.9 L/s through one outlet;
+            # 100 mmHg·s/mL is a branch carrying ~1 % of a 5 L/min cardiac output.
+            self._check_bound("R_total", outlet, R_total_mmHg, 0.05, 100.0, "mmHg·s/mL")
 
         # Initialize R1 (proximal/characteristic impedance) and R2 (distal resistance)
         R1 = np.zeros(num_outlets)
@@ -341,6 +409,10 @@ class WkSetup:
                     R1[i] = 0.15 * R_total[i]
                     self.log.info(f"  {outlet}: R1 = {R1[i]:.2e} Pa·s/m³ (15% of R_total)")
                     continue
+
+                # Pulse wave velocity: 2 m/s is below any arterial value, 20 m/s above (Olufsen's
+                # formula gives ~15 m/s for a 6 mm branch); a radius in mm instead of m lands near 1 m/s.
+                self._check_bound("PWV", outlet, float(c_i), 2.0, 20.0, "m/s")
 
                 # Calculate characteristic impedance
                 R1[i] = rho * c_i / A_i
@@ -433,6 +505,19 @@ class WkSetup:
                 )
 
         self.wk_model_settings["outlet_parameters"] = outlet_parameters
+
+        # Systemic (parallel) resistance of all outlets: 0.25-4 mmHg·s/mL brackets MAP 50-130 mmHg at 2-12 L/min
+        # (a single-outlet test tube at low flow sits near the top of this range on purpose).
+        R_tot = np.asarray(R1, dtype=float) + np.asarray(R2, dtype=float)
+        finite = R_tot[(R_tot > 0) & (R_tot < 1e14)]
+        if finite.size:
+            R_par_mmHg = (1.0 / np.sum(1.0 / finite)) / (MMHG_TO_PA * 1e6)
+            self._check_bound("R_systemic_parallel", "all", R_par_mmHg, 0.25, 4.0, "mmHg·s/mL")
+        self.wk_model_settings["bounds_check"] = list(self.bounds_check)
+        n_bad = sum(1 for b in self.bounds_check if not b["ok"])
+        if n_bad:
+            self.log.warning(f"{n_bad} Windkessel range check(s) failed - see windkessel_bounds_check.json")
+        self._write_bounds_check_report()
         self.log.info("=" * 80)
         self.log.info("Windkessel calculation complete - coefficients stored in config")
         self.log.info("=" * 80)
@@ -748,12 +833,13 @@ class WkSetup:
         Returns:
             Dictionary of flow split ratios (sum to 1.0)
         """
-        r_powered = {name: r**MURRAY_LAW_EXPONENT for name, r in outlet_radii.items()}
+        n = self.murray_exponent
+        r_powered = {name: r**n for name, r in outlet_radii.items()}
         total_r_powered = sum(r_powered.values())
 
         flow_split = {name: rp / total_r_powered for name, rp in r_powered.items()}
 
-        self.log.info(f"  Murray's law (r^{MURRAY_LAW_EXPONENT}) distribution:")
+        self.log.info(f"  Murray's law (r^{n}) distribution:")
         for name, ratio in flow_split.items():
             r_mm = outlet_radii[name] * 1000
             self.log.info(f"    {name}: r={r_mm:.2f} mm → {ratio*100:.1f}%")
@@ -858,7 +944,7 @@ class WkSetup:
 
                     # Calculate Murray distribution for remaining outlets only
                     remaining_radii = {name: outlet_radii[name] for name in remaining_outlets}
-                    r_powered = {name: r**MURRAY_LAW_EXPONENT for name, r in remaining_radii.items()}
+                    r_powered = {name: r**self.murray_exponent for name, r in remaining_radii.items()}
                     total_r_powered = sum(r_powered.values())
 
                     for outlet in remaining_outlets:
@@ -965,10 +1051,11 @@ class WkSetup:
                 self.log.info(f"    {name}: A={A_mm2:.2f}mm² → {flow_split_ratios[name]*100:.1f}%")
         else:
             # Murray's law (r^n) distribution among branches
-            r_powered = {name: r**MURRAY_LAW_EXPONENT for name, r in branch_data.items()}
+            n = self.murray_exponent
+            r_powered = {name: r**n for name, r in branch_data.items()}
             total_r_powered = sum(r_powered.values())
 
-            self.log.info(f"  Branch distribution by Murray's law (r^{MURRAY_LAW_EXPONENT}):")
+            self.log.info(f"  Branch distribution by Murray's law (r^{n}):")
             for name in branch_outlets:
                 # Fraction within branches group
                 branch_fraction = r_powered[name] / total_r_powered

@@ -157,11 +157,24 @@ PRESSURE_ANCHORING_OUTLET_TYPES = frozenset(
 
 
 class ReferenceRadiusStrategy(str, Enum):
-    """Strategy for determining reference radius for mesh sizing."""
+    """Which patch radius sizes the background mesh (``MeshSetup._determine_reference_radius``).
 
+    ``max`` (default) uses the largest patch, ``inlet`` the inlet patch, ``mean``
+    the average of all patches, ``min`` the smallest patch. ``minimum`` and
+    ``average`` are accepted as aliases of ``min`` and ``mean``.
+    """
+
+    MAX = "max"
     INLET = "inlet"
-    MINIMUM = "minimum"
-    AVERAGE = "average"
+    MEAN = "mean"
+    MIN = "min"
+
+    @classmethod
+    def _missing_(cls, value):
+        aliases = {"minimum": cls.MIN, "average": cls.MEAN, "maximum": cls.MAX}
+        if isinstance(value, str):
+            return aliases.get(value.lower()) or next((m for m in cls if m.value == value.lower()), None)
+        return None
 
 
 # =============================================================================
@@ -243,7 +256,7 @@ if PYDANTIC_AVAILABLE:
         outlet_keywords_ordered: Union[str, List[str]] = Field(default_factory=lambda: ["outlet"])
         wall_keywords_ordered: Union[str, List[str]] = "wall"
         scale_factor: float = Field(default=0.001, gt=0, description="STL scale: 0.001 for mm→m")
-        reference_radius_strategy: ReferenceRadiusStrategy = ReferenceRadiusStrategy.INLET
+        reference_radius_strategy: ReferenceRadiusStrategy = ReferenceRadiusStrategy.MAX
 
     class NumericsConfig(BaseModel):
         """Numerical schemes configuration."""
@@ -364,7 +377,7 @@ else:
         outlet_keywords_ordered: Union[str, List[str]] = field(default_factory=lambda: ["outlet"])
         wall_keywords_ordered: Union[str, List[str]] = "wall"
         scale_factor: float = 0.001
-        reference_radius_strategy: str = "inlet"
+        reference_radius_strategy: str = "max"
 
     @dataclass
     class SimulationConfig:

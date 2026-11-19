@@ -460,18 +460,23 @@ cases_input/<case>/inlet/
     "venous_pressure": 5,         // mmHg
     "tau": 1.8,                   // seconds
     "flow_split": null,           // Auto Murray's law
-    "initial_pressure_method": "diastolic"  // NEW: diastolic/systolic/MAP/zero
+    "initial_pressure_method": "map"  // map/diastolic/systolic/zero
   }
 }
 ```
 
-**Initial Pressure Method (NEW v2.1)**:
+**Initial Pressure Method**:
 | Method | Description |
 |--------|-------------|
-| `diastolic` | Start at diastolic pressure (DEFAULT, recommended) |
+| `map` | Start at mean arterial pressure = DBP + (SBP − DBP)/3 (DEFAULT since v1.5.1) |
+| `diastolic` | Start at diastolic pressure (the default before v1.5.1) |
 | `systolic` | Start at systolic pressure (if simulation starts at peak systole) |
-| `MAP` | Start at mean arterial pressure = (SBP + 2*DBP) / 3 |
 | `zero` | Start at zero pressure (debugging only) |
+
+The field is uniform in space whichever method is chosen; only the level
+differs. A uniform start is what matters for stability (Pfaller et al. 2021).
+Starting at MAP puts the Windkessel state near its cycle mean, so the first
+cycle has less to settle.
 
 ### 7. **simulation_control** (Required)
 Time control and output settings.
@@ -853,7 +858,7 @@ print(f"Mass balanced: {result['is_balanced']}")  # True if < 1% imbalance
 ### v2.2 (January 2026)
 - **Hemodynamics Module**: NEW runtime hemodynamics computation (WSS, TAWSS, OSI, RRT, pressure drop)
 - **Flowrate Unit Auto-Detection**: CSV flowrate data auto-detected as L/min if max > 1.0, converted to m³/s internally
-- **Input Data Units Section**: Added comprehensive documentation of all input units
+- **Input Data Units Section**: Added documentation of all input units
 - **fieldAverage Auto Mode**: `"auto"` enables time-averaging only for pulsatile flow
 - **TAWSS Settings**: Configurable skip_cycles, periodicRestart, keep_all_cycles for convergence analysis
 - **Pressure Monitoring**: Area-averaged pressure at all patches for pressure drop calculation

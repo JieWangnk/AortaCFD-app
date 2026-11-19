@@ -233,11 +233,7 @@ class BoundaryConditionSetup:
             elif outlet_type in ("fixedValue", "fixedPressure"):
                 # Pressure pin: inline pressure_mmHg, else diastolic default.
                 p_mmhg = float(override.get("pressure_mmHg", 80))
-                rho = float(
-                    self.physics_settings.get("rho")
-                    or self.config.get("physics", {}).get("rho")
-                    or 1060
-                )
+                rho = float(self.physics_settings.get("rho") or self.config.get("physics", {}).get("rho") or 1060)
                 entry["pressure_mmHg"] = p_mmhg
                 entry["p_kinematic"] = p_mmhg * MMHG_TO_PA / rho
 
@@ -540,15 +536,16 @@ class BoundaryConditionSetup:
 
         Supports multiple initialization methods via 'initial_pressure_method' setting:
 
-        - 'diastolic' (default): End-diastolic pressure - physically correct if simulation
-          starts at end-diastole (most common and recommended)
+        - 'map' (default since v1.5.1): Mean Arterial Pressure using the physiologically
+          correct formula MAP = DBP + (1/3) × (SBP - DBP) = (2×DBP + SBP) / 3
+          (diastole is ~2/3 of the cardiac cycle). The Windkessel state then
+          starts near its cycle mean, so the first cycle has less to settle.
+          Reference: Klabunde (2011) Cardiovascular Physiology Concepts
+
+        - 'diastolic' (default before v1.5.1): End-diastolic pressure - a natural choice
+          if the inlet waveform starts at end-diastole
 
         - 'systolic': Peak systolic pressure
-
-        - 'map': Mean Arterial Pressure using physiologically correct formula:
-          MAP = DBP + (1/3) × (SBP - DBP) = (2×DBP + SBP) / 3
-          Accounts for diastole being ~2/3 of cardiac cycle.
-          Reference: Klabunde (2011) Cardiovascular Physiology Concepts
 
         - 'mean' or 'arithmetic': Simple arithmetic mean (SBP + DBP) / 2
           Less accurate than MAP but sometimes used in literature
@@ -561,7 +558,7 @@ class BoundaryConditionSetup:
 
         For non-Windkessel BC: Always initialize to 0 (gauge pressure).
 
-        IMPORTANT - Why uniform diastolic pressure is recommended:
+        IMPORTANT - Why a uniform start pressure is required:
             Per Pfaller et al. (2021), uniform pressure initialization is critical
             for numerical stability. Non-uniform pressures create large gradients
             that cause velocity spikes as the solver equilibrates the pressure field.
@@ -589,8 +586,8 @@ class BoundaryConditionSetup:
             systolic = wk_settings.get("systolic_pressure", SYSTOLIC_PRESSURE_DEFAULT)
             diastolic = wk_settings.get("diastolic_pressure", DIASTOLIC_PRESSURE_DEFAULT)
 
-            # Get initialization method (default: diastolic - simulation starts at end-diastole)
-            init_method = wk_settings.get("initial_pressure_method", "diastolic").lower()
+            # Get initialization method (default: map, uniform field at mean arterial pressure)
+            init_method = wk_settings.get("initial_pressure_method", "map").lower()
 
             # Calculate pressure based on method
             # Reference: Klabunde (2011) Cardiovascular Physiology Concepts
@@ -636,9 +633,9 @@ class BoundaryConditionSetup:
                 method_desc = "zero (gauge pressure)"
 
             else:
-                self.log.warning(f"Unknown initial_pressure_method '{init_method}', using 'diastolic'")
-                p_init_mmHg = diastolic
-                method_desc = "diastolic (default)"
+                self.log.warning(f"Unknown initial_pressure_method '{init_method}', using 'map'")
+                p_init_mmHg = diastolic + (1.0 / 3.0) * pulse_pressure
+                method_desc = "MAP (default)"
 
             p_init_Pa = p_init_mmHg * MMHG_TO_PA
 

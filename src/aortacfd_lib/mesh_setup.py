@@ -301,7 +301,8 @@ class GeometryAnalyzer:
         if not radii:
             return None
 
-        strategy = self.geom_settings.get("reference_radius_strategy", "max").lower()
+        strategy = str(self.geom_settings.get("reference_radius_strategy", "max")).lower()
+        strategy = {"minimum": "min", "average": "mean", "maximum": "max"}.get(strategy, strategy)
         if strategy == "inlet":
             return self.inlet_radius
         if strategy == "mean":
@@ -801,7 +802,7 @@ class GeometryAnalyzer:
         if self.reference_radius_m:
             D_ref_mm = 2.0 * self.reference_radius_m * 1000
             actual_cpd = D_ref_mm / cell_size_mm
-            ref_strategy = self.geom_settings.get("reference_radius_strategy", "min")
+            ref_strategy = self.geom_settings.get("reference_radius_strategy", "max")
             self.log.info(f"Reference diameter: {D_ref_mm:.2f} mm ({ref_strategy} vessel)")
             self.log.info(f"Cell size: {cell_size_mm:.3f} mm = {actual_cpd:.1f} cells/D")
         else:

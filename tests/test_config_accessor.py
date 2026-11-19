@@ -114,7 +114,8 @@ class TestConfigGeometry:
         assert cfg.inlet_patch_name == ""
         assert cfg.outlet_patch_names == []
         assert cfg.wall_patch_name == ""
-        assert cfg.reference_radius_strategy == "inlet"
+        # Default matches MeshSetup._determine_reference_radius: the largest vessel sizes the background mesh.
+        assert cfg.reference_radius_strategy == "max"
 
     def test_outlet_names_string(self):
         """Test outlet names when given as string."""
@@ -262,7 +263,7 @@ class TestConfigWindkesselSettings:
         assert cfg.windkessel_order == 3
         assert cfg.windkessel_coupling_mode == "implicit"
         assert cfg.windkessel_enable_stabilization is True
-        assert cfg.windkessel_initial_pressure_method == "diastolic"
+        assert cfg.windkessel_initial_pressure_method == "map"
         assert cfg.windkessel_pwv_method == "matlab"
 
     def test_windkessel_flow_split(self):

@@ -242,9 +242,9 @@
     "scale_factor": 0.001,
     "_scale_factor_comment": "Geometry scale factor (0.001 = mm to m)",
 
-    "reference_radius_strategy": "inlet",
-    "_reference_radius_strategy_options": ["inlet", "minimum", "average"],
-    "_reference_radius_strategy_comment": "How to determine reference radius for mesh sizing. 'inlet' uses inlet patch radius, 'minimum' uses smallest vessel radius, 'average' uses mean radius."
+    "reference_radius_strategy": "max",
+    "_reference_radius_strategy_options": ["max", "inlet", "mean", "min"],
+    "_reference_radius_strategy_comment": "Which vessel radius sizes the background mesh. 'max' (default) uses the largest patch (usually the aorta), 'inlet' the inlet patch, 'mean' the average of all patches, 'min' the smallest patch (resolves every branch to the cells-across target, at a cost). The old spellings 'minimum' and 'average' are accepted as aliases."
   },
 
   "boundary_conditions": {
@@ -455,12 +455,12 @@
         "methodology": "murray_law_automatic",
         "_methodology_comment": "Windkessel calculation methodology (informational)",
 
-        "initial_pressure_method": "diastolic",
-        "_initial_pressure_method_options": ["diastolic", "systolic", "MAP", "zero"],
+        "initial_pressure_method": "map",
+        "_initial_pressure_method_options": ["map", "diastolic", "systolic", "zero"],
         "_initial_pressure_method_descriptions": {
-          "diastolic": "Start at diastolic pressure (DEFAULT, recommended for start-of-cycle initialization)",
+          "map": "Start at mean arterial pressure = DBP + (SBP - DBP)/3 (DEFAULT since v1.5.1; uniform field, Windkessel state starts near its cycle mean)",
+          "diastolic": "Start at diastolic pressure (default before v1.5.1; use if the inlet waveform starts at end-diastole and you want the first cycle to build pressure up)",
           "systolic": "Start at systolic pressure (use if simulation starts at peak systole)",
-          "MAP": "Start at mean arterial pressure = (SBP + 2*DBP) / 3",
           "zero": "Start at zero pressure (not physiological, for debugging only)"
         }
       },

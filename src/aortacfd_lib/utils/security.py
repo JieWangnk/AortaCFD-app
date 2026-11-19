@@ -3,6 +3,8 @@ Security and validation utilities for AortaCFD.
 """
 
 import shutil
+import tempfile
+
 import psutil
 from pathlib import Path
 from typing import Dict, List
@@ -69,7 +71,7 @@ class SecurityValidator:
                 return False
 
             # Ensure path doesn't escape reasonable bounds
-            allowed_prefixes = ["/tmp", "/home", "/opt", str(Path.cwd())]
+            allowed_prefixes = [tempfile.gettempdir(), "/home", "/opt", str(Path.cwd())]
             if resolved_path.is_absolute():
                 if not any(path_str.startswith(prefix) for prefix in allowed_prefixes):
                     return False

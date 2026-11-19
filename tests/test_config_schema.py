@@ -76,9 +76,14 @@ class TestEnumerations:
 
     def test_reference_radius_strategy_values(self):
         """Test ReferenceRadiusStrategy enum values."""
+        # Values are the strings MeshSetup._determine_reference_radius dispatches on.
+        assert ReferenceRadiusStrategy.MAX.value == "max"
         assert ReferenceRadiusStrategy.INLET.value == "inlet"
-        assert ReferenceRadiusStrategy.MINIMUM.value == "minimum"
-        assert ReferenceRadiusStrategy.AVERAGE.value == "average"
+        assert ReferenceRadiusStrategy.MEAN.value == "mean"
+        assert ReferenceRadiusStrategy.MIN.value == "min"
+        # Old spellings from examples/config_full.json keep working as aliases.
+        assert ReferenceRadiusStrategy("minimum") is ReferenceRadiusStrategy.MIN
+        assert ReferenceRadiusStrategy("average") is ReferenceRadiusStrategy.MEAN
 
     def test_enum_string_behavior(self):
         """Test that enums behave as strings."""
@@ -240,7 +245,7 @@ class TestGeometryConfig:
         assert config.inlet_keywords_ordered == "inlet"
         assert config.wall_keywords_ordered == "wall"
         assert config.scale_factor == 0.001
-        assert config.reference_radius_strategy == ReferenceRadiusStrategy.INLET
+        assert config.reference_radius_strategy == ReferenceRadiusStrategy.MAX
 
     def test_outlet_list(self):
         """Test outlet keywords as list."""

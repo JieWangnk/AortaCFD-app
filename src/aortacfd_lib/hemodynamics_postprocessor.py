@@ -97,6 +97,13 @@ class HemodynamicsResults:
     pressure_drops: Dict[str, float] = field(default_factory=dict)
     pressure_drop_mmhg: Dict[str, float] = field(default_factory=dict)
 
+    # Measured flow split from the <patch>Flow function objects (sum of phi, m³/s)
+    flow_inlet_m3s: float = 0.0
+    flow_outlets_m3s: Dict[str, float] = field(default_factory=dict)
+    flow_fraction_outlets: Dict[str, float] = field(default_factory=dict)  # Q_i / sum(Q_out)
+    flow_balance_error: Optional[float] = None  # (sum(Q_out) - Q_in) / Q_in
+    flow_source: str = "none"  # "measured" when the function-object data were found
+
     # Time series (for plotting)
     time_series: List[float] = field(default_factory=list)
     pressure_inlet_series: List[float] = field(default_factory=list)
@@ -132,7 +139,7 @@ class HemodynamicsPostProcessor:
         # Determine inlet type
         inlet_config = config.get("inlet", {}) or config.get("boundary_conditions", {}).get("inlet", {})
         self.inlet_type = inlet_config.get("type", "CONSTANT").upper()
-        self.is_pulsatile = self.inlet_type in ["TIMEVARYING", "WOMERSLEY"]
+        self.is_pulsatile = self.inlet_type in ["TIMEVARYING", "WOMERSLEY", "MAPPED_PROFILE", "MRI"]
 
         # Get cardiac cycle
         self.cardiac_cycle = config.get("cardiac_cycle", 0.8)
@@ -264,6 +271,9 @@ class HemodynamicsPostProcessor:
 
         # Always compute pressure drop
         self._compute_pressure_drop(results)
+
+        # Measured per-outlet flow (replaces the 1/R estimate in reports when present)
+        self._compute_measured_flow_split(results)
 
         # Check if WSS data exists
         if not self._check_wss_exists():
@@ -757,6 +767,62 @@ boundaryField
             for outlet, dp_mmhg in results.pressure_drop_mmhg.items():
                 self.log.info(f"  → {outlet}: {dp_mmhg:.2f} mmHg")
 
+    def _settled_mean(self, times: np.ndarray, values: np.ndarray) -> float:
+        """Mean over the settled part of a monitor series.
+
+        Pulsatile: samples from skip_cycles × cardiac_cycle onwards, or the last
+        full cycle when the run is shorter than that. Steady: the last 10 % of samples.
+        """
+        times = np.asarray(times, dtype=float)
+        values = np.asarray(values, dtype=float)
+        if times.size == 0:
+            return 0.0
+        if self.is_pulsatile and self.cardiac_cycle and self.cardiac_cycle > 0:
+            t_end = float(times[-1])
+            skip_time = self.skip_cycles * self.cardiac_cycle
+            start = skip_time if t_end > skip_time + 0.5 * self.cardiac_cycle else max(0.0, t_end - self.cardiac_cycle)
+        else:
+            start = float(times[0]) + 0.9 * (float(times[-1]) - float(times[0]))
+        mask = times >= start
+        if not mask.any():
+            mask = np.ones(times.shape, dtype=bool)
+        return float(np.mean(values[mask]))
+
+    def _compute_measured_flow_split(self, results: HemodynamicsResults) -> None:
+        """Cycle-averaged flow through every patch from the <patch>Flow function objects.
+
+        phi is positive out of the domain, so the inlet value is negated. Fills
+        flow_inlet_m3s, flow_outlets_m3s, flow_fraction_outlets (share of the total
+        outflow) and flow_balance_error (outflow minus inflow, relative to inflow).
+        """
+        inlet_data = self._read_surface_field_value(f"{self.inlet_patch}Flow")
+        outlet_means: Dict[str, float] = {}
+        for outlet in self.outlet_patches:
+            data = self._read_surface_field_value(f"{outlet}Flow")
+            if data is not None:
+                outlet_means[outlet] = self._settled_mean(*data)
+        if inlet_data is None and not outlet_means:
+            return
+
+        if inlet_data is not None:
+            results.flow_inlet_m3s = -self._settled_mean(*inlet_data)
+        results.flow_outlets_m3s = outlet_means
+        total_out = sum(outlet_means.values())
+        if total_out > 0:
+            results.flow_fraction_outlets = {k: v / total_out for k, v in outlet_means.items()}
+        if results.flow_inlet_m3s > 0 and outlet_means:
+            results.flow_balance_error = (total_out - results.flow_inlet_m3s) / results.flow_inlet_m3s
+        results.flow_source = "measured"
+
+        self.log.info("Measured flow split (settled mean of the <patch>Flow monitors):")
+        if results.flow_inlet_m3s:
+            self.log.info(f"  inlet: {results.flow_inlet_m3s * 1e6:.2f} mL/s")
+        for outlet, q in outlet_means.items():
+            frac = results.flow_fraction_outlets.get(outlet, 0.0)
+            self.log.info(f"  → {outlet}: {q * 1e6:.2f} mL/s ({frac * 100:.1f} % of outflow)")
+        if results.flow_balance_error is not None:
+            self.log.info(f"  flow balance error: {results.flow_balance_error * 100:+.2f} %")
+
     def _read_surface_field_value(self, func_name: str) -> Optional[Tuple[np.ndarray, np.ndarray]]:
         """Read surfaceFieldValue.dat from postProcessing."""
         postproc_dir = self.case_dir / "postProcessing" / func_name
@@ -1041,6 +1107,11 @@ boundaryField
             if results.pressure_drop_mmhg:
                 mean_dp = sum(results.pressure_drop_mmhg.values()) / len(results.pressure_drop_mmhg)
                 f.write(f"  QoI-1: Pressure Drop (mean)     = {mean_dp:.2f} mmHg\n")
+            if results.flow_fraction_outlets:
+                split = ", ".join(f"{k} {v * 100:.1f} %" for k, v in results.flow_fraction_outlets.items())
+                f.write(f"  Measured outlet flow split      = {split}\n")
+                if results.flow_balance_error is not None:
+                    f.write(f"  Flow balance error (out-in)/in  = {results.flow_balance_error * 100:+.2f} %\n")
 
             # WSS QoIs
             f.write(f"  QoI-2: TAWSS p99                = {results.tawss_p99:.2f} Pa\n")
@@ -1230,6 +1301,11 @@ boundaryField
                 },
             },
             "per_outlet_pressure_drop_mmhg": results.pressure_drop_mmhg,
+            "per_outlet_flow_fraction_measured": results.flow_fraction_outlets,
+            "flow_inlet_mean_m3s": results.flow_inlet_m3s,
+            "flow_outlets_mean_m3s": results.flow_outlets_m3s,
+            "flow_balance_error": results.flow_balance_error,
+            "flow_source": results.flow_source,
             "tawss_convergence": {
                 "cv": results.tawss_cv,
                 "status": results.tawss_cv_status,
@@ -1253,6 +1329,15 @@ boundaryField
             # Add per-outlet pressure drops
             for outlet, dp in results.pressure_drop_mmhg.items():
                 writer.writerow([f"pressure_drop_{outlet}_mmhg", dp, "mmHg", f"Pressure drop to {outlet}"])
+            # Measured flow split (sum of phi at each patch, settled mean)
+            for outlet, frac in results.flow_fraction_outlets.items():
+                writer.writerow(
+                    [f"flow_fraction_{outlet}", frac, "-", f"Measured share of total outflow through {outlet}"]
+                )
+            if results.flow_balance_error is not None:
+                writer.writerow(
+                    ["flow_balance_error", results.flow_balance_error, "-", "(sum outflow - inflow) / inflow, measured"]
+                )
 
         self.log.info(f"QoI exported to: {json_path}, {csv_path}")
         return str(json_path), str(csv_path)

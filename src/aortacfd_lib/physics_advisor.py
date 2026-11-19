@@ -135,7 +135,7 @@ def estimate_reynolds_number(
 
     # For pulsatile flow, peak velocity is roughly 2x mean
     inlet_type = inlet_settings.get("type", "CONSTANT").upper()
-    if inlet_type in ["TIMEVARYING", "WOMERSLEY", "MRI"]:
+    if inlet_type in ["TIMEVARYING", "WOMERSLEY", "MAPPED_PROFILE", "MRI"]:
         velocity_peak = velocity * 2.0
     else:
         velocity_peak = velocity

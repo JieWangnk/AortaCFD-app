@@ -297,9 +297,8 @@ class TestInitialPressureCalculations:
         bc_setup = BoundaryConditionSetup(config, self.case_dir)
         initial_p, outlet_pressures = bc_setup._calculate_initial_pressure()
 
-        # Initial pressure should be based on diastolic pressure (default method)
-        # Diastolic = 80 mmHg = 80 * 133.322 Pa
-        expected_p = 80 * 133.322
+        # Default method is MAP = DBP + PP/3 with the default systolic pressure (120 mmHg)
+        expected_p = (80 + (120 - 80) / 3) * 133.322
         assert initial_p == pytest.approx(expected_p, rel=1e-4)
 
 
@@ -767,7 +766,7 @@ class TestInitialPressureMethods:
         assert initial_p == pytest.approx(expected_p, rel=1e-4)
 
     def test_initial_pressure_unknown_method_fallback(self):
-        """Test that unknown method falls back to diastolic."""
+        """Test that unknown method falls back to MAP (the default)."""
         config = {
             "geometry": {
                 "case_name": "test",
@@ -793,8 +792,8 @@ class TestInitialPressureMethods:
         bc_setup = BoundaryConditionSetup(config, self.case_dir)
         initial_p, _ = bc_setup._calculate_initial_pressure()
 
-        # Should fall back to diastolic
-        expected_p = 80 * 133.322
+        # Should fall back to MAP = DBP + PP/3
+        expected_p = (80 + 40 / 3) * 133.322
         assert initial_p == pytest.approx(expected_p, rel=1e-4)
 
     def test_initial_pressure_with_flow_split(self):

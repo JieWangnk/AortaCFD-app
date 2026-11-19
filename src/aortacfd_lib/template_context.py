@@ -52,7 +52,7 @@ def prepare_control_dict_context(config: Dict[str, Any]) -> Dict[str, Any]:
     # Determine inlet type
     inlet_settings = config.get("inlet_settings", inlet)
     inlet_type = inlet_settings.get("type", "CONSTANT").upper()
-    is_pulsatile = inlet_type in ["TIMEVARYING", "WOMERSLEY"]
+    is_pulsatile = inlet_type in ["TIMEVARYING", "WOMERSLEY", "MAPPED_PROFILE", "MRI"]
 
     # Get simulation timing
     end_time = config.get("end_time", 5.0)

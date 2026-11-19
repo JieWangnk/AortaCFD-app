@@ -64,12 +64,14 @@ libs
 {%- set hemodynamics = config.get('hemodynamics', {}) -%}
 {%- set inlet_settings = config.get('inlet', {}) or config.get('boundary_conditions', {}).get('inlet', {}) -%}
 {%- set _inlet_type = inlet_type if inlet_type is defined else inlet_settings.get('type', 'CONSTANT').upper() -%}
-{%- set _is_pulsatile = is_pulsatile if is_pulsatile is defined else (_inlet_type in ['TIMEVARYING', 'WOMERSLEY']) -%}
+{%- set _is_pulsatile = is_pulsatile if is_pulsatile is defined else (_inlet_type in ['TIMEVARYING', 'WOMERSLEY', 'MAPPED_PROFILE', 'MRI']) -%}
 {%- set cardiac_cycle_val = cardiac_cycle if cardiac_cycle is defined and cardiac_cycle else config.get('cardiac_cycle', 0.8) -%}
 {%- set runtime_funcs = hemodynamics.get('runtime_functions', {}) -%}
 {%- set enable_wss = runtime_funcs.get('wallShearStress', true) -%}
 {%- set enable_fieldavg = runtime_funcs.get('fieldAverage', 'auto') -%}
 {%- set enable_pressure = runtime_funcs.get('pressureMonitoring', true) -%}
+{%- set enable_flow = runtime_funcs.get('flowMonitoring', true) -%}
+{%- set enable_yplus = runtime_funcs.get('yPlus', true) -%}
 {%- if enable_fieldavg == 'auto' -%}
     {%- set enable_fieldavg = _is_pulsatile -%}
 {%- endif -%}
@@ -82,7 +84,7 @@ libs
 {%- set outlet_patches = geom.get('outlet_keywords_ordered', ['outlet']) -%}
 {%- set wall_patch = geom.get('wall_keywords_ordered', 'wall') -%}
 {%- if outlet_patches is string -%}{%- set outlet_patches = [outlet_patches] -%}{%- endif -%}
-{%- set hemodynamics_enabled = enable_wss or enable_fieldavg or enable_pressure -%}
+{%- set hemodynamics_enabled = enable_wss or enable_fieldavg or enable_pressure or enable_flow or enable_yplus -%}
 {%- set user_functions = config.get('simulation_control', {}).get('controlDict', {}).get('functions', []) %}
 {%- if hemodynamics_enabled or user_functions %}
 
@@ -155,6 +157,51 @@ functions
         log             false;
     }
 {%- endfor %}
+{%- endif %}
+{%- if enable_flow %}
+
+    // Volume flow through each patch (sum of phi, m3/s; positive out of the domain).
+    // Read by the hemodynamics post-processor for the measured outlet flow split.
+    {{ inlet_patch }}Flow
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    timeStep;
+        writeInterval   10;
+        writeFields     false;
+        regionType      patch;
+        name            {{ inlet_patch }};
+        operation       sum;
+        fields          (phi);
+        log             false;
+    }
+{%- for outlet in outlet_patches %}
+
+    {{ outlet }}Flow
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    timeStep;
+        writeInterval   10;
+        writeFields     false;
+        regionType      patch;
+        name            {{ outlet }};
+        operation       sum;
+        fields          (phi);
+        log             false;
+    }
+{%- endfor %}
+{%- endif %}
+{%- if enable_yplus %}
+
+    // Wall y+ (min/max/average per wall patch) at every write time: postProcessing/yPlus/
+    yPlus
+    {
+        type            yPlus;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        log             false;
+    }
 {%- endif %}
 }
 {%- endif %}

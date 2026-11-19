@@ -12,14 +12,18 @@ The output directory layout matches the existing post-processor:
         pressure_clip.png
         velocity_t<sim_time>.png   (one per time step in the time series)
 """
+
 from __future__ import annotations
 
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
+
+if TYPE_CHECKING:  # pyvista is an optional dependency; imported lazily inside functions at runtime
+    import pyvista as pv
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +62,7 @@ def _ensure_offscreen_render_ready() -> None:
     except OSError as exc:
         # xvfb binary not on PATH
         logger.debug("xvfb unavailable (%s); falling back to software GL", exc)
-    except Exception as exc:    # noqa: BLE001  — covers VTKError, etc.
+    except Exception as exc:  # noqa: BLE001  — covers VTKError, etc.
         logger.debug("start_xvfb failed (%s); falling back to software GL", exc)
 
     # Software-rendering fallback: tell VTK/Mesa to use llvmpipe, never
@@ -147,7 +151,7 @@ def _camera_pose_max_silhouette(
     """
     points = np.asarray(mesh.points)
     centre, axes = _principal_axes(points)
-    pc1, _pc2, pc3 = axes[0], axes[1], axes[2]
+    pc1, pc3 = axes[0], axes[2]
 
     # Camera distance: scale by the size along the longest axis
     extent_pc1 = float(np.ptp(points @ pc1))
@@ -161,7 +165,7 @@ def _camera_pose_max_silhouette(
     )
 
 
-RHO_BLOOD = 1060.0       # kg/m^3 — converts OpenFOAM kinematic to dynamic
+RHO_BLOOD = 1060.0  # kg/m^3 — converts OpenFOAM kinematic to dynamic
 MMHG_PER_PA = 1.0 / 133.322
 
 
@@ -175,16 +179,13 @@ def _load_case(case_openfoam_dir: Path, time: Optional[float]):
     foam = _find_foam_file(case_openfoam_dir)
     if foam is None:
         raise FileNotFoundError(
-            f"No .foam pointer file found under {case_openfoam_dir} — "
-            "is this a real AortaCFD openfoam/ directory?"
+            f"No .foam pointer file found under {case_openfoam_dir} — " "is this a real AortaCFD openfoam/ directory?"
         )
 
     reader = pv.POpenFOAMReader(str(foam))
     time_values = list(reader.time_values or [])
     if not time_values:
-        raise RuntimeError(
-            f"No time values found in {foam} — has the solver actually written any output yet?"
-        )
+        raise RuntimeError(f"No time values found in {foam} — has the solver actually written any output yet?")
 
     t = _resolve_render_time(time_values, time)
     reader.set_active_time_value(t)
@@ -267,9 +268,7 @@ def render_velocity_magnitude(
 
     multiblock, t = _load_case(case_openfoam_dir, time)
     if "internalMesh" not in multiblock.keys():
-        raise RuntimeError(
-            f"PyVista returned a MultiBlock with no 'internalMesh' block: {list(multiblock.keys())}"
-        )
+        raise RuntimeError(f"PyVista returned a MultiBlock with no 'internalMesh' block: {list(multiblock.keys())}")
 
     internal = multiblock["internalMesh"]
     umag_name = _ensure_umag(internal)
@@ -294,8 +293,11 @@ def render_velocity_magnitude(
     wall = boundary[wall_patch] if (boundary is not None and wall_patch in boundary.keys()) else None
     if wall is not None and wall_opacity > 0.0:
         plotter.add_mesh(
-            wall, color="lightgray", opacity=wall_opacity,
-            specular=0.1, show_scalar_bar=False,
+            wall,
+            color="lightgray",
+            opacity=wall_opacity,
+            specular=0.1,
+            show_scalar_bar=False,
         )
 
     # 2) Nested iso-surfaces of |U|
@@ -323,8 +325,13 @@ def render_velocity_magnitude(
 
     logger.info(
         "PyVista wrote %s (t=%.3fs, %d iso-surfaces from %s, clim 0-%.2f m/s, wall=%s @ %.0f%%)",
-        out_png, t, iso_levels, umag_name, clim[1],
-        wall_patch if wall is not None else "none", wall_opacity * 100,
+        out_png,
+        t,
+        iso_levels,
+        umag_name,
+        clim[1],
+        wall_patch if wall is not None else "none",
+        wall_opacity * 100,
     )
     return out_png
 
@@ -349,15 +356,10 @@ def render_wall_shear_stress(
 
     multiblock, t = _load_case(case_openfoam_dir, time)
     if "boundary" not in multiblock.keys():
-        raise RuntimeError(
-            f"No 'boundary' block at top level; got: {list(multiblock.keys())}"
-        )
+        raise RuntimeError(f"No 'boundary' block at top level; got: {list(multiblock.keys())}")
     boundary = multiblock["boundary"]
     if wall_patch not in boundary.keys():
-        raise RuntimeError(
-            f"Wall patch '{wall_patch}' not found. Available patches: "
-            f"{list(boundary.keys())}"
-        )
+        raise RuntimeError(f"Wall patch '{wall_patch}' not found. Available patches: " f"{list(boundary.keys())}")
     wall = boundary[wall_patch]
 
     if "wallShearStress" not in wall.point_data and "wallShearStress" not in wall.cell_data:
@@ -408,7 +410,11 @@ def render_wall_shear_stress(
 
     logger.info(
         "PyVista wrote %s (t=%.3fs, |WSS| Pa range %.2f–%.2f at %s%%)",
-        out_png, t, lo, hi, clip_percentile,
+        out_png,
+        t,
+        lo,
+        hi,
+        clip_percentile,
     )
     return out_png
 
@@ -499,7 +505,11 @@ def render_pressure_clip(
 
     logger.info(
         "PyVista wrote %s (t=%.3fs, p %s range %.2f–%.2f)",
-        out_png, t, unit_label, lo, hi,
+        out_png,
+        t,
+        unit_label,
+        lo,
+        hi,
     )
     return out_png
 
@@ -570,8 +580,11 @@ def render_velocity_time_series(
         wall = boundary[wall_patch] if boundary is not None and wall_patch in boundary.keys() else None
         if wall is not None and wall_opacity > 0.0:
             plotter.add_mesh(
-                wall, color="lightgray", opacity=wall_opacity,
-                specular=0.1, show_scalar_bar=False,
+                wall,
+                color="lightgray",
+                opacity=wall_opacity,
+                specular=0.1,
+                show_scalar_bar=False,
             )
 
         iso = _build_isosurfaces(internal, "U_magnitude", n_levels=iso_levels)
@@ -601,7 +614,11 @@ def render_velocity_time_series(
 
     logger.info(
         "PyVista wrote %d time-series frames to %s (|U| clim 0–%.3f m/s, %d iso @ %.0f%% opacity)",
-        len(written), out_dir, global_max, iso_levels, iso_opacity * 100,
+        len(written),
+        out_dir,
+        global_max,
+        iso_levels,
+        iso_opacity * 100,
     )
     return written
 
@@ -645,9 +662,7 @@ def open_interactive_viewer(
     cell_arrays = list(internal.cell_data.keys())
     available = list(dict.fromkeys(point_arrays + cell_arrays))
     if initial_field not in available:
-        raise ValueError(
-            f"Field '{initial_field}' not available. Got: {available}"
-        )
+        raise ValueError(f"Field '{initial_field}' not available. Got: {available}")
 
     # For vector fields, derive a scalar magnitude for visualization
     def _scalar_view(field: str) -> str:
@@ -694,13 +709,16 @@ def open_interactive_viewer(
     def _make_switcher(field: str):
         def _swap():
             scalar_name = _scalar_view(field)
-            actor.mapper.SetScalarModeToUsePointData() \
-                if scalar_name in internal.point_data \
+            (
+                actor.mapper.SetScalarModeToUsePointData()
+                if scalar_name in internal.point_data
                 else actor.mapper.SetScalarModeToUseCellData()
+            )
             actor.mapper.SelectColorArray(scalar_name)
             actor.mapper.SetScalarRange(internal.get_data_range(scalar_name))
             plotter.scalar_bar.SetTitle(f"{field} — t={t:.3f}s")
             plotter.render()
+
         return _swap
 
     for i, field in enumerate(available):
@@ -772,22 +790,20 @@ def post_process(
 
     # Static single-time renders
     for label, fn, name in [
-        ("velocity",        render_velocity_magnitude, "velocity_peak_systole.png"),
-        ("wallShearStress", render_wall_shear_stress,  "wall_shear_stress.png"),
-        ("pressure_clip",   render_pressure_clip,      "pressure_clip.png"),
+        ("velocity", render_velocity_magnitude, "velocity_peak_systole.png"),
+        ("wallShearStress", render_wall_shear_stress, "wall_shear_stress.png"),
+        ("pressure_clip", render_pressure_clip, "pressure_clip.png"),
     ]:
         try:
             written.append(fn(openfoam_dir, images_dir / name))
-        except Exception as exc:    # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             logger.warning("PyVista %s render failed: %s", label, exc)
 
     # Multi-time velocity series, locked colourmap so frames are comparable
     if time_series:
         try:
-            written.extend(
-                render_velocity_time_series(openfoam_dir, images_dir / "velocity_series")
-            )
-        except Exception as exc:    # noqa: BLE001
+            written.extend(render_velocity_time_series(openfoam_dir, images_dir / "velocity_series"))
+        except Exception as exc:  # noqa: BLE001
             logger.warning("PyVista velocity time-series render failed: %s", exc)
 
     return written

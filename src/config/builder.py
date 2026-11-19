@@ -67,13 +67,7 @@ class ConfigBuilder:
         # Physics model advisory (warns if RANS/LES may be inappropriate)
         self._validate_physics_model(final_config)
 
-        # Schema validation (if pydantic available)
-        if is_pydantic_available():
-            try:
-                validate_config(final_config)
-                self.logger.debug("✅ Final config validated against schema")
-            except Exception as e:
-                self.logger.warning(f"⚠️ Config schema validation warning: {e}")
+        self._validate_schema(final_config)
 
         return final_config
 
@@ -150,13 +144,7 @@ class ConfigBuilder:
         # Physics model advisory (warns if RANS/LES may be inappropriate)
         self._validate_physics_model(final_config)
 
-        # Schema validation (if pydantic available)
-        if is_pydantic_available():
-            try:
-                validate_config(final_config)
-                self.logger.debug("✅ Final config validated against schema")
-            except Exception as e:
-                self.logger.warning(f"⚠️ Config schema validation warning: {e}")
+        self._validate_schema(final_config)
 
         return final_config
 
@@ -389,6 +377,29 @@ class ConfigBuilder:
                 f"Profile defaults will be removed in a future release.\n"
                 f"See docs/PROFILE_USAGE_GUIDE.md for details.\n"
             )
+
+    def _validate_schema(self, config: dict) -> None:
+        """Validate the merged config against the pydantic schema.
+
+        The raw case file is validated at CLI entry; this pass catches values
+        introduced by the base/profile merge. Strict by default: a config that
+        fails the schema stops the run here instead of producing a case that
+        OpenFOAM rejects later. ``run_settings.strict_schema: false`` downgrades
+        the failure to a warning.
+        """
+        if not is_pydantic_available():
+            return
+        strict = bool(config.get("run_settings", {}).get("strict_schema", True))
+        try:
+            validate_config(config)
+            self.logger.debug("✅ Final config validated against schema")
+        except Exception as e:
+            if strict:
+                raise ValueError(
+                    f"Merged configuration failed schema validation:\n{e}\n"
+                    "Fix the config, or set run_settings.strict_schema: false to continue with a warning."
+                ) from e
+            self.logger.warning(f"⚠️ Config schema validation warning (strict_schema=false): {e}")
 
     def _validate_physical_parameters(self, config: dict) -> None:
         """
@@ -628,9 +639,7 @@ class ConfigBuilder:
         # pressure field IS anchored even though the default type is
         # zeroGradient. Allow the config.
         per_outlet = outlets.get("per_outlet", {}) or {}
-        per_outlet_types = {
-            str(spec.get("type", "")) for spec in per_outlet.values() if isinstance(spec, dict)
-        }
+        per_outlet_types = {str(spec.get("type", "")) for spec in per_outlet.values() if isinstance(spec, dict)}
         if per_outlet_types & PRESSURE_ANCHORING_OUTLET_TYPES:
             return  # At least one outlet is pinned via per_outlet — well-posed
 
@@ -646,8 +655,7 @@ class ConfigBuilder:
             "geometries (verified empirically on BPM120: FPE at t≈0.020s even "
             "with one outlet pinned to 80 mmHg)."
             if has_anchor
-            else " No pressure_anchor was set, so the pressure field has no "
-            "reference at all."
+            else " No pressure_anchor was set, so the pressure field has no " "reference at all."
         )
         raise ValueError(
             f"Pulsatile inlet (inlet.type={inlet_type!r}) with "

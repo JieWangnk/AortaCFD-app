@@ -134,8 +134,8 @@ class Config:
 
     @property
     def reference_radius_strategy(self) -> str:
-        """Get reference radius strategy (inlet, minimum, average)."""
-        return self.geometry.get("reference_radius_strategy", "inlet")
+        """Get reference radius strategy (max, inlet, mean, min; aliases minimum/average)."""
+        return self.geometry.get("reference_radius_strategy", "max")
 
     # =========================================================================
     # BOUNDARY CONDITIONS (handles nested and flattened)
@@ -188,7 +188,7 @@ class Config:
     @property
     def is_pulsatile(self) -> bool:
         """Check if inlet is pulsatile (time-varying)."""
-        return self.inlet_type in ["TIMEVARYING", "WOMERSLEY", "MRI"]
+        return self.inlet_type in ["TIMEVARYING", "WOMERSLEY", "MAPPED_PROFILE", "MRI"]
 
     # -------------------------------------------------------------------------
     # INLET BC DETAILED SETTINGS
@@ -306,8 +306,8 @@ class Config:
 
     @property
     def windkessel_initial_pressure_method(self) -> str:
-        """Get initial pressure method (diastolic, systolic, MAP, zero)."""
-        return self.windkessel_settings.get("initial_pressure_method", "diastolic")
+        """Get initial pressure method (map [default], diastolic, systolic, zero)."""
+        return self.windkessel_settings.get("initial_pressure_method", "map")
 
     @property
     def windkessel_outlet_parameters(self) -> Optional[Dict[str, Dict[str, float]]]:
