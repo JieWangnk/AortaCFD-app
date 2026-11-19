@@ -1026,11 +1026,29 @@ class GenerateSimulationReportTask(Task):
             logger.info(f"Technical report generated: {report_path}")
             logger.info(f"Report directory: {output_dir}/reports/")
             context["report_path"] = report_path
-            return True
         except Exception as e:
             logger.error(f"Failed to generate simulation report: {e}")
             # Don't fail the workflow if report generation fails
-            return True
+
+        self._write_run_record(output_dir, case_name)
+        return True
+
+    def _write_run_record(self, output_dir: str, case_name: str) -> None:
+        """Write reports/ro-crate-metadata.json (software versions, git state, input hashes).
+
+        Provenance only; a failure here never stops the workflow.
+        """
+        try:
+            from aortacfd_lib import run_record
+
+            out = Path(output_dir)
+            inputs = run_record.collect_case_inputs(self.config)
+            outputs = [out / "reports" / "merged_config.json", out / "reports" / "simulation_setup_report.txt"]
+            record = run_record.build_run_record(case_name, inputs, outputs, out)
+            path = run_record.write_run_record(out, record)
+            logger.info(f"Run record written: {path}")
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Run record (RO-Crate) not written: {e}")
 
 
 class GenerateWindkesselReportTask(Task):

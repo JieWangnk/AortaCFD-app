@@ -7,6 +7,11 @@ from pathlib import Path
 from aortacfd_lib.utils.logger import Logger
 
 
+# A floating-point number as checkMesh prints it. The trailing full stop that OpenFOAM 12 writes after
+# "Maximum face area = 1.03e-05." must not be captured (a greedy [\d.e-]+ used to swallow it).
+_NUMBER = r"(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)"
+
+
 class MeshQualityChecker:
     """
     Analyzes mesh quality from checkMesh log and provides alerts for poor quality.
@@ -131,7 +136,7 @@ class MeshQualityChecker:
 
     def _extract_face_areas(self, content: str, report: dict):
         """Extract face area information."""
-        area_match = re.search(r"Minimum face area = ([\d.e-]+)\. Maximum face area = ([\d.e-]+)", content)
+        area_match = re.search(rf"Minimum face area = {_NUMBER}\. Maximum face area = {_NUMBER}", content)
         if area_match:
             min_area = float(area_match.group(1))
             max_area = float(area_match.group(2))
@@ -141,7 +146,7 @@ class MeshQualityChecker:
 
     def _extract_cell_volumes(self, content: str, report: dict):
         """Extract cell volume information."""
-        vol_match = re.search(r"Min volume = ([\d.e-]+)\. Max volume = ([\d.e-]+)", content)
+        vol_match = re.search(rf"Min volume = {_NUMBER}\. Max volume = {_NUMBER}", content)
         if vol_match:
             min_vol = float(vol_match.group(1))
             max_vol = float(vol_match.group(2))

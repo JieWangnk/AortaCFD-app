@@ -74,6 +74,9 @@ class ExecuteMeshingTask(Task):
             # Check if mesh quality supports the selected turbulence model
             self._check_turbulence_model_compatibility(case_dir)
 
+            # Structured summary for the run record (never fails the mesh step)
+            self._write_mesh_summary(case_dir)
+
             logger.info("Mesh is already in SI units (meters) - no post-mesh scaling needed")
 
         except CommandExecutionError as e:
@@ -85,6 +88,205 @@ class ExecuteMeshingTask(Task):
 
         logger.info("Meshing commands completed successfully.")
         return True
+
+    def _write_mesh_summary(self, case_dir: str) -> None:
+        """Write reports/mesh_quality_summary.json.
+
+        Contents: checkMesh metrics and status, cell counts, cells-across-lumen
+        proxy at every inlet/outlet patch, the layer coverage snappyHexMesh
+        reported, and a screening y+ estimate at peak inlet velocity.
+        """
+        import json
+
+        try:
+            from aortacfd_lib.mesh_audit import audit_mesh
+            from aortacfd_lib.utils.patch_processing import PatchProcessing
+
+            geom = self.config.get("geometry", {})
+            inlet = geom.get("inlet_keywords_ordered", "inlet")
+            outlets = geom.get("outlet_keywords_ordered", [])
+            if isinstance(outlets, str):
+                outlets = [outlets]
+            tri_dir = os.path.join(case_dir, "constant", "triSurface")
+
+            def _radius(patch: str):
+                try:
+                    return float(PatchProcessing(tri_dir, patch).calculate_inlet_center_radius()[1])
+                except Exception as e:  # noqa: BLE001
+                    logger.debug(f"No radius for patch {patch}: {e}")
+                    return None
+
+            inlet_r = _radius(inlet)
+            outlet_r = [_radius(o) for o in outlets]
+            info = {"inlet_name": inlet, "inlet_radius_m": inlet_r, "outlet_names": outlets, "outlet_radii_m": outlet_r}
+            report = audit_mesh(case_dir, info, self.config)
+            report["patch_radii_m"] = {inlet: inlet_r, **dict(zip(outlets, outlet_r))}
+            if not report.get("resolution_proxy"):
+                # Binary polyMesh (the default writeFormat): the ASCII face reader gives nothing,
+                # so size the cells from patch area / boundary-face count instead.
+                from aortacfd_lib.mesh_audit import _determine_verdict
+
+                report["resolution_proxy"] = self._face_count_resolution_proxy(case_dir, report["patch_radii_m"])
+                report["verdict"], report["warnings"] = _determine_verdict(report)
+            report["layer_coverage"] = self._parse_layer_coverage(os.path.join(case_dir, "logs", "log.snappyHexMesh"))
+            report["yplus_estimate"] = self._estimate_wall_yplus(inlet_r, report["layer_coverage"])
+
+            reports_dir = os.path.join(os.path.dirname(case_dir), "reports")
+            os.makedirs(reports_dir, exist_ok=True)
+            path = os.path.join(reports_dir, "mesh_quality_summary.json")
+            with open(path, "w") as fh:
+                json.dump(report, fh, indent=2, default=lambda o: float(o) if hasattr(o, "__float__") else str(o))
+            logger.info(f"Mesh summary written: {path} (status: {report.get('verdict')})")
+            for w in report.get("warnings", []):
+                logger.warning(f"Mesh summary: {w}")
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Mesh summary not written: {e}")
+
+    @staticmethod
+    def _face_count_resolution_proxy(case_dir: str, patch_radii_m: dict) -> dict:
+        """Cells across the lumen at each patch from patch area / boundary-face count.
+
+        Works for binary meshes because constant/polyMesh/boundary is always ASCII.
+        Same proxy as mesh_audit.estimate_patch_resolution, with the mean face area
+        taken as (pi r^2) / nFaces instead of summing face polygons.
+        """
+        import math
+        from pathlib import Path
+
+        from aortacfd_lib.mesh_audit import _read_openfoam_boundary
+
+        try:
+            boundary = _read_openfoam_boundary(Path(case_dir) / "constant" / "polyMesh" / "boundary")
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"boundary file not readable for the resolution proxy: {e}")
+            return {}
+        out = {}
+        for patch, radius in patch_radii_m.items():
+            info = boundary.get(patch) or {}
+            n_faces = info.get("nFaces", 0)
+            if not radius or radius <= 0 or n_faces <= 0:
+                continue
+            area = math.pi * radius * radius
+            cell = math.sqrt(area / n_faces)
+            diameter = 2.0 * radius
+            out[patch] = {
+                "patch": patch,
+                "diameter_mm": round(diameter * 1000, 2),
+                "n_faces": int(n_faces),
+                "mean_face_area_mm2": round(area / n_faces * 1e6, 4),
+                "cell_size_proxy_mm": round(cell * 1000, 4),
+                "cells_across_proxy": round(diameter / cell, 1),
+                "method": "boundary_face_count",
+            }
+        return out
+
+    def _peak_inlet_velocity(self, inlet_radius_m: float, nu: float):
+        """Peak inlet velocity in m/s and where it came from.
+
+        Order: cardiac_output / velocity keys in the config (via the physics advisor),
+        else the largest value in the inlet CSV (flow rate in L/min when values are
+        > 1, else m^3/s; the same rule as WkSetup._read_inlet_flow).
+        """
+        import math
+
+        from aortacfd_lib.physics_advisor import estimate_reynolds_number
+
+        diameter = 2.0 * inlet_radius_m
+        re_peak = estimate_reynolds_number(self.config, inlet_radius_m)
+        if re_peak:
+            return float(re_peak) * nu / diameter, "config cardiac output or velocity"
+
+        inlet = self.config.get("boundary_conditions", {}).get("inlet") or self.config.get("inlet", {})
+        csv_name = inlet.get("csv_file")
+        if not csv_name:
+            return None, "no inlet velocity, cardiac output or csv_file in config"
+        patient_dir = self.config.get("patient_case_directory") or os.path.join(
+            "cases_input", str(self.config.get("geometry", {}).get("case_name", ""))
+        )
+        path = csv_name if os.path.isabs(csv_name) else os.path.join(patient_dir, csv_name)
+        if not os.path.isfile(path):
+            return None, f"inlet csv not found: {path}"
+        values = []
+        with open(path) as fh:
+            for line in fh:
+                parts = line.strip().split(",")
+                if len(parts) < 2:
+                    continue
+                try:
+                    values.append(abs(float(parts[1])))
+                except ValueError:
+                    continue  # header line
+        if not values:
+            return None, "inlet csv has no numeric rows"
+        peak = max(values)
+        data_type = str(inlet.get("data_type", "flowrate")).lower()
+        if data_type.startswith("vel") or data_type in ("u", "v"):
+            return peak, "inlet csv (velocity)"
+        q_peak = peak * 1e-3 / 60.0 if peak > 1.0 else peak  # L/min -> m3/s, else already m3/s
+        return q_peak / (math.pi * inlet_radius_m**2), "inlet csv (flow rate)"
+
+    def _estimate_wall_yplus(self, inlet_radius_m, layer_coverage: dict) -> dict:
+        """Screening y+ at peak inlet velocity for the first layer snappyHexMesh achieved.
+
+        Pipe-flow friction law (YPlusEstimator) with the peak inlet velocity from
+        the config and the per-patch layer thickness from the snappy log. The run
+        itself writes the measured y+ to postProcessing/yPlus/; this number only
+        flags a layer that is far too thick or thin before the solver starts.
+        """
+        from aortacfd_lib.yplus_estimator import YPlusEstimator
+
+        if not inlet_radius_m or not layer_coverage:
+            return {"status": "not_available", "reason": "no inlet radius or no layer report"}
+
+        physics = self.config.get("physics", {})
+        transport = physics.get("transport_properties", {})
+        rho = float(transport.get("rho", physics.get("rho", 1060.0)))
+        nu = float(transport.get("nu", physics.get("nu", 0.004 / 1060.0)))
+        diameter = 2.0 * float(inlet_radius_m)
+        u_peak, velocity_source = self._peak_inlet_velocity(float(inlet_radius_m), nu)
+        if not u_peak:
+            return {"status": "not_available", "reason": velocity_source}
+        re_peak = u_peak * diameter / nu
+
+        layers = self.config.get("mesh", {}).get("boundary_layers", {})
+        snappy = self.config.get("mesh", {}).get("SNAPPY_SETTINGS", {})
+        n_layers = float(layers.get("num_layers", snappy.get("nSurfaceLayers", 3)))
+        ratio = float(layers.get("expansion_ratio", snappy.get("expansionRatio", 1.2)))
+
+        est = YPlusEstimator(density=rho, viscosity=nu * rho).estimate_first_layer_thickness(
+            target_yplus=1.0,
+            mean_velocity=u_peak,
+            characteristic_length=diameter,
+            n_layers=int(round(n_layers)),
+            expansion_ratio=ratio,
+        )
+        thickness_for_unit_yplus = float(est.get("firstLayerThickness") or 0.0)
+        out = {
+            "status": "ok",
+            "method": "pipe-flow friction law at peak inlet velocity; first layer from the snappy layer report",
+            "velocity_source": velocity_source,
+            "peak_velocity_m_s": u_peak,
+            "reynolds_peak": float(re_peak),
+            "flow_regime": est.get("flow_regime"),
+            "first_layer_for_yplus_1_m": thickness_for_unit_yplus,
+            "patches": {},
+        }
+        if thickness_for_unit_yplus <= 0:
+            out["status"] = "not_available"
+            return out
+        for patch, cov in layer_coverage.items():
+            total = cov.get("thickness_m")
+            n_eff = cov.get("layers") or n_layers
+            if not total or not n_eff or n_eff <= 0:
+                continue
+            first = total * (ratio - 1.0) / (ratio**n_eff - 1.0) if ratio > 1.0 else total / n_eff
+            out["patches"][patch] = {
+                "first_layer_m": first,
+                "yplus_peak": first / thickness_for_unit_yplus,
+                "layers_achieved": n_eff,
+                "coverage_pct": cov.get("coverage_pct"),
+            }
+        return out
 
     def _create_foam_file(self, case_dir: str):
         """

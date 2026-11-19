@@ -33,6 +33,8 @@ class SimulationReporter:
         """
         self.case_path = Path(case_path)
         self.case_name = self.case_path.name
+        # "measured" (from the <patch>Flow monitors) or "estimated" (1/R Windkessel split)
+        self.flow_source = "unknown"
 
         if not self.case_path.exists():
             raise FileNotFoundError(f"Case directory not found: {case_path}")
@@ -218,12 +220,26 @@ class SimulationReporter:
 
                 logger.info(f"Found inlet flow data: {len(inlet_data)} time points")
 
-                # Calculate outlet flow rates using Windkessel coefficients
-                windkessel_data = self.extract_windkessel_coefficients()
-                outlet_flows = self._calculate_outlet_flows(inlet_data, windkessel_data)
+                # Prefer the flows the run measured; fall back to the 1/R Windkessel estimate
+                _, measured_outlets = self._read_flow_monitors()
+                if measured_outlets:
+                    outlet_flows = measured_outlets
+                    self.flow_source = "measured"
+                else:
+                    windkessel_data = self.extract_windkessel_coefficients()
+                    outlet_flows = self._calculate_outlet_flows(inlet_data, windkessel_data)
+                    self.flow_source = "estimated"
 
             except Exception as e:
                 logger.warning(f"Could not read inlet flow data from {csv_file}: {e}")
+
+        # No inlet CSV (steady or constant inlet): use the run's own flow monitors
+        if inlet_data is None:
+            measured_inlet, measured_outlets = self._read_flow_monitors()
+            if measured_inlet is not None or measured_outlets:
+                inlet_data = measured_inlet
+                outlet_flows = measured_outlets
+                self.flow_source = "measured"
 
         # Fallback: Look for flow rate data in postProcessing directory
         if inlet_data is None:
@@ -248,6 +264,38 @@ class SimulationReporter:
                             logger.warning(f"Could not read flow data from {data_file}: {e}")
 
         return inlet_data, outlet_flows
+
+    def _read_flow_monitors(self) -> Tuple[Optional[pd.DataFrame], Dict[str, pd.DataFrame]]:
+        """Read the <patch>Flow surfaceFieldValue monitors (sum of phi, m³/s) written by the run.
+
+        Returns (inlet_df, {outlet: df}); the inlet series is negated so that
+        inflow is positive. Empty when the run has not produced them.
+        """
+        postproc_dir = self.case_path / "postProcessing"
+        inlet_df = None
+        outlets: Dict[str, pd.DataFrame] = {}
+        if not postproc_dir.exists():
+            return inlet_df, outlets
+        for func_dir in sorted(postproc_dir.glob("*Flow")):
+            patch = func_dir.name[: -len("Flow")]
+            frames = []
+            for data_file in sorted(func_dir.glob("*/surfaceFieldValue.dat")):
+                try:
+                    df = pd.read_csv(
+                        data_file, sep=r"\s+", comment="#", header=None, usecols=[0, 1], names=["time", "flow_rate"]
+                    )
+                    frames.append(df)
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(f"Could not read flow monitor {data_file}: {e}")
+            if not frames:
+                continue
+            df = pd.concat(frames).drop_duplicates("time").sort_values("time").reset_index(drop=True)
+            if patch.lower().startswith("inlet"):
+                df["flow_rate"] = -df["flow_rate"]
+                inlet_df = df
+            else:
+                outlets[patch] = df
+        return inlet_df, outlets
 
     def _calculate_outlet_flows(self, inlet_data: pd.DataFrame, windkessel_data: Dict) -> Dict[str, pd.DataFrame]:
         """Calculate outlet flow rates based on Murray's law and resistance ratios."""
@@ -329,7 +377,11 @@ class SimulationReporter:
 
         ax.set_xlabel("Time (s)", fontsize=12)
         ax.set_ylabel("Flow Rate (mL/s)", fontsize=12)
-        ax.set_title("Flow Rate Comparison - Murray's Law Distribution", fontsize=14, fontweight="bold")
+        title = {
+            "measured": "Flow Rate Comparison - measured at each patch",
+            "estimated": "Flow Rate Comparison - estimated 1/R Windkessel split (no run data)",
+        }.get(self.flow_source, "Flow Rate Comparison")
+        ax.set_title(title, fontsize=14, fontweight="bold")
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize=11, loc="upper right", framealpha=0.9)
 
@@ -640,7 +692,11 @@ class SimulationReporter:
                 flow_summary += f"- Cardiac cycle duration: {inlet_data['time'].iloc[-1]:.3f} s\n\n"
 
                 if outlet_flows:
-                    flow_summary += "**Outlet Flow Distribution:**\n"
+                    source_note = {
+                        "measured": "measured by the run (sum of phi at each outlet patch)",
+                        "estimated": "ESTIMATED from the 1/R Windkessel split; the run has not produced flow monitors",
+                    }.get(self.flow_source, "source unknown")
+                    flow_summary += f"**Outlet Flow Distribution** ({source_note}):\n"
                     for outlet_name, outlet_data in outlet_flows.items():
                         outlet_max = outlet_data["flow_rate"].max() * 1000
                         outlet_avg = outlet_data["flow_rate"].mean() * 1000
