@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-11-19
+
+### Fixed
+
+- `MAPPED_PROFILE` inlets (the documented name; `MRI` is the deprecated alias) now
+  render `timeVaryingMappedFixedValue` in `0/U` and are treated as pulsatile by
+  the config accessor, the validator, the physics advisor, the controlDict
+  function objects and the hemodynamics post-processor. Before this fix only
+  `MRI` was recognised and a `MAPPED_PROFILE` config fell through to a constant
+  inlet with velocity `None`. Regression test: `tests/test_inlet_type_dispatch.py`.
+- `windkessel_settings.murray_exponent` is now used by the Murray-law flow split
+  (it was validated by the schema but never read; the split always used 2.6).
+- `geometry.reference_radius_strategy`: the schema enum (`inlet/minimum/average`)
+  did not match the mesh code (`max/inlet/mean/min`). The enum now carries the
+  mesh code's values with `minimum`/`average` accepted as aliases, and the
+  default is `max` everywhere (it was `max` in the mesh code, `inlet` in the schema).
+- flake8 F821 in `post_processor_pyvista.py` and bandit B108 in `utils/security.py`,
+  both of which blocked the release workflow.
+- `CITATION.cff` version and date now follow the release.
+
+### Changed
+
+- **Default initial pressure for Windkessel outlets is now `map`** (mean arterial
+  pressure, uniform field) instead of `diastolic`. Set
+  `windkessel_settings.initial_pressure_method: "diastolic"` to keep the old start.
+- The merged configuration is validated against the schema strictly: a failure
+  stops the run with a clear message. `run_settings.strict_schema: false`
+  downgrades it to a warning.
+- `controlDict` gains per-patch volume-flow monitors (`<patch>Flow`, sum of
+  `phi`) and a `yPlus` function object. Both default on; disable with
+  `hemodynamics.runtime_functions.flowMonitoring: false` / `yPlus: false`.
+
+### Added
+
+- `reports/ro-crate-metadata.json`: a Workflow Run RO-Crate record per run
+  (AortaCFD version, git commit and dirty flag, OpenFOAM and Python versions,
+  sha256 of every input file, the merged config).
+- `reports/mesh_quality_summary.json` after meshing: checkMesh metrics and
+  status, cell counts, cells-across-lumen proxy per patch, layer coverage, and a
+  screening y+ estimate at peak inlet velocity.
+- Measured per-outlet flow split in `qoi_summary.json`
+  (`per_outlet_flow_fraction_measured`, `flow_balance_error`, `flow_source`).
+  The simulation report now plots and labels measured outlet flows when the run
+  has produced them, and says "ESTIMATED" when it falls back to the 1/R split.
+- Range checks on computed Windkessel quantities (per-outlet R, systemic parallel
+  R, pulse wave velocity) with warnings; results written to
+  `reports/windkessel_bounds_check.json`.
+- CI job `openfoam-smoke.yml`: installs OpenFOAM 12 from dl.openfoam.org and runs
+  the tracked `ubend` case (`config_ci_smoke.json`) through case, mesh,
+  boundary, solver and hemodynamics.
+
 ## [1.5.0] - 2026-06-05
 
 ### Fixed — ParaView post-processing works on ParaView 6.x

@@ -271,7 +271,7 @@ See [`tests/README.md`](tests/README.md) for marker definitions and test categor
 ```text
 AortaCFD-app/
 ├── src/                         CFD library + workflow + CLI
-├── tests/                       2263 tests
+├── tests/                       2330 tests
 ├── docs/                        User guide + tutorial + workshop
 ├── examples/                    Config templates
 ├── cases_input/                 Patient case data (STL + config)
