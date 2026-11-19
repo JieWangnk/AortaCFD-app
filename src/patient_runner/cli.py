@@ -10,6 +10,21 @@ from aortacfd_lib import __version__ as _aortacfd_version
 # Delay PatientCaseRunner import until after Logger is configured
 
 
+# CLI step name -> workflow command. One table for --steps, --step choices and --list-steps.
+STEP_MAPPING = {
+    "case": "setup:dict",
+    "mesh": "run:mesh",
+    "boundary": "setup:bc",
+    "regenerate-numerics": "setup:regenerate-numerics",
+    "solver": "run:solver",
+    "reconstruct": "run:reconstruct",
+    "postprocess": "run:postprocess",  # combined: hemodynamics + images
+    "hemodynamics": "run:hemodynamics",  # QoIs only
+    "paraview": "execute_post",  # images only (legacy alias)
+    "all": "runAll",
+}
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create command-line argument parser."""
     parser = argparse.ArgumentParser(
@@ -61,18 +76,7 @@ steps:
         "--step",
         action="append",
         dest="step_list",
-        choices=[
-            "case",
-            "mesh",
-            "boundary",
-            "regenerate-numerics",
-            "solver",
-            "reconstruct",
-            "postprocess",       # QoIs + images (combined)
-            "hemodynamics",      # QoIs only
-            "paraview",          # images only (legacy alias)
-            "all",
-        ],
+        choices=list(STEP_MAPPING),
         help="run a single step (repeatable)",
     )
 
@@ -339,18 +343,9 @@ def main():
         options["case_dir"] = str(case_path)
         options["update_mode"] = True
 
-    # Handle workflow steps
-    valid_steps = {
-        "case",
-        "mesh",
-        "boundary",
-        "regenerate-numerics",
-        "solver",
-        "reconstruct",
-        "postprocess",
-        "paraview",
-        "all",
-    }
+    # Map CLI step names to workflow commands (also the list of valid --steps names)
+    step_mapping = dict(STEP_MAPPING)
+    valid_steps = set(step_mapping)
     steps = []
 
     # Parse --steps (comma-separated string)
@@ -374,20 +369,6 @@ def main():
             steps = ["case", "boundary"]
         else:
             steps = ["all"]
-
-    # Map CLI step names to workflow commands
-    step_mapping = {
-        "case": "setup:dict",
-        "mesh": "run:mesh",
-        "boundary": "setup:bc",
-        "regenerate-numerics": "setup:regenerate-numerics",
-        "solver": "run:solver",
-        "reconstruct": "run:reconstruct",
-        "postprocess": "run:postprocess",       # combined: hemodynamics + images
-        "hemodynamics": "run:hemodynamics",     # QoIs only
-        "paraview": "execute_post",             # images only (legacy alias)
-        "all": "runAll",
-    }
 
     print(f"\nAortaCFD — {args.patient_id}")
     print(f"  Steps: {', '.join(steps)}")

@@ -320,3 +320,35 @@ class TestStepsParsing:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
+
+
+class TestStepNamesAgreeEverywhere:
+    """--steps a,b and --step X must accept the same names (hemodynamics was missing from --steps)."""
+
+    def test_step_choices_match_mapping(self):
+        from patient_runner.cli import STEP_MAPPING, create_parser
+
+        parser = create_parser()
+        choices = parser._option_string_actions["--step"].choices
+        assert set(choices) == set(STEP_MAPPING)
+        assert "hemodynamics" in STEP_MAPPING
+
+    def test_steps_string_accepts_hemodynamics(self, capsys, monkeypatch):
+        import patient_runner.cli as cli
+
+        class _Runner:
+            def get_available_profiles(self):
+                return {}
+
+            def load_patient_case(self, *a, **k):
+                raise RuntimeError("stop here")
+
+        import patient_runner.core as core
+
+        monkeypatch.setattr(core, "PatientCaseRunner", lambda *a, **k: _Runner())
+        monkeypatch.setattr(sys, "argv", ["aortacfd", "nocase", "--steps", "case,hemodynamics"])
+        try:
+            cli.main()
+        except (SystemExit, RuntimeError):
+            pass
+        assert "unknown step" not in capsys.readouterr().out

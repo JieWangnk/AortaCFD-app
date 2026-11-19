@@ -44,8 +44,9 @@
       "profile": "parabolic"
     },
     "outlets": {
-      "type": "fixedPressure",
-      "pressure_mmHg": 80
+      "type": "fixedValue",
+      "pressure_pa": 10666,
+      "_note": "80 mmHg; fixedValue needs no Windkessel library in CI"
     },
     "walls": {
       "type": "no_slip"
