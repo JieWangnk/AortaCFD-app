@@ -40,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `hemodynamics.runtime_functions.flowMonitoring: false` / `yPlus: false`.
 
 ### Added
-
+- `python -m aortacfd_lib.web_export <run_dir> -o <bundle>`: exports a finished run for the interactive three.js viewer on the website (glTF surface, per-frame wall fields, flow paths, measured flow split, provenance). Works for any run whose patches are named inlet/outlet*/wall*.
 - `reports/ro-crate-metadata.json`: a Workflow Run RO-Crate record per run
   (AortaCFD version, git commit and dirty flag, OpenFOAM and Python versions,
   sha256 of every input file, the merged config).

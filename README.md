@@ -254,6 +254,21 @@ sensitive to mesh-topology artefacts.
 
 ---
 
+### Export a run for the web viewer
+
+```bash
+python -m aortacfd_lib.web_export output/ubend/1cycle_wk_laptop_A -o bundle/ubend \
+    --title "U-bend, pulsatile inflow" --licence "CC BY 4.0"
+```
+
+Writes `meta.json`, `scene.glb` (wall and cap surfaces, glTF 2.0) and `flow.bin`
+(wall pressure drop and shear stress per time frame, flow paths at a few
+keyframes). The interactive three.js page in the
+[AortaCFD-web](https://github.com/JieWangnk/AortaCFD-web) repository
+(`docs/assets/viewer3d/`) loads any such bundle with `?case=<folder>/`.
+Patches must be named `inlet`, `outlet*` and `wall*`; the flow split is
+measured from the saved fields.
+
 ## Testing
 
 ```bash
