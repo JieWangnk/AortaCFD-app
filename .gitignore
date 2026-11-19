@@ -203,3 +203,6 @@ config_matrix_results/
 cases_input/ub_*/
 scripts/*ubend*
 scripts/tile_inlet_csv.py
+
+# Real patient CT cases must never be committed (public repo)
+cases_input/PAT_0000/
