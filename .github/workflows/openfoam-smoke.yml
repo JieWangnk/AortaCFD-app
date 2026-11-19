@@ -1,0 +1,89 @@
+# OpenFOAM smoke test: install OpenFOAM 12 (Foundation) from dl.openfoam.org and
+# push one tiny shipped case through case -> mesh -> boundary -> solver -> QoIs.
+# The unit tests never touch OpenFOAM; this job is the only check that the
+# rendered dictionaries are accepted by the real solver.
+#
+# The case uses fixedPressure outlets so it does not need the OpenFOAM-WK
+# Windkessel library (a separate repository).
+
+name: OpenFOAM smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'cases_input/ubend/**'
+      - 'pyproject.toml'
+      - '.github/workflows/openfoam-smoke.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: openfoam-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: ubend case on OpenFOAM 12
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install OpenFOAM 12 (Foundation apt repository)
+        run: |
+          sudo sh -c "wget -q -O - https://dl.openfoam.org/gpg.key > /etc/apt/trusted.gpg.d/openfoam.asc"
+          sudo add-apt-repository -y http://dl.openfoam.org/ubuntu
+          sudo apt-get update -q
+          sudo apt-get install -y -q openfoam12
+          test -f /opt/openfoam12/etc/bashrc
+
+      - name: Install AortaCFD
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run the smoke case
+        shell: bash
+        run: |
+          source /opt/openfoam12/etc/bashrc
+          python run_patient.py ubend --config cases_input/ubend/config_ci_smoke.json \
+            --steps case,mesh,boundary,solver,hemodynamics --quick --run-name ci_smoke
+
+      - name: Check outputs
+        shell: bash
+        run: |
+          run=output/ubend/ci_smoke
+          test -f $run/openfoam/constant/polyMesh/points
+          test -f $run/openfoam/0/U
+          test -f $run/reports/merged_config.json
+          test -f $run/reports/ro-crate-metadata.json
+          test -f $run/reports/mesh_quality_summary.json
+          grep -q "^End" $run/openfoam/logs/log.solver
+          ls $run/openfoam/postProcessing
+          python - <<'EOF'
+          import json, glob
+          qoi = glob.glob("output/ubend/ci_smoke/**/qoi_summary.json", recursive=True)
+          assert qoi, "qoi_summary.json not written"
+          d = json.load(open(qoi[0]))
+          print(json.dumps(d.get("per_outlet_flow_fraction_measured", d.get("per_outlet_pressure_drop_mmhg")), indent=1))
+          EOF
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-logs
+          path: |
+            output/ubend/ci_smoke/openfoam/logs
+            output/ubend/ci_smoke/reports
+          if-no-files-found: ignore

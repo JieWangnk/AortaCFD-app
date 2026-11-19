@@ -1,0 +1,64 @@
+{
+  "case_info": {
+    "patient_id": "ubend",
+    "description": "CI smoke case: U-bend, coarse mesh, serial, fixed-pressure outlet (no Windkessel library needed)"
+  },
+  "_purpose": "Used by .github/workflows/openfoam-smoke.yml with --quick (simulation_control.end_time = 0.004 s). Checks that the rendered dictionaries are accepted by a real OpenFOAM 12 install. Not a physics case.",
+  "physics": {
+    "model": "laminar",
+    "transport_properties": {
+      "rho": 1060,
+      "nu": 3.7736e-06
+    }
+  },
+  "numerics": {
+    "profile": "robust"
+  },
+  "mesh": {
+    "cells_per_diameter": 10,
+    "boundary_layers": {
+      "enabled": false
+    },
+    "SNAPPY_SETTINGS": {
+      "parallel": false,
+      "surfaceRefinementLevels": [
+        0,
+        0
+      ],
+      "featureLevel": 0
+    }
+  },
+  "geometry": {
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": [
+      "outlet1"
+    ],
+    "wall_keywords_ordered": "wall_aorta",
+    "scale_factor": 0.001
+  },
+  "boundary_conditions": {
+    "inlet": {
+      "type": "TIMEVARYING",
+      "csv_file": "ubend_inflow.csv",
+      "data_type": "flowrate",
+      "profile": "parabolic"
+    },
+    "outlets": {
+      "type": "fixedPressure",
+      "pressure_mmHg": 80
+    },
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+  "simulation_control": {
+    "cardiac_cycle_period": 0.8,
+    "number_of_cycles": 1,
+    "end_time": 0.004,
+    "writeInterval": 0.002
+  },
+  "run_settings": {
+    "solution_type": "serial",
+    "subdomains": 1
+  }
+}
