@@ -1,0 +1,72 @@
+name: Request a CFD run
+description: Ask for an AortaCFD run on a geometry you supply. Synthetic or openly licensed geometry only; the result is published on OpenCardioFlow.
+title: "[Run request] "
+labels: ["run-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the request. Read the rules first: https://jiewangnk.github.io/AortaCFD-web/request-a-run/
+
+        Short version: the geometry must be synthetic or openly licensed, with no patient-identifiable data. Everything you attach here is public, and the finished case is published under CC BY 4.0. Runs are approved by hand and take a four-core laptop a few hours, so expect days, not minutes, and a request may be declined.
+  - type: input
+    id: name
+    attributes:
+      label: What the geometry is
+      description: One line, used as the title of the case page.
+      placeholder: Synthetic aortic arch with a 50 % coarctation
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the geometry and the question
+      description: What the reader will be looking at and what you want to learn from the run. The first sentence becomes the question on the page.
+    validations:
+      required: true
+  - type: dropdown
+    id: anatomy
+    attributes:
+      label: Anatomy
+      options:
+        - aorta
+        - coronary
+        - synthetic (idealised vessel)
+        - benchmark
+    validations:
+      required: true
+  - type: dropdown
+    id: inflow
+    attributes:
+      label: Inflow
+      options:
+        - Constant, 5 L/min (one cycle, fastest)
+        - Pulsatile, default aortic waveform (70 bpm, 5 L/min mean, two cycles)
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Source and licence of the geometry
+      description: Where it comes from and under which licence it may be published.
+      placeholder: Made with aortacfd-geomgen; CC BY 4.0
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Case files
+      description: |
+        Drag one zip (up to 25 MB) into this box. It must hold, in millimetres, `inlet.stl`, `wall.stl` and the outlets as `outlet1.stl`, `outlet2.stl`, ... (closed caps, one patch per file, the AortaCFD case layout). A config.json in the zip is ignored: every requested run uses the same configuration so the pages are comparable.
+      placeholder: Drop the zip here; GitHub inserts a link.
+    validations:
+      required: true
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Conditions
+      options:
+        - label: The geometry is synthetic or openly licensed, contains no patient-identifiable data, and may be published on OpenCardioFlow under CC BY 4.0 with the source stated above.
+          required: true
+        - label: I understand that runs are approved by hand, run on a four-core laptop with a fixed configuration, may take days, and may be declined.
+          required: true

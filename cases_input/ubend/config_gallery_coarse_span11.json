@@ -1,0 +1,81 @@
+{
+  "_doc": "Method C \u2014 adaptive_span with explicit span_refinement_level. Invoke with: python run_patient.py ubend --config cases_input/ubend/config_adaptive_span.json. Identical physics / BCs / WK auto-calc to config.json \u2014 only the mesh block changes.",
+  "case_info": {
+    "patient_id": "ubend",
+    "description": "U-bend, pulsatile, 11 cells across the lumen (mesh-level study, coarse)",
+    "source": "OpenCardioFlow gallery; config_adaptive_span.json with cells_across_span changed"
+  },
+  "physics": {
+    "model": "laminar",
+    "transport_properties": {
+      "rho": 1060,
+      "nu": 3.7736e-06
+    }
+  },
+  "numerics": {
+    "profile": "standard"
+  },
+  "mesh": {
+    "boundary_layers": {
+      "enabled": true,
+      "num_layers": 3,
+      "expansion_ratio": 1.2,
+      "final_layer_thickness": 0.3,
+      "min_thickness": 0.05,
+      "relativeSizes": true
+    },
+    "SNAPPY_SETTINGS": {
+      "parallel": true,
+      "nProcessors": 4,
+      "mesh_strategy": "adaptive_span",
+      "cells_across_span": 11,
+      "span_refinement_level": 1,
+      "surfaceRefinementLevels": [
+        1,
+        1
+      ],
+      "featureLevel": 1
+    }
+  },
+  "geometry": {
+    "_doc": "reference_radius_strategy='max' (default) anchors the background-mesh sizing to the largest vessel. For the single-tube ubend this is the inlet (27.4 mm). On a multi-branch aorta, switch to 'min' if you need every branch resolved to the cells_across_span target.",
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": [
+      "outlet1"
+    ],
+    "wall_keywords_ordered": "wall_aorta",
+    "scale_factor": 0.001
+  },
+  "boundary_conditions": {
+    "inlet": {
+      "type": "TIMEVARYING",
+      "csv_file": "ubend_inflow.csv",
+      "data_type": "flowrate",
+      "profile": "parabolic"
+    },
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80,
+        "venous_pressure": 0,
+        "initial_pressure_method": "map",
+        "enable_stabilization": true
+      }
+    },
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+  "simulation_control": {
+    "cardiac_cycle_period": 0.8,
+    "number_of_cycles": 1,
+    "writeInterval": 0.016,
+    "_keep_last_cycles": 1
+  },
+  "run_settings": {
+    "solution_type": "parallel",
+    "subdomains": 4,
+    "decomposition_method": "scotch"
+  }
+}

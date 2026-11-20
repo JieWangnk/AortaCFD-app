@@ -179,3 +179,22 @@ def test_export_run_steady_single_frame(tmp_path, monkeypatch):
     assert meta["frame_times"] == [0.2]
     assert len(meta["paths"]) == 1
     assert meta["density_kg_m3"] == 1060.0
+
+
+def test_monitor_flux_reads_solver_monitor_and_prefers_restart_values(tmp_path):
+    """Shares must come from the solver's sum(phi) monitor when the run has one."""
+    from aortacfd_lib.web_export import monitor_flux
+
+    pp = tmp_path / "openfoam" / "postProcessing" / "outlet1Flow"
+    (pp / "0").mkdir(parents=True)
+    (pp / "0" / "surfaceFieldValue.dat").write_text(
+        "# Time sum(phi)\n0 0\n0.5 1e-4\n1.0 1e-4\n1.5 9e-5\n2.0 1e-4\n"
+    )
+    (pp / "1.5").mkdir()
+    (pp / "1.5" / "surfaceFieldValue.dat").write_text("# restart\n1.5 1e-4\n2.0 1e-4\n")
+    # window with several samples: trapezoid mean; the restart folder overrides the 1.5 s sample
+    assert monitor_flux(tmp_path, "outlet1", 0.5, 2.0) == pytest.approx(1e-4)
+    # window with one sample: the nearest sample to t1
+    assert monitor_flux(tmp_path, "outlet1", 2.0, 2.0) == pytest.approx(1e-4)
+    # no monitor for this patch
+    assert monitor_flux(tmp_path, "outlet2", 0.0, 2.0) is None

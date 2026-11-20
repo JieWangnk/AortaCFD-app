@@ -123,6 +123,33 @@ def despike(values: np.ndarray) -> np.ndarray:
     return np.median(stacked, axis=0)
 
 
+def monitor_flux(run_dir, patch: str, t0: float, t1: float):
+    """Time-mean volume flux (m^3/s, signed) of a patch between t0 and t1 from the
+    solver's own sum(phi) monitor (postProcessing/<patch>Flow), or None when the
+    run has no such monitor.
+
+    The saved boundary velocity of a mixed outlet condition (the stabilised
+    Windkessel velocity) is not the face flux the pressure equation conserved,
+    so flow shares taken from the saved fields can be off by more than 10 % on
+    a pulsatile run. The monitor is exact to solver tolerance.
+    """
+    files = sorted(Path(run_dir, "openfoam", "postProcessing", f"{patch}Flow").glob("*/surfaceFieldValue.dat"))
+    if not files:
+        return None
+    rows = {}
+    for f in files:  # a restart writes a second folder; later folders win on a repeated time
+        for row in np.loadtxt(f, comments="#", ndmin=2):
+            rows[float(row[0])] = float(row[1])
+    if not rows:
+        return None
+    t = np.array(sorted(rows))
+    q = np.array([rows[x] for x in t])
+    m = (t >= t0 - 1e-9) & (t <= t1 + 1e-9)
+    if m.sum() < 2:
+        return float(q[int(np.argmin(np.abs(t - t1)))])
+    return float(np.trapezoid(q[m], t[m]) / (t[m][-1] - t[m][0]))
+
+
 def patch_flux(surface) -> float:
     """Signed volume flux through a patch surface from its face velocities (m^3/s).
 
@@ -556,6 +583,25 @@ def export_run(
     q_out_sum = np.sum([np.asarray(v) for v in q_out.values()], axis=0) if q_out else np.zeros_like(q_in_arr)
     share = {o: float(np.mean(v) / (np.mean(q_out_sum) or 1.0)) for o, v in q_out.items()}
     balance = float((np.mean(q_out_sum) - np.mean(q_in_arr)) / (np.mean(q_in_arr) or 1.0))
+    flow_method = (
+        "face velocity dot face normal times face area, per patch, from the saved fields; "
+        "shares are time means over the exported frames"
+    )
+    period = (config.get("simulation_control", {}) if isinstance(config, dict) else {}).get("cardiac_cycle_period")
+    t1 = float(frame_times[-1])
+    t0 = max(float(frame_times[0]), t1 - float(period)) if (pulsatile and period) else float(frame_times[0])
+    mon_in = monitor_flux(run_dir, P["inlet"], t0, t1)
+    mon_out = {o: monitor_flux(run_dir, o, t0, t1) for o in P["outlets"]}
+    if mon_in is not None and mon_out and all(v is not None for v in mon_out.values()):
+        q_in_mon = abs(mon_in)
+        q_out_mon = float(sum(mon_out.values()))  # signed: reversed flow counts against its patch
+        share = {o: float(v / (q_out_mon or 1.0)) for o, v in mon_out.items()}
+        balance = float((q_out_mon - q_in_mon) / (q_in_mon or 1.0))
+        flow_method = (
+            f"solver sum(phi) monitors (postProcessing/<patch>Flow), time mean over t = {t0:g} to {t1:g} s"
+            + (" (the last cycle)" if pulsatile and period else "")
+            + "; the per-frame series above come from the saved fields"
+        )
     case_info = config.get("case_info", {}) if isinstance(config, dict) else {}
     sim = config.get("simulation_control", {}) if isinstance(config, dict) else {}
     meta = {
@@ -588,8 +634,7 @@ def export_run(
             "outlets_L_min": {o: np.round(np.asarray(v) * M3S_TO_LMIN, 4).tolist() for o, v in q_out.items()},
             "share_mean": {o: round(s, 4) for o, s in share.items()},
             "balance_error": round(balance, 5),
-            "method": "face velocity dot face normal times face area, per patch, from the saved fields; "
-            "shares are time means over the exported frames",
+            "method": flow_method,
         },
         "fields": fields,
         "paths": paths,

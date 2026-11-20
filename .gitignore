@@ -206,3 +206,8 @@ scripts/tile_inlet_csv.py
 
 # Real patient CT cases must never be committed (public repo)
 cases_input/PAT_0000/
+
+# Requested runs (run-request workflow): never committed
+cases_input/req-*/
+output/req-*/
+output/_requests/
