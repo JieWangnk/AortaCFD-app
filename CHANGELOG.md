@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Plug-in interface for the open core (`src/workflow/plugins.py`). Modules that
+  are not released with AortaCFD (a moving left-ventricle wall, coronary trees,
+  GPU pressure solves) live in separate packages and register their tasks,
+  workflow commands and `--steps` names through the `aortacfd.plugins`
+  entry-point group or the `AORTACFD_PLUGINS` environment variable. Built-in
+  names cannot be replaced by accident; a broken plug-in stops the run with a
+  `PluginError` that names it. `--list-steps` shows plug-in steps. Guide:
+  `docs/user-guide/plugins.md`; starter package: `examples/plugin_template/`.
+  Tests: `tests/test_workflow_plugins.py`.
+
 ## [1.5.1] - Unreleased
 
 ### Fixed

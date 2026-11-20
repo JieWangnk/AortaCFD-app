@@ -31,6 +31,7 @@ python run_patient.py BPM120              # ships with the repo — pediatric co
 | Add boundary layers (auto y+ or manual) | [`docs/user-guide/boundary-layers.md`](docs/user-guide/boundary-layers.md) |
 | Read mesh-quality caveats before trusting results | [`docs/user-guide/mesh-quality-warnings.md`](docs/user-guide/mesh-quality-warnings.md) |
 | Regenerate numerics from existing mesh quality | [`docs/user-guide/regenerate-numerics.md`](docs/user-guide/regenerate-numerics.md) |
+| Add your own steps without touching this repository (plug-ins) | [`docs/user-guide/plugins.md`](docs/user-guide/plugins.md) |
 | Learn the pipeline end-to-end on one canonical patient | [`docs/tutorial/`](docs/tutorial/README.md) — 9-session course |
 | Run parametric studies / cohorts | [`docs/workshop/`](docs/workshop/README.md) — 6 lessons + cheat sheet |
 | Pick a starter config | [`examples/`](examples/README.md) — `golden_base`, `standard`, `minimal`, `full`, `per_outlet` |

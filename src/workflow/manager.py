@@ -12,9 +12,11 @@ from typing import Any, Dict, List, Optional, Type
 
 try:
     from .base_task import logger, AortaCFDError, Task, ExecutionContext
+    from .plugins import load_plugins
     from .tasks import setup_tasks, execution_tasks
 except ImportError:
     from workflow.base_task import logger, AortaCFDError, Task, ExecutionContext
+    from workflow.plugins import load_plugins
     from workflow.tasks import setup_tasks, execution_tasks
 
 from aortacfd_lib.utils.logger import Logger
@@ -41,6 +43,7 @@ class WorkflowManager:
     config: Dict[str, Any]
     context: ExecutionContext
     available_tasks: Dict[str, Type[Task]]
+    recipes: Dict[str, List[str]]
 
     def __init__(self, config: Dict[str, Any]) -> None:
         """
@@ -53,6 +56,8 @@ class WorkflowManager:
         self.config = config
         self.context = ExecutionContext()  # Typed context for task data sharing
         self._register_tasks()
+        self.recipes = self._builtin_recipes()
+        self._load_plugins()
         self._initialize_context()  # Initialize context with config values early
 
     def _initialize_context(self) -> None:
@@ -207,27 +212,8 @@ class WorkflowManager:
             "execute_hemodynamics": execution_tasks.ExecuteHemodynamicsTask,
         }
 
-    def run_workflow(self, command: str) -> None:
-        """
-        Look up the recipe for a command and run the tasks.
-
-        Args:
-            command: Workflow command name. Available commands:
-                - "runAll": Full end-to-end simulation
-                - "createCase": Setup case without running solver
-                - "setup:dict": Generate dictionary files only
-                - "setup:bc": Generate boundary condition files
-                - "run:mesh": Execute meshing only
-                - "run:solver": Execute solver only
-                - "run:post": Execute post-processing
-                - "run:reconstruct": Reconstruct parallel case
-                - "run:hemodynamics": Compute hemodynamic metrics (WSS, TAWSS, OSI, RRT)
-                - "setup:regenerate-numerics": Regenerate schemes
-
-        Raises:
-            AortaCFDError: If command is unknown or a task fails.
-        """
-
+    def _builtin_recipes(self) -> Dict[str, List[str]]:
+        """The workflow commands shipped with the open core. Plug-ins add theirs."""
         recipes = {
             # COMMAND 1: Generates all non-mesh-dependent dictionary files.
             "setup:dict": [
@@ -303,8 +289,46 @@ class WorkflowManager:
             # Use AFTER meshing to apply mesh-quality-aware settings based on checkMesh results.
             "setup:regenerate-numerics": ["generate_numerical_schemes", "generate_solver_settings"],
         }
+        return recipes
 
-        task_sequence = recipes.get(command)
+    def _load_plugins(self) -> None:
+        """
+        Merge the tasks and recipes that installed plug-ins register.
+
+        See ``workflow/plugins.py``: plug-ins are found through the
+        ``aortacfd.plugins`` entry-point group or the ``AORTACFD_PLUGINS``
+        environment variable. A broken plug-in raises ``PluginError`` here,
+        before any task runs.
+        """
+        registry = load_plugins(self.available_tasks, self.recipes)
+        self.available_tasks.update(registry.tasks)
+        self.recipes.update(registry.recipes)
+        self.plugins = registry
+        if registry.loaded:
+            logger.info(f"Loaded plug-ins: {', '.join(registry.loaded)}")
+
+    def run_workflow(self, command: str) -> None:
+        """
+        Look up the recipe for a command and run the tasks.
+
+        Args:
+            command: Workflow command name. Available commands:
+                - "runAll": Full end-to-end simulation
+                - "createCase": Setup case without running solver
+                - "setup:dict": Generate dictionary files only
+                - "setup:bc": Generate boundary condition files
+                - "run:mesh": Execute meshing only
+                - "run:solver": Execute solver only
+                - "run:post": Execute post-processing
+                - "run:reconstruct": Reconstruct parallel case
+                - "run:hemodynamics": Compute hemodynamic metrics (WSS, TAWSS, OSI, RRT)
+                - "setup:regenerate-numerics": Regenerate schemes
+
+        Raises:
+            AortaCFDError: If command is unknown or a task fails.
+        """
+
+        task_sequence = self.recipes.get(command)
         if not task_sequence:
             raise AortaCFDError(f"Unknown command '{command}'")
 

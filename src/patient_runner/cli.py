@@ -4,6 +4,8 @@ CLI interface for patient runner - handles command-line argument parsing
 
 import sys
 import argparse
+import functools
+from typing import Dict
 
 from aortacfd_lib import __version__ as _aortacfd_version
 
@@ -23,6 +25,21 @@ STEP_MAPPING = {
     "paraview": "execute_post",  # images only (legacy alias)
     "all": "runAll",
 }
+
+
+@functools.lru_cache(maxsize=None)
+def _plugin_registry():
+    """Plug-ins found at start-up (see workflow/plugins.py); loaded once per process."""
+    from workflow.plugins import load_plugins
+
+    return load_plugins(builtin_steps=STEP_MAPPING, validate=False)
+
+
+def all_steps() -> Dict[str, str]:
+    """Built-in CLI steps plus the steps registered by plug-ins."""
+    mapping = dict(STEP_MAPPING)
+    mapping.update(_plugin_registry().steps)
+    return mapping
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -76,7 +93,7 @@ steps:
         "--step",
         action="append",
         dest="step_list",
-        choices=list(STEP_MAPPING),
+        choices=list(all_steps()),
         help="run a single step (repeatable)",
     )
 
@@ -280,6 +297,13 @@ def main():
             deps_str = f"  (after: {', '.join(deps)})" if deps else ""
             print(f"  {step_name:<22s} {description}{deps_str}")
 
+        plugin_steps = {k: v for k, v in all_steps().items() if k not in STEP_MAPPING}
+        if plugin_steps:
+            print("\nPlug-in steps:")
+            for step_name, workflow_cmd in plugin_steps.items():
+                help_text = _plugin_registry().step_help.get(step_name) or workflow_cmd
+                print(f"  {step_name:<22s} {help_text}")
+
         print("\nExamples:")
         print("  python run_patient.py BPM120 --steps case,mesh,boundary")
         print("  python run_patient.py BPM120 --steps solver")
@@ -344,7 +368,7 @@ def main():
         options["update_mode"] = True
 
     # Map CLI step names to workflow commands (also the list of valid --steps names)
-    step_mapping = dict(STEP_MAPPING)
+    step_mapping = all_steps()
     valid_steps = set(step_mapping)
     steps = []
 

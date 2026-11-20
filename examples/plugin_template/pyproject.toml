@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aortacfd-example-plugin"
+version = "0.1.0"
+description = "Starter plug-in for AortaCFD: one task, one workflow command, one CLI step"
+requires-python = ">=3.10"
+dependencies = []
+
+# AortaCFD finds the plug-in through this entry point once the package is
+# installed (pip install -e .) in the same environment as AortaCFD.
+[project.entry-points."aortacfd.plugins"]
+example = "aortacfd_example_plugin.plugin:register"
+
+[tool.setuptools.packages.find]
+where = ["src"]

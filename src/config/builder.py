@@ -290,6 +290,10 @@ class ConfigBuilder:
             result = deep_merge(result, {"visualization": visualization})
         if cardiac_cycle is not None:
             result["cardiac_cycle"] = cardiac_cycle
+        # Reserved block for plug-in settings (see workflow/plugins.py): carried
+        # through untouched so a plug-in task finds it under config["plugins"].
+        if isinstance(case_config.get("plugins"), dict):
+            result["plugins"] = json.loads(json.dumps(case_config["plugins"]))
 
         return result
 
