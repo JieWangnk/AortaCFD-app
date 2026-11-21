@@ -207,3 +207,20 @@ def test_tawss_is_the_mean_of_magnitudes_not_the_magnitude_of_the_mean():
     assert tawss is not None
     assert np.allclose(tawss, [1.5, 1.0])
     assert tawss_from_frames([np.array([2.0, 1.0])]) is None  # a steady run has no time average
+
+
+def test_wall_statistics_are_area_weighted():
+    import pyvista as pv
+    from aortacfd_lib.web_export import point_area_weights, weighted_percentile
+
+    # two triangles sharing an edge: a small one (area 0.5) and one seven times larger (area 3.5)
+    pts = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [4, 4, 0]], float)
+    poly = pv.PolyData(pts, np.array([3, 0, 1, 2, 3, 1, 2, 3]))
+    w = point_area_weights(poly)
+    assert np.isclose(w.sum(), 4.0)
+    assert np.allclose(w, [0.5 / 3, 0.5 / 3 + 3.5 / 3, 0.5 / 3 + 3.5 / 3, 3.5 / 3])
+    # the far point carries the large triangle: a weighted median lands on the shared points, not on the small one
+    x = np.array([1.0, 2.0, 2.0, 3.0])
+    assert weighted_percentile(x, w, 50) == 2.0
+    assert weighted_percentile(x, w, 99) == 3.0
+    assert np.isclose(np.average(x, weights=w), (1.0 * 0.5 / 3 + 2.0 * 2 * (0.5 / 3 + 3.5 / 3) + 3.0 * 3.5 / 3) / 4.0)

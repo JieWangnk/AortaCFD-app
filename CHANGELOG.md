@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Fixed
+- Web export: the wall statistics in the summary (`wss_p99_Pa_at_reference_frame`, `tawss_mean_Pa`, `tawss_p95_Pa`) are area-weighted over the exported wall points; the plain point statistics counted regions with small faces more than their area, so the same flow gave a different TAWSS mean at different mesh levels.
 - Hemodynamics report: the inlet and outlet pressure means (and so the per-outlet pressure drop) are now time-weighted over the settled window, like the flow split; the plain sample mean over the whole run over-weighted the densely sampled start-up and gave non-monotone drops across mesh levels. The settled mean itself is trapezoid-weighted now.
 - Web export: `tawss_mean_Pa` and `tawss_p95_Pa` are the time mean of the shear magnitude over the exported frames (TAWSS proper); before, they were the magnitude of the solver's mean shear vector, which is lower wherever the shear reverses.
 - `mesh_strategy: adaptive_span` now applies span refinement when the case sets `cells_across_span` itself. Before, a case that set the target without `span_refinement_enabled` got the fallback background mesh silently, so a "coarse" and a "fine" run came out with the same mesh (found on the U-bend gallery runs, 21 Nov 2026). Regression test in `tests/test_mesh_setup.py`.

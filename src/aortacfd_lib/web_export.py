@@ -335,6 +335,28 @@ def tawss_from_frames(w_frames) -> Optional[np.ndarray]:
     return np.mean(np.stack([np.asarray(w, float) for w in w_frames]), axis=0)
 
 
+def point_area_weights(poly) -> np.ndarray:
+    """Wall area around each point of a triangle surface: a third of every adjacent triangle.
+
+    The summary statistics are weighted with these, so a mesh with small faces in
+    one region (refinement, layers) does not count that region more than its area.
+    """
+    faces = _faces_of(poly)
+    area = np.asarray(poly.compute_cell_sizes(length=False, volume=False)["Area"], float)
+    w = np.zeros(poly.n_points)
+    np.add.at(w, faces.ravel(), np.repeat(area / 3.0, 3))
+    return w
+
+
+def weighted_percentile(x, w, q: float) -> float:
+    """Value below which the fraction q/100 of the total weight lies."""
+    x = np.asarray(x, float)
+    w = np.asarray(w, float)
+    order = np.argsort(x)
+    cw = np.cumsum(w[order])
+    return float(x[order][min(int(np.searchsorted(cw, q / 100.0 * cw[-1])), len(x) - 1)])
+
+
 def _point_field(poly, name: str, index: np.ndarray, ncomp: int) -> np.ndarray:
     """Point array ``name`` at the given point indices; zeros (with a warning) when the array is missing."""
     if name in poly.point_data:
@@ -667,18 +689,20 @@ def export_run(
         shutil.copyfile(poster, target)
         meta["poster"] = target.name
     meta.update(_run_numbers(run_dir))
+    area_w = point_area_weights(wall)  # the wall statistics below are area-weighted
     summary = {
         "inlet_flow_mean_L_min": round(float(np.mean(q_in_arr)) * M3S_TO_LMIN, 3),
         "inlet_flow_peak_L_min": round(float(np.max(q_in_arr)) * M3S_TO_LMIN, 3),
-        "wss_p99_Pa_at_reference_frame": round(float(np.percentile(w_frames[ref], 99)), 3),
+        "wss_p99_Pa_at_reference_frame": round(weighted_percentile(w_frames[ref], area_w, 99), 3),
         "wall_pressure_range_mmHg_at_reference_frame": [
             round(float(p_frames[ref].min()), 2),
             round(float(p_frames[ref].max()), 2),
         ],
+        "wall_statistics": "area-weighted over the exported wall points",
     }
     if tawss is not None:
-        summary["tawss_mean_Pa"] = round(float(tawss.mean()), 3)
-        summary["tawss_p95_Pa"] = round(float(np.percentile(tawss, 95)), 3)
+        summary["tawss_mean_Pa"] = round(float(np.average(tawss, weights=area_w)), 3)
+        summary["tawss_p95_Pa"] = round(weighted_percentile(tawss, area_w, 95), 3)
     meta["summary"] = summary
     (out_dir / "meta.json").write_text(json.dumps(meta, separators=(",", ":")))
     logger.info("web_export: wrote %s (glb %d B, bin %d B)", out_dir, glb_bytes, len(blob.buf))
