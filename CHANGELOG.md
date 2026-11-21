@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+### Fixed
+- `mesh_strategy: adaptive_span` now applies span refinement when the case sets `cells_across_span` itself. Before, a case that set the target without `span_refinement_enabled` got the fallback background mesh silently, so a "coarse" and a "fine" run came out with the same mesh (found on the U-bend gallery runs, 21 Nov 2026). Regression test in `tests/test_mesh_setup.py`.
+
 ### Added
 - "Request a CFD run" issue form (`.github/ISSUE_TEMPLATE/run-request.yml`) and the `run-request` workflow: a request labelled `approved` runs on a self-hosted runner with a fixed configuration and is published on OpenCardioFlow.
 - `web_export` takes flow shares and the balance error from the solver's `sum(phi)` monitors when the run has them; the saved velocity of a mixed outlet condition is not the conserved face flux and gave a 14 % imbalance on a pulsatile run.

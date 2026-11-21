@@ -2,7 +2,7 @@
   "_doc": "Method C \u2014 adaptive_span with explicit span_refinement_level. Invoke with: python run_patient.py ubend --config cases_input/ubend/config_adaptive_span.json. Identical physics / BCs / WK auto-calc to config.json \u2014 only the mesh block changes.",
   "case_info": {
     "patient_id": "ubend",
-    "description": "U-bend, pulsatile, 26 cells across the lumen (mesh-level study, fine)",
+    "description": "Gallery mesh study: U-bend at 26 cells across the span (span refinement level 1, three layers); one of three levels 12/18/26",
     "source": "OpenCardioFlow gallery; config_adaptive_span.json with cells_across_span changed"
   },
   "physics": {

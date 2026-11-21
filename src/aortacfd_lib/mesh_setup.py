@@ -510,13 +510,19 @@ class GeometryAnalyzer:
         span_refinement_enabled = self.snappy_settings.get("span_refinement_enabled", False)
         cells_across_span = self.snappy_settings.get("cells_across_span", 0)
 
-        # Strategy-driven: adaptive_span auto-enables span when no explicit resolution given
-        if self.mesh_strategy == "adaptive_span" and not span_refinement_enabled and cells_across_span <= 0:
+        # Strategy-driven: adaptive_span enables span refinement on its own, at the default
+        # target when the case gives none and at the case's own cells_across_span otherwise.
+        # (Before 21 Nov 2026 a case that set cells_across_span without span_refinement_enabled
+        # got no span refinement at all, silently: two "coarse" and "fine" runs came out identical.)
+        if self.mesh_strategy == "adaptive_span" and not span_refinement_enabled:
             span_refinement_enabled = True
-            cells_across_span = self.snappy_settings.get("default_cells_across_span", 12)
+            if cells_across_span <= 0:
+                cells_across_span = self.snappy_settings.get("default_cells_across_span", 12)
+                self.log.info(f"adaptive_span: auto-enabled span refinement with target={cells_across_span}")
+            else:
+                self.log.info(f"adaptive_span: span refinement enabled for the case's target of {cells_across_span}")
             self.snappy_settings["span_refinement_enabled"] = True
             self.snappy_settings["cells_across_span"] = cells_across_span
-            self.log.info(f"adaptive_span: auto-enabled span refinement with target={cells_across_span}")
 
         if self.reference_radius_m is not None and self.reference_radius_m > 0:
             D_ref_m = 2.0 * self.reference_radius_m

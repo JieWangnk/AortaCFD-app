@@ -1155,6 +1155,52 @@ class TestSpanRefinementLevel:
             # Should auto-calculate a span level (exact value depends on algorithm)
             assert level >= 1 and level <= 4
 
+    @patch("aortacfd_lib.mesh_setup.PatchProcessing")
+    @patch("aortacfd_lib.mesh_setup.Logger")
+    @patch("aortacfd_lib.mesh_setup.Environment")
+    @patch("aortacfd_lib.mesh_setup.FileSystemLoader")
+    def test_adaptive_span_uses_explicit_cells_across_span(self, mock_loader, mock_env, mock_logger, mock_patch):
+        """adaptive_span with a case-given cells_across_span (and no span_refinement_enabled key) must
+        enable span refinement at that target; before the fix it silently gave the fallback mesh."""
+        from aortacfd_lib.mesh_setup import GeometryAnalyzer
+
+        mock_patch_instance = MagicMock()
+        mock_patch_instance.calculate_inlet_center_radius.return_value = (
+            np.array([0.0, 0.0, 0.0]),
+            0.012,
+            np.array([0.0, 0.0, 1.0]),
+        )
+        mock_patch.return_value = mock_patch_instance
+
+        config = {
+            "geometry": {
+                "wall_keywords_ordered": "wall",
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": [],
+            },
+            "mesh": {
+                "SNAPPY_SETTINGS": {
+                    "mesh_strategy": "adaptive_span",
+                    "cells_across_span": 26,
+                    "span_refinement_level": 1,
+                    "surfaceRefinementLevels": [1, 1],
+                }
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "constant" / "triSurface").mkdir(parents=True)
+            analyzer = GeometryAnalyzer(config, tmpdir)
+            analyzer.reference_radius_m = 0.012
+
+            cell_size_m, source = analyzer._cell_size_from_default_fallback()
+
+            assert analyzer.snappy_settings["span_refinement_enabled"] is True
+            assert analyzer.snappy_settings["cells_across_span"] == 26
+            # 26 across a 24 mm span at span level 1: blockMesh 13 cells/D, cell size 24/13 mm
+            assert abs(cell_size_m - 0.024 / 13) < 1e-6
+            assert "26" in source
+
 
 class TestResolveCellSize:
     """Test _resolve_cell_size method (priority system)."""
