@@ -187,9 +187,7 @@ def test_monitor_flux_reads_solver_monitor_and_prefers_restart_values(tmp_path):
 
     pp = tmp_path / "openfoam" / "postProcessing" / "outlet1Flow"
     (pp / "0").mkdir(parents=True)
-    (pp / "0" / "surfaceFieldValue.dat").write_text(
-        "# Time sum(phi)\n0 0\n0.5 1e-4\n1.0 1e-4\n1.5 9e-5\n2.0 1e-4\n"
-    )
+    (pp / "0" / "surfaceFieldValue.dat").write_text("# Time sum(phi)\n0 0\n0.5 1e-4\n1.0 1e-4\n1.5 9e-5\n2.0 1e-4\n")
     (pp / "1.5").mkdir()
     (pp / "1.5" / "surfaceFieldValue.dat").write_text("# restart\n1.5 1e-4\n2.0 1e-4\n")
     # window with several samples: trapezoid mean; the restart folder overrides the 1.5 s sample
@@ -198,3 +196,14 @@ def test_monitor_flux_reads_solver_monitor_and_prefers_restart_values(tmp_path):
     assert monitor_flux(tmp_path, "outlet1", 2.0, 2.0) == pytest.approx(1e-4)
     # no monitor for this patch
     assert monitor_flux(tmp_path, "outlet2", 0.0, 2.0) is None
+
+
+def test_tawss_is_the_mean_of_magnitudes_not_the_magnitude_of_the_mean():
+    from aortacfd_lib.web_export import tawss_from_frames
+
+    # one wall point whose shear flips sign between the frames: |mean vector| would be 0
+    frames = [np.array([2.0, 1.0]), np.array([2.0, 1.0]), np.array([2.0, 1.0]), np.array([0.0, 1.0])]
+    tawss = tawss_from_frames(frames)
+    assert tawss is not None
+    assert np.allclose(tawss, [1.5, 1.0])
+    assert tawss_from_frames([np.array([2.0, 1.0])]) is None  # a steady run has no time average

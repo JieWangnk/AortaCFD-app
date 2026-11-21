@@ -323,6 +323,18 @@ def _wall_surface(surface, max_faces: int):
     return tri
 
 
+def tawss_from_frames(w_frames) -> Optional[np.ndarray]:
+    """Time-averaged wall shear stress: the mean over the exported frames of |wss| per wall point.
+
+    This is the mean of magnitudes. The magnitude of the solver's mean vector
+    (wallShearStressMean) is smaller wherever the shear changes direction and
+    was used here before 21 Nov 2026. One frame (a steady run) gives no TAWSS.
+    """
+    if len(w_frames) < 2:
+        return None
+    return np.mean(np.stack([np.asarray(w, float) for w in w_frames]), axis=0)
+
+
 def _point_field(poly, name: str, index: np.ndarray, ncomp: int) -> np.ndarray:
     """Point array ``name`` at the given point indices; zeros (with a warning) when the array is missing."""
     if name in poly.point_data:
@@ -487,9 +499,7 @@ def export_run(
         if k in key_idx:
             lines = _streamlines(internal, surf[P["inlet"]], n_paths, 3.0 * diag, rng)
             path_sets[k] = lines
-    tawss = None
-    if "wallShearStressMean" in wf.point_data:
-        tawss = np.linalg.norm(np.asarray(wf.point_data["wallShearStressMean"], float)[nearest], axis=1) * rho
+    tawss = tawss_from_frames(w_frames)
 
     # --- quantised fields into the blob ---
     p_all = np.concatenate(p_frames)

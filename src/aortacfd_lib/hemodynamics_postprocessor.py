@@ -28,6 +28,8 @@ from dataclasses import dataclass, field
 
 from .constants import PA_TO_MMHG, BLOOD_DENSITY_DEFAULT
 
+_TRAPEZOID = getattr(np, "trapezoid", None) or np.trapz  # numpy 2 renamed trapz
+
 try:
     import matplotlib.pyplot as plt
 
@@ -737,13 +739,18 @@ boundaryField
             self.log.warning("postProcessing directory not found")
             return
 
-        # Read inlet pressure
+        # Read inlet pressure. The means are time-weighted over the settled window
+        # (see _settled_mean); a plain sample mean over the whole run was dominated
+        # by the densely sampled start-up on short runs.
         inlet_data = self._read_surface_field_value(f"{self.inlet_patch}Pressure")
         if inlet_data is not None:
             times, pressures = inlet_data
             results.time_series = times.tolist()
             results.pressure_inlet_series = pressures.tolist()
-            results.pressure_inlet = float(np.mean(pressures))
+            results.pressure_inlet = self._settled_mean(times, pressures)
+            self.log.info(
+                f"Pressure means: time-weighted over t = {self._settled_start(times):.3f} to {float(times[-1]):.3f} s"
+            )
 
         # Read each outlet pressure
         for outlet in self.outlet_patches:
@@ -751,7 +758,7 @@ boundaryField
             if outlet_data is not None:
                 times, pressures = outlet_data
                 results.pressure_outlet_series[outlet] = pressures.tolist()
-                results.pressure_outlets[outlet] = float(np.mean(pressures))
+                results.pressure_outlets[outlet] = self._settled_mean(times, pressures)
 
                 # Compute pressure drop
                 if results.pressure_inlet > 0:
@@ -767,26 +774,36 @@ boundaryField
             for outlet, dp_mmhg in results.pressure_drop_mmhg.items():
                 self.log.info(f"  → {outlet}: {dp_mmhg:.2f} mmHg")
 
-    def _settled_mean(self, times: np.ndarray, values: np.ndarray) -> float:
-        """Mean over the settled part of a monitor series.
+    def _settled_start(self, times: np.ndarray) -> float:
+        """Start of the settled window of a monitor series.
 
-        Pulsatile: samples from skip_cycles × cardiac_cycle onwards, or the last
-        full cycle when the run is shorter than that. Steady: the last 10 % of samples.
+        Pulsatile: skip_cycles × cardiac_cycle, or the last full cycle when the run is
+        shorter than that. Steady: the last 10 % of the run time.
+        """
+        if self.is_pulsatile and self.cardiac_cycle and self.cardiac_cycle > 0:
+            t_end = float(times[-1])
+            skip_time = self.skip_cycles * self.cardiac_cycle
+            return skip_time if t_end > skip_time + 0.5 * self.cardiac_cycle else max(0.0, t_end - self.cardiac_cycle)
+        return float(times[0]) + 0.9 * (float(times[-1]) - float(times[0]))
+
+    def _settled_mean(self, times: np.ndarray, values: np.ndarray) -> float:
+        """Time-weighted mean (trapezoid rule) over the settled part of a monitor series.
+
+        The monitors are written every few time steps, so the samples crowd where the
+        time step is small (the start-up, peak systole). A plain sample mean over-weights
+        those stretches; the trapezoid mean weights every stretch by its duration.
         """
         times = np.asarray(times, dtype=float)
         values = np.asarray(values, dtype=float)
         if times.size == 0:
             return 0.0
-        if self.is_pulsatile and self.cardiac_cycle and self.cardiac_cycle > 0:
-            t_end = float(times[-1])
-            skip_time = self.skip_cycles * self.cardiac_cycle
-            start = skip_time if t_end > skip_time + 0.5 * self.cardiac_cycle else max(0.0, t_end - self.cardiac_cycle)
-        else:
-            start = float(times[0]) + 0.9 * (float(times[-1]) - float(times[0]))
-        mask = times >= start
-        if not mask.any():
+        mask = times >= self._settled_start(times)
+        if mask.sum() < 2:
             mask = np.ones(times.shape, dtype=bool)
-        return float(np.mean(values[mask]))
+        t, v = times[mask], values[mask]
+        if t.size < 2 or t[-1] <= t[0]:
+            return float(np.mean(v))
+        return float(_TRAPEZOID(v, t) / (t[-1] - t[0]))
 
     def _compute_measured_flow_split(self, results: HemodynamicsResults) -> None:
         """Cycle-averaged flow through every patch from the <patch>Flow function objects.

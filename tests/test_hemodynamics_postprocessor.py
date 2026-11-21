@@ -644,6 +644,30 @@ class TestComputePressureDrop:
         # Should handle gracefully
         assert results.pressure_inlet == 0.0
 
+    def test_pressure_means_are_time_weighted_over_the_settled_window(self):
+        """Constant inflow: the settled window is the last 10 % of the run. Samples crowd
+        in the middle of that window with a different value; the trapezoid mean weights
+        them by duration, a sample mean would not."""
+        inlet_dir = os.path.join(self.temp_dir, "postProcessing", "inletPressure", "0")
+        outlet_dir = os.path.join(self.temp_dir, "postProcessing", "outlet1Pressure", "0")
+        os.makedirs(inlet_dir, exist_ok=True)
+        os.makedirs(outlet_dir, exist_ok=True)
+        times = [round(0.1 * k, 3) for k in range(10)] + [round(0.9 + 0.01 * k, 3) for k in range(1, 10)] + [1.0]
+        inlet = {t: (0.0 if 0.905 < t < 0.995 else 100.0) for t in times}
+        with open(os.path.join(inlet_dir, "surfaceFieldValue.dat"), "w") as f:
+            f.write("# t p\n" + "".join(f"{t} {inlet[t]}\n" for t in sorted(inlet)))
+        with open(os.path.join(outlet_dir, "surfaceFieldValue.dat"), "w") as f:
+            f.write("# t p\n" + "".join(f"{t} 20.0\n" for t in sorted(inlet)))
+
+        processor = HemodynamicsPostProcessor(self.temp_dir, self.config)
+        results = HemodynamicsResults()
+        processor._compute_pressure_drop(results)
+
+        # window 0.9-1.0 s: 100 at both ends, 0 in between (9 samples); trapezoid = 10, sample mean = 18.2
+        assert results.pressure_inlet == pytest.approx(10.0, rel=1e-6)
+        assert results.pressure_outlets["outlet1"] == pytest.approx(20.0)
+        assert results.pressure_drops["outlet1"] == pytest.approx(-10.0, rel=1e-6)
+
 
 class TestExportQoi:
     """Test export_qoi method."""
