@@ -19,7 +19,7 @@ config = {
         "foundation": True,
         "solver_names": {"incompressible": "foamRun", "windkessel": "foamRun"},
         "windkessel": {
-            "repository": "https://github.com/JieWangnk/OpenFOAM-WK",
+            "repository": "https://github.com/JieWangnk/OpenFOAM_WK",
             "boundary_condition": "modularWKPressure",
             "solver_name": "foamRun",
             "solver_module": "incompressibleFluid",

@@ -106,8 +106,19 @@ steps:
     from .core import PatientCaseRunner as _PCR
 
     profile_choices = list(_PCR().get_available_profiles().keys())
-    config_group.add_argument("--profile", metavar="NAME", choices=profile_choices, help="override simulation profile")
-    config_group.add_argument("--quick", action="store_true", help="coarse-mesh fast-settings test mode")
+    config_group.add_argument(
+        "--profile",
+        metavar="NAME",
+        choices=profile_choices,
+        help="apply a catalogue profile on top of the case config for this run: sets the cells across the "
+        "vessel, the numerics profile and the Courant limit; physics.model is unchanged "
+        f"(choices: {', '.join(profile_choices)})",
+    )
+    config_group.add_argument(
+        "--quick",
+        action="store_true",
+        help="same as --profile sim_laminar_coarse: 10 cells across the vessel, first-order numerics, Courant 0.5",
+    )
     config_group.add_argument(
         "--end-time",
         metavar="T",

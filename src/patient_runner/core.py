@@ -238,6 +238,13 @@ class PatientCaseRunner:
             Simulation configuration dictionary with same structure as old system
         """
         config = case_info["config"].copy()
+
+        # CLI catalogue override (--profile sim_* or --quick): applied on top of the case config
+        # before the three-layer merge, so the catalogue entry decides mesh resolution,
+        # numerics profile and Courant limit for this run only.
+        if options and options.get("profile"):
+            config = self._apply_cli_profile_override(config, options)
+
         # Use output_id for output directory (may differ from patient_id for multi-config runs)
         patient_output_dir = self.output_dir / case_info["output_id"]
         patient_output_dir.mkdir(parents=True, exist_ok=True)
@@ -270,6 +277,63 @@ class PatientCaseRunner:
             "case_config_file": case_info["config_file"],
             "parallel": merged_config["mesh"]["SNAPPY_SETTINGS"].get("parallel", False),
         }
+
+    # Catalogue solver_recipe_fragment -> numerics profile name in src/config/profiles/numerics/
+    _RECIPE_TO_NUMERICS_PROFILE = {"robust": "robust", "balanced": "standard", "aggressive": "precise"}
+
+    def _apply_cli_profile_override(self, config: Dict[str, Any], options: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Apply a catalogue profile chosen on the command line (--profile NAME or --quick).
+
+        The catalogue entry (see _profile_catalog) sets three things on a deep copy of the
+        case config and leaves everything else, including physics.model, unchanged:
+          - numerics.profile   from solver_recipe_fragment (robust / balanced -> standard / aggressive -> precise)
+          - numerics.max_co    from max_CFL
+          - cells across the vessel from mesh_resolution, written as
+            mesh.SNAPPY_SETTINGS.cells_across_span with mesh_strategy adaptive_span; the case's own
+            resolution keys (goal, span_target, cells_per_diameter, target_cell_size_mm,
+            mesh_resolution, span_refinement_level) are removed so the override cannot be shadowed.
+
+        Returns the modified copy. Raises PatientConfigurationError for an unknown profile name.
+        """
+        import copy
+
+        config = copy.deepcopy(config)
+        simulation_settings = config.get("simulation_settings") or {}
+        profile_key, profile_data, _variant = self._resolve_profile_choice(
+            simulation_settings, options, self._profile_catalog()
+        )
+
+        recipe = str(profile_data.get("solver_recipe_fragment", "balanced")).lower()
+        numerics_profile = self._RECIPE_TO_NUMERICS_PROFILE.get(recipe, "standard")
+        numerics = config.setdefault("numerics", {})
+        numerics["profile"] = numerics_profile
+        if profile_data.get("max_CFL") is not None:
+            numerics["max_co"] = float(profile_data["max_CFL"])
+
+        cells_across = profile_data.get("mesh_resolution")
+        if cells_across:
+            mesh = config.setdefault("mesh", {})
+            for key in ("goal", "span_target", "cells_per_diameter", "target_cell_size_mm", "mesh_resolution"):
+                mesh.pop(key, None)
+            snappy = mesh.setdefault("SNAPPY_SETTINGS", {})
+            snappy.pop("span_refinement_level", None)
+            snappy["mesh_strategy"] = "adaptive_span"
+            snappy["cells_across_span"] = int(cells_across)
+
+        model = str(config.get("physics", {}).get("model", "laminar")).lower()
+        solver_type = str(profile_data.get("solver_type", "laminar")).lower()
+        if not model.startswith(solver_type):
+            self.logger.warning(
+                f"--profile {profile_key} is a {solver_type} catalogue entry; physics.model stays '{model}'. "
+                "Only the mesh resolution, the numerics profile and the Courant limit are overridden."
+            )
+
+        self.logger.info(
+            f"CLI profile override '{profile_key}': numerics.profile={numerics_profile}, "
+            f"max_co={numerics.get('max_co')}, cells across vessel={cells_across}"
+        )
+        return config
 
     def _resolve_run_directory(self, patient_output_dir: Path, options: Optional[Dict[str, Any]] = None) -> Path:
         """

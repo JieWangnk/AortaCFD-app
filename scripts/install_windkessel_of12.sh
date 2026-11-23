@@ -20,7 +20,7 @@ fi
 
 # Set installation directory
 INSTALL_DIR="${PWD}/windkessel_of12"
-REPO_URL="https://github.com/JieWangnk/OpenFOAM-WK.git"
+REPO_URL="https://github.com/JieWangnk/OpenFOAM_WK.git"
 
 echo "Installing to: $INSTALL_DIR"
 
@@ -31,7 +31,7 @@ cd "$INSTALL_DIR"
 # Clone the repository if not already present
 if [ ! -d "OpenFOAM-WK" ]; then
     echo "Cloning Windkessel repository..."
-    git clone "$REPO_URL"
+    git clone "$REPO_URL" OpenFOAM-WK
 else
     echo "Repository already exists, updating..."
     cd OpenFOAM-WK

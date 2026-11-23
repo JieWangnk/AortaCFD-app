@@ -707,3 +707,90 @@ class TestApplyTimeSteppingSettings:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
+
+
+class TestCliProfileOverride:
+    """--profile NAME / --quick apply a catalogue entry on top of the case config (1.5.1 fix)."""
+
+    def _case_config(self):
+        return {
+            "physics": {"model": "laminar"},
+            "numerics": {"profile": "standard", "max_co": 0.8},
+            "mesh": {
+                "goal": "routine_hemodynamics",
+                "cells_per_diameter": 15,
+                "SNAPPY_SETTINGS": {"cells_across_span": 20, "span_refinement_level": 2, "addLayers": False},
+            },
+            "geometry": {
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet"],
+                "wall_keywords_ordered": "wall",
+                "scale_factor": 0.001,
+            },
+            "boundary_conditions": {
+                "inlet": {"type": "CONSTANT", "cardiac_output": 5.0},
+                "outlets": {"type": "zeroGradient"},
+                "walls": {"type": "no_slip"},
+            },
+            "simulation_control": {"end_time": 0.1},
+            "run_settings": {"solution_type": "serial"},
+        }
+
+    def test_quick_entry_sets_mesh_numerics_and_courant(self):
+        runner = PatientCaseRunner()
+        original = self._case_config()
+        out = runner._apply_cli_profile_override(original, {"profile": "sim_laminar_coarse"})
+
+        assert out["numerics"]["profile"] == "robust"
+        assert out["numerics"]["max_co"] == 0.5
+        snappy = out["mesh"]["SNAPPY_SETTINGS"]
+        assert snappy["cells_across_span"] == 10
+        assert snappy["mesh_strategy"] == "adaptive_span"
+        assert "span_refinement_level" not in snappy
+        assert snappy["addLayers"] is False, "unrelated snappy keys are kept"
+        for key in ("goal", "cells_per_diameter", "span_target", "mesh_resolution", "target_cell_size_mm"):
+            assert key not in out["mesh"], f"case resolution key {key} must not shadow the override"
+        assert out["physics"]["model"] == "laminar", "physics model is not changed by the override"
+        # the case config object is left untouched
+        assert original["numerics"]["profile"] == "standard"
+        assert original["mesh"]["SNAPPY_SETTINGS"]["cells_across_span"] == 20
+
+    def test_recipe_to_profile_mapping(self):
+        runner = PatientCaseRunner()
+        expected = {"sim_laminar_coarse": "robust", "sim_laminar_medium": "standard", "sim_laminar_fine": "precise"}
+        for key, profile in expected.items():
+            out = runner._apply_cli_profile_override(self._case_config(), {"profile": key})
+            assert out["numerics"]["profile"] == profile, key
+
+    def test_unknown_profile_raises(self):
+        runner = PatientCaseRunner()
+        with pytest.raises(PatientConfigurationError):
+            runner._apply_cli_profile_override(self._case_config(), {"profile": "sim_does_not_exist"})
+
+    def test_prepare_simulation_carries_override_into_merged_config(self, monkeypatch):
+        """End to end through _prepare_simulation_new_system: the merged config reflects the catalogue entry."""
+        runner = PatientCaseRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            monkeypatch.chdir(tmp)  # the builder resolves cases_input/<case> from the working directory
+            runner.output_dir = Path(tmp) / "output"
+            case_dir = Path(tmp) / "cases_input" / "PAT001"
+            case_dir.mkdir(parents=True)
+            case_info = {
+                "patient_id": "PAT001",
+                "output_id": "PAT001",
+                "config": self._case_config(),
+                "config_file": str(case_dir / "config.json"),
+                "patient_dir": str(case_dir),
+            }
+            plain = runner._prepare_simulation_new_system(case_info, {"run_name": "plain"})
+            quick = runner._prepare_simulation_new_system(
+                case_info, {"run_name": "quick", "profile": "sim_laminar_coarse"}
+            )
+
+        assert plain["profile_name"] == "laminar_standard"
+        assert plain["config"]["simulation_control"]["controlDict"]["maxCo"] == 0.8
+        assert quick["profile_name"] == "laminar_robust"
+        assert quick["config"]["simulation_control"]["controlDict"]["maxCo"] == 0.5
+        assert quick["config"]["mesh"]["SNAPPY_SETTINGS"]["cells_across_span"] == 10
+        assert quick["config"]["mesh"]["SNAPPY_SETTINGS"]["mesh_strategy"] == "adaptive_span"
+        assert plain["config"]["mesh"]["SNAPPY_SETTINGS"]["cells_across_span"] == 20
