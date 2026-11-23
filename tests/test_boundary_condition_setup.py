@@ -8,6 +8,7 @@ import pytest
 import sys
 import os
 import tempfile
+import numpy as np
 import shutil
 import math
 from pathlib import Path
@@ -1004,3 +1005,62 @@ class TestTurbulenceWithMeanVelocity:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestParabolicInletTypeMeanVelocity:
+    """PARABOLIC inlet type: a flow-derived velocity is already the mean and must not be halved (fix of 23 Nov 2026)."""
+
+    def setup_method(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.case_dir = os.path.join(self.temp_dir, "test_case")
+        os.makedirs(os.path.join(self.case_dir, "constant", "triSurface"), exist_ok=True)
+
+    def teardown_method(self):
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+
+    def _config(self, inlet):
+        return {
+            "geometry": {
+                "case_name": "test",
+                "inlet_keywords_ordered": "inlet",
+                "outlet_keywords_ordered": ["outlet1"],
+                "wall_keywords_ordered": "wall",
+                "scale_factor": 1e-3,
+            },
+            "boundary_conditions": {"inlet": inlet, "outlets": {"type": "ZEROGRADIENT"}},
+            "physics": {"simulation_type": "laminar"},
+            "openfoam_version": "12",
+        }
+
+    @staticmethod
+    def _magnitude(vector_string):
+        parts = [float(x) for x in vector_string.strip("()").split()]
+        return sum(p * p for p in parts) ** 0.5
+
+    @patch("aortacfd_lib.boundary_condition_setup.detect_world_patch_mode", return_value=False)
+    @patch("aortacfd_lib.utils.patch_processing.PatchProcessing")
+    def test_cardiac_output_gives_mean_velocity_unhalved(self, mock_patch_processing, mock_world):
+        mock_processor = Mock()
+        mock_processor.calculate_normal_direction.return_value = (0, 0, 1)
+        mock_processor.calculate_surface_area.return_value = 5.0e-4  # m², a 25 mm inlet
+        mock_processor.calculate_inlet_center_radius.return_value = (np.zeros(3), 0.0126, np.array([0.0, 0.0, 1.0]))
+        mock_patch_processing.return_value = mock_processor
+
+        inlet = {"type": "PARABOLIC", "cardiac_output": 5.0, "orientation": "out"}  # "out": no STL read
+        bc = BoundaryConditionSetup(self._config(inlet), self.case_dir)
+        magnitude = self._magnitude(bc._calculate_inlet_velocity_vector())
+        expected = 5.0 / 60.0 / 1000.0 / 5.0e-4  # Q / A = 0.1667 m/s
+        assert abs(magnitude - expected) < 1e-6, "flow-derived velocity is the mean already; it must not be halved"
+
+    @patch("aortacfd_lib.boundary_condition_setup.detect_world_patch_mode", return_value=False)
+    @patch("aortacfd_lib.utils.patch_processing.PatchProcessing")
+    def test_specified_velocity_is_read_as_centreline_and_halved(self, mock_patch_processing, mock_world):
+        mock_processor = Mock()
+        mock_processor.calculate_normal_direction.return_value = (0, 0, 1)
+        mock_processor.calculate_inlet_center_radius.return_value = (np.zeros(3), 0.0126, np.array([0.0, 0.0, 1.0]))
+        mock_patch_processing.return_value = mock_processor
+
+        inlet = {"type": "PARABOLIC", "velocity": 1.0, "orientation": "out"}
+        bc = BoundaryConditionSetup(self._config(inlet), self.case_dir)
+        assert abs(self._magnitude(bc._calculate_inlet_velocity_vector()) - 0.5) < 1e-9

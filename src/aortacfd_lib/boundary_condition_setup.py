@@ -406,6 +406,7 @@ class BoundaryConditionSetup:
         if "flowrate" in self.inlet_settings and "cardiac_output" not in self.inlet_settings:
             self.inlet_settings["cardiac_output"] = self.inlet_settings["flowrate"]
 
+        velocity_is_centerline = False
         if "cardiac_output" in self.inlet_settings:
             # Calculate velocity from cardiac output (L/min) and inlet area
             cardiac_output_Lmin = self.inlet_settings["cardiac_output"]
@@ -431,6 +432,7 @@ class BoundaryConditionSetup:
         elif "velocity" in self.inlet_settings:
             # Use directly specified velocity
             velocity_magnitude = self.inlet_settings["velocity"]
+            velocity_is_centerline = True
             self.log.info(f"Using specified velocity: {velocity_magnitude:.4f} m/s")
         else:
             self.log.error(
@@ -438,15 +440,17 @@ class BoundaryConditionSetup:
             )
             return "(0 0 0)"
 
-        # For parabolic profile at the boundary, we use centerline velocity
-        # (the actual parabolic distribution would need non-uniform BC)
-        if inlet_type == "PARABOLIC":
-            # For uniform BC with parabolic intent, use mean velocity
+        # The PARABOLIC inlet type writes a uniform fixedValue at the MEAN velocity. A velocity derived
+        # from cardiac_output or flowrate is already the mean (Q / A) and must not be halved; a directly
+        # specified `velocity` is read as the centreline value of a parabolic profile, whose mean is half.
+        if inlet_type == "PARABOLIC" and velocity_is_centerline:
             velocity_magnitude = velocity_magnitude / 2.0
             self.log.warning(
-                "PARABOLIC inlet type with fixedValue BC uses mean velocity. "
-                "For true parabolic profile, consider using groovyBC or codedFixedValue."
+                "PARABOLIC inlet type with fixedValue BC uses the mean velocity (centreline / 2). "
+                "For a true parabolic shape use the CONSTANT type with an inlet profile."
             )
+        elif inlet_type == "PARABOLIC":
+            self.log.info("PARABOLIC inlet type with fixedValue BC: mean velocity from the flow rate, not halved.")
 
         # Get inlet normal direction from geometry (STLs are pre-scaled, no scale_factor)
         try:
