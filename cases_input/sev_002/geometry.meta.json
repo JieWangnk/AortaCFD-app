@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "case_id": "sev_002",
+  "generated_utc": "2026-05-18T16:49:02+00:00",
+  "generator": "blender_aorta_like_generator",
+  "generator_path": "blender_aorta_like_generator.py",
+  "mode": "sweep",
+  "sampler": null,
+  "sample_index": 2,
+  "seed": null,
+  "spec_name": "sweep_severity_3",
+  "geometry": "arch_branched_coarctation",
+  "params": {
+    "diameter": 24.0,
+    "ascending_length": 45.0,
+    "arch_span": 70.0,
+    "arch_height": 35.0,
+    "descending_length": 80.0,
+    "branch_count": 3,
+    "branch_diameter_ratio": 0.42,
+    "branch_length": 35.0,
+    "branch_spacing": 14.0,
+    "branch_tilt_deg": 60.0,
+    "branch_splay_deg": 22.0,
+    "coarctation_length": 25.0,
+    "coarctation_centre_fraction": 0.72,
+    "coarctation_area_reduction": 0.35
+  },
+  "patch_checksums": {
+    "inlet.stl": "a3c934ce5407482e",
+    "outlet1.stl": "177ab7dc709433b3",
+    "outlet2.stl": "bfff350d2b6c9d54",
+    "outlet3.stl": "1e8d97edd25140be",
+    "outlet4.stl": "0a6766ee6f835abe",
+    "sev_002.stl": "5d8e1a6b334e20ec",
+    "wall_aorta.stl": "8f0a6e1762d6d5a5"
+  }
+}

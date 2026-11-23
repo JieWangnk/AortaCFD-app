@@ -1,0 +1,78 @@
+{
+  "_doc": "Workshop-quick template: minimal mesh, 1 cycle, robust numerics, CONSTANT inlet (no CSV needed). Designed so 6 cases run in under 30 minutes on a laptop with `run_batch.py --workers 2 --quick`. Use config_sweep_default.json for production-quality sweeps.",
+  "case_info": {
+    "patient_id": "WORKSHOP_CASE",
+    "description": "Workshop quick-demo case (config_workshop_quick.json template)"
+  },
+  "cardiac_cycle": 0.8,
+  "physics": {
+    "model": "laminar",
+    "transport_properties": {
+      "rho": 1060,
+      "nu": 3.7736e-06
+    }
+  },
+  "numerics": {
+    "profile": "robust",
+    "correctors": {
+      "nOuterCorrectors": 3,
+      "nCorrectors": 2,
+      "nNonOrthogonalCorrectors": 1
+    }
+  },
+  "mesh": {
+    "cells_per_diameter": 8,
+    "boundary_layers": {
+      "enabled": false
+    },
+    "SNAPPY_SETTINGS": {
+      "parallel": true,
+      "nProcessors": 4,
+      "surfaceRefinementLevels": [
+        1,
+        1
+      ]
+    }
+  },
+  "geometry": {
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": [
+      "outlet1",
+      "outlet2",
+      "outlet3",
+      "outlet4"
+    ],
+    "wall_keywords_ordered": "wall_aorta",
+    "scale_factor": 0.001
+  },
+  "boundary_conditions": {
+    "inlet": {
+      "type": "CONSTANT",
+      "cardiac_output": 3.0,
+      "profile": "plug"
+    },
+    "outlets": {
+      "_comment": "Default = zeroGradient; outlet1 (descending) pinned to p=0 for a well-posed pressure problem. No Windkessel ODE, so no startup transient \u2014 much more stable for the workshop demo than 3EWINDKESSEL.",
+      "type": "zeroGradient",
+      "per_outlet": {
+        "outlet1": {
+          "type": "fixedValue",
+          "pressure_mmHg": 0
+        }
+      }
+    },
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+  "simulation_control": {
+    "cardiac_cycle_period": 0.2,
+    "number_of_cycles": 1,
+    "writeInterval": 0.02
+  },
+  "run_settings": {
+    "solution_type": "parallel",
+    "subdomains": 4,
+    "decomposition_method": "scotch"
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "case_info": {
+    "patient_id": "sev_001",
+    "description": "Gallery: coarctation severity 0 % (area reduction), constant inflow 5 L/min, Windkessel outlets; same settings as the G3 constant-inflow arm",
+    "source": "OpenCardioFlow gallery; mesh and numerics from cases_input/ubend/config_adaptive_span.json"
+  },
+  "physics": {
+    "model": "laminar",
+    "transport_properties": {
+      "rho": 1060,
+      "nu": 3.7736e-06,
+      "_comment": "Standard blood: rho=1060 kg/m\u00b3, mu=0.004 Pa\u00b7s \u2192 nu=3.77e-6 m\u00b2/s"
+    }
+  },
+  "numerics": {
+    "profile": "standard",
+    "correctors": {
+      "nNonOrthogonalCorrectors": 1
+    }
+  },
+  "mesh": {
+    "boundary_layers": {
+      "enabled": true,
+      "num_layers": 3,
+      "expansion_ratio": 1.2,
+      "final_layer_thickness": 0.3,
+      "min_thickness": 0.05,
+      "relativeSizes": true
+    },
+    "SNAPPY_SETTINGS": {
+      "parallel": true,
+      "nProcessors": 4,
+      "mesh_strategy": "adaptive_span",
+      "cells_across_span": 17,
+      "span_refinement_level": 1,
+      "surfaceRefinementLevels": [
+        1,
+        1
+      ],
+      "featureLevel": 1
+    }
+  },
+  "geometry": {
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": [
+      "outlet1",
+      "outlet2",
+      "outlet3",
+      "outlet4"
+    ],
+    "wall_keywords_ordered": "wall_aorta",
+    "scale_factor": 0.001,
+    "_comment": "Blender geometry in mm, scale 0.001 to meters. outlet1=descending, outlet2-4=branches"
+  },
+  "boundary_conditions": {
+    "inlet": {
+      "type": "CONSTANT",
+      "cardiac_output": 5.0,
+      "profile": "parabolic"
+    },
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80,
+        "venous_pressure": 0,
+        "methodology": "murray_law_automatic",
+        "tau": 1.0,
+        "initial_pressure_method": "map",
+        "enable_stabilization": true,
+        "betaT": 0.3,
+        "betaN": 1.0,
+        "_comment_betaN": "betaN 1.0 clamps the normal velocity on backflow faces (inletOutlet-like). With betaN 0 the middle branch of G3 ran away when its flow reversed in late systole (20 Nov 2026 gallery run)."
+      }
+    },
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+  "simulation_control": {
+    "cardiac_cycle_period": 0.857,
+    "number_of_cycles": 2,
+    "writeInterval": 0.01714,
+    "keep_last_cycles": 1
+  },
+  "run_settings": {
+    "solution_type": "parallel",
+    "subdomains": 4,
+    "decomposition_method": "scotch"
+  },
+  "_comment_severity": "sev_001: synthetic branched arch with a 0 % area reduction over 25 mm, centre at 72 % of the descending length. Constant inflow because the pulsatile 0 % case collapsed twice in the first deceleration (20 Nov 2026, see research notes 18.2)."
+}

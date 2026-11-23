@@ -1,0 +1,66 @@
+{
+  "type": "arch_branched_coarctation",
+  "main_diameter_mm": 24.0,
+  "ascending_length_mm": 45.0,
+  "arch_span_mm": 70.0,
+  "arch_height_mm": 35.0,
+  "descending_length_mm": 80.0,
+  "branch_count": 3,
+  "branch_diameter_mm": 10.08,
+  "branch_length_mm": 35.0,
+  "branches": [
+    {
+      "index": 1,
+      "origin_fraction": 0.3,
+      "origin_xyz_mm": [
+        10.27257251739502,
+        0.0,
+        64.32669067382812
+      ],
+      "end_xyz_mm": [
+        7.145270824432373,
+        13.11122989654541,
+        96.62709045410156
+      ],
+      "diameter_mm": 10.08
+    },
+    {
+      "index": 2,
+      "origin_fraction": 0.38,
+      "origin_xyz_mm": [
+        26.868806838989258,
+        0.0,
+        71.13565826416016
+      ],
+      "end_xyz_mm": [
+        37.90571594238281,
+        0.0,
+        104.34991455078125
+      ],
+      "diameter_mm": 10.08
+    },
+    {
+      "index": 3,
+      "origin_fraction": 0.46,
+      "origin_xyz_mm": [
+        44.85942840576172,
+        0.0,
+        71.77534484863281
+      ],
+      "end_xyz_mm": [
+        64.25183868408203,
+        -13.11122989654541,
+        97.7951431274414
+      ],
+      "diameter_mm": 10.08
+    }
+  ],
+  "coarctation": true,
+  "coarctation_area_reduction": 0.0,
+  "coarctation_length_mm": 25.0,
+  "coarctation_centre_fraction": 0.72,
+  "proximal_hypoplasia": 0.0,
+  "roughness": false,
+  "noise_amplitude_mm": 0.0,
+  "noise_scale": 0.0
+}

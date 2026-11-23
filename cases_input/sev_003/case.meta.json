@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "case_id": "sev_003",
+  "source": "synthetic",
+  "geometry_meta": {
+    "schema_version": "1.0",
+    "case_id": "sev_003",
+    "generated_utc": "2026-05-18T16:49:04+00:00",
+    "generator": "blender_aorta_like_generator",
+    "generator_path": "blender_aorta_like_generator.py",
+    "mode": "sweep",
+    "sampler": null,
+    "sample_index": 3,
+    "seed": null,
+    "spec_name": "sweep_severity_3",
+    "geometry": "arch_branched_coarctation",
+    "params": {
+      "diameter": 24.0,
+      "ascending_length": 45.0,
+      "arch_span": 70.0,
+      "arch_height": 35.0,
+      "descending_length": 80.0,
+      "branch_count": 3,
+      "branch_diameter_ratio": 0.42,
+      "branch_length": 35.0,
+      "branch_spacing": 14.0,
+      "branch_tilt_deg": 60.0,
+      "branch_splay_deg": 22.0,
+      "coarctation_length": 25.0,
+      "coarctation_centre_fraction": 0.72,
+      "coarctation_area_reduction": 0.7
+    },
+    "patch_checksums": {
+      "inlet.stl": "34846ad7bcc500ce",
+      "outlet1.stl": "c1c62435055ff6d2",
+      "outlet2.stl": "bf18303b6f5fd229",
+      "outlet3.stl": "0a0b556f2e0089e8",
+      "outlet4.stl": "a16b94793e112eb4",
+      "sev_003.stl": "d9fed4f9b4493aa6",
+      "wall_aorta.stl": "701ae67ebe7899f6"
+    }
+  },
+  "config_template": "config_workshop_quick.json",
+  "sample_index": 3,
+  "seed": null,
+  "params": {
+    "diameter": 24.0,
+    "ascending_length": 45.0,
+    "arch_span": 70.0,
+    "arch_height": 35.0,
+    "descending_length": 80.0,
+    "branch_count": 3,
+    "branch_diameter_ratio": 0.42,
+    "branch_length": 35.0,
+    "branch_spacing": 14.0,
+    "branch_tilt_deg": 60.0,
+    "branch_splay_deg": 22.0,
+    "coarctation_length": 25.0,
+    "coarctation_centre_fraction": 0.72,
+    "coarctation_area_reduction": 0.7
+  },
+  "source_generator": "blender_aorta_like_generator"
+}
