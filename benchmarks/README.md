@@ -12,15 +12,15 @@ Different from neighbouring dirs:
 - **`docs/tutorial/`**, **`docs/workshop/`** — learning material (one-case
   deep dive and parametric study, respectively).
 
-## Quick validation (~1 hour on 4 cores, ~20 min on 8 cores)
+## Quick check (about 1 h 46 min on 8 cores, recorded 9 April 2026)
 
 ```bash
 python run_patient.py BPM120 --config cases_input/BPM120/config_tutorial_coarse.json --steps all
 ```
 
-This runs 1 cardiac cycle on a coarse mesh (~110K cells, cpd=12, 4 cores).
+This runs 1 cardiac cycle on a coarse mesh (~110K cells, cpd=12). The recorded run used 8 cores; on 4 cores expect roughly twice the wall time.
 
-### Expected outputs (BPM120 coarse, standard profile)
+### Expected outputs (BPM120 coarse; the profile of the recorded run was not written down)
 
 | Metric | Expected | Tolerance |
 |--------|----------|-----------|
@@ -29,12 +29,12 @@ This runs 1 cardiac cycle on a coarse mesh (~110K cells, cpd=12, 4 cores).
 | P_sys / P_dia | ~140 / 65 mmHg | Reasonable systolic/diastolic range |
 | Peak systolic ΔP (inlet→outlet4) | ~44 mmHg | +/-20% (coarse mesh, 1 cycle) |
 | postProcessing | `inletPressure/`, `outlet*Pressure/`, `wallShearStress/` | Files must exist |
-| Wall time | ~1.7 hrs (4 cores) | Hardware dependent |
+| Wall time | 1 h 46 min (8 cores, 9 April 2026) | Hardware dependent; hardware not recorded |
 
 Note: 1-cycle results differ from 3-cycle production values because the Windkessel
 capacitor has not fully equilibrated. This is expected and not a failure.
 
-## Production benchmark (~4 hours on 32 cores)
+## Production benchmark (the authors' 1.9M-cell runs took 23 to 34 h on 200 cores; see the profile table below)
 
 ```bash
 python run_patient.py BPM120 --steps all

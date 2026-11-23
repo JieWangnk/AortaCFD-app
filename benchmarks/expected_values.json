@@ -34,7 +34,7 @@
       "production_precise": {
         "config": "cases_input/BPM120/config.json (with numerics.profile=precise)",
         "profile": "precise",
-        "_comment": "LUST + CrankNicolson; closest to standard but slightly different TAWSS due to lower numerical diffusion. Per Wang et al. Table 3.",
+        "_comment": "LUST + backward (an earlier CrankNicolson 0.9 variant was dropped after oscillations with Windkessel outlets); closest to standard but slightly different TAWSS due to lower numerical diffusion. Per Wang et al. Table 3.",
         "expected": {
           "pressure_drop_mean_mmhg": {"value": 11.32, "tolerance_rel": 0.05},
           "tawss_p99_pa":           {"value": 13.99, "tolerance_rel": 0.10}
@@ -45,7 +45,8 @@
       },
       "tutorial_coarse": {
         "config": "cases_input/BPM120/config_tutorial_coarse.json",
-        "profile": "standard",
+        "profile": "not recorded",
+        "_profile_note": "The profile of the 9 April 2026 run was not logged; this record said standard, the config file says robust (checked 23 Nov 2026). Do not use these values to compare profiles.",
         "_reference_run": "output/BPM120/run_20260409_195511 (on /media/Elements1 backup, 109,597 cells, 1 cycle = 0.5s, wall ~1h46m on 8 cores). QoIs extracted via v1.2.0 --postprocess.",
         "_use": "Live-solver benchmark validation for v1.2.0. Full production benchmark (Wang et al. Table 3) deferred to v1.2.1 (requires ~10-25 h HPC run).",
         "expected": {

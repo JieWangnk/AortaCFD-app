@@ -1081,7 +1081,7 @@ boundaryField
                 f.write("\n")
                 f.write("  Clinical thresholds:\n")
                 f.write("    Low TAWSS (<0.4 Pa): Atherogenic phenotype risk\n")
-                f.write("    High TAWSS (>40 Pa): Endothelial injury risk\n")
+                f.write("    High WSS (>40 Pa, instantaneous value, Fry 1968): Endothelial injury risk\n")
                 f.write("    High OSI (>0.3): Oscillatory flow, thrombus risk\n")
                 f.write("    High RRT (>10 Pa⁻¹): Particle trapping risk\n")
                 f.write("\n")
@@ -1275,12 +1275,12 @@ boundaryField
                 "wss_p99_pa": {
                     "value": results.wss_p99,
                     "unit": "Pa",
-                    "definition": "99th percentile peak systolic wall shear stress",
+                    "definition": "99th percentile of wall shear stress magnitude at the last saved time",
                 },
                 "wss_p95_pa": {
                     "value": results.wss_p95,
                     "unit": "Pa",
-                    "definition": "95th percentile peak systolic wall shear stress",
+                    "definition": "95th percentile of wall shear stress magnitude at the last saved time",
                 },
                 "tawss_p99_pa": {
                     "value": results.tawss_p99,
