@@ -6,7 +6,7 @@
 #   3  the service is no longer active and there is no ALL_DONE (the batch died)
 # Failed runs do not stop the batch (run_gallery.sh moves on); they are listed at the end.
 APP=${APP:-$(cd "$(dirname "$0")/../../.." && pwd)}
-G=$APP/output/_ladder
+G=${GALLERY_DIR:-$APP/output/_ladder}
 UNIT=ocf-ladder
 last_tag=""; last_time=""
 while true; do

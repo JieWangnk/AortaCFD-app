@@ -45,6 +45,8 @@ across the inlet:
   `ladder_stats.py` with `LADDER_STATS_DIR` and `LADDER_RUN_PREFIX=nodamp_`).
 - `../runs_ladder_L3_rerun.txt`: the run list of the repeated Ladder 3 batch (fine
   mesh first, so a late failure shows within two hours).
+- `make_physio_series.py`: writes the physiological waveforms, the twelve `config_physio_*`
+  configurations and `../runs_ladder_physio.txt` (the second series, below).
 
 ## Running the ladder
 
@@ -84,3 +86,34 @@ velocities reads about 7 % low in the lobe (`ladder_stats.py` records the inlet 
 as the flow record); and during the lobe the inlet acts as an outlet with a forced
 parabolic exit profile, which squeezes the arriving flow into that shape within one cell
 (0.8 to 0.9 m/s in the cells beside the inlet against 0.2 m/s on the face, on every mesh).
+
+## The physiological-waveform series (24 November 2026)
+
+The first series (runs `gallery_*`, the U-bend waveform) has the cycle mean of an adult
+aorta (5.0 L/min, Reynolds number 1000 at the mean, Womersley number 20) but a peak
+Reynolds number of 3000 at the inlet, about half of physiological: the waveform ejects over
+0.4 s with a 14.6 L/min peak, and a real heart ejects its stroke volume in about 0.3 s with
+a peak of 20 to 25 L/min. At that peak the flow is a plug and the mid-plane figures looked
+alike on every level. The second series keeps everything else (geometry, meshes, numerics,
+Windkessel) and changes the waveform: `physio_inflow.csv` is a half-sine ejection over
+0.30 s with a stroke volume of 66.7 mL (peak 20.9 L/min at 0.15 s, mean 5.0 L/min, zero
+inflow for the rest of the 0.8 s cycle), and `physio_reversing_inflow.csv` (Ladder 3) adds
+the same reverse lobe as before (a quarter of the peak, 0.12 s long, now 0.30 to 0.42 s;
+mean 4.5 L/min). Peak Reynolds number 4300 at the inlet, 4800 in the descending leg, 6800
+in the throat. The outlet backflow damping is `betaT` 0.3 and `betaN` 0.3 on every level in
+this series: the steeper deceleration reverses part of the outlet on every level, and the
+normal term is what kept the fine Ladder 3 mesh alive in the first series. Run names
+`physio_<tag>`, run list `../runs_ladder_physio.txt` (the coarse Ladder 0 run first as a
+ten-minute check of the setup, then the fine meshes), batch folder `output/_ladder_physio`:
+
+```bash
+systemd-run --user --unit=ocf-ladder --collect --working-directory="$PWD" \
+  --setenv=RUNS="$PWD/scripts/gallery/runs_ladder_physio.txt" \
+  --setenv=GALLERY_DIR="$PWD/output/_ladder_physio" bash scripts/gallery/run_gallery.sh
+GALLERY_DIR="$PWD/output/_ladder_physio" bash scripts/gallery/ladder/wait_ladder.sh
+LADDER_STATS_DIR=... LADDER_RUN_PREFIX=physio_ python3 scripts/gallery/ladder/ladder_stats.py
+```
+
+The first run of the series (coarse Ladder 0) solved in 2.3 minutes: inlet peak 21.1 L/min
+at 0.149 s, mean 5.03 L/min, inertial pressure swing +22.5 / -23.5 mmHg between inlet and
+outlet (the first series: +12 / -12), outlet pressure 81 to 135 mmHg over the cycle.
