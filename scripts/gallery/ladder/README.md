@@ -34,6 +34,8 @@ across the inlet:
   planes), peak speed, wall shear at peak inflow, TAWSS and OSI area-weighted with a
   4 mm band off each cap left out, outlet backflow area, and the pressure profile along
   the descending leg at peak inflow.
+- `leg_peak_instant.py`: adds the leg pressure profiles at the two frames around the
+  instant of peak inflow to the Ladder 2 and 3 statistics.
 - `convergence_map.py`: classifies every quantity per level by its 12-to-18 and
   18-to-26 changes relative to the 26-cell value (tolerance 5 %) and draws
   `convergence_map.png`; also writes `map.json` and `map.csv`.
@@ -132,20 +134,27 @@ per-run JSON files in `stats_physio/` keep the `gallery_` names of the first ser
 `convergence_map.py` reads them by that name; the `cells` field inside each file is the
 physiological run's own.
 
-Seventeen of the 56 classified cells of the map change class between the series. The
-pressure difference at the frame nearest peak inflow goes from "not converged at 26" to
-"converged at 12" on every level, a change that comes with the larger denominator rather
-than a cleaner answer: that frame (0.144 s, 6 ms before the peak) sits on the inertial ramp,
-where the difference across the vessel changes by 3.5 mmHg per 16 ms frame, so the value
-there (3.5 mmHg on the bends) is about 60 % viscous loss and 40 % inertial residue. A better
-reading of the viscous loss would interpolate the series to the instant of zero acceleration;
-that change touches both series and the published pages, so it is left for a decision. The
-other changes: the cycle-mean difference settles at 12 with the narrowing (0.59 and 0.53
-mmHg) and stays open on the bends (0.17 and 0.19 mmHg); the jet's lowest pressure is open
-on Ladder 3 as well now; the 99th-percentile shear at peak inflow is open on Ladder 3; the
-TAWSS 99th percentile needs 18 on Ladders 2 and 3; the OSI threshold area (55 to 58 % of
-the wall on every level, the zero-flow diastole oscillates the whole wall) is converged on
-Ladder 1 and open on Ladder 0; the largest outlet backflow area (55 to 62 %, 100 % on
-Ladder 3) is open on Ladders 1 and 2. The drop across the narrowing at peak inflow is 2.89
-mmHg (2.56 times the first series' 1.13 mmHg for 1.43 times the peak flow) and rises 4.0 %
-then 4.3 % across the meshes, formally within tolerance and still moving.
+The pressures at peak inflow (the whole-vessel difference, the drop across the narrowing and
+the jet's lowest pressure) are read at the instant of peak inflow, where the inflow's
+acceleration is zero: `convergence_map.py` finds it as the vertex of a parabola through the
+three highest inflow frames (0.150 s and 0.200 s, the exact peaks) and interpolates between
+the two frames around it; `leg_peak_instant.py` adds the leg profiles of those two frames to
+the Ladder 2 and 3 statistics (`leg_profile_bracket`). Until the evening of 24 November 2026
+the map read the saved frame nearest the peak, which misses it by 6 to 8 ms, where the
+column's inertia still moves the whole-vessel difference by about 1.4 mmHg (physiological)
+and 0.5 mmHg (first series). On the first series this moved the 26-cell values from 0.59,
+0.61, 1.56, 1.62 to 1.07, 1.08, 2.05, 2.11 mmHg, the drop across the narrowing from 1.13 and
+1.15 to 1.24 and 1.26 mmHg, and three classes (difference at peak inflow: L0 open to 18, L2
+and L3 open to 12; jet's lowest pressure on L2 open to 12).
+
+At the peak instant both series give the same classes for the whole-vessel difference (18 on
+the planar bend, open with torsion, 12 with the narrowing), and every loss scales with the
+square of the peak flow: physiological over first series 2.03 to 2.09, against 1.43^2 = 2.04.
+Fourteen of the 56 classified cells change class between the series: the cycle-mean
+difference settles at 12 with the narrowing and opens on the planar bend; the drop across
+the narrowing rises about 5 % per level (2.37, 2.44, 2.56 mmHg on L2, 2.6 % then 4.9 %; on L3
+2.6 % then 5.1 %, open) where it was flat; the jet's lowest pressure (7.0 mmHg) is open on
+both narrowing levels (+10 % over the last step); the 99th-percentile shear at peak inflow is
+open on L3; the shear maximum needs 18 on L0; the TAWSS 99th percentile needs 18 on L2 and L3;
+the OSI threshold area (55 to 58 % of the wall everywhere) is converged on L1; the largest
+outlet backflow area (55 to 62 %, 100 % on L3) is converged on L0 and open on L1 and L2.

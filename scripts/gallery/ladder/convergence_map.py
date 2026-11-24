@@ -26,12 +26,21 @@ LEVEL_NAME = {"L0": "L0 planar bend", "L1": "L1 + torsion", "L2": "L2 + narrowin
 
 
 def leg_numbers(r):
-    """Pressure drop across the narrowing at peak inflow from the leg profile: one diameter upstream of the throat
+    """Pressure drop across the narrowing at the peak-inflow instant from the leg profile: one diameter upstream of the throat
     minus two diameters downstream (net loss), and upstream minus the minimum (the dip in the throat)."""
-    s = np.array(r["leg_profile_peak"]["s_mm"])
-    p = np.array(r["leg_profile_peak"]["p_mmHg"])
     if r["level"] not in ("L2", "L3"):
         return None, None
+    br = r.get("leg_profile_bracket")
+    if br:  # the two frames around the peak instant (leg_peak_instant.py), interpolated to it
+        f0, f1 = br["frames"]
+        s = np.array(f0["s_mm"])
+        p0 = np.array(f0["p_mmHg"])
+        p1 = np.interp(s, f1["s_mm"], f1["p_mmHg"])
+        w = (br["t_star"] - f0["t"]) / (f1["t"] - f0["t"])
+        p = (1 - w) * p0 + w * p1
+    else:  # the saved frame nearest the peak
+        s = np.array(r["leg_profile_peak"]["s_mm"])
+        p = np.array(r["leg_profile_peak"]["p_mmHg"])
     s_thr = 196.95 - 11.86  # mm from the outlet plane to the throat centre (engine centreline, see centreline_stations.json)
     p_up = float(np.interp(s_thr + 26.0, s, p))
     p_rec = float(np.interp(s_thr - 52.0, s, p))
@@ -39,14 +48,39 @@ def leg_numbers(r):
     return p_up - p_rec, p_up - p_min
 
 
+def peak_instant(r):
+    """The instant of peak inflow, where the inflow's acceleration is zero and the fluid column's inertia adds
+    nothing to the pressure difference: the vertex of a parabola through the inflow at the largest saved value and
+    its two neighbours. Returns the instant and the index of the saved frame just before it. The saved frames miss
+    the instant by up to half a frame (16 ms per frame), where the pressure difference across the whole vessel
+    changes by several mmHg per frame."""
+    t = np.asarray(r["times"], float)
+    q = np.asarray(r["Q_in_L_min"]["series"], float)
+    k = int(np.argmax(q))
+    if k == 0 or k == len(q) - 1:
+        return float(t[k]), max(0, min(k, len(q) - 2))
+    curv = q[k - 1] - 2 * q[k] + q[k + 1]
+    off = 0.5 * (q[k - 1] - q[k + 1]) / curv if curv != 0 else 0.0
+    t_star = float(t[k] + off * (t[k + 1] - t[k]))
+    k0 = int(np.searchsorted(t, t_star, side="right") - 1)
+    return t_star, max(0, min(k0, len(t) - 2))
+
+
+def dp_at_peak_instant(r):
+    """Pressure difference at the instant of peak inflow, interpolated linearly between the two saved frames that
+    bracket it (second differences of the series there are under 0.1 mmHg)."""
+    t_star, _ = peak_instant(r)
+    return float(np.interp(t_star, np.asarray(r["times"], float), np.asarray(r["dP_mmHg"]["series"], float)))
+
+
 QUANTITIES = [
     # key, label, unit, getter, near-zero floor (absolute), decimals
     ("dP_acc", "Pressure difference, acceleration peak", "mmHg", lambda r: r["dP_mmHg"]["max"], 0.1, 2),
     ("dP_dec", "Pressure difference, deceleration trough", "mmHg", lambda r: r["dP_mmHg"]["min"], 0.1, 2),
-    ("dP_peak", "Pressure difference at peak inflow", "mmHg", lambda r: r["dP_mmHg"]["at_peak"], 0.1, 2),
+    ("dP_peak", "Pressure difference at the peak-inflow instant", "mmHg", lambda r: dp_at_peak_instant(r), 0.1, 2),
     ("dP_mean", "Pressure difference, cycle mean", "mmHg", lambda r: r["dP_mmHg"]["mean"], 0.05, 3),
-    ("dP_narrowing", "Pressure drop across the narrowing at peak inflow", "mmHg", lambda r: leg_numbers(r)[0], 0.1, 2),
-    ("dP_dip", "Lowest pressure in the jet past the throat, below upstream, at peak inflow", "mmHg", lambda r: leg_numbers(r)[1], 0.1, 2),
+    ("dP_narrowing", "Pressure drop across the narrowing at the peak-inflow instant", "mmHg", lambda r: leg_numbers(r)[0], 0.1, 2),
+    ("dP_dip", "Lowest pressure in the jet past the throat, below upstream, at the peak-inflow instant", "mmHg", lambda r: leg_numbers(r)[1], 0.1, 2),
     ("umax", "Peak speed (99.9th percentile over the cycle)", "m/s", lambda r: r["umax_p999_m_s"]["cycle_max"], 0.05, 3),
     ("wss_p99", "Wall shear at peak inflow, 99th percentile", "Pa", lambda r: r["wss_peak_Pa"]["p99"], 0.1, 2),
     ("wss_max", "Wall shear at peak inflow, maximum", "Pa", lambda r: r["wss_peak_Pa"]["max"], 0.1, 2),
