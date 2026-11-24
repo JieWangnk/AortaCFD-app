@@ -182,7 +182,8 @@ class InletMapping:
             return False
 
     def _get_velocity_components(self, speed_scalar, normal_vec):
-        # Apply orientation: 'out' means positive normal direction, 'in' means negative, 'auto' means automatic detection
+        # Apply orientation: 'out' means positive normal direction, 'in' means negative,
+        # 'auto' means automatic detection
         if self.orientation == "auto":
             direction_multiplier = -1.0 if self.auto_flip_normal else 1.0
         else:
@@ -216,7 +217,10 @@ class InletMapping:
 
     def womersley_shape_factor(self, r, t, omega, alpha):
         """
-        Compute the Womersley velocity profile shape factor (normalized).
+        Compute the single-frequency Womersley velocity profile shape factor (normalized).
+
+        Kept for reference. The generator no longer uses it: rescaling this shape to the
+        flow rate at every instant blew up where its own flow rate crossed zero.
 
         This returns a dimensionless shape factor that describes the radial
         velocity distribution. The actual velocity is obtained by scaling
@@ -313,9 +317,25 @@ class InletMapping:
                 - Vn_complex: Complex Fourier coefficients for harmonics 1..n
                 - omega_fundamental: Fundamental angular frequency (rad/s)
         """
-        N = len(values)
-        T = times[-1] - times[0]  # Cardiac cycle period
+        times = np.asarray(times, dtype=float)
+        values = np.asarray(values, dtype=float)
+        # The FFT wants one period sampled uniformly without the end point repeated. A CSV usually
+        # lists the end of the cycle as well as its start (same value): drop that repeat. Otherwise
+        # the period is the span plus one sample interval.
+        scale = max(1.0, float(np.max(np.abs(values))))
+        if len(values) > 2 and abs(values[-1] - values[0]) <= 1e-9 * scale:
+            T = float(times[-1] - times[0])
+            times, values = times[:-1], values[:-1]
+        else:
+            T = float(times[-1] - times[0]) * len(values) / (len(values) - 1)
         omega_fundamental = 2 * np.pi / T
+        # Resample onto a uniform grid when the CSV spacing is not uniform
+        dt = np.diff(times)
+        if len(dt) > 0 and np.ptp(dt) > 1e-6 * np.mean(dt):
+            uniform = times[0] + T * np.arange(len(values)) / len(values)
+            values = np.interp(uniform, np.append(times, times[0] + T), np.append(values, values[0]))
+        N = len(values)
+        n_harmonics = max(1, min(int(n_harmonics), N // 2))
 
         # Compute FFT
         fft_result = np.fft.fft(values)
@@ -339,11 +359,15 @@ class InletMapping:
         Compute velocity contribution from a single Womersley harmonic.
 
         For harmonic n, the radial velocity profile is:
-            uₙ(r,t) = Re[ Vₙ · Φₙ(r) · e^(inωt) ]
+            uₙ(r,t) = Re[ Vₙ · Φₙ(r) / ⟨Φₙ⟩ · e^(inωt) ]
 
         where:
-            Φₙ(r) = (1 - J₀(αₙ·i^(3/2)·r/R)) / (1 - J₀(αₙ·i^(3/2)))
+            Φₙ(r) = 1 - J₀(αₙ·i^(3/2)·r/R) / J₀(αₙ·i^(3/2))
+            ⟨Φₙ⟩ = 1 - 2·J₁(z₀) / (z₀·J₀(z₀)), z₀ = αₙ·i^(3/2), the area mean of Φₙ
             αₙ = R·√(n·ω/ν)
+
+        so the cross-section mean of uₙ is Re[Vₙ e^(inωt)]: Vₙ is the Fourier coefficient
+        of the mean velocity and the series carries the waveform's flow rate as it is.
 
         Args:
             r: Radial distance from center (m)
@@ -372,11 +396,15 @@ class InletMapping:
         if np.abs(J0_z0) < 1e-15:
             # Avoid division by zero for very high alpha
             Phi_n = 0.0
+            mean_Phi_n = 1.0
         else:
             Phi_n = 1 - J0_z / J0_z0
+            # Area mean of Φₙ over the section. Dividing by it makes the mean velocity of this
+            # harmonic equal to Re[Vₙ e^(inωt)], so no per-instant rescaling is needed.
+            mean_Phi_n = 1 - 2 * jv(1, z0) / (z0 * J0_z0)
 
-        # Complete harmonic contribution: Vₙ · Φₙ(r) · e^(inωt)
-        u_n = Vn_complex * Phi_n * np.exp(1j * omega_n * t)
+        # Complete harmonic contribution: Vₙ · Φₙ(r) / ⟨Φₙ⟩ · e^(inωt)
+        u_n = Vn_complex * Phi_n / mean_Phi_n * np.exp(1j * omega_n * t)
 
         return np.real(u_n)
 
@@ -445,47 +473,6 @@ class InletMapping:
                 velocities[idx] = 0.0
 
         return velocities
-
-    def _compute_womersley_fft_scale_factor(self, points, t, V0, Vn_complex, omega_fundamental, target_Q):
-        """
-        Compute scale factor to ensure flow rate conservation for Womersley FFT.
-
-        The Womersley FFT reconstruction inherently conserves flow rate if the
-        Doppler signal represents the true cross-sectional average. However,
-        we apply a correction factor to account for:
-        - Discrete sampling of face centers
-        - Non-uniform face areas
-        - Truncation of Fourier series
-
-        Args:
-            points: Array of face center coordinates
-            t: Current time (s)
-            V0, Vn_complex, omega_fundamental: Fourier parameters
-            target_Q: Target flow rate from CSV (m³/s)
-
-        Returns:
-            float: Scale factor to apply to velocities
-        """
-        # Compute raw velocities
-        raw_velocities = self._compute_womersley_fft_shape_factors(points, t, V0, Vn_complex, omega_fundamental)
-
-        # Estimate integrated flow rate
-        active_mask = np.abs(raw_velocities) > 1e-15
-        n_active = np.sum(active_mask)
-
-        if n_active == 0:
-            return 0.0
-
-        A_face = self.area / n_active
-        Q_raw = np.sum(raw_velocities[active_mask]) * A_face
-
-        if np.abs(Q_raw) < 1e-15:
-            return 0.0
-
-        # Scale factor
-        scale_factor = target_Q / Q_raw
-
-        return scale_factor
 
     # =========================================================================
     # WALL-DISTANCE BASED PROFILE FOR IRREGULAR INLETS
@@ -724,8 +711,8 @@ class InletMapping:
         Supported profiles:
             - plug / plug_flow: Uniform velocity (shape = 1.0)
             - parabolic: Circular Poiseuille (1 - r²/R²)
-            - womersley: Single-frequency pulsatile (Bessel functions)
-            - womersley_fft: Multi-harmonic Doppler reconstruction
+            - womersley / womersley_fft: multi-harmonic Womersley solution of the waveform
+              (returns actual velocities, flow rate carried by the series)
             - wall_distance: Distance-to-wall based (for irregular inlets)
             - elliptical: Elliptical Poiseuille (1 - x²/a² - y²/b²)
 
@@ -742,8 +729,8 @@ class InletMapping:
         Returns:
             numpy.ndarray: Shape factors for each point (dimensionless)
         """
-        # For womersley_fft, use the dedicated method
-        if self.profile == "womersley_fft":
+        # Womersley: the multi-harmonic series gives actual velocities ("womersley_fft" is the same)
+        if self.profile in ("womersley", "womersley_fft"):
             return self._compute_womersley_fft_shape_factors(points, t, V0, Vn_complex, omega_fundamental)
 
         # For wall_distance profile, use distance-based calculation
@@ -769,10 +756,6 @@ class InletMapping:
                 elif self.profile == "parabolic":
                     # Parabolic: 1 - (r/R)^2
                     shape_factors[idx] = self.parabolic_factor(dist)
-
-                elif self.profile == "womersley":
-                    # Womersley: time-dependent shape from Bessel functions
-                    shape_factors[idx] = self.womersley_shape_factor(dist, t, omega, alpha)
 
                 else:
                     # Default to plug flow
@@ -833,7 +816,7 @@ class InletMapping:
             return velocities
 
         else:
-            # For non-standard profiles (womersley, wall_distance, elliptical, etc.),
+            # For non-standard profiles (wall_distance, elliptical, etc.),
             # use mesh-based integration as these don't have simple analytical forms
             # Estimate face area per point (uniform distribution assumption)
             A_face = self.area / n_active
@@ -864,8 +847,7 @@ class InletMapping:
         Supported profile types:
         - plug, plug_flow: Uniform velocity
         - parabolic: Circular Poiseuille (1 - r²/R²)
-        - womersley: Single-frequency pulsatile
-        - womersley_fft: Multi-harmonic Doppler reconstruction
+        - womersley, womersley_fft: multi-harmonic Womersley solution of the waveform
         - wall_distance: Distance-to-wall based (irregular inlets)
         - elliptical: Elliptical Poiseuille (1 - x²/a² - y²/b²)
 
@@ -884,44 +866,9 @@ class InletMapping:
         n_harmonics_setting = self.inlet_settings.get("n_harmonics", 8)
         profile_exponent = self.inlet_settings.get("exponent", 2.0)
 
-        if self.profile == "womersley":
-            # Simple single-frequency Womersley
-            if not self.nu or self.nu <= 0:
-                raise ValueError("Womersley profile requires a positive kinematic viscosity (nu) in config.")
-            omega = 2 * np.pi / self.cardiac_cycle
-            alpha = self.radius * np.sqrt(omega / self.nu)
-            self.log.info(f"Womersley parameters: omega={omega:.4f} rad/s, alpha={alpha:.4f}")
-
-        elif self.profile == "womersley_fft":
-            # Multi-harmonic Womersley with Fourier decomposition
-            if not self.nu or self.nu <= 0:
-                raise ValueError("Womersley FFT profile requires a positive kinematic viscosity (nu) in config.")
-
-            # Convert flow rate to velocity for FFT if needed
-            if self.data_type == "flowrate":
-                velocity_values = csv_values / self.area
-            else:
-                velocity_values = csv_values
-
-            # Determine number of harmonics (auto-detect or user-specified)
-            if n_harmonics_setting == "auto" or n_harmonics_setting == -1:
-                # Auto-detect based on spectral energy content
-                # Status: UNDER DEVELOPMENT
-                energy_threshold = self.inlet_settings.get("energy_threshold", 0.99)
-                n_harmonics = self._estimate_required_harmonics(velocity_values, energy_threshold)
-            else:
-                n_harmonics = int(n_harmonics_setting)
-
-            # Compute Fourier coefficients from the waveform
-            V0, Vn_complex, omega_fundamental = self._compute_fourier_coefficients(
-                time_array, velocity_values, n_harmonics
-            )
-
-            # Log Womersley numbers for each harmonic
-            self.log.info(f"Womersley FFT profile with {n_harmonics} harmonics:")
-            for n in range(1, min(4, n_harmonics + 1)):  # Log first 3 harmonics
-                alpha_n = self.radius * np.sqrt(n * omega_fundamental / self.nu)
-                self.log.info(f"  Harmonic {n}: α={alpha_n:.2f}")
+        womersley = self.profile in ("womersley", "womersley_fft")
+        if womersley:
+            V0, Vn_complex, omega_fundamental = self._womersley_series(time_array, csv_values, n_harmonics_setting)
 
         elif self.profile == "wall_distance":
             self.log.info(f"Wall-distance profile with exponent={profile_exponent}")
@@ -932,6 +879,9 @@ class InletMapping:
             self.log.info("  Semi-axes will be estimated from inlet geometry")
 
         n_points = len(points)
+        # csv_values are m³/s already (converted in _read_csv_file) or mean velocities (Q = V_avg * A)
+        targets = np.asarray(csv_values, dtype=float) * (1.0 if self.data_type == "flowrate" else self.area)
+        Q_peak = max(float(np.max(np.abs(targets))), 1e-15)
 
         # Track flow rate statistics for verification
         max_error_percent = 0.0
@@ -942,58 +892,88 @@ class InletMapping:
 
         for i in range(total_timesteps):
             t = time_array[i]
-            csv_value = csv_values[i]
+            target_Q = targets[i]
 
-            # Determine target flow rate in m³/s
-            # Note: csv_values are already converted to m³/s in _read_csv_file()
-            if self.data_type == "flowrate":
-                # CSV flow rate already converted to m³/s during file read
-                target_Q = csv_value
-            else:
-                # CSV contains velocity - convert to flow rate
-                # Q = V_avg * A
-                target_Q = csv_value * self.area
-
-            # Step 1: Compute shape factors for this timestep
-            if self.profile == "womersley_fft":
-                # For womersley_fft, shape factors are actual velocities
-                shape_factors = self._compute_shape_factors(
+            # Step 1 + 2: velocities at this instant
+            if womersley:
+                # The series gives actual velocities; its flow rate differs from the CSV only by the
+                # Fourier truncation. No per-instant rescaling.
+                velocity_magnitudes = self._compute_shape_factors(
                     points, t, omega, alpha, V0=V0, Vn_complex=Vn_complex, omega_fundamental=omega_fundamental
                 )
-                # Apply flow conservation scaling
-                scale_factor = self._compute_womersley_fft_scale_factor(
-                    points, t, V0, Vn_complex, omega_fundamental, target_Q
-                )
-                velocity_magnitudes = shape_factors * scale_factor
+                # truncation error of the Fourier series, as a share of the peak flow rate
+                series_Q = self.area * self._womersley_mean_velocity(t, V0, Vn_complex, omega_fundamental)
+                error_percent = abs(series_Q - target_Q) / Q_peak * 100
             else:
-                # For all other profiles (plug, parabolic, womersley, wall_distance, elliptical)
                 shape_factors = self._compute_shape_factors(points, t, omega, alpha, profile_exponent=profile_exponent)
-                # Step 2: Scale to target flow rate
                 velocity_magnitudes = self._scale_to_target_flowrate(shape_factors, target_Q, n_points)
+                # Both values are signed: a negative target_Q (reverse flow) comes back as a negative computed_Q
+                error_percent = 0.0
+                if abs(target_Q) > 1e-15:
+                    computed_Q = self._verify_flowrate(velocity_magnitudes, n_points)
+                    error_percent = abs(computed_Q - target_Q) / abs(target_Q) * 100
+            max_error_percent = max(max_error_percent, error_percent)
 
             # Step 3: Apply direction and create velocity vectors
-            velocities = []
-            for mag in velocity_magnitudes:
-                vel_vector = self._get_velocity_components(mag, normal_vec)
-                velocities.append(vel_vector)
+            velocities = [self._get_velocity_components(mag, normal_vec) for mag in velocity_magnitudes]
 
-            # Step 4: Verify flow rate (for logging). Both values are signed: a negative
-            # target_Q (reverse flow) must come back as a negative computed_Q.
-            if abs(target_Q) > 1e-15:
-                computed_Q = self._verify_flowrate(velocity_magnitudes, n_points)
-                error_percent = abs(computed_Q - target_Q) / abs(target_Q) * 100
-                max_error_percent = max(max_error_percent, error_percent)
-
-            # Step 5: Write to file
+            # Step 4: Write to file
             time_dir_path = os.path.join(parent_directory, f"{t:.6f}")
             os.makedirs(time_dir_path, exist_ok=True)
             out_file_path = os.path.join(time_dir_path, "U")
             self._write_openfoam_data_format(out_file_path, n_points, velocities)
 
-        # Log summary
-        self.log.info(f"Flow rate conservation complete. Max error: {max_error_percent:.4f}%")
-        if max_error_percent > 1.0:
-            self.log.warning("Flow rate error exceeds 1%. Consider checking mesh face distribution.")
+        self._log_flow_rate_summary(womersley, max_error_percent)
+
+    def _womersley_series(self, time_array, csv_values, n_harmonics_setting):
+        """
+        Fourier series of the mean inlet velocity for the multi-harmonic Womersley profile.
+
+        Every harmonic of the mean velocity gets its analytic profile (see _womersley_profile_harmonic),
+        normalised so the series carries the CSV flow rate. The earlier single-frequency "womersley"
+        rescaled one Bessel shape to the flow rate at every instant; that blew up wherever the shape's
+        own flow rate crossed zero, and at alpha ~ 20 with a 0.8 s cycle one crossing sits at the
+        systolic peak.
+
+        Returns:
+            tuple: (V0, Vn_complex, omega_fundamental) for the mean velocity (m/s)
+        """
+        if not self.nu or self.nu <= 0:
+            raise ValueError("Womersley profile requires a positive kinematic viscosity (nu) in config.")
+
+        velocity_values = np.asarray(csv_values, dtype=float)
+        if self.data_type == "flowrate":
+            velocity_values = velocity_values / self.area
+
+        if n_harmonics_setting == "auto" or n_harmonics_setting == -1:
+            # Auto-detect based on spectral energy content (status: under development)
+            energy_threshold = self.inlet_settings.get("energy_threshold", 0.99)
+            n_harmonics = self._estimate_required_harmonics(velocity_values, energy_threshold)
+        else:
+            n_harmonics = int(n_harmonics_setting)
+
+        V0, Vn_complex, omega_fundamental = self._compute_fourier_coefficients(time_array, velocity_values, n_harmonics)
+
+        self.log.info(f"Womersley profile with {len(Vn_complex)} harmonics:")
+        for n in range(1, min(4, len(Vn_complex) + 1)):  # Log first 3 harmonics
+            alpha_n = self.radius * np.sqrt(n * omega_fundamental / self.nu)
+            self.log.info(f"  Harmonic {n}: α={alpha_n:.2f}")
+        return V0, Vn_complex, omega_fundamental
+
+    @staticmethod
+    def _womersley_mean_velocity(t, V0, Vn_complex, omega_fundamental):
+        """Mean velocity of the truncated Fourier series at time t (m/s)."""
+        return V0 + sum(np.real(Vn * np.exp(1j * n * omega_fundamental * t)) for n, Vn in enumerate(Vn_complex, 1))
+
+    def _log_flow_rate_summary(self, womersley, max_error_percent):
+        if womersley:
+            self.log.info(f"Womersley series: largest flow-rate truncation error {max_error_percent:.2f}% of the peak")
+            if max_error_percent > 5.0:
+                self.log.warning("Womersley truncation error exceeds 5% of the peak flow. Increase n_harmonics.")
+        else:
+            self.log.info(f"Flow rate conservation complete. Max error: {max_error_percent:.4f}%")
+            if max_error_percent > 1.0:
+                self.log.warning("Flow rate error exceeds 1%. Consider checking mesh face distribution.")
 
     def _verify_flowrate(self, velocity_magnitudes, n_points):
         """

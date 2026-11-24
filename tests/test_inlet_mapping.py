@@ -1628,82 +1628,6 @@ endsolid inlet"""
                 mapping.run()
 
 
-class TestComputeWomersleyFFTScaleFactor:
-    """Test _compute_womersley_fft_scale_factor method."""
-
-    @patch("aortacfd_lib.inlet_mapping.Logger")
-    def test_scale_factor_computation(self, mock_logger, tmp_path):
-        """Test Womersley FFT scale factor computation."""
-        from aortacfd_lib.inlet_mapping import InletMapping
-
-        config = {
-            "boundary_conditions": {
-                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "womersley_fft"}
-            },
-            "geometry": {"inlet_keywords_ordered": "inlet"},
-            "physics": {"nu": 3.5e-6},
-        }
-
-        mapping = InletMapping(config, str(tmp_path))
-        mapping.center = np.array([0.0, 0.0, 0.0])
-        mapping.radius = 0.01
-        mapping.area = np.pi * 0.01**2
-        mapping.nu = 3.5e-6
-
-        # Create test points within the inlet
-        n_points = 10
-        theta = np.linspace(0, 2 * np.pi, n_points, endpoint=False)
-        r = 0.005  # Half radius
-        points = np.zeros((n_points, 3))
-        points[:, 0] = r * np.cos(theta)
-        points[:, 1] = r * np.sin(theta)
-
-        V0 = 0.5
-        Vn_complex = np.array([0.1 + 0.0j, 0.05 + 0.0j])
-        omega_fundamental = 2 * np.pi / 0.8
-        target_Q = 1.0e-5  # m³/s
-
-        scale_factor = mapping._compute_womersley_fft_scale_factor(
-            points, t=0.0, V0=V0, Vn_complex=Vn_complex, omega_fundamental=omega_fundamental, target_Q=target_Q
-        )
-
-        assert np.isfinite(scale_factor)
-        assert scale_factor != 0.0
-
-    @patch("aortacfd_lib.inlet_mapping.Logger")
-    def test_scale_factor_zero_flow(self, mock_logger, tmp_path):
-        """Test scale factor returns 0 when no active points."""
-        from aortacfd_lib.inlet_mapping import InletMapping
-
-        config = {
-            "boundary_conditions": {
-                "inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": "womersley_fft"}
-            },
-            "geometry": {"inlet_keywords_ordered": "inlet"},
-            "physics": {"nu": 3.5e-6},
-        }
-
-        mapping = InletMapping(config, str(tmp_path))
-        mapping.center = np.array([0.0, 0.0, 0.0])
-        mapping.radius = 0.01
-        mapping.area = np.pi * 0.01**2
-        mapping.nu = 3.5e-6
-
-        # Points outside the inlet (will have zero velocity)
-        points = np.array([[0.05, 0.05, 0.0], [0.06, 0.06, 0.0]])
-
-        V0 = 0.0
-        Vn_complex = np.array([0.0j])
-        omega_fundamental = 2 * np.pi / 0.8
-        target_Q = 1.0e-5
-
-        scale_factor = mapping._compute_womersley_fft_scale_factor(
-            points, t=0.0, V0=V0, Vn_complex=Vn_complex, omega_fundamental=omega_fundamental, target_Q=target_Q
-        )
-
-        assert scale_factor == 0.0
-
-
 class TestComputeWallDistances:
     """Test _compute_wall_distances method."""
 
@@ -2426,3 +2350,92 @@ class TestReversedFlow:
         velocities = mapping._scale_to_target_flowrate(shape_factors, 1e-4, len(shape_factors))
         assert abs(velocities[0] - 2.0e-4 / mapping.area) < 1e-10
         assert abs(mapping._verify_flowrate(velocities, len(velocities)) - 1e-4) < 1e-12
+
+
+class TestWomersleyMultiHarmonic:
+    """The womersley profile is the multi-harmonic Womersley solution of the waveform: each harmonic is
+    normalised so its mean velocity is its Fourier coefficient, the Fourier step treats the CSV as one period,
+    and there is no per-instant rescaling (the old single-frequency shape rescaled at every instant wrote
+    -18.5 m/s at the systolic peak of a 0.41 m/s waveform, alpha 20)."""
+
+    @staticmethod
+    def _mapping(tmp_path, radius=0.01, nu=3.5e-6, data_type="flowrate"):
+        from aortacfd_lib.inlet_mapping import InletMapping
+
+        config = {
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": data_type, "profile": "womersley"}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": nu},
+        }
+        mapping = InletMapping(config, str(tmp_path))
+        mapping.center = np.array([0.0, 0.0, 0.0])
+        mapping.radius = radius
+        mapping.area = np.pi * radius**2
+        mapping.nu = nu
+        mapping.cardiac_cycle = 0.8
+        mapping.auto_flip_normal = False
+        return mapping
+
+    @patch("aortacfd_lib.inlet_mapping.Logger")
+    def test_harmonic_mean_velocity_is_its_fourier_coefficient(self, mock_logger, tmp_path):
+        mapping = self._mapping(tmp_path)
+        omega0 = 2 * np.pi / 0.8
+        r = np.linspace(0.0, mapping.radius, 2001)
+        for n, Vn, t in ((1, 0.3 * np.exp(0.7j), 0.1), (3, 0.05 - 0.02j, 0.33)):
+            u = np.array([mapping._womersley_profile_harmonic(ri, n, omega0, Vn, t) for ri in r])
+            mean = np.trapezoid(u * 2 * np.pi * r, r) / mapping.area
+            expected = np.real(Vn * np.exp(1j * n * omega0 * t))
+            assert abs(mean - expected) < 2e-3 * abs(Vn), (n, mean, expected)
+
+    @patch("aortacfd_lib.inlet_mapping.Logger")
+    def test_fourier_coefficients_treat_csv_as_one_period(self, mock_logger, tmp_path):
+        mapping = self._mapping(tmp_path)
+        T = 0.8
+        times = np.linspace(0.0, T, 81)  # end point repeated, as in a CSV
+        values = 1.0 + 0.5 * np.cos(2 * np.pi * times / T - 0.4)
+        V0, Vn, omega0 = mapping._compute_fourier_coefficients(times, values, n_harmonics=4)
+        assert abs(omega0 - 2 * np.pi / T) < 1e-9
+        assert abs(V0 - 1.0) < 1e-9
+        assert abs(abs(Vn[0]) - 0.5) < 1e-9
+        assert abs(np.angle(Vn[0]) + 0.4) < 1e-9
+        assert np.all(np.abs(Vn[1:]) < 1e-9)
+        # the same waveform on a non-uniform grid is resampled, not misread
+        skew = times[:-1] ** 1.3 / T**0.3
+        skew = np.append(skew, T)
+        V0b, Vnb, omega0b = mapping._compute_fourier_coefficients(
+            skew, 1.0 + 0.5 * np.cos(2 * np.pi * skew / T - 0.4), 4
+        )
+        assert abs(omega0b - omega0) < 1e-9 and abs(V0b - 1.0) < 2e-3 and abs(abs(Vnb[0]) - 0.5) < 2e-3
+
+    @patch("aortacfd_lib.inlet_mapping.Logger")
+    def test_reversing_waveform_stays_bounded_and_reverses(self, mock_logger, tmp_path):
+        import re
+
+        mapping = self._mapping(tmp_path, radius=0.0137, nu=0.004 / 1060)
+        times = np.linspace(0.0, 0.8, 81)
+        Qp = 14.6 / 60000.0  # m3/s
+        Q = np.where(
+            times < 0.4,
+            Qp * np.sin(np.pi * times / 0.4),
+            np.where(times < 0.52, -0.25 * Qp * np.sin(np.pi * (times - 0.4) / 0.12), 0.03 * Qp),
+        )
+        xs = np.linspace(-0.95, 0.95, 41) * mapping.radius
+        points = np.column_stack([xs, np.zeros_like(xs), np.zeros_like(xs)])
+        out = tmp_path / "boundaryData"
+        out.mkdir()
+        mapping._generate_time_data(str(out), times, Q, points, np.array([0.0, 0.0, -1.0]))
+        pat = re.compile(r"\(\s*([-\d.eE+]+)\s+([-\d.eE+]+)\s+([-\d.eE+]+)\s*\)")
+
+        def read(t):
+            txt = (out / f"{t:.6f}" / "U").read_text()
+            return np.array(pat.findall(txt), float)[:, 2]
+
+        u_peak_mean = Qp / mapping.area  # 0.41 m/s
+        worst = max(np.max(np.abs(read(t))) for t in times)
+        assert worst < 2.0 * u_peak_mean, worst  # the old profile gave 45 times the mean
+        # area mean of an axisymmetric profile sampled on a diameter: weight by |x|
+        w = np.abs(xs)
+        mean_at = {t: float(np.sum(read(t) * w) / np.sum(w)) for t in (0.2, 0.46)}
+        assert mean_at[0.2] * mean_at[0.46] < 0, mean_at  # the reverse lobe points the other way
+        assert abs(abs(mean_at[0.2]) - u_peak_mean) < 0.1 * u_peak_mean, mean_at  # the series carries the flow rate
+        assert abs(abs(mean_at[0.46]) - 0.25 * u_peak_mean) < 0.2 * 0.25 * u_peak_mean, mean_at
