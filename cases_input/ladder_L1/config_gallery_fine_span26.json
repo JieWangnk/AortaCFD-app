@@ -1,0 +1,81 @@
+{
+  "_doc": "Complexity ladder L1 (the L0 bend with 108 degrees of Frenet torsion along the arch (torsion/curvature 0.6)); the U-bend gallery mesh configuration with 26 cells across the span. Invoke with: python run_patient.py ladder_L1 --config cases_input/ladder_L1/config_gallery_fine_span26.json",
+  "case_info": {
+    "patient_id": "ladder_L1",
+    "description": "Ladder L1: the L0 bend with 108 degrees of Frenet torsion along the arch (torsion/curvature 0.6); 26 cells across the inlet span",
+    "source": "OpenCardioFlow complexity ladder, 23 Nov 2026; cases_input/ubend/config_gallery_*.json with the geometry and inflow changed"
+  },
+  "physics": {
+    "model": "laminar",
+    "transport_properties": {
+      "rho": 1060,
+      "nu": 3.7736e-06
+    }
+  },
+  "numerics": {
+    "profile": "standard"
+  },
+  "mesh": {
+    "boundary_layers": {
+      "enabled": true,
+      "num_layers": 3,
+      "expansion_ratio": 1.2,
+      "final_layer_thickness": 0.3,
+      "min_thickness": 0.05,
+      "relativeSizes": true
+    },
+    "SNAPPY_SETTINGS": {
+      "parallel": true,
+      "nProcessors": 4,
+      "mesh_strategy": "adaptive_span",
+      "cells_across_span": 26,
+      "span_refinement_level": 1,
+      "surfaceRefinementLevels": [
+        1,
+        1
+      ],
+      "featureLevel": 1
+    }
+  },
+  "geometry": {
+    "_doc": "reference_radius_strategy='max' (default) anchors the background-mesh sizing to the largest vessel. For the single-tube ubend this is the inlet (27.4 mm). On a multi-branch aorta, switch to 'min' if you need every branch resolved to the cells_across_span target.",
+    "inlet_keywords_ordered": "inlet",
+    "outlet_keywords_ordered": [
+      "outlet1"
+    ],
+    "wall_keywords_ordered": "wall_aorta",
+    "scale_factor": 0.001
+  },
+  "boundary_conditions": {
+    "inlet": {
+      "type": "TIMEVARYING",
+      "csv_file": "ubend_inflow.csv",
+      "data_type": "flowrate",
+      "profile": "parabolic"
+    },
+    "outlets": {
+      "type": "3EWINDKESSEL",
+      "windkessel_settings": {
+        "systolic_pressure": 120,
+        "diastolic_pressure": 80,
+        "venous_pressure": 0,
+        "initial_pressure_method": "map",
+        "enable_stabilization": true
+      }
+    },
+    "walls": {
+      "type": "no_slip"
+    }
+  },
+  "simulation_control": {
+    "cardiac_cycle_period": 0.8,
+    "number_of_cycles": 1,
+    "writeInterval": 0.016,
+    "_keep_last_cycles": 1
+  },
+  "run_settings": {
+    "solution_type": "parallel",
+    "subdomains": 4,
+    "decomposition_method": "scotch"
+  }
+}

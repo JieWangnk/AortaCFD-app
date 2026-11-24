@@ -1,0 +1,122 @@
+{
+ "schema_version": "2.0",
+ "case_id": "ladder_L0",
+ "generator": "geometry-generation-trial scenarios.py aorta (engine source STL split by patch name)",
+ "command": "python scenarios.py aorta --branches '' --twist 0 --grid-res 1 --name L0",
+ "description": "planar 180-degree bend from the geometry engine (U-bend calibre 27.4/26.0/24.4 mm, ascending 50 mm, arch radius 40.4 mm, descending 200 mm)",
+ "derived_from": "cases_input/ubend parameters (the engine's aorta defaults are the U-bend values); not the Blender surface",
+ "params": {
+  "d_ascending": 27.4,
+  "d_arch": 26.0,
+  "d_descending": 24.4,
+  "ascending_length": 50.0,
+  "arch_R_c": 40.4,
+  "arch_angle_deg": 180.0,
+  "arch_blend_mm": 12.0,
+  "arch_twist_deg": 0.0,
+  "coarctation_area_reduction": 0.0,
+  "coarctation_length_mm": 30.0,
+  "coarctation_offset_mm": 15.0,
+  "descending_length": 200.0,
+  "grid_res": 1.0
+ },
+ "engine_record": {
+  "out": "/tmp/claude-1001/-home-mchi4jw4-GitHub/b3bd38e2-a465-42a0-b87f-c6c0f8a6a585/scratchpad/ladder/L0.stl",
+  "is_watertight": true,
+  "n_faces": 83910,
+  "n_vertices": 41957,
+  "boundary_edges": 0,
+  "nonmanifold_edges": 0,
+  "junction": [
+   0.0,
+   0.0,
+   49.99999999999988
+  ],
+  "branches": [
+   "AAo",
+   "ARCH",
+   "DAo"
+  ],
+  "sfa_direction": null,
+  "pfa_direction": null,
+  "diameters_mm": {
+   "AAo": 27.4,
+   "ARCH": 26.0,
+   "DAo": 26.0
+  },
+  "murray_residual_mm3": -20570.823999999997,
+  "expected_patches": [
+   "wall_AAo",
+   "wall_ARCH",
+   "wall_DAo",
+   "inlet",
+   "outlet_DAo"
+  ],
+  "patch_face_counts": {
+   "wall_AAo": 10704,
+   "wall_ARCH": 19719,
+   "wall_DAo": 53075,
+   "inlet": 216,
+   "outlet_DAo": 196
+  },
+  "caps": "planar",
+  "cap_fallbacks": [],
+  "dropped_components": 0,
+  "dropped_volume_mm3": 0.0,
+  "detached_pieces_kept": 0,
+  "field_sampling": {
+   "mode": "dense",
+   "batch_points": null,
+   "grid_shape": [
+    180,
+    99,
+    346
+   ],
+   "grid_nodes": 6165720,
+   "storage_dtype": "float64"
+  },
+  "kernel": "mitre",
+  "engine_version": "0.7.5",
+  "lesions": [],
+  "edits": [],
+  "transforms": [],
+  "lesion_targets": [
+   "AAo",
+   "ARCH",
+   "DAo"
+  ],
+  "build_seconds": 78.4
+ },
+ "files": {
+  "wall_aorta.stl": {
+   "faces": 83498,
+   "centre_mm": [
+    39.89,
+    -0.0,
+    -19.96
+   ],
+   "area_mm2": 31065.2,
+   "sha256_16": "190cc9fc9841ec1d"
+  },
+  "inlet.stl": {
+   "faces": 216,
+   "centre_mm": [
+    -0.0,
+    -0.0,
+    1.0
+   ],
+   "area_mm2": 587.8,
+   "sha256_16": "8f6cfcdcb2e4ccfe"
+  },
+  "outlet1.stl": {
+   "faces": 196,
+   "centre_mm": [
+    78.91,
+    0.01,
+    -149.21
+   ],
+   "area_mm2": 465.4,
+   "sha256_16": "0fc777a89e04c82a"
+  }
+ }
+}

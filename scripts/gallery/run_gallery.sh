@@ -6,11 +6,12 @@
 #   systemd-run --user --unit=ocf-gallery --collect \
 #       --working-directory="$PWD" bash scripts/gallery/run_gallery.sh
 #
-# Markers and logs live in output/_gallery/.
+# Markers and logs live in output/_gallery/. Another batch: RUNS=<list> GALLERY_DIR=<dir> (same format,
+# markers and logs in that dir), e.g. the complexity ladder of 24 Nov 2026 (scripts/gallery/runs_ladder.txt).
 set -o pipefail
 cd "$(dirname "$0")/../.." || exit 1
 ROOT=$PWD
-G=$ROOT/output/_gallery
+G=${GALLERY_DIR:-$ROOT/output/_gallery}
 mkdir -p "$G/bundles" "$G/logs"
 LOG=$G/batch.log
 # No 'postprocess' step: its ParaView image stage (pvbatch) crashed and hung on 19 Nov 2026;
@@ -52,6 +53,6 @@ while read -r -u 3 CASE RUN CFG; do
         < /dev/null > "$G/logs/$TAG.export.log" 2>&1 \
         && log "exported $TAG" || log "EXPORT FAILED $TAG (see logs/$TAG.export.log)"
     touch "$G/$TAG.done"
-done 3< "$ROOT/scripts/gallery/runs.txt"
+done 3< "${RUNS:-$ROOT/scripts/gallery/runs.txt}"
 log "batch end"
 touch "$G/ALL_DONE"

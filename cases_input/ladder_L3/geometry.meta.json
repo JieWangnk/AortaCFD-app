@@ -1,0 +1,173 @@
+{
+ "schema_version": "2.0",
+ "case_id": "ladder_L3",
+ "generator": "geometry-generation-trial scenarios.py aorta (engine source STL split by patch name)",
+ "command": "python scenarios.py aorta --branches '' --twist 108 --coarctation 0.5 --grid-res 1 --name L2",
+ "description": "the L2 geometry with a reversing inflow (half-sine systole, reverse lobe 0.40-0.52 s, parabolic profile scaled to the flow rate), three cycles",
+ "derived_from": "cases_input/ubend parameters (the engine's aorta defaults are the U-bend values); not the Blender surface",
+ "params": {
+  "d_ascending": 27.4,
+  "d_arch": 26.0,
+  "d_descending": 24.4,
+  "ascending_length": 50.0,
+  "arch_R_c": 40.4,
+  "arch_angle_deg": 180.0,
+  "arch_blend_mm": 12.0,
+  "arch_twist_deg": 108.0,
+  "coarctation_area_reduction": 0.5,
+  "coarctation_length_mm": 30.0,
+  "coarctation_offset_mm": 15.0,
+  "descending_length": 200.0,
+  "grid_res": 1.0
+ },
+ "engine_record": {
+  "out": "/tmp/claude-1001/-home-mchi4jw4-GitHub/b3bd38e2-a465-42a0-b87f-c6c0f8a6a585/scratchpad/ladder/L2.stl",
+  "is_watertight": true,
+  "n_faces": 92770,
+  "n_vertices": 46387,
+  "boundary_edges": 0,
+  "nonmanifold_edges": 0,
+  "junction": [
+   0.0,
+   0.0,
+   49.99999999999988
+  ],
+  "branches": [
+   "AAo",
+   "ARCH",
+   "DAo"
+  ],
+  "sfa_direction": null,
+  "pfa_direction": null,
+  "diameters_mm": {
+   "AAo": 27.4,
+   "ARCH": 26.0,
+   "DAo": 26.0
+  },
+  "murray_residual_mm3": -20570.823999999997,
+  "expected_patches": [
+   "wall_AAo",
+   "wall_ARCH",
+   "wall_DAo",
+   "inlet",
+   "outlet_DAo"
+  ],
+  "patch_face_counts": {
+   "wall_AAo": 10784,
+   "wall_ARCH": 20553,
+   "wall_DAo": 61001,
+   "inlet": 220,
+   "outlet_DAo": 212
+  },
+  "caps": "planar",
+  "cap_fallbacks": [],
+  "dropped_components": 0,
+  "dropped_volume_mm3": 0.0,
+  "detached_pieces_kept": 0,
+  "field_sampling": {
+   "mode": "dense",
+   "batch_points": null,
+   "grid_shape": [
+    195,
+    321,
+    219
+   ],
+   "grid_nodes": 13708305,
+   "storage_dtype": "float64"
+  },
+  "kernel": "mitre",
+  "engine_version": "0.7.5",
+  "lesions": [
+   {
+    "branch": "DAo",
+    "severity": 0.2928932188134524,
+    "s0": 0.27231170132662524,
+    "length_mm": 30.0,
+    "theta0_deg": 0.0,
+    "eccentricity": 0.0,
+    "shape": "cosine"
+   }
+  ],
+  "edits": [],
+  "transforms": [],
+  "lesion_targets": [
+   "AAo",
+   "ARCH",
+   "DAo"
+  ],
+  "build_seconds": 449.1
+ },
+ "rotation": {
+  "applied": true,
+  "matrix": [
+   [
+    0.234609644,
+    -0.403900524,
+    -0.884207375
+   ],
+   [
+    0.864708279,
+    0.502274419,
+    0.0
+   ],
+   [
+    0.444114745,
+    -0.764581437,
+    0.46709455
+   ]
+  ],
+  "outlet_normal_before": [
+   -0.4441,
+   0.7646,
+   -0.4671
+  ],
+  "inlet_normal_before": [
+   0.0,
+   0.0,
+   -1.0
+  ],
+  "outlet_normal_after": [
+   0.0,
+   -0.0,
+   -1.0
+  ],
+  "inlet_normal_after": [
+   0.8842,
+   -0.0,
+   -0.4671
+  ],
+  "why": "outlet cap plane made axis-aligned so snappyHexMesh cuts no stair-step sliver cells on the pressure outlet (dt collapse on the tilted outlet, 23 Nov 2026)"
+ },
+ "files": {
+  "wall_aorta.stl": {
+   "faces": 92338,
+   "centre_mm": [
+    -45.7,
+    39.07,
+    -66.35
+   ],
+   "area_mm2": 30791.0,
+   "sha256_16": "bb8422905e8b9f62"
+  },
+  "inlet.stl": {
+   "faces": 220,
+   "centre_mm": [
+    -0.88,
+    0.0,
+    0.47
+   ],
+   "area_mm2": 586.7,
+   "sha256_16": "2e088d0ae09fee1c"
+  },
+  "outlet1.stl": {
+   "faces": 212,
+   "centre_mm": [
+    -78.29,
+    78.98,
+    -195.95
+   ],
+   "area_mm2": 466.5,
+   "sha256_16": "a0478abfc8681aea"
+  }
+ }
+}
