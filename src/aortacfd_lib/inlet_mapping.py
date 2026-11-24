@@ -799,8 +799,11 @@ class InletMapping:
             target_flowrate: Target volumetric flow rate (m³/s)
             n_points: Total number of points
 
+        The sign of the flow rate is kept: a negative flow rate in the CSV is flow out of the inlet
+        (reverse flow) and gives velocities that point the other way.
+
         Returns:
-            numpy.ndarray: Scaled velocities (m/s)
+            numpy.ndarray: Scaled velocities (m/s), signed like target_flowrate
         """
         # Count active points (inside inlet radius)
         active_mask = shape_factors > 0
@@ -816,16 +819,16 @@ class InletMapping:
         if self.profile == "parabolic":
             # Parabolic (Poiseuille): u(r) = U_max * (1 - r²/R²)
             # Analytical integral: Q = U_max * πR² / 2 = U_max * A / 2
-            # => U_max = 2 * Q / A = 2 * U_avg
-            U_max = 2.0 * abs(target_flowrate) / self.area
+            # => U_max = 2 * Q / A = 2 * U_avg (signed: a negative Q reverses the profile)
+            U_max = 2.0 * target_flowrate / self.area
             velocities = shape_factors * U_max
             return velocities
 
         elif self.profile in ["plug", "plug_flow"]:
             # Plug flow: u = U_max (uniform)
             # Analytical integral: Q = U_max * A
-            # => U_max = Q / A = U_avg
-            U_max = abs(target_flowrate) / self.area
+            # => U_max = Q / A = U_avg (signed: a negative Q reverses the profile)
+            U_max = target_flowrate / self.area
             velocities = shape_factors * U_max
             return velocities
 
@@ -843,8 +846,8 @@ class InletMapping:
                 # Avoid division by zero for zero flow
                 return np.zeros(len(shape_factors))
 
-            # Scale factor to achieve target flow rate
-            scale_factor = abs(target_flowrate) / Q_unit
+            # Scale factor to achieve the target flow rate, sign included
+            scale_factor = target_flowrate / Q_unit
 
             # Apply scaling
             velocities = shape_factors * scale_factor
@@ -974,13 +977,11 @@ class InletMapping:
                 vel_vector = self._get_velocity_components(mag, normal_vec)
                 velocities.append(vel_vector)
 
-            # Step 4: Verify flow rate (for logging)
-            # Bug fix: compare absolute values - velocity_magnitudes are always
-            # positive (from abs(target_flowrate) in scaling), but target_Q can
-            # be negative during backflow phases of the cardiac cycle.
+            # Step 4: Verify flow rate (for logging). Both values are signed: a negative
+            # target_Q (reverse flow) must come back as a negative computed_Q.
             if abs(target_Q) > 1e-15:
                 computed_Q = self._verify_flowrate(velocity_magnitudes, n_points)
-                error_percent = abs(computed_Q - abs(target_Q)) / abs(target_Q) * 100
+                error_percent = abs(computed_Q - target_Q) / abs(target_Q) * 100
                 max_error_percent = max(max_error_percent, error_percent)
 
             # Step 5: Write to file
@@ -1007,23 +1008,23 @@ class InletMapping:
             n_points: Total number of points
 
         Returns:
-            float: Computed flow rate (m³/s), always positive
+            float: Computed flow rate (m³/s), signed (negative for reverse flow)
         """
-        active_mask = velocity_magnitudes > 0
+        active_mask = velocity_magnitudes != 0
         n_active = np.sum(active_mask)
 
         if n_active == 0:
             return 0.0
 
         if self.profile == "parabolic":
-            # Analytical: Q = U_max * A / 2 (exact for Poiseuille)
-            U_max = np.max(velocity_magnitudes)
+            # Analytical: Q = U_max * A / 2 (exact for Poiseuille); U_max is the signed value of largest size
+            U_max = velocity_magnitudes[np.argmax(np.abs(velocity_magnitudes))]
             return U_max * self.area / 2.0
 
         elif self.profile in ["plug", "plug_flow"]:
             # Analytical: Q = U * A (exact for uniform flow)
             # All active faces should have the same velocity
-            U_plug = np.max(velocity_magnitudes)
+            U_plug = velocity_magnitudes[np.argmax(np.abs(velocity_magnitudes))]
             return U_plug * self.area
 
         else:

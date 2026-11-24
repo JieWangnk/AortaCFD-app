@@ -2369,3 +2369,60 @@ class TestDetermineCardiacPeriod:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
+
+
+class TestReversedFlow:
+    """A negative flow rate in the CSV is flow out of the inlet (reverse flow). The scaled velocities and
+    the verified flow rate must keep that sign; folding it to a forward flow was the bug behind the
+    ladder_L3 run of 23 Nov 2026 (the reverse lobe came out as a second forward lobe)."""
+
+    @staticmethod
+    def _mapping(tmp_path, profile):
+        from aortacfd_lib.inlet_mapping import InletMapping
+
+        config = {
+            "boundary_conditions": {"inlet": {"csv_file": "test.csv", "data_type": "flowrate", "profile": profile}},
+            "geometry": {"inlet_keywords_ordered": "inlet"},
+            "physics": {"nu": 3.5e-6},
+        }
+        mapping = InletMapping(config, str(tmp_path))
+        mapping.center = np.array([0.0, 0.0, 0.0])
+        mapping.radius = 0.01
+        mapping.area = np.pi * 0.01**2
+        return mapping
+
+    @patch("aortacfd_lib.inlet_mapping.Logger")
+    def test_negative_flowrate_reverses_parabolic_profile(self, mock_logger, tmp_path):
+        mapping = self._mapping(tmp_path, "parabolic")
+        shape_factors = np.array([1.0, 0.75, 0.5, 0.25, 0.0])
+        velocities = mapping._scale_to_target_flowrate(shape_factors, -1e-4, len(shape_factors))
+        assert abs(velocities[0] - (-2.0e-4 / mapping.area)) < 1e-10
+        assert np.all(velocities <= 0.0)
+        # the verified flow rate carries the sign, so the logged error is zero
+        assert abs(mapping._verify_flowrate(velocities, len(velocities)) - (-1e-4)) < 1e-12
+
+    @patch("aortacfd_lib.inlet_mapping.Logger")
+    def test_negative_flowrate_reverses_plug_profile(self, mock_logger, tmp_path):
+        mapping = self._mapping(tmp_path, "plug")
+        shape_factors = np.array([1.0, 1.0, 1.0, 1.0])
+        velocities = mapping._scale_to_target_flowrate(shape_factors, -1e-4, len(shape_factors))
+        np.testing.assert_array_almost_equal(velocities, [-1e-4 / mapping.area] * 4)
+        assert abs(mapping._verify_flowrate(velocities, len(velocities)) - (-1e-4)) < 1e-12
+
+    @patch("aortacfd_lib.inlet_mapping.Logger")
+    def test_negative_flowrate_reverses_mesh_integrated_profile(self, mock_logger, tmp_path):
+        mapping = self._mapping(tmp_path, "wall_distance")
+        shape_factors = np.array([1.0, 0.8, 0.6, 0.4])
+        velocities = mapping._scale_to_target_flowrate(shape_factors, -1e-4, len(shape_factors))
+        assert np.all(velocities < 0.0)
+        # discrete integral with uniform face areas equals the signed target
+        assert abs(np.sum(velocities) * mapping.area / 4 - (-1e-4)) < 1e-12
+        assert abs(mapping._verify_flowrate(velocities, len(velocities)) - (-1e-4)) < 1e-12
+
+    @patch("aortacfd_lib.inlet_mapping.Logger")
+    def test_positive_flowrate_unchanged(self, mock_logger, tmp_path):
+        mapping = self._mapping(tmp_path, "parabolic")
+        shape_factors = np.array([1.0, 0.5, 0.0])
+        velocities = mapping._scale_to_target_flowrate(shape_factors, 1e-4, len(shape_factors))
+        assert abs(velocities[0] - 2.0e-4 / mapping.area) < 1e-10
+        assert abs(mapping._verify_flowrate(velocities, len(velocities)) - 1e-4) < 1e-12
