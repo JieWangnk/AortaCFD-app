@@ -117,3 +117,35 @@ LADDER_STATS_DIR=... LADDER_RUN_PREFIX=physio_ python3 scripts/gallery/ladder/la
 The first run of the series (coarse Ladder 0) solved in 2.3 minutes: inlet peak 21.1 L/min
 at 0.149 s, mean 5.03 L/min, inertial pressure swing +22.5 / -23.5 mmHg between inlet and
 outlet (the first series: +12 / -12), outlet pressure 81 to 135 mmHg over the cycle.
+
+The batch ran 10:32 to 19:36 on 24 November 2026, all twelve runs clean (largest Courant
+number 0.81 to 0.89, no pipeline flags, every run to its end time). Solver minutes per run,
+coarse / mid / fine: L0 2.2 / 7.5 / 64, L1 2.9 / 8.6 / 47, L2 3.6 / 8.3 / 46, L3 10 / 24 / 145
+(three cycles); about 17 % more than the first series, from the smaller time step of the
+steeper waveform. The batch log shows 2.7 hours of wall time for the coarse Ladder 3 run
+against 10 minutes of solver time: between 16:52 and 19:27 the machine was starved by a
+runaway LaTeX build in another repository (see the solver log, ExecutionTime against
+ClockTime); the results are unaffected. Statistics are in `stats_physio/`
+(`LADDER_STATS_DIR`), the map in `physio_map.json`, `physio_map.csv` and
+`physio_convergence_map.png` (`LADDER_MAP_PREFIX=physio_` for `convergence_map.py`). The
+per-run JSON files in `stats_physio/` keep the `gallery_` names of the first series because
+`convergence_map.py` reads them by that name; the `cells` field inside each file is the
+physiological run's own.
+
+Seventeen of the 56 classified cells of the map change class between the series. The
+pressure difference at the frame nearest peak inflow goes from "not converged at 26" to
+"converged at 12" on every level, a change that comes with the larger denominator rather
+than a cleaner answer: that frame (0.144 s, 6 ms before the peak) sits on the inertial ramp,
+where the difference across the vessel changes by 3.5 mmHg per 16 ms frame, so the value
+there (3.5 mmHg on the bends) is about 60 % viscous loss and 40 % inertial residue. A better
+reading of the viscous loss would interpolate the series to the instant of zero acceleration;
+that change touches both series and the published pages, so it is left for a decision. The
+other changes: the cycle-mean difference settles at 12 with the narrowing (0.59 and 0.53
+mmHg) and stays open on the bends (0.17 and 0.19 mmHg); the jet's lowest pressure is open
+on Ladder 3 as well now; the 99th-percentile shear at peak inflow is open on Ladder 3; the
+TAWSS 99th percentile needs 18 on Ladders 2 and 3; the OSI threshold area (55 to 58 % of
+the wall on every level, the zero-flow diastole oscillates the whole wall) is converged on
+Ladder 1 and open on Ladder 0; the largest outlet backflow area (55 to 62 %, 100 % on
+Ladder 3) is open on Ladders 1 and 2. The drop across the narrowing at peak inflow is 2.89
+mmHg (2.56 times the first series' 1.13 mmHg for 1.43 times the peak flow) and rises 4.0 %
+then 4.3 % across the meshes, formally within tolerance and still moving.

@@ -6,16 +6,19 @@ to the 26-cell value, and the mesh level at which the quantity is converged to w
   18   only the 18 -> 26 change within TOL
   >26  the 18 -> 26 change is larger than TOL (not converged at the finest level run)
   n/a  the quantity is near zero at this level (a relative change means nothing)
-Reads stats/<run>.json (ladder_stats.py); writes map.json, map.csv and convergence_map.png.
+Reads stats/<run>.json (ladder_stats.py; another folder with LADDER_STATS_DIR); writes map.json, map.csv and
+convergence_map.png (prefixed with LADDER_MAP_PREFIX, e.g. physio_, for a second series).
 """
 import csv
 import json
+import os
 import pathlib
 
 import numpy as np
 
 HERE = pathlib.Path(__file__).resolve().parent
-ST = HERE / "stats"
+ST = pathlib.Path(os.environ.get("LADDER_STATS_DIR", HERE / "stats"))  # stats of one series
+MAP_PREFIX = os.environ.get("LADDER_MAP_PREFIX", "")  # e.g. physio_ -> physio_map.json, physio_convergence_map.png
 LEVELS = ("L0", "L1", "L2", "L3")
 MESHES = ("coarse_span12", "mid_span18", "fine_span26")
 TOL = 0.05
@@ -85,8 +88,8 @@ def main():
             table[key]["levels"][L] = dict(values=vals, change_12_18=c1, change_18_26=c2, converged_at=cls)
             rows.append(dict(quantity=label, unit=unit, level=L, v12=vals[0], v18=vals[1], v26=vals[2],
                              change_12_18_pct=None if c1 is None else 100 * c1, change_18_26_pct=None if c2 is None else 100 * c2, converged_at=cls))
-    (HERE / "map.json").write_text(json.dumps(dict(tolerance=TOL, quantities=table, level_names=LEVEL_NAME), indent=1))
-    with open(HERE / "map.csv", "w", newline="") as f:
+    (HERE / f"{MAP_PREFIX}map.json").write_text(json.dumps(dict(tolerance=TOL, quantities=table, level_names=LEVEL_NAME), indent=1))
+    with open(HERE / f"{MAP_PREFIX}map.csv", "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         w.writeheader()
         w.writerows(rows)
@@ -131,7 +134,7 @@ def main():
     fig.suptitle("Which quantity is converged at which mesh level, as the flow gets more complicated\n"
                  "(value at 26 cells across; changes relative to that value; 12, 18 and 26 cells across the 27 mm inlet)", fontsize=12, y=0.995)
     fig.tight_layout(rect=(0, 0.02, 1, 0.95))
-    fig.savefig(HERE / "convergence_map.png", facecolor="white", bbox_inches="tight", pad_inches=0.25)
+    fig.savefig(HERE / f"{MAP_PREFIX}convergence_map.png", facecolor="white", bbox_inches="tight", pad_inches=0.25)
     print(f"wrote convergence_map.png, map.json, map.csv ({nq} quantities x {nl} levels)")
     for key, label, unit, get, floor, dec in QUANTITIES:
         print(f"{label:55s}", "  ".join(f"{L}:{table[key]['levels'][L]['converged_at']:>4s}" for L in LEVELS))
