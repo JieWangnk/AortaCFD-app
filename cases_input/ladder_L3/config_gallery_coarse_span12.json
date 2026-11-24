@@ -1,5 +1,5 @@
 {
-  "_doc": "Complexity ladder L3 (the L2 geometry with a reversing inflow (half-sine systole, reverse lobe 0.40-0.52 s, parabolic profile scaled to the flow rate), three cycles); the U-bend gallery mesh configuration with 12 cells across the span. Invoke with: python run_patient.py ladder_L3 --config cases_input/ladder_L3/config_gallery_coarse_span12.json",
+  "_doc": "Complexity ladder L3 (the L2 geometry with a reversing inflow (half-sine systole, reverse lobe 0.40-0.52 s, parabolic profile scaled to the flow rate), three cycles); the U-bend gallery mesh configuration with 12 cells across the span. Invoke with: python run_patient.py ladder_L3 --config cases_input/ladder_L3/config_gallery_coarse_span12.json Outlet backflow damping: betaT 0.3 (default) and betaN 0.3; with betaN 0 the fine mesh collapsed at t = 0.468 s in the reverse lobe (normal inflow spike in the wall/cap corner cell of the outlet, 24 Nov 2026).",
   "case_info": {
     "patient_id": "ladder_L3",
     "description": "Ladder L3: the L2 geometry with a reversing inflow (half-sine systole, reverse lobe 0.40-0.52 s, parabolic profile scaled to the flow rate), three cycles; 12 cells across the inlet span",
@@ -60,7 +60,9 @@
         "diastolic_pressure": 80,
         "venous_pressure": 0,
         "initial_pressure_method": "map",
-        "enable_stabilization": true
+        "enable_stabilization": true,
+        "betaT": 0.3,
+        "betaN": 0.3
       }
     },
     "walls": {

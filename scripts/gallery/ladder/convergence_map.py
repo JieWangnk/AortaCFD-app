@@ -98,7 +98,7 @@ def main():
     colours = {"12": "#cfe8d3", "18": "#fde7b0", ">26": "#f5c6c0", "n/a": "#ececec"}
     text_col = {"12": "#1f5b2b", "18": "#7a5200", ">26": "#8a1c1c", "n/a": "#777777"}
     nq, nl = len(QUANTITIES), len(LEVELS)
-    fig, ax = plt.subplots(figsize=(13.2, 0.62 * nq + 1.9), dpi=170)
+    fig, ax = plt.subplots(figsize=(13.2, 0.74 * nq + 2.1), dpi=170)
     ax.set_xlim(0, nl)
     ax.set_ylim(0, nq)
     ax.invert_yaxis()
@@ -121,9 +121,9 @@ def main():
                 ax.text(j + 0.5, i + 0.5, txt, ha="center", va="center", fontsize=9.5, color=text_col[cls])
             else:
                 head = f"{v[2]:.{dec}f} {unit}".replace(" -", "") if unit != "%" else f"{v[2]:.{dec}f} %"
-                sub = f"12→18: {100 * d['change_12_18']:+.1f} %   18→26: {100 * d['change_18_26']:+.1f} %"
-                ax.text(j + 0.5, i + 0.36, head, ha="center", va="center", fontsize=10, color="black", fontweight="bold")
-                ax.text(j + 0.5, i + 0.72, sub, ha="center", va="center", fontsize=8.6, color=text_col[cls])
+                sub = f"12→18: {100 * d['change_12_18']:+.1f} %\n18→26: {100 * d['change_18_26']:+.1f} %"
+                ax.text(j + 0.5, i + 0.28, head, ha="center", va="center", fontsize=10, color="black", fontweight="bold")
+                ax.text(j + 0.5, i + 0.67, sub, ha="center", va="center", fontsize=8.4, color=text_col[cls], linespacing=1.25)
     handles = [Rectangle((0, 0), 1, 1, facecolor=colours[c]) for c in ("12", "18", ">26", "n/a")]
     ax.legend(handles, [f"converged at 12 cells across (both changes within {100 * TOL:.0f} %)", "converged at 18 (only the 18→26 change within tolerance)",
                         "not converged at 26 (the 18→26 change is larger)", "near zero: no relative change to read"],
@@ -131,7 +131,7 @@ def main():
     fig.suptitle("Which quantity is converged at which mesh level, as the flow gets more complicated\n"
                  "(value at 26 cells across; changes relative to that value; 12, 18 and 26 cells across the 27 mm inlet)", fontsize=12, y=0.995)
     fig.tight_layout(rect=(0, 0.02, 1, 0.95))
-    fig.savefig(HERE / "convergence_map.png", facecolor="white")
+    fig.savefig(HERE / "convergence_map.png", facecolor="white", bbox_inches="tight", pad_inches=0.25)
     print(f"wrote convergence_map.png, map.json, map.csv ({nq} quantities x {nl} levels)")
     for key, label, unit, get, floor, dec in QUANTITIES:
         print(f"{label:55s}", "  ".join(f"{L}:{table[key]['levels'][L]['converged_at']:>4s}" for L in LEVELS))

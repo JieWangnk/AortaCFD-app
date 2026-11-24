@@ -579,6 +579,11 @@ def export_run(
         spacing = max(diag / 220.0, float(np.percentile(lengths, 95)) / path_points)
         res = [resample_polyline(x, s, spacing, path_points) for x, s in lines]
         res = [(x, s) for x, s in res if len(x) >= 4]
+        if not res:
+            # every path too short to keep: the flow is at a standstill at this keyframe (e.g. the zero crossing
+            # of a reversing waveform); skip the keyframe instead of stacking an empty list
+            print(f"web_export: no flow paths of 4+ points at frame {k}, keyframe skipped", flush=True)
+            continue
         lens = np.array([len(x) for x, _ in res], np.uint16)
         xyz = np.vstack([to_mm(x) for x, _ in res])
         sp = np.concatenate([s for _, s in res])
@@ -678,7 +683,7 @@ def export_run(
             "max_faces": max_faces,
             "n_paths": n_paths,
             "path_points": path_points,
-            "keyframes": sorted(path_sets),
+            "keyframes": [p["frame"] for p in paths],
             "seed": seed,
         },
     }

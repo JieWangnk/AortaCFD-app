@@ -1,0 +1,3 @@
+ladder_L3 gallery_fine_span26 cases_input/ladder_L3/config_gallery_fine_span26.json
+ladder_L3 gallery_coarse_span12 cases_input/ladder_L3/config_gallery_coarse_span12.json
+ladder_L3 gallery_mid_span18 cases_input/ladder_L3/config_gallery_mid_span18.json

@@ -3,7 +3,9 @@
 
 For every run (4 levels x 3 mesh levels) over the last saved cycle (L0-L2: 0.016-0.8 s; L3: 1.616-2.4 s, the
 third cycle), frame by frame:
-  inlet and outlet flow from the face velocities against the cap normals of the exported bundle (outward),
+  inlet and outlet flow from the face velocities against the cap normals of the exported bundle (outward);
+  the inlet flow is the flow record: on Ladder 3 the outlet condition damps the normal velocity written on
+  inflow faces (betaN 0.3), so the outlet flow summed from face velocities reads about 7 % low in the lobe,
   the inlet-to-outlet pressure difference (area-weighted means; p relative to the outlet mean, as on the site),
   the wall shear vector per wall face (x 1060 kg/m3), the 99.9th percentile of |U| over the cells,
   the outlet area fraction in backflow (U . n_out < 0).
@@ -14,6 +16,8 @@ shear percentiles, pressure difference and speed; the mean pressure along the st
 outlet at the peak frame (render_arms.leg_profile), which for L2/L3 crosses the narrowing.
 
 Usage: python3 ladder_stats.py [name-or-level ...]      -> stats/<run>.json (skips runs already done) + stats/summary.csv
+  LADDER_STATS_DIR=<dir> changes the output folder; LADDER_RUN_PREFIX=<prefix> scores output/ladder_<L>/<prefix><mesh>
+  instead of gallery_<mesh> (the bundle meta of the gallery run supplies the cap normals, which depend on the mesh only).
 """
 import csv
 import json
@@ -30,7 +34,8 @@ sys.path.insert(0, str(WEB / "scripts"))  # render_case.py: the field reader
 import render_arms as ra  # noqa: E402
 import render_case as rc  # noqa: E402
 
-OUT = pathlib.Path(__file__).resolve().parent / "stats"
+OUT = pathlib.Path(os.environ.get("LADDER_STATS_DIR", pathlib.Path(__file__).resolve().parent / "stats"))
+RUN_PREFIX = os.environ.get("LADDER_RUN_PREFIX", "gallery_")  # e.g. nodamp_ for the damping-off Ladder 3 runs
 LEVELS = ("L0", "L1", "L2", "L3")
 MESHES = ("coarse_span12", "mid_span18", "fine_span26")
 BAND_M = 0.004
@@ -67,7 +72,7 @@ def band_mask(wall_c, caps):
 
 def run_stats(level, tag):
     name = f"ladder_{level}__gallery_{tag}"
-    run = APP / "output" / f"ladder_{level}" / f"gallery_{tag}"
+    run = APP / "output" / f"ladder_{level}" / f"{RUN_PREFIX}{tag}"
     foam = next((run / "openfoam").glob("*.foam"))
     meta = json.loads((APP / "output/_ladder/bundles" / name / "meta.json").read_text())
     caps = meta["caps"]
